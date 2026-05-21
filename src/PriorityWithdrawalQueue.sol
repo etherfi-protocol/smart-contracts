@@ -204,7 +204,7 @@ contract PriorityWithdrawalQueue is
     function requestWithdraw(
         uint96 amountOfEEth,
         uint96 amountWithFee
-    ) external whenNotPaused onlyWhitelisted nonReentrant returns (bytes32 requestId) {
+    ) external nonReentrant whenNotPaused onlyWhitelisted returns (bytes32 requestId) {
         if (amountOfEEth < MIN_AMOUNT || amountOfEEth > MAX_AMOUNT) revert InvalidAmount();
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore,) = _snapshotBalances();
 
@@ -218,7 +218,7 @@ contract PriorityWithdrawalQueue is
         uint96 amountOfEEth,
         uint96 amountWithFee,
         PermitInput calldata permit
-    ) external whenNotPaused onlyWhitelisted nonReentrant returns (bytes32 requestId) {
+    ) external nonReentrant whenNotPaused onlyWhitelisted returns (bytes32 requestId) {
         if (amountOfEEth < MIN_AMOUNT || amountOfEEth > MAX_AMOUNT) revert InvalidAmount();
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore,) = _snapshotBalances();
 
@@ -242,7 +242,7 @@ contract PriorityWithdrawalQueue is
     function requestWithdrawWithWeETH(
         uint96 weEthAmount,
         uint96 amountWithFee
-    ) external whenNotPaused onlyWhitelisted nonReentrant returns (bytes32 requestId) {
+    ) external nonReentrant whenNotPaused onlyWhitelisted returns (bytes32 requestId) {
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore,) = _snapshotBalances();
 
         IERC20(address(weETH)).safeTransferFrom(msg.sender, address(this), weEthAmount);
@@ -263,7 +263,7 @@ contract PriorityWithdrawalQueue is
         uint96 weEthAmount,
         uint96 amountWithFee,
         PermitInput calldata permit
-    ) external whenNotPaused onlyWhitelisted nonReentrant returns (bytes32 requestId) {
+    ) external nonReentrant whenNotPaused onlyWhitelisted returns (bytes32 requestId) {
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore,) = _snapshotBalances();
 
         try weETH.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {
@@ -286,7 +286,7 @@ contract PriorityWithdrawalQueue is
     /// @return requestId The cancelled request ID
     function cancelWithdraw(
         WithdrawRequest calldata request
-    ) external whenNotPaused onlyRequestUser(request.user) nonReentrant returns (bytes32 requestId) {
+    ) external nonReentrant whenNotPaused onlyRequestUser(request.user) returns (bytes32 requestId) {
         if (request.creationTime + minDelay > block.timestamp) revert NotMatured();
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore,) = _snapshotBalances();
         uint256 userEEthSharesBefore = eETH.shares(request.user);

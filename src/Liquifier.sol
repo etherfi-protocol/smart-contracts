@@ -206,7 +206,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     /// @param _referral The referral address
     /// @return mintedAmount the amount of eETH minted to the caller (= msg.sender)
     /// If the token is l2Eth, only the l2SyncPool can call this function
-    function depositWithERC20(address _token, uint256 _amount, address _referral) public whenNotPaused nonReentrant nonBlacklisted returns (uint256) {        
+    function depositWithERC20(address _token, uint256 _amount, address _referral) public nonReentrant whenNotPaused nonBlacklisted returns (uint256) {        
         if (!isTokenWhitelisted(_token) || (tokenInfos[_token].isL2Eth && msg.sender != l1SyncPool)) revert NotAllowed();
 
         // Measure actual amount received to handle stETH's 1-2 wei rounding issue

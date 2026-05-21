@@ -219,7 +219,7 @@ contract EtherFiNodesManager is
      *        - amountGwei: 0 for full exit, >0 for partial to pod
      * @custom:fee Send EXACT ETH to cover sum of (feePerPod * requestsForPod).
      */
-    function requestExecutionLayerTriggeredWithdrawal(IEigenPod.WithdrawalRequest[] calldata requests) external payable onlyConsolidationExecutor whenNotPaused nonReentrant {
+    function requestExecutionLayerTriggeredWithdrawal(IEigenPod.WithdrawalRequest[] calldata requests) external payable nonReentrant onlyConsolidationExecutor whenNotPaused {
         if (requests.length == 0) revert EmptyWithdrawalsRequest();
 
         // rate limit the amount of the that can be withdrawn from beacon chain
@@ -263,7 +263,7 @@ contract EtherFiNodesManager is
      * @dev EigenLayer validates that validators belong to the pod automatically.
      * @custom:fee Send EXACT ETH to cover consolidation fees.
      */
-    function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable onlyConsolidationExecutor whenNotPaused nonReentrant {
+    function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable nonReentrant onlyConsolidationExecutor whenNotPaused {
         if (requests.length == 0) revert EmptyConsolidationRequest();
 
         // rate limit consolidation requests - each request could affect up to FULL_EXIT_GWEI

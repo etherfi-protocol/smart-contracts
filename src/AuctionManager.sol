@@ -119,7 +119,7 @@ contract AuctionManager is
     function createBid(
         uint256 _bidSize,
         uint256 _bidAmountPerBid
-    ) external payable whenNotPaused nonReentrant nonBlacklisted returns (uint256[] memory) {
+    ) external payable nonReentrant whenNotPaused nonBlacklisted returns (uint256[] memory) {
         if (_bidSize == 0) revert InvalidBidSize();
         if (whitelistEnabled) {
             if (!nodeOperatorManager.isWhitelisted(msg.sender)) revert NotWhitelisted();

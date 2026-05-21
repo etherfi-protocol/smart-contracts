@@ -232,14 +232,14 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     // Used by eETH staking flow
-    function deposit(address _referral) public payable whenNotPaused nonReentrant nonBlacklisted returns (uint256) {
+    function deposit(address _referral) public payable nonReentrant whenNotPaused nonBlacklisted returns (uint256) {
         emit Deposit(msg.sender, msg.value, SourceOfFunds.EETH, _referral);
 
         return _deposit(msg.sender, msg.value, 0);
     }
 
     // Used by eETH staking flow through Liquifier contract; deVamp or to pay protocol fees
-    function depositToRecipient(address _recipient, uint256 _amount, address _referral) public whenNotPaused nonReentrant returns (uint256) {
+    function depositToRecipient(address _recipient, uint256 _amount, address _referral) public nonReentrant whenNotPaused returns (uint256) {
         if (msg.sender != address(liquifier) && msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
         blacklister.nonBlacklisted(_recipient);
 
@@ -249,7 +249,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     // Used by ether.fan staking flow
-    function deposit(address _user, address _referral) external payable whenNotPaused nonReentrant returns (uint256) {
+    function deposit(address _user, address _referral) external payable nonReentrant whenNotPaused returns (uint256) {
         if (msg.sender != address(membershipManager)) revert IncorrectCaller();
         blacklister.nonBlacklisted(_user);
 
@@ -312,7 +312,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /// @param recipient address that will be issued the NFT
     /// @param amount requested amount to withdraw from contract
     /// @return uint256 requestId of the WithdrawRequestNFT
-    function requestWithdraw(address recipient, uint256 amount) public whenNotPaused nonReentrant nonBlacklisted returns (uint256) {
+    function requestWithdraw(address recipient, uint256 amount) public nonReentrant whenNotPaused nonBlacklisted returns (uint256) {
         blacklister.nonBlacklisted(recipient);
         if (amount == 0) revert InvalidWithdrawalAmount();
         if (amount < MIN_WITHDRAW_AMOUNT || amount > MAX_WITHDRAW_AMOUNT) revert InvalidWithdrawalAmount();
@@ -351,7 +351,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /// @param amount requested amount to withdraw from contract
     /// @param fee the burn fee to be paid by the recipient when the withdrawal is claimed (WithdrawRequestNFT.claimWithdraw)
     /// @return uint256 requestId of the WithdrawRequestNFT
-    function requestMembershipNFTWithdraw(address recipient, uint256 amount, uint256 fee) public whenNotPaused nonReentrant returns (uint256) {
+    function requestMembershipNFTWithdraw(address recipient, uint256 amount, uint256 fee) public nonReentrant whenNotPaused returns (uint256) {
         if (msg.sender != address(membershipManager)) revert IncorrectCaller();
         uint256 share = sharesForAmount(amount);
         if (amount > type(uint96).max || amount == 0 || share == 0) revert InvalidAmount();
@@ -392,7 +392,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         IStakingManager.DepositData[] calldata _depositData,
         uint256[] calldata _bidIds,
         address _etherFiNode
-    ) external whenNotPaused nonReentrant {
+    ) external nonReentrant whenNotPaused {
         if (!roleRegistry.hasRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
 
         // liquidity pool supplies 1 eth per validator
@@ -409,7 +409,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         uint256[] memory _validatorIds,
         bytes[] calldata _pubkeys,
         bytes[] calldata _signatures
-    ) external whenNotPaused nonReentrant {
+    ) external nonReentrant whenNotPaused {
         if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
         if (validatorSizeWei < MIN_VALIDATOR_SIZE_WEI || validatorSizeWei > MAX_VALIDATOR_SIZE_WEI) revert InvalidValidatorSize();
         if (_validatorIds.length == 0 || _validatorIds.length != _pubkeys.length || _validatorIds.length != _signatures.length) revert InvalidArrayLengths();
@@ -452,7 +452,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     function confirmAndFundBeaconValidators(
         IStakingManager.DepositData[] calldata _depositData,
         uint256 _validatorSizeWei
-    ) external whenNotPaused nonReentrant {
+    ) external nonReentrant whenNotPaused {
         if (!roleRegistry.hasRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
         if (_validatorSizeWei < MIN_VALIDATOR_SIZE_WEI || _validatorSizeWei > MAX_VALIDATOR_SIZE_WEI) revert InvalidValidatorSize();
 
