@@ -8,7 +8,6 @@ import "@openzeppelin-upgradeable/contracts/utils/cryptography/EIP712Upgradeable
 import "@openzeppelin-upgradeable/contracts/utils/CountersUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/draft-IERC20PermitUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/utils/cryptography/ECDSAUpgradeable.sol";
-import "@openzeppelin/contracts/utils/math/Math.sol";
 
 import "./interfaces/IeETH.sol";
 import "./interfaces/ILiquidityPool.sol";
@@ -16,6 +15,7 @@ import "./AssetRecovery.sol";
 import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IBlacklister.sol";
 import "./interfaces/IEtherFiRateLimiter.sol";
+import "./libraries/RateLimitMath.sol";
 import "./utils/PausableUntil.sol";
 
 contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, IERC20PermitUpgradeable, IeETH, AssetRecovery {
@@ -97,7 +97,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         totalShares += _share;
 
         uint256 amount = liquidityPool.amountForShare(_share);
-        _consumeIfConfigured(EETH_MINT_LIMIT_ID, amount);
+        rateLimiter.consumeIfConfigured(EETH_MINT_LIMIT_ID, RateLimitMath.toBucketUnit(amount));
 
         emit Transfer(address(0), _user, amount);
         emit TransferShares(address(0), _user, _share);
@@ -111,7 +111,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         totalShares -= _share;
 
         uint256 amount = liquidityPool.amountForShare(_share);
-        _consumeIfConfigured(EETH_BURN_LIMIT_ID, amount);
+        rateLimiter.consumeIfConfigured(EETH_BURN_LIMIT_ID, RateLimitMath.toBucketUnit(amount));
 
         emit Transfer(_user, address(0), amount);
         emit TransferShares(_user, address(0), _share);
@@ -213,33 +213,12 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         _recoverERC721(token, to, tokenId);
     }
 
-    // [INTERNAL FUNCTIONS] 
+    // [INTERNAL FUNCTIONS]
     function _transfer(address _sender, address _recipient, uint256 _amount) internal {
-        _consumeIfConfigured(EETH_TRANSFER_LIMIT_ID, _amount);
+        rateLimiter.consumeIfConfigured(EETH_TRANSFER_LIMIT_ID, RateLimitMath.toBucketUnit(_amount));
         uint256 _sharesToTransfer = liquidityPool.sharesForAmount(_amount);
         _transferShares(_sender, _recipient, _sharesToTransfer);
         emit Transfer(_sender, _recipient, _amount);
-    }
-
-    /// @dev Consumes from the rate-limiter bucket unless the admin has disabled it
-    /// by setting capacity to zero. getLimit() reverts on UnknownLimit, so the bucket
-    /// must still be explicitly created — there is no silent-bypass path from forgetting
-    /// to deploy the configuration. Note: the rate limiter's global pause is bypassed
-    /// when capacity == 0; use the token's own pause mechanism for a hard stop.
-    function _consumeIfConfigured(bytes32 id, uint256 amount) internal {
-        (uint64 capacity,,,) = rateLimiter.getLimit(id);
-        if (capacity == 0) return;
-        rateLimiter.consume(id, _toBucketUnit(amount));
-    }
-
-    /// @dev Converts a wei amount to the gwei unit consumed by EtherFiRateLimiter (rounding up).
-    /// Saturates at type(uint64).max — practical token amounts (entire ETH supply is ~1.2e17
-    /// gwei) sit well below this; saturation makes the limiter consume its max-conservative
-    /// cap rather than reverting at SafeCast, which would otherwise DoS pathological-but-legal
-    /// upstream call sites that pass uint128/uint256 amounts.
-    function _toBucketUnit(uint256 amount) internal pure returns (uint64) {
-        uint256 gweiAmount = Math.ceilDiv(amount, 1 gwei);
-        return gweiAmount > type(uint64).max ? type(uint64).max : uint64(gweiAmount);
     }
 
     function _approve(address _owner, address _spender, uint256 _amount) internal {

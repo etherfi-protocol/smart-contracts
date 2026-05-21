@@ -116,6 +116,25 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
         if (!BucketLimiter.consume(limits[id], amount)) revert LimitExceeded();
     }
 
+    /// @notice Consume capacity, or no-op if the bucket is disabled (capacity == 0).
+    /// @param id The rate limit identifier
+    /// @param amount The amount to consume in gwei
+    /// @dev Designed for token transfer/mint/burn paths that want a gas-cheap soft rate-limit
+    ///      in a single external call. Intentionally skips `whenNotPaused` — pausing the rate
+    ///      limiter must not halt token transfers; operators pause the token contract itself
+    ///      for a hard stop. Still enforces bucket existence and the consumer whitelist, so
+    ///      this is not a backdoor: only consumers explicitly whitelisted by an admin (e.g.
+    ///      eETH, weETH for their respective buckets) can use it. Monitoring should watch the
+    ///      existing CapacityUpdated(id, 0) event to detect buckets entering disabled mode.
+    function consumeIfConfigured(bytes32 id, uint64 amount) external {
+        if (!limitExists(id)) revert UnknownLimit();
+        if (!consumers[id][msg.sender]) revert InvalidConsumer();
+
+        if (limits[id].capacity == 0) return;
+
+        if (!BucketLimiter.consume(limits[id], amount)) revert LimitExceeded();
+    }
+
     /// @notice Checks if a specific amount can be consumed from a rate limit
     /// @param id The rate limit identifier
     /// @param amount The amount to check in gwei
