@@ -742,6 +742,32 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         priorityQueue.fulfillRequests(requests);
     }
 
+    function test_fulfillRequests_revertWhenMigrationNotComplete() public {
+        uint96 withdrawAmount = 10 ether;
+
+        (, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
+            _createWithdrawRequest(vipUser, withdrawAmount);
+
+        IPriorityWithdrawalQueue.WithdrawRequest[] memory requests = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
+        requests[0] = request;
+
+        // Simulate the LP pre-migration state. Without the fulfillRequests guard,
+        // the request would still get finalized and ethAmountLockedForPriorityWithdrawal
+        // would stay at zero (since receive() also gates on this flag), bricking later
+        // claims and cancels via uint128 underflow.
+        vm.mockCall(
+            address(liquidityPoolInstance),
+            abi.encodeWithSelector(ILiquidityPool.escrowMigrationCompleted.selector),
+            abi.encode(false)
+        );
+
+        vm.prank(requestManager);
+        vm.expectRevert(PriorityWithdrawalQueue.MigrationNotComplete.selector);
+        priorityQueue.fulfillRequests(requests);
+
+        vm.clearMockedCalls();
+    }
+
     //--------------------------------------------------------------------------------------
     //------------------------------  CLAIM TESTS  -----------------------------------------
     //--------------------------------------------------------------------------------------

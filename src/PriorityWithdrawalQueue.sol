@@ -115,6 +115,7 @@ contract PriorityWithdrawalQueue is
     error InsufficientLiquidity();
     error InsufficientEscrow();
     error EthTransferFailed();
+    error MigrationNotComplete();
 
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
@@ -334,7 +335,10 @@ contract PriorityWithdrawalQueue is
 
     /// @notice Request manager finalizes withdrawal requests after maturity.
     /// @dev Locks ETH per request by calling LP.transferLockedEthForPriority — escrowed in this contract until claim or cancel.
+    ///      Gated on escrowMigrationCompleted: receive() only bumps ethAmountLockedForPriorityWithdrawal post-migration,
+    ///      so finalizing before that would leave the lock counter at zero and brick the resulting requests.
     function fulfillRequests(WithdrawRequest[] calldata requests) external onlyRequestManager whenNotPaused {
+        if (!liquidityPool.escrowMigrationCompleted()) revert MigrationNotComplete();
         uint256 totalAmountToLock = 0;
 
         for (uint256 i = 0; i < requests.length; ++i) {
