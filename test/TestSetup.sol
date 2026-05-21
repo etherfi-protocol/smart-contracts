@@ -1024,7 +1024,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // CumulativeMerkleRewardsDistributor (no circular deps)
         cumulativeMerkleRewardsDistributorImplementation = new CumulativeMerkleRewardsDistributor(address(roleRegistryInstance));
         cumulativeMerkleRewardsDistributorProxy = new UUPSProxy(address(cumulativeMerkleRewardsDistributorImplementation), "");
-        cumulativeMerkleRewardsDistributorInstance = CumulativeMerkleRewardsDistributor(address(cumulativeMerkleRewardsDistributorProxy));
+        cumulativeMerkleRewardsDistributorInstance = CumulativeMerkleRewardsDistributor(payable(address(cumulativeMerkleRewardsDistributorProxy)));
         cumulativeMerkleRewardsDistributorInstance.initialize();
 
         // CumulativeMerkleRewardsDistributor admin/claim-delay-setter consolidated into EXECUTOR_OPERATIONS_ROLE

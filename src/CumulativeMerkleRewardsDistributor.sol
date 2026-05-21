@@ -4,11 +4,12 @@ pragma solidity ^0.8.24;
 import { SafeERC20, IERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {OwnableUpgradeable} from "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import {AssetRecovery} from "./AssetRecovery.sol";
 import {IRoleRegistry} from "./interfaces/IRoleRegistry.sol";
 import {PausableUntil} from "./utils/PausableUntil.sol";
 import {ICumulativeMerkleRewardsDistributor}  from "./interfaces/ICumulativeMerkleRewardsDistributor.sol";
 
-contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistributor, OwnableUpgradeable, UUPSUpgradeable, PausableUntil {
+contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistributor, OwnableUpgradeable, UUPSUpgradeable, PausableUntil, AssetRecovery {
 using SafeERC20 for IERC20;
 
 
@@ -42,6 +43,8 @@ using SafeERC20 for IERC20;
         _disableInitializers();
         roleRegistry = IRoleRegistry(_roleRegistry);
     }
+
+    receive() external payable {}
 
     function initialize() external initializer {
         __Ownable_init();
@@ -155,6 +158,13 @@ using SafeERC20 for IERC20;
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
+    function recoverETH(address payable to, uint256 amount) external onlyOperations {
+        _recoverETH(to, amount);
+    }
+
+    function recoverERC20(address token, address to, uint256 amount) external onlyOperations {
+        _recoverERC20(token, to, amount);
+    }
 
     function getImplementation() external view returns (address) {return _getImplementation();}
 
