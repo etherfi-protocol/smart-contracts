@@ -39,6 +39,8 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     IEtherFiAdmin public immutable etherFiAdmin;
     IRoleRegistry public immutable roleRegistry;
 
+    uint32 public immutable minQuorumSize;
+
     event CommitteeMemberAdded(address indexed member);
     event CommitteeMemberRemoved(address indexed member);
     event CommitteeMemberUpdated(address indexed member, bool enabled);
@@ -72,7 +74,8 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     error InvalidQuorum();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _etherFiAdmin, address _roleRegistry) {
+    constructor(uint32 _minQuorumSize, address _etherFiAdmin, address _roleRegistry) {
+        minQuorumSize = _minQuorumSize;
         etherFiAdmin = IEtherFiAdmin(_etherFiAdmin);
         roleRegistry = IRoleRegistry(_roleRegistry);
         _disableInitializers();
@@ -284,6 +287,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     }
 
     function setQuorumSize(uint32 _quorumSize) public onlyAdmin {
+        if (_quorumSize < minQuorumSize) revert InvalidQuorum();
         quorumSize = _quorumSize;
         _checkQuorum();
         emit QuorumUpdated(_quorumSize);

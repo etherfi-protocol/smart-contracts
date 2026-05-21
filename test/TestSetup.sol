@@ -1031,7 +1031,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryInstance.grantRole(roleRegistryInstance.EXECUTOR_OPERATIONS_ROLE(), admin);
 
         // EtherFiOracle
-        etherFiOracleImplementation = new EtherFiOracle(address(etherFiAdminProxy), address(roleRegistryInstance));
+        etherFiOracleImplementation = new EtherFiOracle(1, address(etherFiAdminProxy), address(roleRegistryInstance));
         etherFiOracleInstance.upgradeTo(address(etherFiOracleImplementation));
 
         // EtherFiRestaker — constructor reads from liquifier, which is initialized above
@@ -1331,7 +1331,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function _upgradeOracleAndAdminForFork() internal {
-        address newOracleImpl = address(new EtherFiOracle(address(etherFiAdminInstance), address(roleRegistryInstance)));
+        address newOracleImpl = address(new EtherFiOracle(1, address(etherFiAdminInstance), address(roleRegistryInstance)));
         vm.prank(etherFiOracleInstance.owner());
         etherFiOracleInstance.upgradeTo(newOracleImpl);
 

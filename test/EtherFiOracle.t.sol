@@ -941,6 +941,12 @@ contract EtherFiOracleTest is TestSetup {
     // The check runs after every add/remove/manage/setQuorum mutation, so each
     // mutation needs to leave the (members, quorum) pair inside the valid band.
 
+    function test_setQuorumSize_revertsWhenBelowMinQuorumSize() public {
+        vm.prank(owner);
+        vm.expectRevert(EtherFiOracle.InvalidQuorum.selector);
+        etherFiOracleInstance.setQuorumSize(0);
+    }
+
     function test_setQuorumSize_revertsWhenAboveActiveMembers() public {
         // numActive = 2 (alice, bob); quorum = 3 violates numActive < quorum
         vm.prank(owner);
