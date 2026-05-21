@@ -74,6 +74,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     RoleRegistry private DEPRECATED_roleRegistry;
 
     uint128 public ethAmountLockedForWithdrawal;
+    uint256 public negativeRebaseStrandedETH;
 
     // (requestId upperBound => amountPerShareCeil(1e18) at finalize time).
     // A value of 0 marks a "legacy" range that pre-dates the share-rate-freeze upgrade;
@@ -256,6 +257,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
         if (ethAmountLockedForWithdrawal < amountToTransfer) revert InsufficientEscrow();
         ethAmountLockedForWithdrawal -= uint128(amountToTransfer);
+        if (amountToTransfer < request.amountOfEEth) negativeRebaseStrandedETH += request.amountOfEEth - amountToTransfer;
 
         uint256 burnedShares = liquidityPool.withdraw(amountToWithdraw, uint256(frozenRate));
         // When `amountToWithdraw` was computed at `frozenRate` (or live rate, for legacy), the
@@ -408,6 +410,13 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
         emit HandledRemainderOfClaimedWithdrawRequests(eEthAmountToTreasury, eEthAmountToBurn);
 
+        if (negativeRebaseStrandedETH > 0) {
+            ethAmountLockedForWithdrawal -= uint128(negativeRebaseStrandedETH);
+            (bool ok, ) = payable(address(treasury)).call{value: negativeRebaseStrandedETH}("");
+            if (!ok) revert EthTransferFailed();
+            negativeRebaseStrandedETH = 0;
+        }
+
         // Sweep accumulated fee ETH (surplus over locked counter) back to LP.
         // Fee ETH accrues because _claimWithdraw decrements by gross (amountOfEEth) but only
         // sends net (amountToWithdraw = amountOfEEth - fee) to the recipient.
@@ -417,8 +426,9 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         if (strandedFeeEth > 0) {
             (bool ok, ) = payable(address(liquidityPool)).call{value: strandedFeeEth}("");
             if (!ok) revert FeeReturnFailed();
-            _checkEthAmountLockedForWithdrawal();
         }
+
+        _checkEthAmountLockedForWithdrawal();
     }
 
     function getEEthRemainderAmount() public view returns (uint256) {

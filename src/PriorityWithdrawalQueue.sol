@@ -35,6 +35,7 @@ contract PriorityWithdrawalQueue is
     uint96 public constant MIN_AMOUNT = 0.01 ether;
     uint96 public constant MAX_AMOUNT = 1000 ether;
     uint256 private constant _BASIS_POINT_SCALE = 1e4;
+    uint256 private constant _TOLERANCE_BUFFER = 10; // in wei to account for rounding errors
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  IMMUTABLES  ---------------------------------------
@@ -609,7 +610,7 @@ contract PriorityWithdrawalQueue is
         if (!_finalizedRequests.contains(requestId)) revert RequestNotFinalized();
 
         uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
-        if (amountForShares < request.amountWithFee) revert InvalidOutputAmount();
+        if (amountForShares + _TOLERANCE_BUFFER < request.amountWithFee) revert InvalidOutputAmount();
 
         uint128 amountToWithdraw = request.amountWithFee;
 
