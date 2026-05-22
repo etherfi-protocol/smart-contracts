@@ -45,6 +45,10 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
     uint256 private constant BUCKET_UNIT_SCALE = 1e12;
     uint256 private constant BASIS_POINT_SCALE = 1e4;
 
+    /// @dev Suggested gas stipend for contract receiving ETH to perform a few
+    /// storage reads and writes, but low enough to prevent griefing.
+    uint256 internal constant GAS_STIPEND_NO_GRIEF = 100_000;
+
     address public constant ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
     address public immutable treasury;
@@ -68,7 +72,6 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
 
     error InvalidAmount();
     error InvalidOutputToken();
-    error BlacklistedUser();
     error InvalidBps();
     error ExceedsMaxExitFee();
     error ExceedsMaxLowWatermark();
@@ -144,7 +147,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param receiver The address to receive the redeemed outputToken.
      * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemEEth(uint256 eEthAmount, address receiver, address outputToken) public whenNotPaused nonReentrant nonBlacklisted(receiver) {
+    function redeemEEth(uint256 eEthAmount, address receiver, address outputToken) public nonReentrant whenNotPaused nonBlacklisted(receiver) {
         _redeemEEth(eEthAmount, receiver, outputToken);
     }
 
@@ -154,7 +157,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param receiver The address to receive the redeemed outputToken.
      * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemWeEth(uint256 weEthAmount, address receiver, address outputToken) public whenNotPaused nonReentrant nonBlacklisted(receiver) {
+    function redeemWeEth(uint256 weEthAmount, address receiver, address outputToken) public nonReentrant whenNotPaused nonBlacklisted(receiver) {
         _redeemWeEth(weEthAmount, receiver, outputToken);
     }
 
@@ -165,7 +168,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param permit The permit params.
      * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemEEthWithPermit(uint256 eEthAmount, address receiver, IeETH.PermitInput calldata permit, address outputToken) external whenNotPaused nonReentrant nonBlacklisted(receiver) {
+    function redeemEEthWithPermit(uint256 eEthAmount, address receiver, IeETH.PermitInput calldata permit, address outputToken) external nonReentrant whenNotPaused nonBlacklisted(receiver) {
         try eEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {}
         _redeemEEth(eEthAmount, receiver, outputToken);
     }
@@ -177,7 +180,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param permit The permit params.
      * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemWeEthWithPermit(uint256 weEthAmount, address receiver, IWeETH.PermitInput calldata permit, address outputToken) external whenNotPaused nonReentrant nonBlacklisted(receiver) {
+    function redeemWeEthWithPermit(uint256 weEthAmount, address receiver, IWeETH.PermitInput calldata permit, address outputToken) external nonReentrant whenNotPaused nonBlacklisted(receiver) {
         try weEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s)  {} catch {}
         _redeemWeEth(weEthAmount, receiver, outputToken);
     }
@@ -189,7 +192,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         uint256 feeShareToStakers
     ) internal {
         uint256 prevBalance = address(this).balance;
-        uint256 prevLpBalance = address(liquidityPool).balance;
+        uint256 prevLpBalance = liquidityPool.totalValueInLp();
         uint256 totalEEthShare = eEth.totalShares();
 
         // Withdraw ETH from the liquidity pool
@@ -201,11 +204,11 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         if (eEth.totalShares() < 1 gwei || eEth.totalShares() != totalEEthShare - (sharesToBurn + feeShareToStakers)) revert InvalidTotalShares();
 
         // To Receiver by transferring ETH, using gas 10k for additional safety
-        (bool success, ) = receiver.call{value: ethReceived, gas: 10_000}("");
+        (bool success, ) = receiver.call{value: ethReceived, gas: GAS_STIPEND_NO_GRIEF}("");
         if (!success) revert TransferFailed();
 
         // Make sure the liquidity pool balance is correct && total shares are correct
-        if (address(liquidityPool).balance != prevLpBalance - ethReceived) revert InvalidLpBalance();
+        if (liquidityPool.totalValueInLp() != prevLpBalance - ethReceived) revert InvalidLpBalance();
     }
 
     /**
@@ -280,7 +283,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         if(token == ETH_ADDRESS) {
             // Post-escrow-migration, locked ETH has physically left LP into the holder
             // contracts, so LP.balance already excludes it. No further subtraction needed.
-            return address(liquidityPool).balance;
+            return liquidityPool.totalValueInLp();
         } else if (token == address(lido)) {
             return lido.balanceOf(address(etherFiRestaker));
         }

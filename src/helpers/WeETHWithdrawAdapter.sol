@@ -125,7 +125,7 @@ contract WeETHWithdrawAdapter is
         uint256 eETHAmount = weETH.unwrap(weETHAmount);
         
         // Approve eETH to be spent by LiquidityPool
-        IERC20(address(eETH)).safeApprove(address(liquidityPool), eETHAmount);
+        IERC20(address(eETH)).safeIncreaseAllowance(address(liquidityPool), eETHAmount);
         
         // Create withdrawal request through LiquidityPool
         requestId = liquidityPool.requestWithdraw(recipient, eETHAmount);

@@ -184,7 +184,7 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         bytes memory signature = vm.randomBytes(96);
         bytes memory withdrawalCredentials = managerInstance.addressToCompoundingWithdrawalCredentials(eigenPod);
         bytes32 depositDataRoot =
-            depositDataRootGenerator.generateDepositDataRoot(pubkey, signature, withdrawalCredentials, stakingManagerInstance.initialDepositAmount());
+            depositDataRootGenerator.generateDepositDataRoot(pubkey, signature, withdrawalCredentials, stakingManagerInstance.INITIAL_DEPOSIT_AMOUNT());
 
         depositData = IStakingManager.DepositData({
             publicKey: pubkey,
@@ -296,6 +296,6 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         etherFiAdminInstance.executeTasks(report);
         (bool completed, bool exists) = _executeValidatorApprovalTask(report, pubkeys, signatures);
         uint256 LiquidityPoolBalanceAfter = address(liquidityPoolInstance).balance;
-        assertApproxEqAbs(LiquidityPoolBalanceAfter, LiquidityPoolBalanceBefore - liquidityPoolInstance.validatorSizeWei() + stakingManagerInstance.initialDepositAmount(), 1e3);
+        assertApproxEqAbs(LiquidityPoolBalanceAfter, LiquidityPoolBalanceBefore - liquidityPoolInstance.validatorSizeWei() + stakingManagerInstance.INITIAL_DEPOSIT_AMOUNT(), 1e3);
     }
 }

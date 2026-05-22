@@ -35,6 +35,7 @@ contract PriorityWithdrawalQueue is
     uint96 public constant MIN_AMOUNT = 0.01 ether;
     uint96 public constant MAX_AMOUNT = 1000 ether;
     uint256 private constant _BASIS_POINT_SCALE = 1e4;
+    uint256 private constant _TOLERANCE_BUFFER = 10; // in wei to account for rounding errors
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  IMMUTABLES  ---------------------------------------
@@ -109,12 +110,12 @@ contract PriorityWithdrawalQueue is
     error AddressZero();
     error BadInput();
     error IncorrectCaller();
-    error InvalidBurnedSharesAmount();
     error InvalidEEthSharesAfterRemainderHandling();
     error InvalidOutputAmount();
     error InsufficientLiquidity();
     error InsufficientEscrow();
     error EthTransferFailed();
+    error MigrationNotComplete();
 
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
@@ -189,7 +190,7 @@ contract PriorityWithdrawalQueue is
         __ReentrancyGuard_init();
 
         nonce = 1;
-        shareRemainderSplitToTreasuryInBps = 10000; // 100%
+        shareRemainderSplitToTreasuryInBps = uint16(_BASIS_POINT_SCALE); // 100%
     }
 
     //--------------------------------------------------------------------------------------
@@ -203,7 +204,7 @@ contract PriorityWithdrawalQueue is
     function requestWithdraw(
         uint96 amountOfEEth,
         uint96 amountWithFee
-    ) external whenNotPaused onlyWhitelisted nonReentrant returns (bytes32 requestId) {
+    ) external nonReentrant whenNotPaused onlyWhitelisted returns (bytes32 requestId) {
         if (amountOfEEth < MIN_AMOUNT || amountOfEEth > MAX_AMOUNT) revert InvalidAmount();
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore,) = _snapshotBalances();
 
@@ -217,7 +218,7 @@ contract PriorityWithdrawalQueue is
         uint96 amountOfEEth,
         uint96 amountWithFee,
         PermitInput calldata permit
-    ) external whenNotPaused onlyWhitelisted nonReentrant returns (bytes32 requestId) {
+    ) external nonReentrant whenNotPaused onlyWhitelisted returns (bytes32 requestId) {
         if (amountOfEEth < MIN_AMOUNT || amountOfEEth > MAX_AMOUNT) revert InvalidAmount();
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore,) = _snapshotBalances();
 
@@ -241,7 +242,7 @@ contract PriorityWithdrawalQueue is
     function requestWithdrawWithWeETH(
         uint96 weEthAmount,
         uint96 amountWithFee
-    ) external whenNotPaused onlyWhitelisted nonReentrant returns (bytes32 requestId) {
+    ) external nonReentrant whenNotPaused onlyWhitelisted returns (bytes32 requestId) {
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore,) = _snapshotBalances();
 
         IERC20(address(weETH)).safeTransferFrom(msg.sender, address(this), weEthAmount);
@@ -262,7 +263,7 @@ contract PriorityWithdrawalQueue is
         uint96 weEthAmount,
         uint96 amountWithFee,
         PermitInput calldata permit
-    ) external whenNotPaused onlyWhitelisted nonReentrant returns (bytes32 requestId) {
+    ) external nonReentrant whenNotPaused onlyWhitelisted returns (bytes32 requestId) {
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore,) = _snapshotBalances();
 
         try weETH.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {
@@ -285,7 +286,7 @@ contract PriorityWithdrawalQueue is
     /// @return requestId The cancelled request ID
     function cancelWithdraw(
         WithdrawRequest calldata request
-    ) external whenNotPaused onlyRequestUser(request.user) nonReentrant returns (bytes32 requestId) {
+    ) external nonReentrant whenNotPaused onlyRequestUser(request.user) returns (bytes32 requestId) {
         if (request.creationTime + minDelay > block.timestamp) revert NotMatured();
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore,) = _snapshotBalances();
         uint256 userEEthSharesBefore = eETH.shares(request.user);
@@ -334,7 +335,10 @@ contract PriorityWithdrawalQueue is
 
     /// @notice Request manager finalizes withdrawal requests after maturity.
     /// @dev Locks ETH per request by calling LP.transferLockedEthForPriority — escrowed in this contract until claim or cancel.
+    ///      Gated on escrowMigrationCompleted: receive() only bumps ethAmountLockedForPriorityWithdrawal post-migration,
+    ///      so finalizing before that would leave the lock counter at zero and brick the resulting requests.
     function fulfillRequests(WithdrawRequest[] calldata requests) external onlyRequestManager whenNotPaused {
+        if (!liquidityPool.escrowMigrationCompleted()) revert MigrationNotComplete();
         uint256 totalAmountToLock = 0;
 
         for (uint256 i = 0; i < requests.length; ++i) {
@@ -471,7 +475,7 @@ contract PriorityWithdrawalQueue is
     /// @return queueEEthSharesBefore eETH shares held by this contract
     /// @return queueEthBefore ETH balance of this contract (used for claim verification)
     function _snapshotBalances() internal view returns (uint256 lpEthBefore, uint256 queueEEthSharesBefore, uint256 queueEthBefore) {
-        lpEthBefore = address(liquidityPool).balance;
+        lpEthBefore = liquidityPool.totalValueInLp();
         queueEEthSharesBefore = eETH.shares(address(this));
         queueEthBefore = address(this).balance;
     }
@@ -487,7 +491,7 @@ contract PriorityWithdrawalQueue is
     ) internal view {
         uint256 expectedSharesReceived = liquidityPool.sharesForAmount(amountOfEEth);
         if (eETH.shares(address(this)) != queueEEthSharesBefore + expectedSharesReceived) revert UnexpectedBalanceChange();
-        if (address(liquidityPool).balance != lpEthBefore) revert UnexpectedBalanceChange();
+        if (liquidityPool.totalValueInLp() != lpEthBefore) revert UnexpectedBalanceChange();
     }
 
     /// @dev Verify post-conditions after a cancel operation
@@ -503,7 +507,7 @@ contract PriorityWithdrawalQueue is
         address user,
         uint256 expectedLpEthDelta
     ) internal view {
-        if (address(liquidityPool).balance != lpEthBefore + expectedLpEthDelta) revert UnexpectedBalanceChange();
+        if (liquidityPool.totalValueInLp() != lpEthBefore + expectedLpEthDelta) revert UnexpectedBalanceChange();
         if (eETH.shares(address(this)) >= queueEEthSharesBefore) revert UnexpectedBalanceChange();
         if (eETH.shares(user) <= userEEthSharesBefore) revert UnexpectedBalanceChange();
     }
@@ -522,7 +526,7 @@ contract PriorityWithdrawalQueue is
         address user
     ) internal view {
         // LP ETH balance may increase by feeEth (returned from queue to LP via returnLockedEth).
-        if (address(liquidityPool).balance < lpEthBefore) revert UnexpectedBalanceChange();
+        if (liquidityPool.totalValueInLp() < lpEthBefore) revert UnexpectedBalanceChange();
         if (eETH.shares(address(this)) >= queueEEthSharesBefore) revert UnexpectedBalanceChange();
         // Queue paid ETH to the user (and optionally fee back to LP) from its own escrow balance.
         if (address(this).balance >= queueEthBefore) revert UnexpectedBalanceChange();
@@ -605,7 +609,7 @@ contract PriorityWithdrawalQueue is
         if (!_finalizedRequests.contains(requestId)) revert RequestNotFinalized();
 
         uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
-        if (amountForShares < request.amountWithFee) revert InvalidOutputAmount();
+        if (amountForShares + _TOLERANCE_BUFFER < request.amountWithFee) revert InvalidOutputAmount();
 
         uint128 amountToWithdraw = request.amountWithFee;
 

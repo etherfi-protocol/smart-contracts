@@ -1324,7 +1324,7 @@ contract StakingManagerTest is TestSetup {
     //---------------------------------------------------------------------------
 
     function test_initialDepositAmount() public view {
-        assertEq(stakingManagerInstance.initialDepositAmount(), 1 ether);
+        assertEq(stakingManagerInstance.INITIAL_DEPOSIT_AMOUNT(), 1 ether);
     }
 
     function test_calculateValidatorPubkeyHash() public view {

@@ -47,6 +47,10 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     bytes32 public constant QUEUE_WITHDRAWALS_LIMIT_ID        = keccak256("QUEUE_WITHDRAWALS_LIMIT_ID");
     bytes32 public constant DEPOSIT_INTO_STRATEGY_LIMIT_ID    = keccak256("DEPOSIT_INTO_STRATEGY_LIMIT_ID");
 
+    /// @dev Suggested gas stipend for contract receiving ETH to perform a few
+    /// storage reads and writes, but low enough to prevent griefing.
+    uint256 internal constant GAS_STIPEND_NO_GRIEF = 100_000;
+
     LiquidityPool private DEPRECATED_liquidityPool;
     Liquifier private DEPRECATED_liquifier;
     ILidoWithdrawalQueue private DEPRECATED_lidoWithdrawalQueue;
@@ -70,11 +74,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     error IncorrectRole();
     error NotEnoughBalance();
     error IncorrectAmount();
-    error StrategyShareNotEnough();
     error EthTransferFailed();
-    error AlreadyRegistered();
-    error NotRegistered();
-    error WrongOutput();
     error IncorrectCaller();
     error InsufficientBalance();
     error NotTheOwner();
@@ -97,7 +97,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         liquifier = ILiquifier(payable(_liquifier));
         lido = liquifier.lido();
         lidoWithdrawalQueue = liquifier.lidoWithdrawalQueue();
-        eigenLayerStrategyManager = IStrategyManager(_eigenLayerStrategyManager); 
+        eigenLayerStrategyManager = IStrategyManager(_eigenLayerStrategyManager);
         eigenLayerDelegationManager = IDelegationManager(_eigenLayerDelegationManager);
         rewardsCoordinator = IRewardsCoordinator(_rewardsCoordinator);
         etherFiRedemptionManager = _etherFiRedemptionManager;
@@ -166,7 +166,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
             reqAmounts[numReqs - 1] = minAmount;
         }
 
-        lido.approve(address(lidoWithdrawalQueue), _amount);
+        IERC20(lido).safeIncreaseAllowance(address(lidoWithdrawalQueue), _amount);
         uint256[] memory reqIds = lidoWithdrawalQueue.requestWithdrawals(reqAmounts, address(this));
 
         emit QueuedStEthWithdrawals(reqIds);
@@ -193,7 +193,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
 
     function _withdrawEther() internal {
         uint256 amountToLiquidityPool = _min(address(this).balance, liquidityPool.totalValueOutOfLp());
-        (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
+        (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: GAS_STIPEND_NO_GRIEF}("");
         if (!sent) revert EthTransferFailed();
     }
 
@@ -235,7 +235,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         if (!roleRegistry.hasRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
         rateLimiter.consume(DEPOSIT_INTO_STRATEGY_LIMIT_ID, _amountToGwei(amount));
 
-        IERC20(token).safeApprove(address(eigenLayerStrategyManager), amount);
+        IERC20(token).safeIncreaseAllowance(address(eigenLayerStrategyManager), amount);
 
         IStrategy strategy = tokenInfos[token].elStrategy;
         uint256 shares = eigenLayerStrategyManager.depositIntoStrategy(strategy, IERC20(token), amount);

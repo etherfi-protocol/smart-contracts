@@ -112,11 +112,6 @@ contract AuctionManager is
         __ReentrancyGuard_init();
     }
 
-    function initializeOnUpgrade(uint128 _accumulatedRevenueThreshold) external onlyOwner {
-        accumulatedRevenue = 0;
-        accumulatedRevenueThreshold = _accumulatedRevenueThreshold;
-    }
-
     /// @notice Creates bid(s) for the right to run a validator node when ETH is deposited
     /// @param _bidSize the number of bids that the node operator would like to create
     /// @param _bidAmountPerBid the ether value of each bid that is created
@@ -124,7 +119,7 @@ contract AuctionManager is
     function createBid(
         uint256 _bidSize,
         uint256 _bidAmountPerBid
-    ) external payable whenNotPaused nonReentrant nonBlacklisted returns (uint256[] memory) {
+    ) external payable nonReentrant whenNotPaused nonBlacklisted returns (uint256[] memory) {
         if (_bidSize == 0) revert InvalidBidSize();
         if (whitelistEnabled) {
             if (!nodeOperatorManager.isWhitelisted(msg.sender)) revert NotWhitelisted();

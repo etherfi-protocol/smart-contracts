@@ -96,6 +96,9 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             liquidityPoolInstance.initializeOnUpgradeV2();
         }
 
+        liquidityPoolInstance.setMinWithdrawAmount(0.001 ether);
+        liquidityPoolInstance.setMaxWithdrawAmount(1000 ether);
+
         // Grant roles — consolidated to the 8-tier model.
         // PWQ admin → OPERATION_TIMELOCK_ROLE; pauser → OPERATION_MULTISIG_ROLE;
         // whitelist manager → HOUSEKEEPING_OPERATIONS_ROLE; request manager → ORACLE_OPERATIONS_ROLE; IMPLICIT_FEE_CLAIMER → HOUSEKEEPING_OPERATIONS_ROLE.
@@ -740,6 +743,32 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         vm.prank(requestManager);
         vm.expectRevert(PriorityWithdrawalQueue.RequestAlreadyFinalized.selector);
         priorityQueue.fulfillRequests(requests);
+    }
+
+    function test_fulfillRequests_revertWhenMigrationNotComplete() public {
+        uint96 withdrawAmount = 10 ether;
+
+        (, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
+            _createWithdrawRequest(vipUser, withdrawAmount);
+
+        IPriorityWithdrawalQueue.WithdrawRequest[] memory requests = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
+        requests[0] = request;
+
+        // Simulate the LP pre-migration state. Without the fulfillRequests guard,
+        // the request would still get finalized and ethAmountLockedForPriorityWithdrawal
+        // would stay at zero (since receive() also gates on this flag), bricking later
+        // claims and cancels via uint128 underflow.
+        vm.mockCall(
+            address(liquidityPoolInstance),
+            abi.encodeWithSelector(ILiquidityPool.escrowMigrationCompleted.selector),
+            abi.encode(false)
+        );
+
+        vm.prank(requestManager);
+        vm.expectRevert(PriorityWithdrawalQueue.MigrationNotComplete.selector);
+        priorityQueue.fulfillRequests(requests);
+
+        vm.clearMockedCalls();
     }
 
     //--------------------------------------------------------------------------------------
@@ -1636,14 +1665,16 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         priorityQueue.claimWithdraw(request);
 
         uint256 remainderAmount = priorityQueue.getRemainderAmount();
-        
-        // Only test if there are remainder shares
+
+        // Only test if there are remainder shares. The remainder is just a few wei on mainnet
+        // fork (rounding dust), so halving it can round `sharesForAmount(eEthAmount)` to zero
+        // and leave `totalRemainderShares` untouched. Sweep the full remainder so the share
+        // delta is non-zero and the post-condition can fire.
         if (remainderAmount > 0) {
-            uint256 amountToHandle = remainderAmount / 2;
             uint256 remainderBefore = priorityQueue.totalRemainderShares();
 
             vm.prank(alice);
-            priorityQueue.handleRemainder(amountToHandle);
+            priorityQueue.handleRemainder(remainderAmount);
 
             assertLt(priorityQueue.totalRemainderShares(), remainderBefore, "Remainder should decrease");
         }

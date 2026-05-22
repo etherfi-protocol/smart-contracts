@@ -372,4 +372,64 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
     // verifyContractByteCodeMatch(deployedImpl, address(cumulativeMerkleRewardsDistributorImplementation));
     // verifyContractByteCodeMatch(deployedProxy, address(cumulativeMerkleRewardsDistributorInstance));
    }
+
+    /// @dev M-07: contract added `receive() external payable {}` + AssetRecovery (recoverETH /
+    ///      recoverERC20) so any ETH airdropped to the contract can be swept by Operations.
+    ///      Pre-fix, plain ETH transfers would revert (no receive/fallback), trapping funds.
+    function test_receive_acceptsPlainEthTransfer() public {
+        address payable cmrd = payable(address(cumulativeMerkleRewardsDistributorInstance));
+        uint256 balBefore = cmrd.balance;
+
+        vm.deal(bob, 1 ether);
+        vm.prank(bob);
+        (bool ok, ) = cmrd.call{value: 1 ether}("");
+        assertTrue(ok, "plain ETH transfer should succeed via receive()");
+        assertEq(cmrd.balance - balBefore, 1 ether, "balance should reflect transfer");
+    }
+
+    function test_recoverETH_movesEthToRecipient() public {
+        address payable cmrd = payable(address(cumulativeMerkleRewardsDistributorInstance));
+        vm.deal(cmrd, 5 ether);
+
+        address payable to = payable(makeAddr("recipient"));
+        uint256 toBalBefore = to.balance;
+        uint256 cmrdBalBefore = cmrd.balance;
+
+        vm.prank(admin);
+        cumulativeMerkleRewardsDistributorInstance.recoverETH(to, 3 ether);
+
+        assertEq(to.balance - toBalBefore, 3 ether, "recipient should receive recovered ETH");
+        assertEq(cmrdBalBefore - cmrd.balance, 3 ether, "contract balance should drop by recovered amount");
+    }
+
+    function test_recoverETH_revertsForNonOperator() public {
+        address payable cmrd = payable(address(cumulativeMerkleRewardsDistributorInstance));
+        vm.deal(cmrd, 1 ether);
+
+        vm.prank(bob); // bob holds no roles
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
+        cumulativeMerkleRewardsDistributorInstance.recoverETH(payable(bob), 1 ether);
+    }
+
+    function test_recoverERC20_movesTokenToRecipient() public {
+        // setUp() already minted 1000 rETH to the distributor; recover 100.
+        address to = makeAddr("recipient");
+        uint256 cmrdBefore = rETH.balanceOf(address(cumulativeMerkleRewardsDistributorInstance));
+
+        vm.prank(admin);
+        cumulativeMerkleRewardsDistributorInstance.recoverERC20(address(rETH), to, 100 ether);
+
+        assertEq(rETH.balanceOf(to), 100 ether, "recipient should receive recovered tokens");
+        assertEq(
+            cmrdBefore - rETH.balanceOf(address(cumulativeMerkleRewardsDistributorInstance)),
+            100 ether,
+            "contract balance should drop by recovered amount"
+        );
+    }
+
+    function test_recoverERC20_revertsForNonOperator() public {
+        vm.prank(bob);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
+        cumulativeMerkleRewardsDistributorInstance.recoverERC20(address(rETH), bob, 1 ether);
+    }
 }

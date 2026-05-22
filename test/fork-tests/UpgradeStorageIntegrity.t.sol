@@ -70,9 +70,6 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         uint32 nextId;
         uint32 lastFin;
         uint16 split;
-        uint32 scanFrom;
-        uint32 scanTo;
-        uint256 agg;
         uint256 remainder;
         bool paused;
     }
@@ -104,9 +101,6 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         s.nextId = wrn.nextRequestId();
         s.lastFin = wrn.lastFinalizedRequestId();
         s.split = wrn.shareRemainderSplitToTreasuryInBps();
-        s.scanFrom = wrn.currentRequestIdToScanFromForShareRemainder();
-        s.scanTo = wrn.lastRequestIdToScanUntilForShareRemainder();
-        s.agg = wrn.aggregateSumOfEEthShare();
         s.remainder = wrn.totalRemainderEEthShares();
         s.paused = wrn.paused();
     }
@@ -134,9 +128,6 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         assertEq(a.nextId,     b.nextId,     "WRN.nextRequestId");
         assertEq(a.lastFin,    b.lastFin,    "WRN.lastFinalizedRequestId");
         assertEq(a.split,      b.split,      "WRN.split");
-        assertEq(a.scanFrom,   b.scanFrom,   "WRN.scanFrom");
-        assertEq(a.scanTo,     b.scanTo,     "WRN.scanTo");
-        assertEq(a.agg,        b.agg,        "WRN.aggregateSum");
         assertEq(a.remainder,  b.remainder,  "WRN.remainder");
         assertEq(a.paused,     b.paused,     "WRN.paused");
     }
