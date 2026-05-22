@@ -415,7 +415,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         if (_validatorIds.length == 0 || _validatorIds.length != _pubkeys.length || _validatorIds.length != _signatures.length) revert InvalidArrayLengths();
 
         // we have already deposited the initial amount to create the validator on the beacon chain
-        uint256 remainingEthPerValidator = validatorSizeWei - stakingManager.initialDepositAmount();
+        uint256 remainingEthPerValidator = validatorSizeWei - stakingManager.INITIAL_DEPOSIT_AMOUNT();
 
         // In order to maintain compatibility with current callers in this upgrade
         // need to construct data from old format
@@ -457,7 +457,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         if (_validatorSizeWei < MIN_VALIDATOR_SIZE_WEI || _validatorSizeWei > MAX_VALIDATOR_SIZE_WEI) revert InvalidValidatorSize();
 
         // we have already deposited the initial amount to create the validator on the beacon chain
-        uint256 remainingEthPerValidator = _validatorSizeWei - stakingManager.initialDepositAmount();
+        uint256 remainingEthPerValidator = _validatorSizeWei - stakingManager.INITIAL_DEPOSIT_AMOUNT();
 
         uint256 outboundEthAmountFromLp = remainingEthPerValidator * _depositData.length;
         stakingManager.confirmAndFundBeaconValidators{value: outboundEthAmountFromLp}(_depositData, _validatorSizeWei);

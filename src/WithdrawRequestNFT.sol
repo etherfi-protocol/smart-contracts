@@ -74,7 +74,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     RoleRegistry private DEPRECATED_roleRegistry;
 
     uint128 public ethAmountLockedForWithdrawal;
-    uint256 public negativeRebaseStrandedETH;
 
     // (requestId upperBound => amountPerShareCeil(1e18) at finalize time).
     // A value of 0 marks a "legacy" range that pre-dates the share-rate-freeze upgrade;
@@ -184,28 +183,27 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     /// @return uint256 id of the withdraw request
     function requestWithdraw(uint96 amountOfEEth, uint96 shareOfEEth, address recipient, uint256 fee) external onlyLiquidityPool whenNotPaused returns (uint256) {
         uint256 requestId = nextRequestId++;
-        uint32 feeGwei = uint32(fee / 1 gwei);
 
-        _requests[requestId] = IWithdrawRequestNFT.WithdrawRequest(amountOfEEth, shareOfEEth, true, feeGwei);
+        _requests[requestId] = IWithdrawRequestNFT.WithdrawRequest(amountOfEEth, shareOfEEth, true, 0);
 
         _safeMint(recipient, requestId);
 
-        emit WithdrawRequestCreated(uint32(requestId), amountOfEEth, shareOfEEth, recipient, fee);
+        emit WithdrawRequestCreated(uint32(requestId), amountOfEEth, shareOfEEth, recipient, 0);
         return requestId;
     }
 
     function getClaimableAmount(uint256 tokenId) public view returns (uint256) {
-        (uint256 amountToTransfer, uint256 fee, ) = _getClaimableAmount(tokenId);
-        return amountToTransfer - fee;
+        (uint256 amountToTransfer, ) = _getClaimableAmount(tokenId);
+        return amountToTransfer;
     }
 
-    /// @dev Returns `(amountToTransfer, fee, frozenRate)`. `frozenRate` is the rate snapshotted
+    /// @dev Returns `(amountToTransfer, frozenRate)`. `frozenRate` is the rate snapshotted
     ///      at the request's finalize batch. For pre-upgrade legacy requests (covered only by the
     ///      sentinel checkpoint with value 0), the live rate from `LP.amountPerShareCeil()` is
     ///      substituted locally — preserving legacy claim semantics (live-rate at claim). The
     ///      returned `frozenRate` is therefore guaranteed non-zero, which is what `LP.withdraw`
     ///      now requires (`InvalidRate` reverts on zero).
-    function _getClaimableAmount(uint256 tokenId) internal view returns (uint256, uint256, uint224) {
+    function _getClaimableAmount(uint256 tokenId) internal view returns (uint256, uint224) {
         if (tokenId > lastFinalizedRequestId) revert RequestNotFinalized();
         if (ownerOf(tokenId) == address(0)) revert AlreadyClaimed();
 
@@ -226,12 +224,11 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
         // send the lesser value of the originally requested amount of eEth or the frozen-rate value of the shares
         uint256 amountToTransfer = Math.min(request.amountOfEEth, amountForShares);
-        uint256 fee = uint256(request.feeGwei) * 1 gwei;
-        return (amountToTransfer, fee, frozenRate);
+        return (amountToTransfer, frozenRate);
     }
 
     /// @notice called by the NFT owner to claim their ETH
-    /// @dev burns the NFT and transfers ETH from the liquidity pool to the owner minus any fee, withdraw request must be valid and finalized
+    /// @dev burns the NFT and transfers ETH from the liquidity pool to the owner, withdraw request must be valid and finalized
     /// @param tokenId the id of the withdraw request and associated NFT
     function claimWithdraw(uint256 tokenId) external nonReentrant nonBlacklisted {
         return _claimWithdraw(tokenId, ownerOf(tokenId));
@@ -247,15 +244,13 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         IWithdrawRequestNFT.WithdrawRequest memory request = _requests[tokenId];
         if (!request.isValid) revert RequestNotValid();
 
-        (uint256 amountToTransfer, uint256 fee, uint224 frozenRate) = _getClaimableAmount(tokenId);
-        uint256 amountToWithdraw = amountToTransfer - fee;
+        (uint256 amountToWithdraw, uint224 frozenRate) = _getClaimableAmount(tokenId);
 
         _burn(tokenId);
         delete _requests[tokenId];
 
-        if (ethAmountLockedForWithdrawal < amountToTransfer) revert InsufficientEscrow();
-        ethAmountLockedForWithdrawal -= uint128(amountToTransfer);
-        if (amountToTransfer < request.amountOfEEth) negativeRebaseStrandedETH += request.amountOfEEth - amountToTransfer;
+        if (ethAmountLockedForWithdrawal < amountToWithdraw) revert InsufficientEscrow();
+        ethAmountLockedForWithdrawal -= uint128(request.amountOfEEth);
 
         uint256 burnedShares = liquidityPool.withdraw(amountToWithdraw, uint256(frozenRate));
         // When `amountToWithdraw` was computed at `frozenRate` (or live rate, for legacy), the
@@ -408,25 +403,16 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
         emit HandledRemainderOfClaimedWithdrawRequests(eEthAmountToTreasury, eEthAmountToBurn);
 
-        if (negativeRebaseStrandedETH > 0) {
-            ethAmountLockedForWithdrawal -= uint128(negativeRebaseStrandedETH);
-            (bool ok, ) = payable(address(treasury)).call{value: negativeRebaseStrandedETH}("");
-            if (!ok) revert EthTransferFailed();
-            negativeRebaseStrandedETH = 0;
-        }
-
-        // Sweep accumulated fee ETH (surplus over locked counter) back to LP.
-        // Fee ETH accrues because _claimWithdraw decrements by gross (amountOfEEth) but only
-        // sends net (amountToWithdraw = amountOfEEth - fee) to the recipient.
-        uint256 strandedFeeEth = address(this).balance > ethAmountLockedForWithdrawal
+        // Sweep accumulated ETH back to treasury
+        // In case of negative rebase, the ETH is stranded in the NFT contract
+        uint256 strandedEth = address(this).balance > ethAmountLockedForWithdrawal
             ? address(this).balance - uint256(ethAmountLockedForWithdrawal)
             : 0;
-        if (strandedFeeEth > 0) {
-            (bool ok, ) = payable(address(liquidityPool)).call{value: strandedFeeEth}("");
+        if (strandedEth > 0) {
+            (bool ok, ) = payable(address(treasury)).call{value: strandedEth}("");
             if (!ok) revert FeeReturnFailed();
+            _checkEthAmountLockedForWithdrawal();
         }
-
-        _checkEthAmountLockedForWithdrawal();
     }
 
     function getEEthRemainderAmount() public view returns (uint256) {

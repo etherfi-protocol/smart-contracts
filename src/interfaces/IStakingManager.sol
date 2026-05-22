@@ -20,6 +20,8 @@ interface IStakingManager {
         INVALIDATED
     }
 
+    function INITIAL_DEPOSIT_AMOUNT() external view returns (uint256);
+
     // deposit flow
     function registerBeaconValidators(DepositData[] calldata depositData, uint256[] calldata bidIds, address etherFiNode) external;
     function createBeaconValidators(DepositData[] calldata depositData, uint256[] calldata bidIds, address etherFiNode) external payable;
