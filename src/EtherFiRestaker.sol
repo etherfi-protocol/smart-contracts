@@ -139,7 +139,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
 
     /// @notice Request for a specific amount of stETH holdings
     /// @param _amount the amount of stETH to request
-    function stEthRequestWithdrawal(uint256 _amount) public onlyHousekeepingOperations returns (uint256[] memory) {
+    function stEthRequestWithdrawal(uint256 _amount) public onlyExecutorOperations returns (uint256[] memory) {
         rateLimiter.consume(STETH_REQUEST_WITHDRAWAL_LIMIT_ID, _amountToGwei(_amount));
 
         uint256 minAmount = lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT();
@@ -226,7 +226,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     }
 
     // deposit the token in holding into the restaking strategy
-    function depositIntoStrategy(address token, uint256 amount) external onlyHousekeepingOperations returns (uint256) {
+    function depositIntoStrategy(address token, uint256 amount) external onlyExecutorOperations returns (uint256) {
         rateLimiter.consume(DEPOSIT_INTO_STRATEGY_LIMIT_ID, _amountToGwei(amount));
 
         IERC20(token).safeIncreaseAllowance(address(eigenLayerStrategyManager), amount);
@@ -241,7 +241,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// Made easy for operators
     /// @param token the token to withdraw
     /// @param amount the amount of token to withdraw
-    function queueWithdrawals(address token, uint256 amount) public onlyHousekeepingOperations returns (bytes32[] memory) {
+    function queueWithdrawals(address token, uint256 amount) public onlyExecutorOperations returns (bytes32[] memory) {
         rateLimiter.consume(QUEUE_WITHDRAWALS_LIMIT_ID, _amountToGwei(amount));
 
         uint256 shares = getEigenLayerRestakingStrategy(token).underlyingToSharesView(amount);

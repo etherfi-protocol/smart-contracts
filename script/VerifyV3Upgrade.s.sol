@@ -182,7 +182,7 @@ contract VerifyV3Upgrade is Script {
             protocolUpgrader != address(0),
             "Protocol upgrader (RoleRegistry owner) is set"
         );
-        try roleRegistry.onlyProtocolUpgrader(protocolUpgrader) {
+        try roleRegistry.onlyUpgradeTimelock(protocolUpgrader) {
             checkCondition(true, "Protocol upgrader is owner");
         } catch {
             checkCondition(false, "Protocol upgrader is not owner");

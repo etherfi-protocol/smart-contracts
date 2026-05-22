@@ -22,7 +22,6 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
     bytes32 public constant EXECUTOR_OPERATIONS_ROLE = keccak256("EXECUTOR_OPERATIONS_ROLE"); // Executor operations role
     bytes32 public constant EIGENPOD_OPERATIONS_ROLE = keccak256("EIGENPOD_OPERATIONS_ROLE"); // Eigenpod operations role
 
-    error OnlyProtocolUpgrader();
     error OnlyUpgradeTimelock();
     error OnlyOperatingTimelock();
     error OnlyOperatingMultisig();
@@ -104,10 +103,6 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
         return roleHolders(uint256(role));
     }
 
-    function onlyProtocolUpgrader(address account) public view {
-        if (owner() != account) revert OnlyProtocolUpgrader();
-    }
-
     function onlyUpgradeTimelock(address account) public view {
         if (!hasRole(UPGRADE_TIMELOCK_ROLE, account)) revert OnlyUpgradeTimelock();
     }
@@ -153,6 +148,6 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
     }
 
     function _authorizeUpgrade(address newImplementation) internal override {
-        onlyProtocolUpgrader(msg.sender);
+        onlyUpgradeTimelock(msg.sender);
     }
 }

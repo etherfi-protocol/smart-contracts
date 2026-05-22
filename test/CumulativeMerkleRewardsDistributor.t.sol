@@ -166,7 +166,7 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
    }
    function test_upgrading() public {
     vm.prank(chad);
-    vm.expectRevert(RoleRegistry.OnlyProtocolUpgrader.selector);
+    vm.expectRevert(RoleRegistry.OnlyUpgradeTimelock.selector);
     cumulativeMerkleRewardsDistributorInstance.upgradeTo(address(0x555));
     CumulativeMerkleRewardsDistributor newImpl = new CumulativeMerkleRewardsDistributor(address(roleRegistryInstance)); 
     vm.prank(roleRegistryInstance.owner());

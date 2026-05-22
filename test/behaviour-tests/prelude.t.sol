@@ -69,26 +69,27 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
 
-        // Upgrade RoleRegistry in place so newly-added role getters defined in
-        // RolesLibrary are reachable on the deployed proxy.
-        vm.prank(roleRegistry.owner());
-        RoleRegistry(address(roleRegistry)).upgradeTo(address(new RoleRegistry(address(0))));
-
         stakingManager = StakingManager(0x25e821b7197B146F7713C3b89B6A4D83516B912d);
         liquidityPool = ILiquidityPool(0x308861A430be4cce5502d0A12724771Fc6DaF216);
         etherFiNodesManager = EtherFiNodesManager(payable(0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F));
         auctionManager = AuctionManager(0x00C452aFFee3a17d9Cecc1Bcd2B8d5C7635C4CB9);
 
-        // `_authorizeUpgrade` and `upgradeEtherFiNode` now check
-        // UPGRADE_TIMELOCK_ROLE via `onlyUpgradeTimelock`. Grant it to every
-        // proxy owner pranked for an upgrade call below.
-        vm.startPrank(roleRegistry.owner());
-        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), stakingManager.owner());
-        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), LiquidityPool(payable(address(liquidityPool))).owner());
-        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), etherFiNodesManager.owner());
-        vm.stopPrank();
+        // Deploy a fresh Blacklister so any upgraded impl that wires it as an immutable
+        // has a non-zero target to call into.
+        Blacklister blacklisterImpl = new Blacklister(address(roleRegistry));
+        blacklisterInstance = Blacklister(address(new UUPSProxy(address(blacklisterImpl), abi.encodeWithSelector(Blacklister.initialize.selector))));
 
-        // deploy new staking manager implementation
+        // Deploy rate limiter first with proxy pattern (used by EtherFiNodesManager).
+        EtherFiRateLimiter rateLimiterImpl = new EtherFiRateLimiter(address(roleRegistry));
+        UUPSProxy rateLimiterProxy = new UUPSProxy(address(rateLimiterImpl), "");
+        rateLimiter = EtherFiRateLimiter(address(rateLimiterProxy));
+        rateLimiter.initialize();
+
+        // Upgrade StakingManager / LP / EtherFiNodesManager FIRST, while the
+        // deployed RoleRegistry still exposes the legacy `onlyProtocolUpgrader`
+        // selector that their currently-deployed `_authorizeUpgrade` calls into.
+        // Once we swap RoleRegistry below, that selector is gone, so the order
+        // matters.
         StakingManager stakingManagerImpl = new StakingManager(
             address(liquidityPool),
             address(etherFiNodesManager),
@@ -99,11 +100,6 @@ contract PreludeTest is Test, ArrayTestHelper {
         );
         vm.prank(stakingManager.owner());
         stakingManager.upgradeTo(address(stakingManagerImpl));
-
-        // Deploy a fresh Blacklister so any upgraded impl that wires it as an immutable
-        // has a non-zero target to call into.
-        Blacklister blacklisterImpl = new Blacklister(address(roleRegistry));
-        blacklisterInstance = Blacklister(address(new UUPSProxy(address(blacklisterImpl), abi.encodeWithSelector(Blacklister.initialize.selector))));
 
         // Wire LP immutables to the real mainnet proxy addresses so calls into
         // eETH / withdrawRequestNFT / etc. land on live contracts rather than 0x0.
@@ -126,12 +122,23 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.prank(LiquidityPool(payable(address(liquidityPool))).owner());
         LiquidityPool(payable(address(liquidityPool))).upgradeTo(address(liquidityPoolImpl));
 
-        // Deploy rate limiter first with proxy pattern
-        EtherFiRateLimiter rateLimiterImpl = new EtherFiRateLimiter(address(roleRegistry));
-        UUPSProxy rateLimiterProxy = new UUPSProxy(address(rateLimiterImpl), "");
-        rateLimiter = EtherFiRateLimiter(address(rateLimiterProxy));
-        rateLimiter.initialize();
-        
+        EtherFiNodesManager etherFiNodesManagerImpl = new EtherFiNodesManager(address(stakingManager), address(roleRegistry), address(rateLimiter));
+        vm.prank(etherFiNodesManager.owner());
+        etherFiNodesManager.upgradeTo(address(etherFiNodesManagerImpl));
+
+        // Now swap RoleRegistry in place so newly-added role getters defined in
+        // RolesLibrary are reachable from the freshly-upgraded impls.
+        vm.prank(roleRegistry.owner());
+        RoleRegistry(address(roleRegistry)).upgradeTo(address(new RoleRegistry(address(0))));
+
+        // `upgradeEtherFiNode` checks UPGRADE_TIMELOCK_ROLE via
+        // `onlyUpgradeTimelock`. Grant it to every proxy owner pranked below.
+        vm.startPrank(roleRegistry.owner());
+        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), stakingManager.owner());
+        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), LiquidityPool(payable(address(liquidityPool))).owner());
+        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), etherFiNodesManager.owner());
+        vm.stopPrank();
+
         // upgrade etherFiNode impl
         etherFiNodeImpl = new EtherFiNode(
             address(liquidityPool),
@@ -141,11 +148,6 @@ contract PreludeTest is Test, ArrayTestHelper {
         );
         vm.prank(stakingManager.owner());
         stakingManager.upgradeEtherFiNode(address(etherFiNodeImpl));
-
-        // deploy new efnm implementation
-        EtherFiNodesManager etherFiNodesManagerImpl = new EtherFiNodesManager(address(stakingManager), address(roleRegistry), address(rateLimiter));
-        vm.prank(etherFiNodesManager.owner());
-        etherFiNodesManager.upgradeTo(address(etherFiNodesManagerImpl));
 
         vm.prank(auctionManager.owner());
         auctionManager.disableWhitelist();
@@ -586,7 +588,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         );
 
         // only owner should be able to upgrade
-        vm.expectRevert(IRoleRegistry.OnlyProtocolUpgrader.selector);
+        vm.expectRevert(IRoleRegistry.OnlyUpgradeTimelock.selector);
         stakingManager.upgradeTo(address(stakingManagerImpl));
 
         // should succeed when called by owner
@@ -856,13 +858,13 @@ contract PreludeTest is Test, ArrayTestHelper {
         uint256 nodeId = 1;
 
         // none of the EFNM roles should be allowed to upgrade
-        vm.expectRevert(IRoleRegistry.OnlyProtocolUpgrader.selector);
+        vm.expectRevert(IRoleRegistry.OnlyUpgradeTimelock.selector);
         vm.prank(eigenlayerAdmin);
         etherFiNodesManager.upgradeTo(address(0));
-        vm.expectRevert(IRoleRegistry.OnlyProtocolUpgrader.selector);
+        vm.expectRevert(IRoleRegistry.OnlyUpgradeTimelock.selector);
         vm.prank(user);
         etherFiNodesManager.upgradeTo(address(0));
-        vm.expectRevert(IRoleRegistry.OnlyProtocolUpgrader.selector);
+        vm.expectRevert(IRoleRegistry.OnlyUpgradeTimelock.selector);
         vm.prank(callForwarder);
         etherFiNodesManager.upgradeTo(address(0));
 
@@ -949,7 +951,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         // only protocolUpgrader can upgrade etherFiNode
         EtherFiNode nodeImpl = new EtherFiNode(address(0), address(0), address(0), address(0));
         vm.prank(admin);
-        vm.expectRevert(IRoleRegistry.OnlyProtocolUpgrader.selector);
+        vm.expectRevert(IRoleRegistry.OnlyUpgradeTimelock.selector);
         stakingManager.upgradeEtherFiNode(address(nodeImpl));
 
         vm.prank(roleRegistry.owner());

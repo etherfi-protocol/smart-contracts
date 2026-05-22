@@ -788,7 +788,7 @@ contract LiquidityPoolTest is TestSetup {
 
     function test_Upgrade2_49_onlyRoleRegistryOwnerCanUpgrade() public {
         liquidityPool = address(new LiquidityPool(_lpCtorAddrs(address(0x0), address(blacklisterInstance)), 0));
-        vm.expectRevert(RoleRegistry.OnlyProtocolUpgrader.selector);
+        vm.expectRevert(RoleRegistry.OnlyUpgradeTimelock.selector);
         vm.prank(address(100));
         liquidityPoolInstance.upgradeTo(liquidityPool);
 
