@@ -3,9 +3,8 @@ pragma solidity ^0.8.13;
 
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/token/ERC20/IERC20Upgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/draft-IERC20PermitUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/token/ERC20/utils/SafeERC20Upgradeable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/ILiquifier.sol";
@@ -13,11 +12,11 @@ import "./interfaces/IeETH.sol";
 import "./interfaces/IWeETH.sol";
 import "./interfaces/IWETH.sol";
 import "./interfaces/IwstETH.sol";
-import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IBlacklister.sol";
+import "./utils/RolesLibrary.sol";
 
-contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
-    using SafeERC20Upgradeable for IERC20Upgradeable;
+contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable, RolesLibrary {
+    using SafeERC20 for IERC20;
 
     ILiquidityPool public immutable liquidityPool;
     ILiquifier public immutable liquifier;
@@ -26,7 +25,6 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
     IWETH public immutable wETH;
     IERC20Upgradeable public immutable stETH;
     IwstETH public immutable wstETH;
-    IRoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
 
      enum SourceOfFunds {
@@ -45,7 +43,7 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
     error EthTransfersNotAccepted();
     error InvalidRecipient();
 
-    constructor(address _liquidityPool, address _liquifier, address _weETH, address _eETH, address _wETH, address _stETH, address _wstETH, address _roleRegistry, address _blacklister) {
+    constructor(address _liquidityPool, address _liquifier, address _weETH, address _eETH, address _wETH, address _stETH, address _wstETH, address _roleRegistry, address _blacklister) RolesLibrary(_roleRegistry) {
         liquidityPool = ILiquidityPool(_liquidityPool);
         liquifier = ILiquifier(_liquifier);
         eETH = IeETH(_eETH);
@@ -53,7 +51,6 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
         wETH = IWETH(_wETH);
         stETH = IERC20Upgradeable(_stETH);
         wstETH = IwstETH(_wstETH);
-        roleRegistry = IRoleRegistry(_roleRegistry);
         blacklister = IBlacklister(_blacklister);
 
         _disableInitializers();
@@ -163,15 +160,13 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
     /// @param _to Recipient of the swept tokens
     function sweepDust(address _token, address _to) external onlyOperations {
         if (_to == address(0)) revert InvalidRecipient();
-        uint256 balance = IERC20Upgradeable(_token).balanceOf(address(this));
+        uint256 balance = IERC20(_token).balanceOf(address(this));
         if (balance == 0) revert InsufficientBalance();
-        IERC20Upgradeable(_token).safeTransfer(_to, balance);
+        IERC20(_token).safeTransfer(_to, balance);
         emit DustSwept(_token, _to, balance);
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     modifier nonBlacklisted() {
         blacklister.nonBlacklisted(msg.sender);

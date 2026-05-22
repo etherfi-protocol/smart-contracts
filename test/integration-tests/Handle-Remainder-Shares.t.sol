@@ -67,8 +67,8 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
         }
 
         vm.startPrank(owner);
-        liquidityPoolInstance.setMinWithdrawAmount(0.001 ether);
         liquidityPoolInstance.setMaxWithdrawAmount(1000 ether);
+        liquidityPoolInstance.setMinWithdrawAmount(0.001 ether);
         vm.stopPrank();
 
         // Admin-gated setters on WithdrawRequestNFT (e.g. updateShareRemainderSplitToTreasuryInBps)

@@ -202,7 +202,7 @@ contract ReauditFixesTransactions is Utils {
         console2.log("=== Verifying Deployed Bytecode ===");
         console2.log("");
 
-        EtherFiNode newEtherFiNodeImplementation = new EtherFiNode(address(LIQUIDITY_POOL), address(ETHERFI_NODES_MANAGER), address(EIGENLAYER_POD_MANAGER), address(EIGENLAYER_DELEGATION_MANAGER), address(ROLE_REGISTRY));
+        EtherFiNode newEtherFiNodeImplementation = new EtherFiNode(address(LIQUIDITY_POOL), address(ETHERFI_NODES_MANAGER), address(EIGENLAYER_POD_MANAGER), address(EIGENLAYER_DELEGATION_MANAGER));
         EtherFiRedemptionManager newEtherFiRedemptionManagerImplementation = new EtherFiRedemptionManager(address(LIQUIDITY_POOL), address(EETH), address(WEETH), address(TREASURY), address(ROLE_REGISTRY), address(ETHERFI_RESTAKER), address(0x0), address(0x0), 10_000, 100, 10_000);
         EtherFiRestaker newEtherFiRestakerImplementation = new EtherFiRestaker(address(LIQUIDITY_POOL), address(LIQUIFIER), address(EIGENLAYER_REWARDS_COORDINATOR), address(ETHERFI_REDEMPTION_MANAGER), address(ROLE_REGISTRY), address(ETHERFI_RATE_LIMITER), address(EIGENLAYER_STRATEGY_MANAGER), address(EIGENLAYER_DELEGATION_MANAGER));
         EtherFiRewardsRouter newEtherFiRewardsRouterImplementation = new EtherFiRewardsRouter(address(LIQUIDITY_POOL), address(TREASURY), address(ROLE_REGISTRY));

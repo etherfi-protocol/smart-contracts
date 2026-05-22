@@ -67,6 +67,8 @@ contract EtherFiRewardsRouterTest is Test {
         
         // Grant admin role
         roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), admin);
+        // `_authorizeUpgrade` now requires UPGRADE_TIMELOCK_ROLE.
+        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), owner);
         vm.stopPrank();
         
         // Deploy proxy and initialize (outside prank so owner is address(this))

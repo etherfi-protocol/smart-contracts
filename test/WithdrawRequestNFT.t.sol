@@ -1414,9 +1414,9 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.expectRevert(WithdrawRequestNFT.CannotUndoFinalization.selector);
         withdrawRequestNFTInstance.finalizeRequests(requestId - 1);
 
-        // Non-admin cannot finalize — reverts with IncorrectRole() (not the legacy admin string).
+        // Non-admin cannot finalize — only etherFiAdmin may call finalizeRequests.
         vm.prank(bob);
-        vm.expectRevert(WithdrawRequestNFT.IncorrectRole.selector);
+        vm.expectRevert(WithdrawRequestNFT.IncorrectCaller.selector);
         withdrawRequestNFTInstance.finalizeRequests(requestId + 1);
     }
 

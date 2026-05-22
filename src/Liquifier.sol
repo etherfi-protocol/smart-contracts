@@ -11,46 +11,15 @@ import "@openzeppelin/contracts/utils/math/Math.sol";
 
 import "./interfaces/ILiquifier.sol";
 import "./interfaces/ILiquidityPool.sol";
-import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IBlacklister.sol";
 import "./utils/PausableUntil.sol";
+import "./utils/RolesLibrary.sol";
 
 import "./eigenlayer-interfaces/IStrategyManager.sol";
 import "./eigenlayer-interfaces/IDelegationManager.sol";
 
-
-/// @title Router token swapping functionality
-/// @notice Functions for swapping tokens via PancakeSwap V3
-interface IPancackeV3SwapRouter {
-    function WETH9() external returns (address);
-
-    struct ExactInputSingleParams {
-        address tokenIn;
-        address tokenOut;
-        uint24 fee;
-        address recipient;
-        uint256 deadline;
-        uint256 amountIn;
-        uint256 amountOutMinimum;
-        uint160 sqrtPriceLimitX96;
-    }
-
-    /// @notice Swaps `amountIn` of one token for as much as possible of another token
-    /// @dev Setting `amountIn` to 0 will cause the contract to look up its own balance,
-    /// and swap the entire amount, enabling contracts to send tokens before calling this function.
-    /// @param params The parameters necessary for the swap, encoded as `ExactInputSingleParams` in calldata
-    /// @return amountOut The amount of the received token
-    function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256 amountOut);
-
-    function unwrapWETH9(uint256 amountMinimum, address recipient) external payable;
-}
-
-interface IERC20Burnable is IERC20 {
-    function burn(uint256 amount) external;
-}
-
 /// Go wild, spread eETH/weETH to the world
-contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable, PausableUntil, ReentrancyGuardUpgradeable, ILiquifier {
+contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable, PausableUntil, ReentrancyGuardUpgradeable, ILiquifier, RolesLibrary {
     using SafeERC20 for IERC20;
     using Math for uint256;
 
@@ -105,7 +74,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     ILidoWithdrawalQueue public immutable lidoWithdrawalQueue;
     ILido public immutable lido;
     ICurvePool public immutable stEth_Eth_Pool;
-    IRoleRegistry public immutable roleRegistry;
     AggregatorV3Interface public immutable stEthPriceFeed;
     IBlacklister public immutable blacklister;
 
@@ -128,7 +96,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     error EthTransferFailed();
     error AlreadyRegistered();
     error IncorrectCaller();
-    error IncorrectRole();
     error InvalidDiscountRate();
     error InvalidDepositCap();
     error InvalidPriceWindow();
@@ -137,7 +104,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     error InvalidLidoWithdrawalQueue();
     error InvalidLido();
     error InvalidStEth_Eth_Pool();
-    error InvalidRoleRegistry();
     error InvalidPriceFeed();
     error InvalidBlacklister();
     error InvalidEtherfiRestaker();
@@ -162,7 +128,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(ConstructorAddresses memory _constructorAddresses, uint256 _minDiscountInBasisPoints, uint256 _stalePriceWindow, uint256 _maxPriceDeviationInBps) {
+    constructor(ConstructorAddresses memory _constructorAddresses, uint256 _minDiscountInBasisPoints, uint256 _stalePriceWindow, uint256 _maxPriceDeviationInBps) RolesLibrary(_constructorAddresses.roleRegistry) {
         if (_minDiscountInBasisPoints == 0 || _minDiscountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
         if (_stalePriceWindow == 0) revert InvalidPriceWindow();
         if (_maxPriceDeviationInBps == 0 || _maxPriceDeviationInBps > BASIS_POINT_SCALE) revert InvalidMaxPriceDeviationInBps();
@@ -170,7 +136,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         if (_constructorAddresses.lidoWithdrawalQueue == address(0)) revert InvalidLidoWithdrawalQueue();
         if (_constructorAddresses.lido == address(0)) revert InvalidLido();
         if (_constructorAddresses.stEth_Eth_Pool == address(0)) revert InvalidStEth_Eth_Pool();
-        if (_constructorAddresses.roleRegistry == address(0)) revert InvalidRoleRegistry();
         if (_constructorAddresses.stEthPriceFeed == address(0)) revert InvalidPriceFeed();
         if (_constructorAddresses.blacklister == address(0)) revert InvalidBlacklister();
         if (_constructorAddresses.etherfiRestaker == address(0)) revert InvalidEtherfiRestaker();
@@ -179,7 +144,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         lidoWithdrawalQueue = ILidoWithdrawalQueue(_constructorAddresses.lidoWithdrawalQueue);
         lido = ILido(_constructorAddresses.lido);
         stEth_Eth_Pool = ICurvePool(_constructorAddresses.stEth_Eth_Pool);
-        roleRegistry = IRoleRegistry(_constructorAddresses.roleRegistry);
         stEthPriceFeed = AggregatorV3Interface(_constructorAddresses.stEthPriceFeed);
         blacklister = IBlacklister(_constructorAddresses.blacklister);
         etherfiRestaker = _constructorAddresses.etherfiRestaker;
@@ -245,15 +209,13 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     // Send the redeemed ETH back to the liquidity pool & Send the fee to Treasury
-    function withdrawEther() external {
-        if (!roleRegistry.hasRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
+    function withdrawEther() external onlyHousekeepingOperations {
         uint256 amountToLiquidityPool = _min(address(this).balance, liquidityPool.totalValueOutOfLp());
         (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: GAS_STIPEND_NO_GRIEF}("");
         if (!sent) revert EthTransferFailed();
     }
 
-    function sendToEtherFiRestaker(address _token, uint256 _amount) external {
-        if (!roleRegistry.hasRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
+    function sendToEtherFiRestaker(address _token, uint256 _amount) external onlyHousekeepingOperations {
         IERC20(_token).safeTransfer(etherfiRestaker, _amount);
     }
 
@@ -281,7 +243,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         tokenInfos[_token] = TokenInfo(0, 0, IStrategy(_target), _isWhitelisted, _discountInBasisPoints, uint32(block.timestamp), _timeBoundCapInEther, _totalCapInEther, 0, 0, _isL2Eth);
     }
 
-    function updateTimeBoundCapRefreshInterval(uint32 _timeBoundCapRefreshInterval) external onlyOperations {
+    function updateTimeBoundCapRefreshInterval(uint32 _timeBoundCapRefreshInterval) external onlyAdmin {
         timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
     }
 
@@ -290,17 +252,17 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         tokenInfos[_token].discountInBasisPoints = _discountInBasisPoints;
     }
 
-    function updateQuoteStEthWithCurve(bool _quoteStEthWithCurve) external onlyOperations {
+    function updateQuoteStEthWithCurve(bool _quoteStEthWithCurve) external onlyAdmin {
         quoteStEthWithCurve = _quoteStEthWithCurve;
     }
 
     //Pauses the contract
-    function pauseContract() external onlyOperations {
+    function pauseContract() external onlyOperatingMultisig {
         _pause();
     }
 
     //Unpauses the contract
-    function unPauseContract() external onlyOperations {
+    function unPauseContract() external onlyOperatingMultisig {
         _unpause();
     }
 
@@ -310,7 +272,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     /// @notice Unpauses the contract from pauseUntil
-    function unpauseContractUntil() external onlyOperations {
+    function unpauseContractUntil() external onlyOperatingMultisig {
         _unpauseUntil();
     }
 
@@ -459,33 +421,11 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         return (_a > _b) ? _b : _a;
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     function _requireNotPaused() internal override view {
         _requireNotPausedUntil();
         super._requireNotPaused();
-    }
-
-    modifier onlyUpgradeTimelock() {
-        roleRegistry.onlyUpgradeTimelock(msg.sender);
-        _;
-    }
-
-    modifier onlyAdmin() {
-        roleRegistry.onlyOperatingTimelock(msg.sender);
-        _;
-    }
-
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
-        _;
-    }
-
-    modifier onlyGuardian() {
-        roleRegistry.onlyGuardian(msg.sender);
-        _;
     }
 
     modifier nonBlacklisted() {

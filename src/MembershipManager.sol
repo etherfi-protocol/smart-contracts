@@ -12,14 +12,14 @@ import "./interfaces/IMembershipManager.sol";
 import "./interfaces/IMembershipNFT.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IEtherFiAdmin.sol";
-import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IBlacklister.sol";
+import "./utils/RolesLibrary.sol";
 
 import "./libraries/GlobalIndexLibrary.sol";
 
 import "forge-std/console.sol";
 
-contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable, IMembershipManager {
+contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable, IMembershipManager, RolesLibrary {
     using SafeERC20 for IERC20;
 
     //--------------------------------------------------------------------------------------
@@ -73,10 +73,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     ILiquidityPool public immutable liquidityPool;
     IMembershipNFT public immutable membershipNFT;
     IEtherFiAdmin public immutable etherFiAdmin;
-    IRoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
-
-    bytes32 public constant MEMBERSHIP_MANAGER_OPERATIONS_ROLE = keccak256("MEMBERSHIP_MANAGER_OPERATIONS_ROLE");
 
     uint256 public constant BASIS_POINTS_DENOMINATOR = 10000;
     uint256 public constant FEE_UNIT = 0.001 ether;
@@ -90,12 +87,11 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     event NftUnwrappedForEEth(address indexed _user, uint256 indexed _tokenId, uint256 _amountOfEEth, uint40 _loyaltyPoints, uint256 _feeAmount);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _eETH, address _liquidityPool, address _membershipNFT, address _etherFiAdmin, address _roleRegistry, address _blacklister) {
+    constructor(address _eETH, address _liquidityPool, address _membershipNFT, address _etherFiAdmin, address _roleRegistry, address _blacklister) RolesLibrary(_roleRegistry) {
         eETH = IeETH(_eETH);
         liquidityPool = ILiquidityPool(_liquidityPool);
         membershipNFT = IMembershipNFT(_membershipNFT);
         etherFiAdmin = IEtherFiAdmin(_etherFiAdmin);
-        roleRegistry = IRoleRegistry(_roleRegistry);
         blacklister = IBlacklister(_blacklister);
         _disableInitializers();
     }
@@ -206,7 +202,6 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     error WrongTokenMinted();
     error UnexpectedTier();
     error OnlyTokenOwner();
-    error IncorrectRole();
 
     /// @notice Requests exchange of membership points tokens for ETH.
     /// @dev decrements the amount of eETH backing the membership NFT and calls requestWithdraw on the liquidity pool
@@ -313,13 +308,13 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         }
     }
 
-    function addNewTier(uint40 _requiredTierPoints, uint24 _weight) external onlyOperations {
+    function addNewTier(uint40 _requiredTierPoints, uint24 _weight) external onlyOperatingMultisig {
         if (tierData.length >= type(uint8).max) revert TierLimitExceeded();
         tierData.push(TierData(0, _requiredTierPoints, _weight, 0));
         tierVaults.push(TierVault(0, 0));
     }
 
-    function updateTier(uint8 _tier, uint40 _requiredTierPoints, uint24 _weight) external onlyOperations {
+    function updateTier(uint8 _tier, uint40 _requiredTierPoints, uint24 _weight) external onlyOperatingMultisig {
         if (_tier >= tierData.length) revert OutOfBound();
         tierData[_tier].requiredTierPoints = _requiredTierPoints;
         tierData[_tier].weight = _weight;
@@ -330,38 +325,38 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     /// @param _tokenId The ID of the membership NFT.
     /// @param _loyaltyPoints The number of loyalty points to set for the specified NFT.
     /// @param _tierPoints The number of tier points to set for the specified NFT.
-    function setPoints(uint256 _tokenId, uint40 _loyaltyPoints, uint40 _tierPoints) public onlyOperations {
+    function setPoints(uint256 _tokenId, uint40 _loyaltyPoints, uint40 _tierPoints) public onlyOperatingMultisig {
         _claimStakingRewards(_tokenId);
         _setPoints(_tokenId, _loyaltyPoints, _tierPoints);
         _claimTier(_tokenId);
         _emitNftUpdateEvent(_tokenId);
     }
 
-    function updatePointsParams(uint16 _newPointsBoostFactor, uint16 _newPointsGrowthRate) external onlyOperations {
+    function updatePointsParams(uint16 _newPointsBoostFactor, uint16 _newPointsGrowthRate) external onlyOperatingMultisig {
         pointsBoostFactor = _newPointsBoostFactor;
         pointsGrowthRate = _newPointsGrowthRate;
     }
 
     /// @dev set how many blocks a token is locked from trading for after withdrawing
-    function setWithdrawalLockBlocks(uint32 _blocks) external onlyOperations {
+    function setWithdrawalLockBlocks(uint32 _blocks) external onlyOperatingMultisig {
         withdrawalLockBlocks = _blocks;
     }
 
     /// @notice Updates minimum valid deposit
     /// @param _minDepositGwei minimum deposit in wei
     /// @param _maxDepositTopUpPercent integer percentage value
-    function setDepositAmountParams(uint56 _minDepositGwei, uint8 _maxDepositTopUpPercent) external onlyOperations {
+    function setDepositAmountParams(uint56 _minDepositGwei, uint8 _maxDepositTopUpPercent) external onlyOperatingMultisig {
         minDepositGwei = _minDepositGwei;
         maxDepositTopUpPercent = _maxDepositTopUpPercent;
     }
 
     /// @notice Updates the time a user must wait between top ups
     /// @param _newWaitTime the new time to wait between top ups
-    function setTopUpCooltimePeriod(uint32 _newWaitTime) external onlyOperations {
+    function setTopUpCooltimePeriod(uint32 _newWaitTime) external onlyOperatingMultisig {
         topUpCooltimePeriod = _newWaitTime;
     }
 
-    function setFeeAmounts(uint256 _mintFeeAmount, uint256 _burnFeeAmount, uint256 _upgradeFeeAmount, uint16 _burnFeeWaiverPeriodInDays) external onlyOperations {
+    function setFeeAmounts(uint256 _mintFeeAmount, uint256 _burnFeeAmount, uint256 _upgradeFeeAmount, uint16 _burnFeeWaiverPeriodInDays) external onlyOperatingMultisig {
         _feeAmountSanityCheck(_mintFeeAmount);
         _feeAmountSanityCheck(_burnFeeAmount);
         _feeAmountSanityCheck(_upgradeFeeAmount);
@@ -371,17 +366,17 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         burnFeeWaiverPeriodInDays = _burnFeeWaiverPeriodInDays;
     }
 
-    function setFanBoostThresholdEthAmount(uint256 _fanBoostThresholdEthAmount) external onlyOperations {
+    function setFanBoostThresholdEthAmount(uint256 _fanBoostThresholdEthAmount) external onlyOperatingMultisig {
         fanBoostThreshold = uint16(_fanBoostThresholdEthAmount / FEE_UNIT);
     }
 
     //Pauses the contract
-    function pauseContract() external onlyOperations {
+    function pauseContract() external onlyOperatingMultisig {
         _pause();
     }
 
     //Unpauses the contract
-    function unPauseContract() external onlyOperations {
+    function unPauseContract() external onlyOperatingMultisig {
         _unpause();
     }
 
@@ -739,9 +734,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         return uint256(1 gwei) * minDepositGwei;
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     //--------------------------------------------------------------------------------------
     //--------------------------------------  GETTER  --------------------------------------
@@ -766,11 +759,6 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
 
     modifier nonBlacklisted() {
         blacklister.nonBlacklisted(msg.sender);
-        _;
-    }
-
-    modifier onlyOperations() {
-        if (!roleRegistry.hasRole(MEMBERSHIP_MANAGER_OPERATIONS_ROLE, msg.sender)) revert IncorrectRole();
         _;
     }
 }

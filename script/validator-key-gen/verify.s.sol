@@ -157,12 +157,12 @@ contract VerifyValidatorKeyGen is Script {
 
         // Verify that the new functionality is exists and is role restricted
         {
-            vm.expectRevert(IStakingManager.IncorrectRole.selector);
+            vm.expectRevert(RoleRegistry.OnlyOracleOperations.selector);
             liquidityPool.batchCreateBeaconValidators(depositDataArray, new uint256[](1), etherFiNode);
         }
 
         {
-            vm.expectRevert(IStakingManager.IncorrectRole.selector);
+            vm.expectRevert(RoleRegistry.OnlyOracleOperations.selector);
             stakingManager.invalidateRegisteredBeaconValidator(depositDataArray[0], 1, etherFiNode);
 
             vm.expectRevert(IStakingManager.InvalidCaller.selector);

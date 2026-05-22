@@ -16,12 +16,12 @@ import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IeETH.sol";
 import "./interfaces/IWeETH.sol";
 import "./interfaces/ILiquifier.sol";
+import "./interfaces/IEtherFiRestaker.sol";
 import "./utils/PausableUntil.sol";
-import "./EtherFiRestaker.sol";
+import "./utils/RolesLibrary.sol";
 
 import "lib/BucketLimiter.sol";
 
-import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IPriorityWithdrawalQueue.sol";
 import "./interfaces/IBlacklister.sol";
 
@@ -38,7 +38,7 @@ struct RedemptionInfo {
     uint16 lowWatermarkInBpsOfTvl;
 }
 
-contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, PausableUntil, ReentrancyGuardUpgradeable, UUPSUpgradeable {
+contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, PausableUntil, ReentrancyGuardUpgradeable, UUPSUpgradeable, RolesLibrary {
     using SafeERC20 for IERC20;
     using Math for uint256;
 
@@ -52,11 +52,10 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
     address public constant ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
     address public immutable treasury;
-    IRoleRegistry public immutable roleRegistry;
     IeETH public immutable eEth;
     IWeETH public immutable weEth;
     ILiquidityPool public immutable liquidityPool;
-    EtherFiRestaker public immutable etherFiRestaker;
+    IEtherFiRestaker public immutable etherFiRestaker;
     ILido public immutable lido;
     IPriorityWithdrawalQueue public immutable priorityWithdrawalQueue;
     IBlacklister public immutable blacklister;
@@ -101,17 +100,17 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         uint256 _maxExitFeeSplitToTreasuryInBps, 
         uint256 _maxExitFeeInBps, 
         uint256 _maxLowWatermarkInBpsOfTvl)
+        RolesLibrary(_roleRegistry)
     {
         if (_maxExitFeeSplitToTreasuryInBps > BASIS_POINT_SCALE || _maxExitFeeInBps > BASIS_POINT_SCALE || _maxLowWatermarkInBpsOfTvl > BASIS_POINT_SCALE) revert InvalidAmount();
         maxExitFeeSplitToTreasuryInBps = _maxExitFeeSplitToTreasuryInBps;
         maxExitFeeInBps = _maxExitFeeInBps;
         maxLowWatermarkInBpsOfTvl = _maxLowWatermarkInBpsOfTvl;
-        roleRegistry = IRoleRegistry(_roleRegistry);
         treasury = _treasury;
         liquidityPool = ILiquidityPool(payable(_liquidityPool));
         eEth = IeETH(_eEth);
         weEth = IWeETH(_weEth); 
-        etherFiRestaker = EtherFiRestaker(payable(_etherFiRestaker));
+        etherFiRestaker = IEtherFiRestaker(payable(_etherFiRestaker));
         lido = etherFiRestaker.lido();
         priorityWithdrawalQueue = IPriorityWithdrawalQueue(_priorityWithdrawalQueue);
         blacklister = IBlacklister(_blacklister);
@@ -368,11 +367,11 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         tokenToRedemptionInfo[token].exitFeeSplitToTreasuryInBps = _exitFeeSplitToTreasuryInBps;
     }
 
-    function pauseContract() external onlyOperations {
+    function pauseContract() external onlyOperatingMultisig {
         _pause();
     }
 
-    function unPauseContract() external onlyOperations {
+    function unPauseContract() external onlyOperatingMultisig {
         _unpause();
     }
 
@@ -380,7 +379,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         _pauseUntil();
     }
 
-    function unpauseContractUntil() external onlyOperations {
+    function unpauseContractUntil() external onlyOperatingMultisig {
         _unpauseUntil();
     }
 
@@ -451,27 +450,10 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         return assets.mulDiv(feeBasisPoints, BASIS_POINT_SCALE, Math.Rounding.Up);
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     function getImplementation() external view returns (address) {
         return _getImplementation();
-    }
-
-    modifier onlyAdmin() {
-        roleRegistry.onlyOperatingTimelock(msg.sender);
-        _;
-    }
-
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
-        _;
-    }
-
-    modifier onlyGuardian() {
-        roleRegistry.onlyGuardian(msg.sender);
-        _;
     }
 
     modifier nonBlacklisted(address receiver) {

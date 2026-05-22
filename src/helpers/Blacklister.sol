@@ -4,10 +4,11 @@ pragma solidity ^0.8.27;
 
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
-import "../interfaces/IRoleRegistry.sol";
+import "../utils/RolesLibrary.sol";
 
-contract Blacklister is Initializable, UUPSUpgradeable {
-    IRoleRegistry public immutable roleRegistry;
+contract Blacklister is Initializable, UUPSUpgradeable, RolesLibrary {
+
+    uint256 public constant BLACKLIST_DURATION = 3 days;
 
     mapping(address => uint256) public blacklistedUntil;
 
@@ -18,8 +19,7 @@ contract Blacklister is Initializable, UUPSUpgradeable {
     event UserUnblacklisted(address user);
     event UserBlacklistedUntil(address user, uint256 until);
 
-    constructor(address _roleRegistry) {
-        roleRegistry = IRoleRegistry(_roleRegistry);
+    constructor(address _roleRegistry) RolesLibrary(_roleRegistry) {
         _disableInitializers();
     }
 
@@ -27,27 +27,25 @@ contract Blacklister is Initializable, UUPSUpgradeable {
         __UUPSUpgradeable_init();
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     function blacklistUserUntil(address user) external onlyGuardian {
         if (blacklistedUntil[user] > block.timestamp) revert UserAlreadyBlacklisted(user);
-        blacklistedUntil[user] = block.timestamp + 1 days;
-        emit UserBlacklistedUntil(user, block.timestamp + 1 days);
+        blacklistedUntil[user] = block.timestamp + BLACKLIST_DURATION;
+        emit UserBlacklistedUntil(user, block.timestamp + BLACKLIST_DURATION);
     }
 
-    function setBlacklistUntil(address user, uint256 until) external onlyOperations {
+    function setBlacklistUntil(address user, uint256 until) external onlyOperatingMultisig {
         blacklistedUntil[user] = block.timestamp + until;
         emit UserBlacklistedUntil(user, block.timestamp + until);
     }
 
-    function blacklistUser(address user) external onlyOperations {
+    function blacklistUser(address user) external onlyOperatingMultisig {
         blacklistedUntil[user] = type(uint256).max;
         emit UserBlacklisted(user);
     }
 
-    function unblacklistUser(address user) external onlyOperations {
+    function unblacklistUser(address user) external onlyOperatingMultisig {
         blacklistedUntil[user] = 0;
         emit UserUnblacklisted(user);
     }
@@ -58,15 +56,5 @@ contract Blacklister is Initializable, UUPSUpgradeable {
 
     function getImplementation() external view returns (address) { 
         return _getImplementation(); 
-    }
-
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
-        _;
-    }
-
-    modifier onlyGuardian() {
-        roleRegistry.onlyGuardian(msg.sender);
-        _;
     }
 }

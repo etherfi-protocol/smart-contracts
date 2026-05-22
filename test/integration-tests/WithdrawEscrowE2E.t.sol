@@ -79,8 +79,8 @@ contract WithdrawEscrowE2ETest is TestSetup {
         if (!liquidityPoolInstance.escrowMigrationCompleted()) {
             liquidityPoolInstance.initializeOnUpgradeV2();
         }
-        liquidityPoolInstance.setMinWithdrawAmount(0.001 ether);
         liquidityPoolInstance.setMaxWithdrawAmount(1000 ether);
+        liquidityPoolInstance.setMinWithdrawAmount(0.001 ether);
         _grantRoles();
         vm.stopPrank();
 
