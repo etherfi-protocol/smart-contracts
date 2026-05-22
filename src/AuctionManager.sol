@@ -216,23 +216,6 @@ contract AuctionManager is
         emit BidReEnteredAuction(_bidId);
     }
 
-    /// @notice Transfer the auction fee received from the node operator to the membership NFT contract when above the threshold
-    /// @dev Called by registerValidator() in StakingManager.sol
-    /// @param _bidId the ID of the validator
-    function processAuctionFeeTransfer(
-        uint256 _bidId
-    ) external onlyStakingManagerContract {
-        uint256 amount = bids[_bidId].amount;
-        uint256 newAccumulatedRevenue = accumulatedRevenue + amount;
-        if (newAccumulatedRevenue >= accumulatedRevenueThreshold) {
-            accumulatedRevenue = 0;
-            (bool sent, ) = membershipManagerContractAddress.call{value: newAccumulatedRevenue}("");
-            if (!sent) revert EtherTransferFailed();
-        } else {
-            accumulatedRevenue = uint128(newAccumulatedRevenue);
-        }
-    }
-
     function transferAccumulatedRevenue() external onlyHousekeepingOperations {
         uint256 transferAmount = accumulatedRevenue;
         accumulatedRevenue = 0;

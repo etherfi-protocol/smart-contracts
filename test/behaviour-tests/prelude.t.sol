@@ -882,7 +882,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         etherFiNodesManager.completeQueuedETHWithdrawals(nodeId, true);
 
         IDelegationManager.QueuedWithdrawalParams[] memory params = new IDelegationManager.QueuedWithdrawalParams[](1);
-        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
+        vm.expectRevert(RoleRegistry.OnlyExecutorOperations.selector);
         etherFiNodesManager.queueWithdrawals(nodeId, params);
 
         IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
@@ -1429,13 +1429,13 @@ contract PreludeTest is Test, ArrayTestHelper {
         params[0].__deprecated_withdrawer = address(0);
 
         // First withdrawal within limit should succeed
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueWithdrawals(uint256(val.pubkeyHash), params);
 
         // Second withdrawal exceeding limit should fail (15 + 10 > 20)
         shares[0] = 10 ether;
         vm.expectRevert(abi.encodeWithSignature("LimitExceeded()"));
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueWithdrawals(uint256(val.pubkeyHash), params);
     }
 

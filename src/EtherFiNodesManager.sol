@@ -169,14 +169,14 @@ contract EtherFiNodesManager is
         completeQueuedETHWithdrawals(etherfiNodeAddress(id), receiveAsTokens);
     }
 
-    function queueWithdrawals(address node, IDelegationManager.QueuedWithdrawalParams[] calldata params) public onlyHousekeepingOperations whenNotPaused {
+    function queueWithdrawals(address node, IDelegationManager.QueuedWithdrawalParams[] calldata params) public onlyExecutorOperations whenNotPaused {
         _validateNode(node);
         // need to rate limit any beacon eth being withdrawn
         rateLimiter.consume(UNRESTAKING_LIMIT_ID, SafeCast.toUint64(sumRestakingETHWithdrawals(params) / 1 gwei));
         IEtherFiNode(node).queueWithdrawals(params);
     }
     
-    function queueWithdrawals(uint256 id, IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyHousekeepingOperations whenNotPaused {
+    function queueWithdrawals(uint256 id, IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyExecutorOperations whenNotPaused {
         queueWithdrawals(etherfiNodeAddress(id), params);
     }
 

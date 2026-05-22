@@ -380,7 +380,7 @@ contract EtherFiNodesManagerTest is TestSetup {
             __deprecated_withdrawer: testNode
         });
         
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         managerInstance.queueWithdrawals(testNode, params);
     }
     
@@ -397,7 +397,7 @@ contract EtherFiNodesManagerTest is TestSetup {
             __deprecated_withdrawer: testNode
         });
         
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         managerInstance.queueWithdrawals(testLegacyId, params);
     }
     
@@ -1037,7 +1037,7 @@ contract EtherFiNodesManagerTest is TestSetup {
 
         IDelegationManager.QueuedWithdrawalParams[] memory params;
         _expectPausedUntilRevert();
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         managerInstance.queueWithdrawals(testNode, params);
     }
 
@@ -1047,7 +1047,7 @@ contract EtherFiNodesManagerTest is TestSetup {
 
         IDelegationManager.QueuedWithdrawalParams[] memory params;
         _expectPausedUntilRevert();
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         managerInstance.queueWithdrawals(testLegacyId, params);
     }
 
