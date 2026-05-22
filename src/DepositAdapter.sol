@@ -5,6 +5,7 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/draft-IERC20PermitUpgradeable.sol";
+import "@openzeppelin-upgradeable/contracts/token/ERC20/utils/SafeERC20Upgradeable.sol";
 
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/ILiquifier.sol";
@@ -16,6 +17,7 @@ import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IBlacklister.sol";
 
 contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
+    using SafeERC20Upgradeable for IERC20Upgradeable;
 
     ILiquidityPool public immutable liquidityPool;
     ILiquifier public immutable liquifier;
@@ -35,11 +37,13 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
     }
 
     event AdapterDeposit(address indexed sender, uint256 amount, SourceOfFunds source, address referral);
+    event DustSwept(address indexed token, address indexed to, uint256 amount);
 
     error AllowanceExceeded();
     error InsufficientBalance();
     error PermitExpired();
     error EthTransfersNotAccepted();
+    error InvalidRecipient();
 
     constructor(address _liquidityPool, address _liquifier, address _weETH, address _eETH, address _wETH, address _stETH, address _wstETH, address _roleRegistry, address _blacklister) {
         liquidityPool = ILiquidityPool(_liquidityPool);
@@ -151,12 +155,31 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
         return weEthAmount;
     }
 
+    /// @notice Sweep dust accumulated in the adapter to a recipient.
+    /// @dev Each deposit strands 1-2 wei of eETH due to floor-rounding in both
+    ///      amountForShare (shares -> ETH) and wrap (ETH -> shares). This function
+    ///      lets operations recover the residual balance of any ERC20 left here.
+    /// @param _token Address of the ERC20 to sweep
+    /// @param _to Recipient of the swept tokens
+    function sweepDust(address _token, address _to) external onlyOperations {
+        if (_to == address(0)) revert InvalidRecipient();
+        uint256 balance = IERC20Upgradeable(_token).balanceOf(address(this));
+        if (balance == 0) revert InsufficientBalance();
+        IERC20Upgradeable(_token).safeTransfer(_to, balance);
+        emit DustSwept(_token, _to, balance);
+    }
+
     function _authorizeUpgrade(address newImplementation) internal override {
         roleRegistry.onlyProtocolUpgrader(msg.sender);
     }
 
     modifier nonBlacklisted() {
         blacklister.nonBlacklisted(msg.sender);
+        _;
+    }
+
+    modifier onlyOperations() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }
 }
