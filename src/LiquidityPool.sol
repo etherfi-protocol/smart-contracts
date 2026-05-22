@@ -557,12 +557,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     function setMinWithdrawAmount(uint256 _minWithdrawAmount) external onlyOperations {
+        if (_minWithdrawAmount > maxWithdrawAmount) revert InvalidAmount();
         minWithdrawAmount = _minWithdrawAmount;
         emit MinWithdrawAmountSet(_minWithdrawAmount);
     }
 
     function setMaxWithdrawAmount(uint256 _maxWithdrawAmount) external onlyOperations {
-        if (_maxWithdrawAmount ==0 || _maxWithdrawAmount < minWithdrawAmount) revert InvalidAmount();
+        if (_maxWithdrawAmount == 0 || _maxWithdrawAmount < minWithdrawAmount) revert InvalidAmount();
         maxWithdrawAmount = _maxWithdrawAmount;
         emit MaxWithdrawAmountSet(_maxWithdrawAmount);
     }

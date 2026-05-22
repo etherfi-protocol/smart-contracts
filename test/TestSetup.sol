@@ -1205,8 +1205,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.startPrank(alice);
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
         liquidityPoolInstance.setValidatorSizeWei(32 ether);
-        liquidityPoolInstance.setMinWithdrawAmount(0.001 ether);
         liquidityPoolInstance.setMaxWithdrawAmount(1000 ether);
+        liquidityPoolInstance.setMinWithdrawAmount(0.001 ether);
         // Pause WithdrawRequestNFT so existing tests that unPauseContract in their
         // own setUp continue to find it paused (initializeOnUpgrade used to set this).
         withdrawRequestNFTInstance.pauseContract();
