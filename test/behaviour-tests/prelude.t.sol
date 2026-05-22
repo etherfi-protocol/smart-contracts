@@ -118,7 +118,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         LiquidityPool(payable(address(liquidityPool))).upgradeTo(address(liquidityPoolImpl));
 
         // Deploy rate limiter first with proxy pattern
-        EtherFiRateLimiter rateLimiterImpl = new EtherFiRateLimiter(address(roleRegistry));
+        EtherFiRateLimiter rateLimiterImpl = new EtherFiRateLimiter(address(roleRegistry), 0x35fA164735182de50811E8e2E824cFb9B6118ac2, 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee);
         UUPSProxy rateLimiterProxy = new UUPSProxy(address(rateLimiterImpl), "");
         rateLimiter = EtherFiRateLimiter(address(rateLimiterProxy));
         rateLimiter.initialize();

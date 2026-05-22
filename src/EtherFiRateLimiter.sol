@@ -12,17 +12,31 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
 
     IRoleRegistry public immutable roleRegistry;
 
+    /// @dev Hardcoded callers for the per-address bucket API. Only the eETH and weETH
+    ///      proxies can create/update/delete/consume per-address buckets; gating is
+    ///      enforced via the `onlyToken` modifier rather than an admin-managed mapping
+    ///      so the surface stays minimal and the trust boundary is obvious on-chain.
+    address public immutable eETH;
+    address public immutable weETH;
+
     //---------------------------------------------------------------------------
     //---------------------------  Storage  -------------------------------------
     //---------------------------------------------------------------------------
     mapping(bytes32 bucketId => BucketLimiter.Limit) limits;
     mapping(bytes32 bucketId => mapping(address consumer => bool allowed)) consumers;
 
+    /// @dev token (eETH/weETH) -> user -> their rate-limit bucket. `lastRefill == 0`
+    ///      is the unique "never created" sentinel because BucketLimiter.create always
+    ///      stamps `lastRefill = block.timestamp` on a real chain.
+    mapping(address token => mapping(address user => BucketLimiter.Limit)) addressLimits;
+
     //-------------------------------------------------------------------------
     //-------------------------  Deployment  ----------------------------------
     //-------------------------------------------------------------------------
-    constructor(address _roleRegistry) {
+    constructor(address _roleRegistry, address _eETH, address _weETH) {
         roleRegistry = IRoleRegistry(_roleRegistry);
+        eETH = _eETH;
+        weETH = _weETH;
         _disableInitializers();
     }
 
@@ -100,6 +114,55 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
         _unpause();
     }
 
+    //-------------------------------------------------------------------------
+    //----------------------  Per-address buckets  ----------------------------
+    //-------------------------------------------------------------------------
+
+    /// @notice Create or tighten a per-user bucket under the calling token's namespace.
+    /// @dev Callable only by eETH/weETH; the token contract gates this to the Guardian.
+    ///      If a bucket already exists, both `capacity` and `refillRate` must be ≤ their
+    ///      current values — Guardian can only tighten, never loosen. A fresh bucket can
+    ///      be created with any starting parameters because there's no looser prior state
+    ///      to compare against (no bucket == unrestricted). `capacity = 0` on an existing
+    ///      bucket is the tightest move and acts as a hard freeze (consume reverts).
+    ///      `BucketLimiter.setCapacity` / `setRefillRate` preserve `remaining`, capped to
+    ///      the new capacity — so tightening can't accidentally refill a half-drained bucket.
+    function tightenAddressLimit(address user, uint64 capacity, uint64 refillRate) external onlyToken {
+        BucketLimiter.Limit storage lim = addressLimits[msg.sender][user];
+        if (lim.lastRefill == 0) {
+            // `lastRefill == 0` is the "never created" sentinel — BucketLimiter.create
+            // stamps block.timestamp, which is non-zero on any real chain.
+            addressLimits[msg.sender][user] = BucketLimiter.create(capacity, refillRate);
+        } else {
+            if (capacity   > lim.capacity)   revert NotTightening();
+            if (refillRate > lim.refillRate) revert NotTightening();
+            BucketLimiter.setCapacity(lim, capacity);
+            BucketLimiter.setRefillRate(lim, refillRate);
+        }
+        emit AddressLimitTightened(msg.sender, user, capacity, refillRate);
+    }
+
+    /// @notice Set or update a per-user bucket with no tightening constraint.
+    /// @dev Callable only by eETH/weETH; the token contract gates this to the
+    ///      Operating Multisig. This is the only path that can raise capacity or
+    ///      refill rate after Guardian has tightened (or frozen) a user, and it
+    ///      fully resets the bucket — `remaining` returns to the new capacity rather
+    ///      than being preserved. Multisig is the trust escape hatch: a single call
+    ///      here must be able to restore a user to a fully-usable state.
+    function setAddressLimit(address user, uint64 capacity, uint64 refillRate) external onlyToken {
+        addressLimits[msg.sender][user] = BucketLimiter.create(capacity, refillRate);
+        emit AddressLimitSet(msg.sender, user, capacity, refillRate);
+    }
+
+    /// @notice Delete a per-user bucket; the user returns to the unrestricted default.
+    /// @dev Callable only by eETH/weETH; the token contract gates this to the
+    ///      Operating Multisig. Distinct from `tightenAddressLimit(user, 0, 0)` —
+    ///      that freezes the user (consume reverts), this removes the limit entirely.
+    function deleteAddressLimit(address user) external onlyToken {
+        delete addressLimits[msg.sender][user];
+        emit AddressLimitDeleted(msg.sender, user);
+    }
+
     //--------------------------------------------------------------------------------------
     //-----------------------------------  Core  -------------------------------------------
     //--------------------------------------------------------------------------------------
@@ -135,6 +198,18 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
         if (!BucketLimiter.consume(limits[id], amount)) revert LimitExceeded();
     }
 
+    /// @notice Consume from a per-address bucket; no-op if the user has no bucket configured.
+    /// @dev Callable only by eETH/weETH. `lastRefill == 0` uniquely identifies "never
+    ///      created" (unrestricted user). When a bucket exists, a `BucketLimiter.consume`
+    ///      failure reverts — this includes the frozen case (`capacity == 0`) since refill
+    ///      can't push `remaining` above zero capacity. Intentionally skips `whenNotPaused`:
+    ///      pausing the rate limiter must not halt token transfers.
+    function consumeForAddressIfConfigured(address user, uint64 amount) external onlyToken {
+        BucketLimiter.Limit storage lim = addressLimits[msg.sender][user];
+        if (lim.lastRefill == 0) return;
+        if (!BucketLimiter.consume(lim, amount)) revert LimitExceeded();
+    }
+
     /// @notice Checks if a specific amount can be consumed from a rate limit
     /// @param id The rate limit identifier
     /// @param amount The amount to check in gwei
@@ -168,6 +243,23 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
         return (limit.capacity, limit.remaining, limit.refillRate, limit.lastRefill);
     }
 
+    /// @notice Returns the complete state of a per-address bucket.
+    /// @dev Returns the raw struct — callers can check `lastRefill == 0` to detect
+    ///      "no bucket configured" (unrestricted user).
+    function getAddressLimit(address token, address user)
+        external
+        view
+        returns (uint64 capacity, uint64 remaining, uint64 refillRate, uint256 lastRefill)
+    {
+        BucketLimiter.Limit memory lim = addressLimits[token][user];
+        return (lim.capacity, lim.remaining, lim.refillRate, lim.lastRefill);
+    }
+
+    /// @notice Returns true if a per-address bucket has been created for (token, user).
+    function addressLimitExists(address token, address user) external view returns (bool) {
+        return addressLimits[token][user].lastRefill != 0;
+    }
+
     /// @notice Checks if a consumer is allowed to use a specific rate limit
     /// @param id The rate limit identifier
     /// @param consumer The consumer address to check
@@ -195,6 +287,11 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
 
     modifier onlyOperations() {
         roleRegistry.onlyOperatingMultisig(msg.sender);
+        _;
+    }
+
+    modifier onlyToken() {
+        if (msg.sender != eETH && msg.sender != weETH) revert OnlyToken();
         _;
     }
 }

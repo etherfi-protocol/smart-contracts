@@ -62,7 +62,7 @@ contract ConsolidationThroughEOATest is Test {
 
         // Upgrade the on-chain rate limiter so it uses the consolidated role model
         // (the on-chain impl still checks ETHERFI_RATE_LIMITER_ADMIN_ROLE).
-        address newRateLimiterImpl = address(new EtherFiRateLimiter(address(roleRegistry)));
+        address newRateLimiterImpl = address(new EtherFiRateLimiter(address(roleRegistry), 0x35fA164735182de50811E8e2E824cFb9B6118ac2, 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee));
         EtherFiRateLimiter(address(rateLimiter)).upgradeTo(newRateLimiterImpl);
 
         vm.stopPrank();

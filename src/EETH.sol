@@ -12,13 +12,11 @@ import "@openzeppelin-upgradeable/contracts/utils/cryptography/ECDSAUpgradeable.
 import "./interfaces/IeETH.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./AssetRecovery.sol";
-import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IBlacklister.sol";
-import "./interfaces/IEtherFiRateLimiter.sol";
-import "./libraries/RateLimitMath.sol";
+import "./RateLimitedToken.sol";
 import "./utils/PausableUntil.sol";
 
-contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, IERC20PermitUpgradeable, IeETH, AssetRecovery {
+contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, IERC20PermitUpgradeable, IeETH, AssetRecovery, RateLimitedToken {
     using CountersUpgradeable for CountersUpgradeable.Counter;
     ILiquidityPool private DEPRECATED_liquidityPool;
 
@@ -41,13 +39,8 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     bytes32 private immutable _TYPE_HASH;
 
     ILiquidityPool public immutable liquidityPool;
-    IRoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
-    IEtherFiRateLimiter public immutable rateLimiter;
-
-    bytes32 public constant EETH_MINT_LIMIT_ID = keccak256("EETH_MINT_LIMIT_ID");
-    bytes32 public constant EETH_BURN_LIMIT_ID = keccak256("EETH_BURN_LIMIT_ID");
-    bytes32 public constant EETH_TRANSFER_LIMIT_ID = keccak256("EETH_TRANSFER_LIMIT_ID");
+    // `rateLimiter` and `roleRegistry` are inherited from RateLimitedToken.
 
     event Paused();
     event Unpaused();
@@ -63,7 +56,9 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     error TransferAmountExceedsBalance();
     error ContractPaused();
 
-    constructor(address _liquidityPool, address _roleRegistry, address _blacklister, address _rateLimiter) {
+    constructor(address _liquidityPool, address _roleRegistry, address _blacklister, address _rateLimiter)
+        RateLimitedToken(_rateLimiter, _roleRegistry)
+    {
         bytes32 hashedName = keccak256("EETH");
         bytes32 hashedVersion = keccak256("1");
         bytes32 typeHash = keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
@@ -76,11 +71,9 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
 
         if (_liquidityPool == address(0) || _roleRegistry == address(0) || _blacklister == address(0)) revert AddressZero();
         liquidityPool = ILiquidityPool(_liquidityPool);
-        roleRegistry = IRoleRegistry(_roleRegistry);
         blacklister = IBlacklister(_blacklister);
-        rateLimiter = IEtherFiRateLimiter(_rateLimiter);
 
-        _disableInitializers(); 
+        _disableInitializers();
     }
 
     function initialize(address _liquidityPool) external initializer {
@@ -96,7 +89,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         totalShares += _share;
 
         uint256 amount = liquidityPool.amountForShare(_share);
-        rateLimiter.consumeIfConfigured(EETH_MINT_LIMIT_ID, RateLimitMath.toBucketUnit(amount));
+        rateLimiter.consumeForAddressIfConfigured(_user, toBucketUnit(amount));
 
         emit Transfer(address(0), _user, amount);
         emit TransferShares(address(0), _user, _share);
@@ -110,11 +103,14 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         totalShares -= _share;
 
         uint256 amount = liquidityPool.amountForShare(_share);
-        rateLimiter.consumeIfConfigured(EETH_BURN_LIMIT_ID, RateLimitMath.toBucketUnit(amount));
+        rateLimiter.consumeForAddressIfConfigured(_user, toBucketUnit(amount));
 
         emit Transfer(_user, address(0), amount);
         emit TransferShares(_user, address(0), _share);
     }
+
+    // Per-address rate-limit management (tightenAddressRateLimit[s], setAddressRateLimit[s],
+    // deleteAddressRateLimit[s]) is inherited from RateLimitedToken.
 
     function transfer(address _recipient, uint256 _amount) external override(IeETH, IERC20Upgradeable) returns (bool) {
         _transfer(msg.sender, _recipient, _amount);
@@ -214,7 +210,9 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
 
     // [INTERNAL FUNCTIONS]
     function _transfer(address _sender, address _recipient, uint256 _amount) internal {
-        rateLimiter.consumeIfConfigured(EETH_TRANSFER_LIMIT_ID, RateLimitMath.toBucketUnit(_amount));
+        uint64 amt = toBucketUnit(_amount);
+        rateLimiter.consumeForAddressIfConfigured(_sender,    amt);
+        rateLimiter.consumeForAddressIfConfigured(_recipient, amt);
         uint256 _sharesToTransfer = liquidityPool.sharesForAmount(_amount);
         _transferShares(_sender, _recipient, _sharesToTransfer);
         emit Transfer(_sender, _recipient, _amount);
@@ -298,6 +296,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     }
 
     // [MODIFIERS]
+    // `onlyGuardian` and `onlyOperations` are inherited from RateLimitedToken.
     modifier onlyPoolContract() {
         if (msg.sender != address(liquidityPool)) revert IncorrectCaller();
         _;
@@ -308,18 +307,8 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         _;
     }
 
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
-        _;
-    }
-
     modifier onlySuperGuardian() {
         roleRegistry.onlySuperGuardian(msg.sender);
-        _;
-    }
-
-    modifier onlyGuardian() {
-        roleRegistry.onlyGuardian(msg.sender);
         _;
     }
 

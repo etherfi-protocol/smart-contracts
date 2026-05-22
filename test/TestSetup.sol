@@ -549,8 +549,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         // Upgrade EtherFiRateLimiter on the fork — the on-chain impl still checks
         // ETHERFI_RATE_LIMITER_ADMIN_ROLE, which the consolidated role model no
-        // longer uses.
-        address newRateLimiterImpl = address(new EtherFiRateLimiter(address(roleRegistryInstance)));
+        // longer uses, and predates the per-address bucket immutables.
+        address newRateLimiterImpl = address(new EtherFiRateLimiter(address(roleRegistryInstance), address(eETHInstance), address(weEthInstance)));
         vm.prank(roleRegistryInstance.owner());
         rateLimiterInstance.upgradeTo(newRateLimiterImpl);
 
@@ -684,11 +684,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryProxy = new UUPSProxy(address(roleRegistryImplementation), abi.encodeWithSelector(RoleRegistry.initialize.selector, owner));
         roleRegistryInstance = RoleRegistry(address(roleRegistryProxy));
 
-        rateLimiterImplementation = new EtherFiRateLimiter(address(roleRegistryInstance));
-        rateLimiterProxy = new UUPSProxy(address(rateLimiterImplementation), "");
-        rateLimiterInstance = EtherFiRateLimiter(address(rateLimiterProxy));
-        rateLimiterInstance.initialize();
-
         blacklisterImplementation = new Blacklister(address(roleRegistryInstance));
         blacklisterInstance = Blacklister(address(new UUPSProxy(address(blacklisterImplementation), abi.encodeWithSelector(Blacklister.initialize.selector))));
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), owner);
@@ -740,6 +735,15 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         weETHProxy = new UUPSProxy(address(placeholderImpl), "");
         weEthInstance = WeETH(address(weETHProxy));
+
+        // EtherFiRateLimiter takes eETH/weETH as immutables now — it must be
+        // constructed AFTER those proxies are predeployed but BEFORE any contract
+        // that takes the rate limiter as a constructor immutable (eETH, weETH, LP,
+        // EtherFiNodesManager, ...).
+        rateLimiterImplementation = new EtherFiRateLimiter(address(roleRegistryInstance), address(eETHProxy), address(weETHProxy));
+        rateLimiterProxy = new UUPSProxy(address(rateLimiterImplementation), "");
+        rateLimiterInstance = EtherFiRateLimiter(address(rateLimiterProxy));
+        rateLimiterInstance.initialize();
 
         membershipNftProxy = new UUPSProxy(address(placeholderImpl), "");
         membershipNftInstance = MembershipNFT(payable(membershipNftProxy));
@@ -956,8 +960,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // EETH/WEETH operating admin consolidated into OPERATION_MULTISIG_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), admin);
 
-        // Bootstrap EETH/WeETH rate-limit buckets and consumer whitelists for tests.
-        _setupTokenRateLimits();
+        // Per-address rate-limit buckets are opt-in (Guardian creates them on demand);
+        // no global bootstrap needed — tests that exercise rate limiting create their
+        // own buckets via EETH/WeETH entry points.
 
         vm.stopPrank();
         vm.prank(alice);
@@ -1262,53 +1267,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         address newWeETHImpl = address(new WeETH(address(eETHInstance), address(liquidityPoolInstance), address(roleRegistryInstance), address(blacklisterInstance), address(rateLimiterInstance)));
         vm.prank(owner);
         weEthInstance.upgradeTo(newWeETHImpl);
-
-        // The upgraded weETH calls the rate limiter on mint/burn/transfer; create the
-        // buckets and whitelist the token so fork tests don't revert on UnknownLimit.
-        uint64 maxUint64 = type(uint64).max;
-        bytes32[3] memory weethIds = [
-            weEthInstance.WEETH_MINT_LIMIT_ID(),
-            weEthInstance.WEETH_BURN_LIMIT_ID(),
-            weEthInstance.WEETH_TRANSFER_LIMIT_ID()
-        ];
-        vm.startPrank(owner);
-        for (uint256 i = 0; i < weethIds.length; i++) {
-            if (!rateLimiterInstance.limitExists(weethIds[i])) {
-                rateLimiterInstance.createNewLimiter(weethIds[i], maxUint64, maxUint64);
-            }
-            rateLimiterInstance.updateConsumers(weethIds[i], address(weEthInstance), true);
-        }
-        vm.stopPrank();
-    }
-
-    /// @dev Idempotently creates the 6 EETH/WeETH rate-limit buckets with effectively
-    /// unbounded capacity and whitelists the token contracts as consumers. Tests that
-    /// want to exercise rate-limit behavior should override capacity/refill via the
-    /// rate limiter's admin functions before calling the rate-limited path.
-    function _setupTokenRateLimits() internal {
-        uint64 maxUint64 = type(uint64).max;
-        bytes32[3] memory eethIds = [
-            eETHInstance.EETH_MINT_LIMIT_ID(),
-            eETHInstance.EETH_BURN_LIMIT_ID(),
-            eETHInstance.EETH_TRANSFER_LIMIT_ID()
-        ];
-        bytes32[3] memory weethIds = [
-            weEthInstance.WEETH_MINT_LIMIT_ID(),
-            weEthInstance.WEETH_BURN_LIMIT_ID(),
-            weEthInstance.WEETH_TRANSFER_LIMIT_ID()
-        ];
-        for (uint256 i = 0; i < eethIds.length; i++) {
-            if (!rateLimiterInstance.limitExists(eethIds[i])) {
-                rateLimiterInstance.createNewLimiter(eethIds[i], maxUint64, maxUint64);
-            }
-            rateLimiterInstance.updateConsumers(eethIds[i], address(eETHInstance), true);
-        }
-        for (uint256 i = 0; i < weethIds.length; i++) {
-            if (!rateLimiterInstance.limitExists(weethIds[i])) {
-                rateLimiterInstance.createNewLimiter(weethIds[i], maxUint64, maxUint64);
-            }
-            rateLimiterInstance.updateConsumers(weethIds[i], address(weEthInstance), true);
-        }
+        // No bucket bootstrap needed — per-address rate limits are opt-in and the
+        // hot-path consume is a no-op for users without a configured bucket.
     }
 
     function _upgrade_etherfiAdmin() internal {
