@@ -3,8 +3,7 @@ pragma solidity ^0.8.13;
 
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/token/ERC20/IERC20Upgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/draft-IERC20PermitUpgradeable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "./interfaces/ILiquidityPool.sol";
@@ -36,11 +35,13 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable, RolesLibrary {
     }
 
     event AdapterDeposit(address indexed sender, uint256 amount, SourceOfFunds source, address referral);
+    event DustSwept(address indexed token, address indexed to, uint256 amount);
 
     error AllowanceExceeded();
     error InsufficientBalance();
     error PermitExpired();
     error EthTransfersNotAccepted();
+    error InvalidRecipient();
 
     constructor(address _liquidityPool, address _liquifier, address _weETH, address _eETH, address _wETH, address _stETH, address _wstETH, address _roleRegistry, address _blacklister) RolesLibrary(_roleRegistry) {
         liquidityPool = ILiquidityPool(_liquidityPool);
@@ -149,6 +150,20 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable, RolesLibrary {
         IERC20(address(weETH)).safeTransfer(msg.sender, weEthAmount);
 
         return weEthAmount;
+    }
+
+    /// @notice Sweep dust accumulated in the adapter to a recipient.
+    /// @dev Each deposit strands 1-2 wei of eETH due to floor-rounding in both
+    ///      amountForShare (shares -> ETH) and wrap (ETH -> shares). This function
+    ///      lets operations recover the residual balance of any ERC20 left here.
+    /// @param _token Address of the ERC20 to sweep
+    /// @param _to Recipient of the swept tokens
+    function sweepDust(address _token, address _to) external onlyOperatingMultisig {
+        if (_to == address(0)) revert InvalidRecipient();
+        uint256 balance = IERC20(_token).balanceOf(address(this));
+        if (balance == 0) revert InsufficientBalance();
+        IERC20(_token).safeTransfer(_to, balance);
+        emit DustSwept(_token, _to, balance);
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}

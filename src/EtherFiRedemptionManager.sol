@@ -256,10 +256,11 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         _updateRateLimit(ethAmount, outputToken);
         uint256 eEthShareFee = eEthShares - sharesToBurn;
         uint256 feeShareToStakers = eEthShareFee - feeShareToTreasury;
+        uint256 feeAmountToStakers = liquidityPool.amountForShare(feeShareToStakers);
 
         // Common fee handling: Transfer to Treasury
         IERC20(address(eEth)).safeTransfer(treasury, eEthFeeAmountToTreasury);
-        
+
         if(outputToken == ETH_ADDRESS) {
             _processETHRedemption(receiver, eEthAmountToReceiver, sharesToBurn, feeShareToStakers);
         } else if(outputToken == address(lido)) {
@@ -268,7 +269,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
             revert InvalidOutputToken();
         }
 
-        emit Redeemed(receiver, ethAmount, eEthFeeAmountToTreasury, eEthAmountToReceiver, outputToken);
+        emit Redeemed(receiver, ethAmount, eEthFeeAmountToTreasury, feeAmountToStakers, outputToken);
     }
 
     /**

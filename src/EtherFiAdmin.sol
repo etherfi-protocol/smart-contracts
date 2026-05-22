@@ -230,7 +230,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
         uint32 requestId = lastFinalizedRequestId;
         uint128 finalizedWithdrawalAmount;
         while (requestId < currentRequestId) {
-            if (requestId - lastFinalizedRequestId > maxNumberOfRequestsToFinalizePerReport) {
+            if ((requestId + 1) - lastFinalizedRequestId > maxNumberOfRequestsToFinalizePerReport) {
                 break;
             }
             IWithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNft.getRequest(requestId + 1);
