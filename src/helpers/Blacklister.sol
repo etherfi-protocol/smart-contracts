@@ -27,9 +27,7 @@ contract Blacklister is Initializable, UUPSUpgradeable, RolesLibrary {
         __UUPSUpgradeable_init();
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override {
-        _onlyProtocolUpgrader();
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     function blacklistUserUntil(address user) external onlyGuardian {
         if (blacklistedUntil[user] > block.timestamp) revert UserAlreadyBlacklisted(user);

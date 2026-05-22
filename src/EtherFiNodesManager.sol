@@ -62,9 +62,7 @@ contract EtherFiNodesManager is
         _disableInitializers();
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override {
-        _onlyProtocolUpgrader();
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     function pauseContract() external onlyOperatingMultisig {
         _pause();

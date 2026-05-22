@@ -125,9 +125,7 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
     //---------------------------------  INTERNAL FUNCTIONS  -------------------------------
     //--------------------------------------------------------------------------------------
 
-    function _authorizeUpgrade(address newImplementation) internal override {
-        _onlyProtocolUpgrader();
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
 
     function _beforeTokenTransfer(

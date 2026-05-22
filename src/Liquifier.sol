@@ -421,9 +421,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         return (_a > _b) ? _b : _a;
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override {
-        _onlyProtocolUpgrader();
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     function _requireNotPaused() internal override view {
         _requireNotPausedUntil();

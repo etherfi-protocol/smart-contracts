@@ -238,11 +238,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         emit TransferShares(_sender, _recipient, _sharesAmount);
     }
 
-    function _authorizeUpgrade(
-        address /* newImplementation */
-    ) internal view override {
-        _onlyProtocolUpgrader();
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     function _useNonce(address owner) internal virtual returns (uint256 current) {
         CountersUpgradeable.Counter storage nonce = _nonces[owner];

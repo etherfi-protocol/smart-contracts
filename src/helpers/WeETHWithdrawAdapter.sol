@@ -234,9 +234,7 @@ contract WeETHWithdrawAdapter is
     /**
      * @notice Authorize contract upgrades
      */
-    function _authorizeUpgrade(address /* newImplementation */) internal view override {
-        _onlyProtocolUpgrader();
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     /**
      * @notice Check if contract is not paused

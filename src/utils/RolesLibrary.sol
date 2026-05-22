@@ -54,8 +54,4 @@ abstract contract RolesLibrary {
         roleRegistry.onlyEigenpodOperations(msg.sender);
         _;
     }
-
-    function _onlyProtocolUpgrader() internal view {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
-    }
 }

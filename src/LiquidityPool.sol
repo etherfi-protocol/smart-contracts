@@ -196,7 +196,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     /// @notice One-shot post-upgrade migration that sweeps existing locked ETH from LP to WithdrawRequestNFT and PriorityWithdrawalQueue.
-    function initializeOnUpgradeV2() external onlyOwner {
+    function initializeOnUpgradeV2() external onlyUpgradeTimelock {
         if (escrowMigrationCompleted) revert AlreadyMigrated();
 
         uint128 nftLocked   = DEPRECATED_ethAmountLockedForWithdrawal;
@@ -664,9 +664,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         _checkMinAmountForShare();
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override {
-        _onlyProtocolUpgrader();
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     //--------------------------------------------------------------------------------------
     //------------------------------------  GETTERS  ---------------------------------------

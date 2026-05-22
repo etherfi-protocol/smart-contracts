@@ -332,7 +332,5 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         if (numActiveCommitteeMembers < quorumSize || numActiveCommitteeMembers > 2 * quorumSize) revert InvalidQuorum();
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override {
-        _onlyProtocolUpgrader();
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 }

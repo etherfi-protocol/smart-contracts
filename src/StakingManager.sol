@@ -67,9 +67,7 @@ contract StakingManager is
         _disableInitializers();
     }
 
-    function _authorizeUpgrade(address _newImplementation) internal override {
-        _onlyProtocolUpgrader();
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     //---------------------------------------------------------------------------
     //------------------------- Deposit Flow ------------------------------------
@@ -194,8 +192,7 @@ contract StakingManager is
 
     /// @notice Upgrades the etherfi node
     /// @param _newImplementation The new address of the etherfi node
-    function upgradeEtherFiNode(address _newImplementation) external {
-        _onlyProtocolUpgrader();
+    function upgradeEtherFiNode(address _newImplementation) external onlyUpgradeTimelock {
         if (_newImplementation == address(0)) revert InvalidUpgrade();
 
         etherFiNodeBeacon.upgradeTo(_newImplementation);

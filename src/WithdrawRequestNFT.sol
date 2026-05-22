@@ -157,7 +157,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     ///      path resolves locally to the live rate via `LP.amountPerShareCeil()` — preserving
     ///      legacy behavior for requests finalized before this upgrade. New finalizations push
     ///      real rate snapshots, so post-upgrade tokenIds always resolve to a non-zero rate.
-    function initializeShareRateFreezeUpgrade() external onlyOwner {
+    function initializeShareRateFreezeUpgrade() external onlyUpgradeTimelock {
         if (_finalizationRates.length() != 0) revert AlreadyInitialized();
         _finalizationRates.push(uint32(lastFinalizedRequestId), 0);
     }
@@ -428,9 +428,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         if (address(this).balance < ethAmountLockedForWithdrawal) revert InsufficientEscrow();
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override {
-        _onlyProtocolUpgrader();
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     function getImplementation() external view returns (address) {
         return _getImplementation();

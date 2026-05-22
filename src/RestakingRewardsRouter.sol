@@ -72,11 +72,7 @@ contract RestakingRewardsRouter is UUPSUpgradeable, RolesLibrary {
         }
     }
 
-    function _authorizeUpgrade(
-        address /* newImplementation */
-    ) internal override {
-        _onlyProtocolUpgrader();
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     function getImplementation() external view returns (address) {
         return _getImplementation();

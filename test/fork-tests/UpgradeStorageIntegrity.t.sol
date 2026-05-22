@@ -417,9 +417,11 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
 
         // Migrate pre-existing locked ETH from LP into the NFT escrow so that
         // pre-existing finalized requests can be claimed against the NFT balance.
+        // `initializeOnUpgradeV2` is now `onlyUpgradeTimelock`, so use the
+        // upgrade-timelock address that already holds UPGRADE_TIMELOCK_ROLE.
         LiquidityPool lp = LiquidityPool(payable(LIQUIDITY_POOL));
         if (!lp.escrowMigrationCompleted()) {
-            vm.prank(lp.owner());
+            vm.prank(UPGRADE_TIMELOCK);
             lp.initializeOnUpgradeV2();
         }
     }

@@ -497,8 +497,30 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // call would otherwise consume the prank before grantRole executes.
         bytes32 _blacklisterRole = roleRegistryInstance.OPERATION_MULTISIG_ROLE();
         address _roleRegOwner = roleRegistryInstance.owner();
-        vm.prank(_roleRegOwner);
+        bytes32 _upgradeTimelockRole = roleRegistryInstance.UPGRADE_TIMELOCK_ROLE();
+        vm.startPrank(_roleRegOwner);
         roleRegistryInstance.grantRole(_blacklisterRole, _roleRegOwner);
+        // `_authorizeUpgrade` now defers to `onlyUpgradeTimelock`, which checks
+        // UPGRADE_TIMELOCK_ROLE. Grant it to every proxy owner address that
+        // realistic-fork tests prank as for an upgradeTo call.
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, _roleRegOwner);
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, stakingManagerInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, depositAdapterInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, liquidityPoolInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, withdrawRequestNFTInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, managerInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, etherFiAdminInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, etherFiOracleInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, liquifierInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, auctionInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, weEthInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, eETHInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, membershipManagerInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, membershipNftInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, nodeOperatorManagerInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, etherFiRestakerInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, owner);
+        vm.stopPrank();
 
         // Deploy PriorityWithdrawalQueue for fork testing (mainnet LP has immutable address(0) for this)
         PriorityWithdrawalQueue priorityQueueImplementation = new PriorityWithdrawalQueue(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(roleRegistryInstance), address(treasuryInstance), 1 hours);
@@ -582,6 +604,24 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             stEthChainlinkFeed = address(new MockChainlinkPriceFeed(int256(1 ether), 0));
         }
 
+        // On fork, the live RoleRegistry impl may predate this PR and not expose PAUSE_UNTIL_ROLE().
+        // Upgrade in place so new role getters are reachable, then grant roles used by tests.
+        // Order matters: UPGRADE_TIMELOCK_ROLE must be granted to `owner` BEFORE the
+        // Liquifier upgrade below, because `_authorizeUpgrade` now requires that role.
+        vm.startPrank(roleRegistryInstance.owner());
+        if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
+            roleRegistryInstance.upgradeTo(address(new RoleRegistry(address(0))));
+        }
+        roleRegistryInstance.grantRole(roleRegistryInstance.UPGRADE_TIMELOCK_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), owner);
+        vm.stopPrank();
+
         vm.startPrank(owner);
 
         if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
@@ -597,22 +637,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 l1SyncPool: address(0xA6)
             }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS)));
         }
-        vm.stopPrank();
-
-        // On fork, the live RoleRegistry impl may predate this PR and not expose PAUSE_UNTIL_ROLE().
-        // Upgrade in place so new role getters are reachable, then grant roles used by tests.
-        vm.startPrank(roleRegistryInstance.owner());
-        if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
-            roleRegistryInstance.upgradeTo(address(new RoleRegistry(address(0))));
-        }
-        roleRegistryInstance.grantRole(roleRegistryInstance.UPGRADE_TIMELOCK_ROLE(), owner);
-        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), owner);
-        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), alice);
-        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), owner);
-        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), alice);
-        roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), owner);
-        roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), alice);
-        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), owner);
         vm.stopPrank();
 
         vm.startPrank(owner);
@@ -683,6 +707,12 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryImplementation = new RoleRegistry(address(0));
         roleRegistryProxy = new UUPSProxy(address(roleRegistryImplementation), abi.encodeWithSelector(RoleRegistry.initialize.selector, owner));
         roleRegistryInstance = RoleRegistry(address(roleRegistryProxy));
+
+        // Grant UPGRADE_TIMELOCK_ROLE to `owner` up-front so every later upgradeTo
+        // pranked as `owner` (and the proxy-owner pranks below, which also resolve
+        // to `owner` here) passes the new `onlyUpgradeTimelock` check on
+        // `_authorizeUpgrade`.
+        roleRegistryInstance.grantRole(roleRegistryInstance.UPGRADE_TIMELOCK_ROLE(), owner);
 
         rateLimiterImplementation = new EtherFiRateLimiter(address(roleRegistryInstance));
         rateLimiterProxy = new UUPSProxy(address(rateLimiterImplementation), "");

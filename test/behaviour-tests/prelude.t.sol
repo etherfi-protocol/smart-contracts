@@ -79,6 +79,15 @@ contract PreludeTest is Test, ArrayTestHelper {
         etherFiNodesManager = EtherFiNodesManager(payable(0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F));
         auctionManager = AuctionManager(0x00C452aFFee3a17d9Cecc1Bcd2B8d5C7635C4CB9);
 
+        // `_authorizeUpgrade` and `upgradeEtherFiNode` now check
+        // UPGRADE_TIMELOCK_ROLE via `onlyUpgradeTimelock`. Grant it to every
+        // proxy owner pranked for an upgrade call below.
+        vm.startPrank(roleRegistry.owner());
+        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), stakingManager.owner());
+        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), LiquidityPool(payable(address(liquidityPool))).owner());
+        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), etherFiNodesManager.owner());
+        vm.stopPrank();
+
         // deploy new staking manager implementation
         StakingManager stakingManagerImpl = new StakingManager(
             address(liquidityPool),

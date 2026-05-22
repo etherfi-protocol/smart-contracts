@@ -201,11 +201,7 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
     //-------------------------------  INTERNAL FUNCTIONS   --------------------------------
     //--------------------------------------------------------------------------------------
 
-    function _authorizeUpgrade(
-        address newImplementation
-    ) internal override {
-        _onlyProtocolUpgrader();
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------

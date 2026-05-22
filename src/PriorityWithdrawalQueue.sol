@@ -621,9 +621,7 @@ contract PriorityWithdrawalQueue is
         if (ethAmountLockedForPriorityWithdrawal > address(this).balance) revert InsufficientLiquidity();
     }
 
-    function _authorizeUpgrade(address) internal override {
-        _onlyProtocolUpgrader();
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     //--------------------------------------------------------------------------------------
     //------------------------------------  GETTERS  ---------------------------------------

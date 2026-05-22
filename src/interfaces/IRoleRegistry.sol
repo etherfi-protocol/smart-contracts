@@ -14,6 +14,11 @@ interface IRoleRegistry {
     error OnlyProtocolUpgrader();
 
     /**
+     * @dev Error thrown when a function is called by an account without the upgrade timelock role
+     */
+    error OnlyUpgradeTimelock();
+
+    /**
      * @notice Returns the maximum allowed role value
      * @dev This is used by EnumerableRoles._validateRole to ensure roles are within valid range
      * @return The maximum role value

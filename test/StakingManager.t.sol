@@ -1444,8 +1444,8 @@ contract StakingManagerTest is TestSetup {
 
     function test_upgradeEtherFiNodeFailsIfNotAuthorized() public {
         address newImpl = address(new EtherFiNode(address(0), address(0), address(0), address(0)));
-        
-        vm.expectRevert(IRoleRegistry.OnlyProtocolUpgrader.selector);
+
+        vm.expectRevert(IRoleRegistry.OnlyUpgradeTimelock.selector);
         stakingManagerInstance.upgradeEtherFiNode(newImpl);
     }
 

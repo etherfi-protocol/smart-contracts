@@ -287,9 +287,7 @@ contract AuctionManager is
         super._requireNotPaused();
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override {
-        _onlyProtocolUpgrader();
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     //--------------------------------------------------------------------------------------
     //--------------------------------------  GETTER  --------------------------------------
