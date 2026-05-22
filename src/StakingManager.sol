@@ -28,7 +28,7 @@ contract StakingManager is
 {
 
     address public immutable liquidityPool;
-    uint256 public constant initialDepositAmount = 1 ether;
+    uint256 public constant INITIAL_DEPOSIT_AMOUNT = 1 ether;
     uint256 public constant MIN_VALIDATOR_SIZE_WEI = 32 ether;
     uint256 public constant MAX_VALIDATOR_SIZE_WEI = 2048 ether;
     uint256 public constant VALIDATOR_PUBKEY_LENGTH = 48;
@@ -103,7 +103,7 @@ contract StakingManager is
             if (validatorCreationStatus[validatorCreationDataHash] != ValidatorCreationStatus.REGISTERED) revert InvalidValidatorCreationStatus();
 
             bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(address(IEtherFiNode(etherFiNode).getEigenPod()));
-            bytes32 computedDataRoot = generateDepositDataRoot(d.publicKey, d.signature, withdrawalCredentials, initialDepositAmount);
+            bytes32 computedDataRoot = generateDepositDataRoot(d.publicKey, d.signature, withdrawalCredentials, INITIAL_DEPOSIT_AMOUNT);
             if (computedDataRoot != d.depositDataRoot) revert IncorrectBeaconRoot();
 
             validatorCreationStatus[validatorCreationDataHash] = ValidatorCreationStatus.CONFIRMED;
@@ -113,7 +113,7 @@ contract StakingManager is
             etherFiNodesManager.linkPubkeyToNode(d.publicKey, etherFiNode, bidIds[i]);
 
             // Deposit to the Beacon Chain
-            depositContractEth2.deposit{value: initialDepositAmount}(d.publicKey, withdrawalCredentials, d.signature, computedDataRoot);
+            depositContractEth2.deposit{value: INITIAL_DEPOSIT_AMOUNT}(d.publicKey, withdrawalCredentials, d.signature, computedDataRoot);
 
             bytes32 pubkeyHash = calculateValidatorPubkeyHash(d.publicKey);
             emit validatorCreated(pubkeyHash, etherFiNode, d.publicKey);
@@ -140,7 +140,7 @@ contract StakingManager is
 
             // verify deposit root
             bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(address(IEtherFiNode(etherFiNode).getEigenPod()));
-            bytes32 computedDataRoot = generateDepositDataRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, initialDepositAmount);
+            bytes32 computedDataRoot = generateDepositDataRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, INITIAL_DEPOSIT_AMOUNT);
             if (computedDataRoot != depositData[i].depositDataRoot) revert IncorrectBeaconRoot();
 
             bytes32 validatorCreationDataHash = keccak256(abi.encode(depositData[i].publicKey, depositData[i].signature, depositData[i].depositDataRoot, depositData[i].ipfsHashForEncryptedValidatorKey, bidIds[i], etherFiNode));
@@ -161,7 +161,7 @@ contract StakingManager is
         if (validatorSizeWei < MIN_VALIDATOR_SIZE_WEI || validatorSizeWei > MAX_VALIDATOR_SIZE_WEI) revert InvalidValidatorSize();
 
         // we already deposited the initial amount to create the validators in createBeaconValidators()
-        uint256 remainingDeposit = validatorSizeWei - initialDepositAmount;
+        uint256 remainingDeposit = validatorSizeWei - INITIAL_DEPOSIT_AMOUNT;
 
         for (uint256 i = 0; i < depositData.length; i++) {
 

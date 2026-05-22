@@ -26,7 +26,6 @@ interface IStakingManager {
     function invalidateRegisteredBeaconValidator(DepositData calldata depositData, uint256 bidId, address etherFiNode) external;
     function confirmAndFundBeaconValidators(DepositData[] calldata depositData, uint256 validatorSizeWei) external payable;
     function calculateValidatorPubkeyHash(bytes memory pubkey) external pure returns (bytes32);
-    function initialDepositAmount() external returns (uint256);
     function generateDepositDataRoot(bytes memory pubkey, bytes memory signature, bytes memory withdrawalCredentials, uint256 amount) external pure returns (bytes32);
 
     // EtherFiNode Beacon Proxy

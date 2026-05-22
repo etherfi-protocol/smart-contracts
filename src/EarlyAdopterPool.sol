@@ -180,7 +180,7 @@ contract EarlyAdopterPool is Ownable, ReentrancyGuard, Pausable {
     /// @notice Sets claiming to be open, to allow users to claim their points
     /// @param _claimDeadline the amount of time in days until claiming will close
     function setClaimingOpen(uint256 _claimDeadline) public onlyOwner {        
-        claimDeadline = block.timestamp + (_claimDeadline * 1 days);
+        claimDeadline = block.timestamp + (_claimDeadline * 86400);
         claimingOpen = 1;
         endTime = block.timestamp;
 

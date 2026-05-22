@@ -15,7 +15,7 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
     error RateLimitExceeded();
     error TokenRateLimitExceeded();
 
-    uint256 public constant GWEI_TO_WEI = 1e12;
+    uint256 public constant RATE_PRECISION = 1e12;
 
     BucketLimiter.Limit public limit;
     address public consumer;
@@ -45,14 +45,14 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
     function updateRateLimit(address sender, address tokenIn, uint256 amountIn, uint256 amountOut) external whenNotPaused {
         if (msg.sender != consumer) revert IncorrectCaller();
         // Count both 'amountIn' and 'amountOut' as rate limit consumption
-        uint64 consumedAmount = SafeCast.toUint64((amountIn + amountOut + GWEI_TO_WEI - 1) / GWEI_TO_WEI);
+        uint64 consumedAmount = SafeCast.toUint64((amountIn + amountOut + RATE_PRECISION - 1) / RATE_PRECISION);
         if (!BucketLimiter.consume(limit, consumedAmount)) revert RateLimitExceeded();
         if (limitsPerToken[tokenIn].lastRefill != 0 && !BucketLimiter.consume(limitsPerToken[tokenIn], consumedAmount)) revert TokenRateLimitExceeded();
     }
 
     function canConsume(address tokenIn, uint256 amountIn, uint256 amountOut) external view returns (bool) {
         // Count both 'amountIn' and 'amountOut' as rate limit consumption
-        uint64 consumedAmount = SafeCast.toUint64((amountIn + amountOut + GWEI_TO_WEI - 1) / GWEI_TO_WEI);
+        uint64 consumedAmount = SafeCast.toUint64((amountIn + amountOut + RATE_PRECISION - 1) / RATE_PRECISION);
         bool globalConsumable = BucketLimiter.canConsume(limit, consumedAmount);
         bool perTokenConsumable = limitsPerToken[tokenIn].lastRefill == 0 || BucketLimiter.canConsume(limitsPerToken[tokenIn], consumedAmount);
         return globalConsumable && perTokenConsumable;
@@ -60,31 +60,31 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
 
     function setCapacity(uint256 capacity) external onlyAdmin {
         // max capacity = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether, which is practically enough
-        uint64 capacity64 = SafeCast.toUint64(capacity / GWEI_TO_WEI);
+        uint64 capacity64 = SafeCast.toUint64(capacity / RATE_PRECISION);
         BucketLimiter.setCapacity(limit, capacity64);
     }
 
     function setRefillRatePerSecond(uint256 refillRate) external onlyAdmin {
         // max refillRate = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether per second, which is practically enough
-        uint64 refillRate64 = SafeCast.toUint64(refillRate / GWEI_TO_WEI);
+        uint64 refillRate64 = SafeCast.toUint64(refillRate / RATE_PRECISION);
         BucketLimiter.setRefillRate(limit, refillRate64);
     }
 
     function registerToken(address token, uint256 capacity, uint256 refillRate) external onlyAdmin {
-        uint64 capacity64 = SafeCast.toUint64(capacity / GWEI_TO_WEI);
-        uint64 refillRate64 = SafeCast.toUint64(refillRate / GWEI_TO_WEI);
+        uint64 capacity64 = SafeCast.toUint64(capacity / RATE_PRECISION);
+        uint64 refillRate64 = SafeCast.toUint64(refillRate / RATE_PRECISION);
         limitsPerToken[token] = BucketLimiter.create(capacity64, refillRate64);
     }
 
     function setCapacityPerToken(address token, uint256 capacity) external onlyAdmin {
         // max capacity = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether, which is practically enough
-        uint64 capacity64 = SafeCast.toUint64(capacity / GWEI_TO_WEI);
+        uint64 capacity64 = SafeCast.toUint64(capacity / RATE_PRECISION);
         BucketLimiter.setCapacity(limitsPerToken[token], capacity64);
     }
 
     function setRefillRatePerSecondPerToken(address token, uint256 refillRate) external onlyAdmin {
         // max refillRate = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether per second, which is practically enough
-        uint64 refillRate64 = SafeCast.toUint64(refillRate / GWEI_TO_WEI);
+        uint64 refillRate64 = SafeCast.toUint64(refillRate / RATE_PRECISION);
         BucketLimiter.setRefillRate(limitsPerToken[token], refillRate64);
     }
 
