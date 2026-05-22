@@ -96,8 +96,8 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             liquidityPoolInstance.initializeOnUpgradeV2();
         }
 
-        liquidityPoolInstance.setMinWithdrawAmount(0.001 ether);
         liquidityPoolInstance.setMaxWithdrawAmount(1000 ether);
+        liquidityPoolInstance.setMinWithdrawAmount(0.001 ether);
 
         // Grant roles — consolidated to the 8-tier model.
         // PWQ admin → OPERATION_TIMELOCK_ROLE; pauser → OPERATION_MULTISIG_ROLE;
@@ -1857,7 +1857,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
     function test_revert_handleRemainderNotFeeClaimer() public {
         vm.prank(regularUser);
-        vm.expectRevert(PriorityWithdrawalQueue.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
         priorityQueue.handleRemainder(1 ether);
     }
 
@@ -1894,7 +1894,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         requests[0] = request;
 
         vm.prank(regularUser);
-        vm.expectRevert(PriorityWithdrawalQueue.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOracleOperations.selector);
         priorityQueue.fulfillRequests(requests);
     }
 

@@ -731,7 +731,7 @@ contract EtherFiRateLimiterTest is TestSetup {
     function test_upgradeability() public {
         // Verify upgrade authorization
         vm.prank(unauthorizedUser);
-        vm.expectRevert(RoleRegistry.OnlyProtocolUpgrader.selector);
+        vm.expectRevert(RoleRegistry.OnlyUpgradeTimelock.selector);
         rateLimiter.upgradeTo(address(0x1));
 
         // Owner is the protocol upgrader; passes role check but reverts for other reasons

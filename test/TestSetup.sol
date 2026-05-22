@@ -484,21 +484,17 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         weEthWithdrawAdapterInstance = IWeETHWithdrawAdapter(deployed.WEETH_WITHDRAW_ADAPTER());
         etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(address(liquidityPoolInstance.etherFiRedemptionManager())));
 
-        // Upgrade the live RoleRegistry to the local impl so newly-added role
-        // getters are reachable from any contract that is also being upgraded in this fork.
-        vm.prank(roleRegistryInstance.owner());
-        roleRegistryInstance.upgradeTo(address(new RoleRegistry(address(0))));
+        // NOTE: Do NOT upgrade RoleRegistry yet. The currently deployed proxies
+        // (StakingManager, EtherFiRedemptionManager, EtherFiRateLimiter, ...)
+        // authorize upgrades via `roleRegistry.onlyProtocolUpgrader`, which was
+        // removed from the new RoleRegistry impl. Upgrading RoleRegistry first
+        // would bork every subsequent `upgradeTo` against the live impls. The
+        // RoleRegistry swap + role grants happen AFTER the proxy upgrades below.
 
         // Deploy a fresh Blacklister on the fork — mainnet does not yet have one
         // deployed, but any upgraded impl now expects it as an immutable.
         blacklisterImplementation = new Blacklister(address(roleRegistryInstance));
         blacklisterInstance = Blacklister(address(new UUPSProxy(address(blacklisterImplementation), abi.encodeWithSelector(Blacklister.initialize.selector))));
-        // Resolve both arguments before vm.prank — every interleaved external
-        // call would otherwise consume the prank before grantRole executes.
-        bytes32 _blacklisterRole = roleRegistryInstance.OPERATION_MULTISIG_ROLE();
-        address _roleRegOwner = roleRegistryInstance.owner();
-        vm.prank(_roleRegOwner);
-        roleRegistryInstance.grantRole(_blacklisterRole, _roleRegOwner);
 
         // Deploy PriorityWithdrawalQueue for fork testing (mainnet LP has immutable address(0) for this)
         PriorityWithdrawalQueue priorityQueueImplementation = new PriorityWithdrawalQueue(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(roleRegistryInstance), address(treasuryInstance), 1 hours);
@@ -507,6 +503,19 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             abi.encodeWithSelector(PriorityWithdrawalQueue.initialize.selector)
         );
         priorityQueueInstance = PriorityWithdrawalQueue(payable(address(priorityQueueProxy)));
+
+        // Also pre-upgrade the LIVE mainnet PriorityWithdrawalQueue proxy: a handful
+        // of integration tests dereference its deployed address directly and try to
+        // upgrade it themselves AFTER initializeRealisticFork has swapped RoleRegistry.
+        // Doing it here (before that swap) lets the legacy `onlyProtocolUpgrader`
+        // auth path succeed.
+        address mainnetPwqProxy = deployed.PRIORITY_WITHDRAWAL_QUEUE();
+        if (mainnetPwqProxy.code.length > 0) {
+            // Use the same impl bytecode as the fresh proxy above so subsequent
+            // upgradeTo calls in tests are no-ops storage-wise.
+            vm.prank(roleRegistryInstance.owner());
+            PriorityWithdrawalQueue(payable(mainnetPwqProxy)).upgradeTo(address(priorityQueueImplementation));
+        }
 
         // Upgrade StakingManager on the fork so it uses the consolidated role model
         // (the on-chain impl still calls PROTOCOL_PAUSER, which the upgraded RoleRegistry
@@ -569,6 +578,206 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         ));
         vm.prank(depositAdapterInstance.owner());
         depositAdapterInstance.upgradeTo(newDepositAdapterImpl);
+
+        // Upgrade LiquidityPool — deployed impl uses `onlyProtocolUpgrader`,
+        // which the new RoleRegistry impl no longer exposes. Doing this swap
+        // before the RoleRegistry upgrade lets the legacy auth path succeed;
+        // afterwards the new impl's `onlyUpgradeTimelock` takes over (and we
+        // grant the role to relevant addresses below).
+        address newLpImpl = address(new LiquidityPool(
+            LiquidityPool.ConstructorAddresses({
+                stakingManager: address(stakingManagerInstance),
+                nodesManager: address(managerInstance),
+                eETH: address(eETHInstance),
+                withdrawRequestNFT: address(withdrawRequestNFTInstance),
+                liquifier: address(liquifierInstance),
+                etherFiRedemptionManager: address(etherFiRedemptionManagerInstance),
+                roleRegistry: address(roleRegistryInstance),
+                priorityWithdrawalQueue: address(priorityQueueInstance),
+                blacklister: address(blacklisterInstance),
+                etherFiAdminContract: address(etherFiAdminInstance),
+                membershipManager: address(membershipManagerV1Instance)
+            }),
+            0
+        ));
+        vm.prank(liquidityPoolInstance.owner());
+        liquidityPoolInstance.upgradeTo(newLpImpl);
+
+        // Upgrade WithdrawRequestNFT — legacy `_authorizeUpgrade` is `onlyOwner`,
+        // so the call path is independent of RoleRegistry, but we still need the
+        // new impl in place for the consolidated role checks elsewhere.
+        address newWrnImpl = address(new WithdrawRequestNFT(
+            deployed.WITHDRAW_REQUEST_NFT_BUYBACK_SAFE(),
+            address(eETHInstance),
+            address(liquidityPoolInstance),
+            address(membershipManagerV1Instance),
+            address(roleRegistryInstance),
+            address(blacklisterInstance),
+            address(etherFiAdminInstance),
+            1,
+            4e18
+        ));
+        vm.prank(withdrawRequestNFTInstance.owner());
+        withdrawRequestNFTInstance.upgradeTo(newWrnImpl);
+
+        // Upgrade EtherFiNodesManager — deployed impl uses `onlyProtocolUpgrader`.
+        address newManagerImpl = address(new EtherFiNodesManager(
+            address(stakingManagerInstance),
+            address(roleRegistryInstance),
+            address(rateLimiterInstance)
+        ));
+        vm.prank(managerInstance.owner());
+        managerInstance.upgradeTo(newManagerImpl);
+
+        // Upgrade EtherFiAdmin — deployed impl uses `onlyProtocolUpgrader`. Tests
+        // that re-upgrade it later via `_upgradeOracleAndAdminForFork` will then
+        // route through the new impl's `onlyUpgradeTimelock`, which we grant
+        // below.
+        address newAdminImpl = address(new EtherFiAdmin(
+            EtherFiAdmin.ConstructorAddresses({
+                etherFiOracle: address(etherFiOracleInstance),
+                stakingManager: address(stakingManagerInstance),
+                auctionManager: address(auctionInstance),
+                etherFiNodesManager: address(managerInstance),
+                liquidityPool: address(liquidityPoolInstance),
+                membershipManager: address(membershipManagerV1Instance),
+                withdrawRequestNft: address(withdrawRequestNFTInstance),
+                roleRegistry: address(roleRegistryInstance),
+                priorityWithdrawalQueue: address(priorityQueueInstance)
+            }),
+            10_000, 1_000, 7200,
+            100_000 ether, 500, 1000
+        ));
+        vm.prank(roleRegistryInstance.owner());
+        etherFiAdminInstance.upgradeTo(newAdminImpl);
+
+        // Upgrade WeETH — deployed impl uses `onlyProtocolUpgrader`. Tests that
+        // call `setUpLiquifier` later re-upgrade weETH via `_upgrade_weETH`; pre-
+        // upgrading here ensures that path uses the new impl's `onlyUpgradeTimelock`
+        // (granted to `owner` below) instead of the removed legacy selector.
+        address newWeETHImpl = address(new WeETH(
+            address(eETHInstance),
+            address(liquidityPoolInstance),
+            address(roleRegistryInstance),
+            address(blacklisterInstance),
+            address(rateLimiterInstance)
+        ));
+        vm.prank(weEthInstance.owner());
+        weEthInstance.upgradeTo(newWeETHImpl);
+
+        // Upgrade Liquifier — legacy `_authorizeUpgrade` is `onlyOwner`, but we
+        // pre-upgrade here so the rest of the suite sees the new impl consistently.
+        // Need a price feed; mirror the defensive default from `setUpLiquifier`
+        // in case fork-specific wiring hasn't been set up yet.
+        if (stEthChainlinkFeed == address(0)) {
+            stEthChainlinkFeed = address(new MockChainlinkPriceFeed(int256(1 ether), 0));
+        }
+        address newLiquifierImpl = address(new Liquifier(
+            Liquifier.ConstructorAddresses({
+                liquidityPool: address(liquidityPoolInstance),
+                lidoWithdrawalQueue: address(lidoWithdrawalQueue),
+                lido: address(stEth),
+                stEth_Eth_Pool: address(stEth_Eth_Pool),
+                roleRegistry: address(roleRegistryInstance),
+                stEthPriceFeed: stEthChainlinkFeed,
+                blacklister: address(blacklisterInstance),
+                etherfiRestaker: address(etherFiRestakerInstance),
+                l1SyncPool: address(0xA6)
+            }),
+            100,
+            LIQUIFIER_STALE_WINDOW,
+            LIQUIFIER_MAX_PRICE_DEVIATION_BPS
+        ));
+        vm.prank(liquifierInstance.owner());
+        liquifierInstance.upgradeTo(newLiquifierImpl);
+
+        // Now that every live proxy that authorizes upgrades through the legacy
+        // `onlyProtocolUpgrader` path has been swapped to the new impl, it's
+        // safe to upgrade RoleRegistry. After this point, `onlyProtocolUpgrader`
+        // no longer exists; any further proxy upgrade must use UPGRADE_TIMELOCK_ROLE
+        // via `onlyUpgradeTimelock`.
+        vm.prank(roleRegistryInstance.owner());
+        roleRegistryInstance.upgradeTo(address(new RoleRegistry(address(0))));
+
+        // Resolve role identifiers before vm.prank — every interleaved external
+        // call would otherwise consume the prank before grantRole executes.
+        bytes32 _operatingMultisigRole = roleRegistryInstance.OPERATION_MULTISIG_ROLE();
+        bytes32 _operatingTimelockRole = roleRegistryInstance.OPERATION_TIMELOCK_ROLE();
+        bytes32 _upgradeTimelockRole = roleRegistryInstance.UPGRADE_TIMELOCK_ROLE();
+        address _roleRegOwner = roleRegistryInstance.owner();
+        address _operatingTimelockAddr = deployed.OPERATING_TIMELOCK();
+        vm.startPrank(_roleRegOwner);
+        roleRegistryInstance.grantRole(_operatingMultisigRole, _roleRegOwner);
+        // `_authorizeUpgrade` now defers to `onlyUpgradeTimelock`, which checks
+        // UPGRADE_TIMELOCK_ROLE. Grant it to every proxy owner address that
+        // realistic-fork tests prank as for an upgradeTo call.
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, _roleRegOwner);
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, stakingManagerInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, depositAdapterInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, liquidityPoolInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, withdrawRequestNFTInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, managerInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, etherFiAdminInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, etherFiOracleInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, liquifierInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, nodeOperatorManagerInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, etherFiRestakerInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, owner);
+
+        // Operational roles for test setUps. Pre-consolidation, these
+        // call paths were gated by per-contract admin maps or by addresses
+        // that previously held legacy admin roles. The consolidated model
+        // routes them through OPERATION_TIMELOCK / OPERATION_MULTISIG, so we
+        // mirror that historical access for the addresses tests prank as.
+        // Note: HOUSEKEEPING / GUARDIAN are intentionally NOT granted here —
+        // tests for sweepFunds & friends rely on `admin` lacking them.
+        roleRegistryInstance.grantRole(_operatingTimelockRole, owner);
+        roleRegistryInstance.grantRole(_operatingTimelockRole, alice);
+        roleRegistryInstance.grantRole(_operatingTimelockRole, admin);
+        roleRegistryInstance.grantRole(_operatingTimelockRole, _operatingTimelockAddr);
+        roleRegistryInstance.grantRole(_operatingMultisigRole, owner);
+        roleRegistryInstance.grantRole(_operatingMultisigRole, alice);
+        roleRegistryInstance.grantRole(_operatingMultisigRole, admin);
+        roleRegistryInstance.grantRole(_operatingMultisigRole, _operatingTimelockAddr);
+        vm.stopPrank();
+
+        // The freshly-upgraded LP introduces `minWithdrawAmount`/`maxWithdrawAmount`
+        // gates that weren't part of the deployed impl. Their default storage
+        // values are zero, which would reject every `requestWithdraw`. Set sane
+        // bounds here so generic fork tests don't trip the new checks. Tests
+        // that want to exercise the gates can override.
+        vm.startPrank(_roleRegOwner);
+        liquidityPoolInstance.setMaxWithdrawAmount(1000 ether);
+        liquidityPoolInstance.setMinWithdrawAmount(0.001 ether);
+        vm.stopPrank();
+
+        // Run the one-shot escrow migration so `requestWithdraw` / `withdraw`
+        // (both gated by `escrowMigrationCompleted`) function on the upgraded
+        // LP. Idempotent: skip if already complete.
+        if (!liquidityPoolInstance.escrowMigrationCompleted()) {
+            vm.prank(_roleRegOwner);
+            liquidityPoolInstance.initializeOnUpgradeV2();
+        }
+
+        // The just-upgraded WeETH calls the rate limiter on mint/burn/transfer.
+        // Create its buckets with effectively unbounded capacity so generic fork
+        // tests that don't care about rate-limit behaviour don't revert on
+        // UnknownLimit. Done AFTER role grants because `createNewLimiter` is
+        // OPERATION_TIMELOCK-gated.
+        bytes32[3] memory weethRateIds = [
+            weEthInstance.WEETH_MINT_LIMIT_ID(),
+            weEthInstance.WEETH_BURN_LIMIT_ID(),
+            weEthInstance.WEETH_TRANSFER_LIMIT_ID()
+        ];
+        uint64 _rateMax = type(uint64).max;
+        vm.startPrank(owner);
+        for (uint256 i = 0; i < weethRateIds.length; i++) {
+            if (!rateLimiterInstance.limitExists(weethRateIds[i])) {
+                rateLimiterInstance.createNewLimiter(weethRateIds[i], _rateMax, _rateMax);
+            }
+            rateLimiterInstance.updateConsumers(weethRateIds[i], address(weEthInstance), true);
+        }
+        vm.stopPrank();
     }
 
     function updateShouldSetRoleRegistry(bool shouldSetup) public {
@@ -582,9 +791,12 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             stEthChainlinkFeed = address(new MockChainlinkPriceFeed(int256(1 ether), 0));
         }
 
-        vm.startPrank(owner);
-
+        // Upgrade Liquifier BEFORE swapping RoleRegistry: the live Liquifier impl
+        // still authorizes upgrades through `onlyProtocolUpgrader`, which the new
+        // RoleRegistry impl no longer exposes. `liquifierInstance.owner()` matches
+        // RoleRegistry.owner() on mainnet, so the OLD impl's owner check passes.
         if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
+            vm.prank(liquifierInstance.owner());
             liquifierInstance.upgradeTo(address(new Liquifier(Liquifier.ConstructorAddresses({
                 liquidityPool: address(liquidityPoolInstance),
                 lidoWithdrawalQueue: address(lidoWithdrawalQueue),
@@ -597,10 +809,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 l1SyncPool: address(0xA6)
             }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS)));
         }
-        vm.stopPrank();
 
-        // On fork, the live RoleRegistry impl may predate this PR and not expose PAUSE_UNTIL_ROLE().
-        // Upgrade in place so new role getters are reachable, then grant roles used by tests.
+        // Now swap RoleRegistry and grant roles used by tests.
         vm.startPrank(roleRegistryInstance.owner());
         if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
             roleRegistryInstance.upgradeTo(address(new RoleRegistry(address(0))));
@@ -683,6 +893,12 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryImplementation = new RoleRegistry(address(0));
         roleRegistryProxy = new UUPSProxy(address(roleRegistryImplementation), abi.encodeWithSelector(RoleRegistry.initialize.selector, owner));
         roleRegistryInstance = RoleRegistry(address(roleRegistryProxy));
+
+        // Grant UPGRADE_TIMELOCK_ROLE to `owner` up-front so every later upgradeTo
+        // pranked as `owner` (and the proxy-owner pranks below, which also resolve
+        // to `owner` here) passes the new `onlyUpgradeTimelock` check on
+        // `_authorizeUpgrade`.
+        roleRegistryInstance.grantRole(roleRegistryInstance.UPGRADE_TIMELOCK_ROLE(), owner);
 
         rateLimiterImplementation = new EtherFiRateLimiter(address(roleRegistryInstance));
         rateLimiterProxy = new UUPSProxy(address(rateLimiterImplementation), "");
@@ -800,8 +1016,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(liquidityPoolProxy),
             address(etherFiNodeManagerProxy),
             address(eigenLayerEigenPodManager),
-            address(eigenLayerDelegationManager),
-            address(roleRegistryInstance)
+            address(eigenLayerDelegationManager)
         );
 
         // NodeOperatorManager
@@ -815,7 +1030,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(blacklisterInstance),
             address(nodeOperatorManagerProxy),
             address(stakingManagerProxy),
-            address(membershipManagerProxy)
+            address(membershipManagerProxy),
+            address(treasuryInstance)
         );
         auctionInstance.upgradeTo(address(auctionImplementation));
         auctionInstance.initialize(address(nodeOperatorManagerInstance));
@@ -1205,8 +1421,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.startPrank(alice);
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
         liquidityPoolInstance.setValidatorSizeWei(32 ether);
-        liquidityPoolInstance.setMinWithdrawAmount(0.001 ether);
         liquidityPoolInstance.setMaxWithdrawAmount(1000 ether);
+        liquidityPoolInstance.setMinWithdrawAmount(0.001 ether);
         // Pause WithdrawRequestNFT so existing tests that unPauseContract in their
         // own setUp continue to find it paused (initializeOnUpgrade used to set this).
         withdrawRequestNFTInstance.pauseContract();
@@ -2011,7 +2227,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         address liquidityPool;
         address etherFiNodesManager;
 
-        EtherFiNode etherFiNode = new EtherFiNode(liquidityPool, etherFiNodesManager, eigenPodManager, delegationManager, address(roleRegistryInstance));
+        EtherFiNode etherFiNode = new EtherFiNode(liquidityPool, etherFiNodesManager, eigenPodManager, delegationManager);
         address newImpl = address(etherFiNode);
         vm.prank(stakingManagerInstance.owner());
         stakingManagerInstance.upgradeEtherFiNode(newImpl);

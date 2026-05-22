@@ -93,6 +93,8 @@ contract RestakingRewardsRouterTest is Test {
         // Grant transfer role — ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE consolidated into HOUSEKEEPING_OPERATIONS_ROLE.
         roleRegistry.grantRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), admin);
         roleRegistry.grantRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), transferRoleUser);
+        // `_authorizeUpgrade` now requires UPGRADE_TIMELOCK_ROLE.
+        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), owner);
         vm.stopPrank();
 
         // Deploy proxy and initialize (outside prank so owner is address(this))
@@ -126,15 +128,6 @@ contract RestakingRewardsRouterTest is Test {
             address(roleRegistry),
             address(rewardToken),
             address(0)
-        );
-    }
-
-    function test_constructor_revertsWithZeroRoleRegistry() public {
-        vm.expectRevert(RestakingRewardsRouter.InvalidAddress.selector);
-        new RestakingRewardsRouter(
-            address(0),
-            address(rewardToken),
-            address(liquidityPool)
         );
     }
 
@@ -324,7 +317,7 @@ contract RestakingRewardsRouterTest is Test {
         rewardToken.mint(address(router), amount);
 
         vm.prank(unauthorizedUser);
-        vm.expectRevert(RestakingRewardsRouter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
         router.recoverERC20();
 
         // Should still have tokens since transfer failed

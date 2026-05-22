@@ -5,11 +5,11 @@ import { SafeERC20, IERC20 } from "@openzeppelin/contracts/token/ERC20/utils/Saf
 import {OwnableUpgradeable} from "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {AssetRecovery} from "./AssetRecovery.sol";
-import {IRoleRegistry} from "./interfaces/IRoleRegistry.sol";
 import {PausableUntil} from "./utils/PausableUntil.sol";
+import {RolesLibrary} from "./utils/RolesLibrary.sol";
 import {ICumulativeMerkleRewardsDistributor}  from "./interfaces/ICumulativeMerkleRewardsDistributor.sol";
 
-contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistributor, OwnableUpgradeable, UUPSUpgradeable, PausableUntil, AssetRecovery {
+contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistributor, OwnableUpgradeable, UUPSUpgradeable, PausableUntil, AssetRecovery, RolesLibrary {
 using SafeERC20 for IERC20;
 
 
@@ -29,19 +29,17 @@ using SafeERC20 for IERC20;
 
 
     //--------------------------------------------------------------------------------------
-    //-------------------------------------  ROLES  ---------------------------------------
+    //-------------------------------------  CONSTANTS  -------------------------------------
     //--------------------------------------------------------------------------------------
 
     address public constant ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
-    IRoleRegistry public immutable roleRegistry;
 
 //--------------------------------------------------------------------------------------
 //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
 //--------------------------------------------------------------------------------------
 
-    constructor(address _roleRegistry) {
+    constructor(address _roleRegistry) RolesLibrary(_roleRegistry) {
         _disableInitializers();
-        roleRegistry = IRoleRegistry(_roleRegistry);
     }
 
     receive() external payable {}
@@ -53,7 +51,7 @@ using SafeERC20 for IERC20;
         claimDelay = 2 days; // 48 hours
     }
 
-    function setClaimDelay(uint256 _claimDelay) external onlyOperations {
+    function setClaimDelay(uint256 _claimDelay) external onlyAdmin {
         claimDelay = _claimDelay;
         emit ClaimDelayUpdated(claimDelay);
     }
@@ -64,8 +62,7 @@ using SafeERC20 for IERC20;
 * @param _token Address of the reward token (use ETH_ADDRESS for ETH rewards)
 * @param _merkleRoot New Merkle root containing the reward data
 **/
-    function setPendingMerkleRoot(address _token, bytes32 _merkleRoot) external whenNotPaused {
-        if(!roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
+    function setPendingMerkleRoot(address _token, bytes32 _merkleRoot) external whenNotPaused onlyExecutorOperations {
         pendingMerkleRoots[_token] = _merkleRoot;
         lastPendingMerkleUpdatedToTimestamp[_token] = block.timestamp;
         emit PendingMerkleRootUpdated(_token, _merkleRoot);
@@ -78,8 +75,7 @@ using SafeERC20 for IERC20;
 * @param _token Address of the reward token (use ETH_ADDRESS for ETH rewards)
 * @param _finalizedBlock Block number up to which rewards are calculated
 */
-    function finalizeMerkleRoot(address _token, uint256 _finalizedBlock) external whenNotPaused {
-        if(!roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
+    function finalizeMerkleRoot(address _token, uint256 _finalizedBlock) external whenNotPaused onlyExecutorOperations {
         if(!(block.timestamp >= lastPendingMerkleUpdatedToTimestamp[_token] + claimDelay)) revert InsufficentDelay();
         if(_finalizedBlock < lastRewardsCalculatedToBlock[_token] || _finalizedBlock > block.number) revert InvalidFinalizedBlock();
         bytes32 oldClaimableMerkleRoot = claimableMerkleRoots[_token];
@@ -131,17 +127,17 @@ using SafeERC20 for IERC20;
         emit Claimed(token, account, amount);
     }
 
-    function updateWhitelistedRecipient(address user, bool isWhitelisted) external onlyOperations {
+    function updateWhitelistedRecipient(address user, bool isWhitelisted) external onlyAdmin {
         whitelistedRecipient[user] = isWhitelisted;
         emit RecipientStatusUpdated(user, isWhitelisted);
     }
 
-    function pause() external onlyOperations {
+    function pause() external onlyOperatingMultisig {
         paused = true;
         emit Paused(msg.sender);
     }
 
-    function unpause() external onlyOperations {
+    function unpause() external onlyOperatingMultisig {
         paused = false;
         emit UnPaused(msg.sender);
     }
@@ -150,7 +146,7 @@ using SafeERC20 for IERC20;
         _pauseUntil();
     }
 
-    function unpauseContractUntil() external onlyOperations {
+    function unpauseContractUntil() external onlyOperatingMultisig {
         _unpauseUntil();
     }
 
@@ -173,9 +169,7 @@ using SafeERC20 for IERC20;
     //------------------------------  INTERNAL FUNCTIONS  ----------------------------------
     //--------------------------------------------------------------------------------------
 
-    function _authorizeUpgrade(address newImplementation) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     function _verifyAsm(bytes32[] calldata proof, bytes32 root, bytes32 leaf) private pure returns (bool valid) {
         if(proof.length > 1000) revert InvalidProof();
@@ -213,21 +207,6 @@ using SafeERC20 for IERC20;
     modifier whenNotPaused() {
         _requireNotPaused();
         _requireNotPausedUntil();
-        _;
-    }
-
-    modifier onlyAdmin() {
-        roleRegistry.onlyOperatingTimelock(msg.sender);
-        _;
-    }
-
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
-        _;
-    }
-
-    modifier onlyGuardian() {
-        roleRegistry.onlyGuardian(msg.sender);
         _;
     }
 }

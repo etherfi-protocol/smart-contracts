@@ -5,23 +5,22 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
-import "./RoleRegistry.sol";
-
 import "./interfaces/IEtherFiOracle.sol";
 import "./interfaces/IStakingManager.sol";
 import "./interfaces/IAuctionManager.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/ILiquidityPool.sol";
-import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IMembershipManager.sol";
 import "./interfaces/IWithdrawRequestNFT.sol";
 import "./interfaces/IPriorityWithdrawalQueue.sol";
+
+import "./utils/RolesLibrary.sol";
 
 interface IEtherFiPausable {
     function paused() external view returns (bool);
 }
 
-contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, RolesLibrary {
     using Math for uint256;
 
     struct TaskStatus {
@@ -53,7 +52,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     mapping(bytes32 => TaskStatus) public validatorApprovalTaskStatus;
     uint16 validatorTaskBatchSize;
 
-    RoleRegistry private DEPRECATED_roleRegistry;
+    address private DEPRECATED_roleRegistry;
 
     uint256 public lastStaleReportFinalizationBlock;
     uint256 public maxFinalizedWithdrawalAmountPerDay;
@@ -71,7 +70,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     ILiquidityPool public immutable liquidityPool;
     IMembershipManager public immutable membershipManager;
     IWithdrawRequestNFT public immutable withdrawRequestNft;
-    IRoleRegistry public immutable roleRegistry;
     IPriorityWithdrawalQueue public immutable priorityWithdrawalQueue;
 
     int256 public immutable maxAcceptableRebaseAprInBps;
@@ -100,7 +98,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     event ValidatorApprovalTaskCompleted(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators);
     event ValidatorApprovalTaskInvalidated(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators);
 
-    error IncorrectRole();
     error InvalidMaxAcceptableFinalizedWithdrawalAmount();
     error InvalidMaxNumberOfRequestsToFinalizePerReport();
     error InvalidMaxFinalizedWithdrawalAmountPerDay();
@@ -127,7 +124,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         uint256 _maxAcceptableFinalizedWithdrawalAmountPerDay,
         uint256 _maxAcceptableNumValidatorsToApprovePerDay,
         uint256 _maxNumberOfRequestsToFinalizePerReport
-    ) {
+    ) RolesLibrary(_constructorAddresses.roleRegistry) {
         if (_maxAcceptableRebaseAprInBps <= 0 || _maxAcceptableRebaseAprInBps > int256(BASIS_POINTS_DENOMINATOR)) revert InvalidMaxAcceptableRebaseApr();
         if (_maxValidatorTaskBatchSize == 0) revert InvalidValidatorTaskBatchSize();
         if (_staleOracleReportBlockWindow == 0) revert InvalidStaleOracleReportBlockWindow();
@@ -141,7 +138,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         liquidityPool = ILiquidityPool(_constructorAddresses.liquidityPool);
         membershipManager = IMembershipManager(_constructorAddresses.membershipManager);
         withdrawRequestNft = IWithdrawRequestNFT(_constructorAddresses.withdrawRequestNft);
-        roleRegistry = IRoleRegistry(_constructorAddresses.roleRegistry);
         priorityWithdrawalQueue = IPriorityWithdrawalQueue(_constructorAddresses.priorityWithdrawalQueue);
 
         maxAcceptableRebaseAprInBps = _maxAcceptableRebaseAprInBps;
@@ -199,9 +195,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit AdminOperationsExecuted(msg.sender, reportHash);
     }
 
-    function executeValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators, bytes[] calldata _pubKeys, bytes[] calldata _signatures) external {
-        if (!roleRegistry.hasRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
-
+    function executeValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators, bytes[] calldata _pubKeys, bytes[] calldata _signatures) external onlyOracleOperations {
         if (!etherFiOracle.isConsensusReached(_reportHash)) revert ConsensusNotReached();
         bytes32 taskHash = keccak256(abi.encode(_reportHash, _validators));
         if (!validatorApprovalTaskStatus[taskHash].exists) revert TaskDoesNotExist();
@@ -212,7 +206,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit ValidatorApprovalTaskCompleted(taskHash, _reportHash, _validators);
     }
 
-    function invalidateValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators) external onlyOperations {
+    function invalidateValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators) external onlyOperatingMultisig {
         bytes32 taskHash = keccak256(abi.encode(_reportHash, _validators));
         if (!validatorApprovalTaskStatus[taskHash].exists) revert TaskDoesNotExist();
         if (validatorApprovalTaskStatus[taskHash].completed) revert TaskAlreadyCompleted();
@@ -428,17 +422,5 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         return _getImplementation();
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
-    }
-
-    modifier onlyAdmin() {
-        roleRegistry.onlyOperatingTimelock(msg.sender);
-        _;
-    }
-
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
-        _;
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 }

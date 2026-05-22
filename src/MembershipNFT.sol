@@ -10,12 +10,12 @@ import "@openzeppelin/contracts/utils/math/Math.sol";
 import "./interfaces/IMembershipManager.sol";
 import "./interfaces/IMembershipNFT.sol";
 import "./interfaces/ILiquidityPool.sol";
-import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IBlacklister.sol";
+import "./utils/RolesLibrary.sol";
 
 import "forge-std/console.sol";
 
-contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ERC1155Upgradeable, IMembershipNFT {
+contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ERC1155Upgradeable, IMembershipNFT, RolesLibrary {
 
     IMembershipManager private DEPRECATED_membershipManager;
     uint32 public nextMintTokenId;
@@ -38,7 +38,6 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
 
     ILiquidityPool public immutable liquidityPool;
     IMembershipManager public immutable membershipManager;
-    IRoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
 
     uint256 public constant BASIS_POINTS_DENOMINATOR = 10000;
@@ -53,10 +52,9 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
     error OnlyMembershipManagerContract();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _liquidityPool, address _membershipManager, address _roleRegistry, address _blacklister) {
+    constructor(address _liquidityPool, address _membershipManager, address _roleRegistry, address _blacklister) RolesLibrary(_roleRegistry) {
         liquidityPool = ILiquidityPool(_liquidityPool);
         membershipManager = IMembershipManager(_membershipManager);
-        roleRegistry = IRoleRegistry(_roleRegistry);
         blacklister = IBlacklister(_blacklister);
         _disableInitializers();
     }
@@ -104,21 +102,21 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
     //--------------------------------------  SETTER  --------------------------------------
     //--------------------------------------------------------------------------------------
 
-    function setMaxTokenId(uint32 _maxTokenId) external onlyOperations {
+    function setMaxTokenId(uint32 _maxTokenId) external onlyOperatingMultisig {
         maxTokenId = _maxTokenId;
     }
 
     /// @notice Set up for EAP migration; Updates the merkle root, Set the required loyalty points per tier
     /// @param _newMerkleRoot new merkle root used to verify the EAP user data (deposits, points)
     /// @param _requiredEapPointsPerEapDeposit required EAP points per deposit for each tier
-    function setUpForEap(bytes32 _newMerkleRoot, uint64[] calldata _requiredEapPointsPerEapDeposit) external onlyOperations {
+    function setUpForEap(bytes32 _newMerkleRoot, uint64[] calldata _requiredEapPointsPerEapDeposit) external onlyOperatingMultisig {
         bytes32 oldMerkleRoot = eapMerkleRoot;
         eapMerkleRoot = _newMerkleRoot;
         requiredEapPointsPerEapDeposit = _requiredEapPointsPerEapDeposit;
         emit MerkleUpdated(oldMerkleRoot, _newMerkleRoot);
     }
     
-    function setMintingPaused(bool _paused) external onlyOperations {
+    function setMintingPaused(bool _paused) external onlyOperatingMultisig {
         mintingPaused = _paused;
         emit MintingPaused(_paused);
     }
@@ -127,9 +125,7 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
     //---------------------------------  INTERNAL FUNCTIONS  -------------------------------
     //--------------------------------------------------------------------------------------
 
-    function _authorizeUpgrade(address newImplementation) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
 
     function _beforeTokenTransfer(
@@ -371,33 +367,28 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
     }
 
     /// @dev opensea contract-level metadata
-    function setContractMetadataURI(string calldata _newURI) external onlyOperations {
+    function setContractMetadataURI(string calldata _newURI) external onlyOperatingMultisig {
         contractMetadataURI = _newURI;
     }
 
     /// @dev erc1155 metadata extension
-    function setMetadataURI(string calldata _newURI) external onlyOperations {
+    function setMetadataURI(string calldata _newURI) external onlyOperatingMultisig {
         _setURI(_newURI);
     }
 
     /// @dev alert opensea to a metadata update
-    function alertMetadataUpdate(uint256 id) public onlyOperations {
+    function alertMetadataUpdate(uint256 id) public onlyOperatingMultisig {
         emit MetadataUpdate(id);
     }
 
     /// @dev alert opensea to a metadata update
-    function alertBatchMetadataUpdate(uint256 startID, uint256 endID) public onlyOperations {
+    function alertBatchMetadataUpdate(uint256 startID, uint256 endID) public onlyOperatingMultisig {
         emit BatchMetadataUpdate(startID, endID);
     }
 
     //--------------------------------------------------------------------------------------
     //------------------------------------  MODIFIER  --------------------------------------
     //--------------------------------------------------------------------------------------
-
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
-        _;
-    }
 
     modifier onlyMembershipManagerContract() {
         if (msg.sender != address(membershipManager)) revert OnlyMembershipManagerContract();

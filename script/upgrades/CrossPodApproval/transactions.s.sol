@@ -187,7 +187,7 @@ contract CrossPodApprovalScript is Script, Deployed, Utils {
         bytes[] memory pubkeys = new bytes[](1);
         pubkeys[0] = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
 
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyExecutorOperations.selector);
         vm.prank(OPERATING_TIMELOCK);
         EtherFiNodesManager(payable(ETHERFI_NODES_MANAGER)).linkLegacyValidatorIds(validatorIds, pubkeys);
     

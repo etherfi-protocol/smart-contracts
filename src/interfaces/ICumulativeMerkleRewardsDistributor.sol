@@ -13,7 +13,6 @@ interface ICumulativeMerkleRewardsDistributor {
     event Paused(address account);
     event UnPaused(address account);
 
-    error IncorrectRole();
     error InsufficentDelay();
     error InvalidFinalizedBlock();
     error InvalidProof();

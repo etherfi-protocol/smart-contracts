@@ -4,21 +4,33 @@ pragma solidity ^0.8.24;
 import {Ownable2StepUpgradeable} from "@openzeppelin-upgradeable/contracts/access/Ownable2StepUpgradeable.sol";
 import {UUPSUpgradeable, Initializable} from "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {EnumerableRoles} from "solady/auth/EnumerableRoles.sol";
-import {RolesLibrary} from "./utils/RolesLibrary.sol";
 
 /// @title RoleRegistry - An upgradeable role-based access control system
 /// @notice Provides functionality for managing and querying roles with enumeration capabilities
 /// @dev Implements UUPS upgradeability pattern and uses Solady's EnumerableRoles for efficient role management
 /// @author EtherFi
-contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, EnumerableRoles, RolesLibrary {
+contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, EnumerableRoles {
     address public immutable revokeAdmin;
 
-    error OnlyProtocolUpgrader();
+    bytes32 public constant UPGRADE_TIMELOCK_ROLE = keccak256("UPGRADE_TIMELOCK_ROLE"); // 10 day timelock
+    bytes32 public constant OPERATION_TIMELOCK_ROLE = keccak256("OPERATION_TIMELOCK_ROLE"); // 2 day timelock
+    bytes32 public constant OPERATION_MULTISIG_ROLE = keccak256("OPERATION_MULTISIG_ROLE"); // 4 of 7 multisig
+    bytes32 public constant SUPER_GUARDIAN_ROLE = keccak256("SUPER_GUARDIAN_ROLE"); // Guardian role for pausing eeth/weeth token transfers
+    bytes32 public constant GUARDIAN_ROLE = keccak256("GUARDIAN_ROLE"); // hypernative and EOA keys for emergency pausing and blacklisting
+    bytes32 public constant ORACLE_OPERATIONS_ROLE = keccak256("ORACLE_OPERATIONS_ROLE"); // Oracle operations role
+    bytes32 public constant HOUSEKEEPING_OPERATIONS_ROLE = keccak256("HOUSEKEEPING_OPERATIONS_ROLE"); // Housekeeping operations role
+    bytes32 public constant EXECUTOR_OPERATIONS_ROLE = keccak256("EXECUTOR_OPERATIONS_ROLE"); // Executor operations role
+    bytes32 public constant EIGENPOD_OPERATIONS_ROLE = keccak256("EIGENPOD_OPERATIONS_ROLE"); // Eigenpod operations role
+
     error OnlyUpgradeTimelock();
     error OnlyOperatingTimelock();
     error OnlyOperatingMultisig();
     error OnlySuperGuardian();
     error OnlyGuardian();
+    error OnlyOracleOperations();
+    error OnlyHousekeepingOperations();
+    error OnlyExecutorOperations();
+    error OnlyEigenpodOperations();
     error OnlyRevokeAdmin();
     error InvalidRoleToRevoke();
 
@@ -91,10 +103,6 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
         return roleHolders(uint256(role));
     }
 
-    function onlyProtocolUpgrader(address account) public view {
-        if (owner() != account) revert OnlyProtocolUpgrader();
-    }
-
     function onlyUpgradeTimelock(address account) public view {
         if (!hasRole(UPGRADE_TIMELOCK_ROLE, account)) revert OnlyUpgradeTimelock();
     }
@@ -115,6 +123,22 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
         if (!hasRole(GUARDIAN_ROLE, account)) revert OnlyGuardian();
     }
 
+    function onlyOracleOperations(address account) public view {
+        if (!hasRole(ORACLE_OPERATIONS_ROLE, account)) revert OnlyOracleOperations();
+    }
+
+    function onlyHousekeepingOperations(address account) public view {
+        if (!hasRole(HOUSEKEEPING_OPERATIONS_ROLE, account)) revert OnlyHousekeepingOperations();
+    }
+
+    function onlyExecutorOperations(address account) public view {
+        if (!hasRole(EXECUTOR_OPERATIONS_ROLE, account)) revert OnlyExecutorOperations();
+    }
+
+    function onlyEigenpodOperations(address account) public view {
+        if (!hasRole(EIGENPOD_OPERATIONS_ROLE, account)) revert OnlyEigenpodOperations();
+    }
+
     function __revertEnumerableRolesUnauthorized() private pure {
         /// @solidity memory-safe-assembly
         assembly {
@@ -124,6 +148,6 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
     }
 
     function _authorizeUpgrade(address newImplementation) internal override {
-        onlyProtocolUpgrader(msg.sender);
+        onlyUpgradeTimelock(msg.sender);
     }
 }

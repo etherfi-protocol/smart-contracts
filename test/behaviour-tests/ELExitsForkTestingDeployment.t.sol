@@ -149,8 +149,7 @@ contract ELExitsForkTestingDeploymentTest is Test {
             address(liquidityPool),
             address(etherFiNodesManager),
             eigenPodManager,
-            delegationManager,
-            address(roleRegistry)
+            delegationManager
         );
         console2.log("New EtherFiNode implementation:", address(newEtherFiNodeImpl));
         console2.log("");
