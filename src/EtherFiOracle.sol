@@ -67,6 +67,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     error WrongBlockTo();
     error ReportBlockTooOld();
     error ConsensusNotReached();
+    error ReportExecuted();
     error AlreadyRegistered();
     error AlreadyInTargetState();
     error InvalidReportPeriod();
@@ -305,6 +306,17 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         consensusVersion = _consensusVersion;
 
         emit ConsensusVersionUpdated(_consensusVersion);
+    }
+
+    function unpublishReport(OracleReport calldata _report, uint32 _lastPublishedReportRefSlot, uint32 _lastPublishedReportRefBlock) public onlyOperations {
+        bytes32 _hash = generateReportHash(_report);
+        if (!consensusStates[_hash].consensusReached) revert ConsensusNotReached();
+        if (_report.refSlotTo <= etherFiAdmin.lastHandledReportRefSlot()) revert ReportExecuted();
+        consensusStates[_hash].support = 0;
+        consensusStates[_hash].consensusReached = false;
+        lastPublishedReportRefSlot = _lastPublishedReportRefSlot;
+        lastPublishedReportRefBlock = _lastPublishedReportRefBlock;
+        emit ReportUnpublished(_hash);
     }
 
     function pauseContract() external onlyOperations {
