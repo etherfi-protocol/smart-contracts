@@ -158,11 +158,11 @@ using SafeERC20 for IERC20;
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
-    function recoverETH(address payable to, uint256 amount) external onlyOperations {
+    function recoverETH(address payable to, uint256 amount) external onlyAdmin {
         _recoverETH(to, amount);
     }
 
-    function recoverERC20(address token, address to, uint256 amount) external onlyOperations {
+    function recoverERC20(address token, address to, uint256 amount) external onlyAdmin {
         _recoverERC20(token, to, amount);
     }
 
