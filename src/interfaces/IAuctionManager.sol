@@ -30,8 +30,6 @@ interface IAuctionManager {
 
     function updateSelectedBidInformation(uint256 _bidId) external;
 
-    function setAccumulatedRevenueThreshold(uint128 _newThreshold) external;
-
     function pauseContract() external;
     function unPauseContract() external;
     

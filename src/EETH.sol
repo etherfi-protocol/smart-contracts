@@ -73,7 +73,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         _CACHED_THIS = address(this);
         _TYPE_HASH = typeHash;
 
-        if (_liquidityPool == address(0) || _roleRegistry == address(0) || _blacklister == address(0)) revert AddressZero();
+        if (_liquidityPool == address(0) || _blacklister == address(0)) revert AddressZero();
         liquidityPool = ILiquidityPool(_liquidityPool);
         blacklister = IBlacklister(_blacklister);
         rateLimiter = IEtherFiRateLimiter(_rateLimiter);

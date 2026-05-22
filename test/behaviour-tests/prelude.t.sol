@@ -128,8 +128,7 @@ contract PreludeTest is Test, ArrayTestHelper {
             address(liquidityPool),
             address(etherFiNodesManager),
             eigenPodManager,
-            delegationManager,
-            address(roleRegistry)
+            delegationManager
         );
         vm.prank(stakingManager.owner());
         stakingManager.upgradeEtherFiNode(address(etherFiNodeImpl));
@@ -939,7 +938,7 @@ contract PreludeTest is Test, ArrayTestHelper {
 
 
         // only protocolUpgrader can upgrade etherFiNode
-        EtherFiNode nodeImpl = new EtherFiNode(address(0), address(0), address(0), address(0), address(0));
+        EtherFiNode nodeImpl = new EtherFiNode(address(0), address(0), address(0), address(0));
         vm.prank(admin);
         vm.expectRevert(IRoleRegistry.OnlyProtocolUpgrader.selector);
         stakingManager.upgradeEtherFiNode(address(nodeImpl));

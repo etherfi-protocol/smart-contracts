@@ -800,8 +800,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(liquidityPoolProxy),
             address(etherFiNodeManagerProxy),
             address(eigenLayerEigenPodManager),
-            address(eigenLayerDelegationManager),
-            address(roleRegistryInstance)
+            address(eigenLayerDelegationManager)
         );
 
         // NodeOperatorManager
@@ -2012,7 +2011,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         address liquidityPool;
         address etherFiNodesManager;
 
-        EtherFiNode etherFiNode = new EtherFiNode(liquidityPool, etherFiNodesManager, eigenPodManager, delegationManager, address(roleRegistryInstance));
+        EtherFiNode etherFiNode = new EtherFiNode(liquidityPool, etherFiNodesManager, eigenPodManager, delegationManager);
         address newImpl = address(etherFiNode);
         vm.prank(stakingManagerInstance.owner());
         stakingManagerInstance.upgradeEtherFiNode(newImpl);

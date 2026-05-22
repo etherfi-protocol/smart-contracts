@@ -91,8 +91,7 @@ contract EtherFiNodesManagerTest is TestSetup {
             address(liquidityPoolInstance),
             address(managerInstance),
             address(eigenLayerEigenPodManager),
-            address(eigenLayerDelegationManager),
-            address(roleRegistryInstance)
+            address(eigenLayerDelegationManager)
         );
         vm.prank(stakingManagerInstance.owner());
         stakingManagerInstance.upgradeEtherFiNode(address(nodeImpl));

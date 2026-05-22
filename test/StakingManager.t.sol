@@ -1433,7 +1433,7 @@ contract StakingManagerTest is TestSetup {
     }
 
     function test_upgradeEtherFiNode() public {
-        address newImpl = address(new EtherFiNode(address(0), address(0), address(0), address(0), address(roleRegistryInstance)));
+        address newImpl = address(new EtherFiNode(address(0), address(0), address(0), address(0)));
         
         address roleRegistryOwner = roleRegistryInstance.owner();
         
@@ -1443,7 +1443,7 @@ contract StakingManagerTest is TestSetup {
     }
 
     function test_upgradeEtherFiNodeFailsIfNotAuthorized() public {
-        address newImpl = address(new EtherFiNode(address(0), address(0), address(0), address(0), address(roleRegistryInstance)));
+        address newImpl = address(new EtherFiNode(address(0), address(0), address(0), address(0)));
         
         vm.expectRevert(IRoleRegistry.OnlyProtocolUpgrader.selector);
         stakingManagerInstance.upgradeEtherFiNode(newImpl);

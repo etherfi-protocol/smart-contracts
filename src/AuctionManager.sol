@@ -334,12 +334,6 @@ contract AuctionManager is
         maxBidAmount = _newMaxBidAmount;
     }
 
-    /// @notice Updates the accumulated revenue threshold that will trigger a transfer to MembershipNFT contract
-    /// @param _newThreshold the new threshold to set
-    function setAccumulatedRevenueThreshold(uint128 _newThreshold) external onlyOperatingMultisig {
-        accumulatedRevenueThreshold = _newThreshold;
-    }
-
     /// @notice Updates the minimum bid price for a whitelisted address
     /// @param _newAmount the new amount to set the minimum bid price as
     function updateWhitelistMinBidAmount(

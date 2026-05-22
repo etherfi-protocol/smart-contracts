@@ -104,7 +104,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     error InvalidLidoWithdrawalQueue();
     error InvalidLido();
     error InvalidStEth_Eth_Pool();
-    error InvalidRoleRegistry();
     error InvalidPriceFeed();
     error InvalidBlacklister();
     error InvalidEtherfiRestaker();
