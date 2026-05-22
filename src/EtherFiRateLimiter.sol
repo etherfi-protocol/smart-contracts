@@ -5,12 +5,10 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 
 import "./interfaces/IEtherFiRateLimiter.sol";
-import "./interfaces/IRoleRegistry.sol";
+import "./utils/RolesLibrary.sol";
 import "lib/BucketLimiter.sol";
 
-contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeable, PausableUpgradeable {
-
-    IRoleRegistry public immutable roleRegistry;
+contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeable, PausableUpgradeable, RolesLibrary {
 
     /// @dev Hardcoded callers for the per-address bucket API. Only the eETH and weETH
     ///      proxies can create/update/delete/consume per-address buckets; gating is
@@ -33,8 +31,7 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     //-------------------------------------------------------------------------
     //-------------------------  Deployment  ----------------------------------
     //-------------------------------------------------------------------------
-    constructor(address _roleRegistry, address _eETH, address _weETH) {
-        roleRegistry = IRoleRegistry(_roleRegistry);
+    constructor(address _roleRegistry, address _eETH, address _weETH) RolesLibrary(_roleRegistry) {
         eETH = _eETH;
         weETH = _weETH;
         _disableInitializers();
@@ -45,9 +42,7 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
         __Pausable_init();
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     //-------------------------------------------------------------------------
     //-----------------------------  Admin  -----------------------------------
@@ -105,12 +100,12 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     }
 
     /// @notice Pauses the contract, preventing consumption operations
-    function pauseContract() external onlyOperations {
+    function pauseContract() external onlyOperatingMultisig {
         _pause();
     }
 
     /// @notice Unpauses the contract, allowing consumption operations
-    function unPauseContract() external onlyOperations {
+    function unPauseContract() external onlyOperatingMultisig {
         _unpause();
     }
 
@@ -279,16 +274,7 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
     //--------------------------------------------------------------------------------------
-
-    modifier onlyAdmin() {
-        roleRegistry.onlyOperatingTimelock(msg.sender);
-        _;
-    }
-
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
-        _;
-    }
+    // `onlyAdmin` and `onlyOperatingMultisig` are inherited from RolesLibrary.
 
     modifier onlyToken() {
         if (msg.sender != eETH && msg.sender != weETH) revert OnlyToken();

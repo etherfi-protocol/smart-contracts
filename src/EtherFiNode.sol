@@ -3,7 +3,6 @@ pragma solidity ^0.8.27;
 
 import {IEtherFiNode} from "../src/interfaces/IEtherFiNode.sol";
 import {IEtherFiNodesManager} from "../src/interfaces/IEtherFiNodesManager.sol";
-import {IRoleRegistry} from "../src/interfaces/IRoleRegistry.sol";
 import {ILiquidityPool} from "../src/interfaces/ILiquidityPool.sol";
 
 import {IDelegationManager} from "../src/eigenlayer-interfaces/IDelegationManager.sol";
@@ -20,7 +19,6 @@ contract EtherFiNode is IEtherFiNode {
 
     ILiquidityPool public immutable liquidityPool;
     IEtherFiNodesManager public immutable etherFiNodesManager;
-    IRoleRegistry public immutable roleRegistry;
 
     // eigenlayer core contracts
     IEigenPodManager public immutable eigenPodManager;
@@ -42,12 +40,11 @@ contract EtherFiNode is IEtherFiNode {
     //-----------------------------  Admin  -----------------------------------
     //-------------------------------------------------------------------------
 
-    constructor(address _liquidityPool, address _etherFiNodesManager, address _eigenPodManager, address _delegationManager, address _roleRegistry) {
+    constructor(address _liquidityPool, address _etherFiNodesManager, address _eigenPodManager, address _delegationManager) {
         liquidityPool = ILiquidityPool(_liquidityPool);
         etherFiNodesManager = IEtherFiNodesManager(_etherFiNodesManager);
         eigenPodManager = IEigenPodManager(_eigenPodManager);
         delegationManager = IDelegationManager(_delegationManager);
-        roleRegistry = IRoleRegistry(_roleRegistry);
     }
 
     fallback() external payable {}

@@ -50,7 +50,6 @@ interface IEtherFiRateLimiter {
     //--------------------------------------------------------------------------
     //-----------------------------  Errors  -----------------------------------
     //--------------------------------------------------------------------------
-    error IncorrectRole();
     error InvalidConsumer();
     error LimitAlreadyExists();
     error LimitExceeded();

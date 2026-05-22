@@ -12,11 +12,12 @@ import "@openzeppelin-upgradeable/contracts/utils/cryptography/ECDSAUpgradeable.
 import "./interfaces/IeETH.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./AssetRecovery.sol";
+import "./utils/RolesLibrary.sol";
 import "./interfaces/IBlacklister.sol";
 import "./RateLimitedToken.sol";
 import "./utils/PausableUntil.sol";
 
-contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, IERC20PermitUpgradeable, IeETH, AssetRecovery, RateLimitedToken {
+contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, IERC20PermitUpgradeable, IeETH, AssetRecovery, RolesLibrary, RateLimitedToken {
     using CountersUpgradeable for CountersUpgradeable.Counter;
     ILiquidityPool private DEPRECATED_liquidityPool;
 
@@ -40,7 +41,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
 
     ILiquidityPool public immutable liquidityPool;
     IBlacklister public immutable blacklister;
-    // `rateLimiter` and `roleRegistry` are inherited from RateLimitedToken.
+    // `roleRegistry` is inherited from RolesLibrary; `rateLimiter` from RateLimitedToken.
 
     event Paused();
     event Unpaused();
@@ -57,7 +58,8 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     error ContractPaused();
 
     constructor(address _liquidityPool, address _roleRegistry, address _blacklister, address _rateLimiter)
-        RateLimitedToken(_rateLimiter, _roleRegistry)
+        RolesLibrary(_roleRegistry)
+        RateLimitedToken(_rateLimiter)
     {
         bytes32 hashedName = keccak256("EETH");
         bytes32 hashedVersion = keccak256("1");
@@ -69,7 +71,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         _CACHED_THIS = address(this);
         _TYPE_HASH = typeHash;
 
-        if (_liquidityPool == address(0) || _roleRegistry == address(0) || _blacklister == address(0)) revert AddressZero();
+        if (_liquidityPool == address(0) || _blacklister == address(0)) revert AddressZero();
         liquidityPool = ILiquidityPool(_liquidityPool);
         blacklister = IBlacklister(_blacklister);
 
@@ -109,8 +111,44 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         emit TransferShares(_user, address(0), _share);
     }
 
-    // Per-address rate-limit management (tightenAddressRateLimit[s], setAddressRateLimit[s],
-    // deleteAddressRateLimit[s]) is inherited from RateLimitedToken.
+    //--------------------------------------------------------------------------------------
+    //----------------------  PER-ADDRESS RATE LIMIT MANAGEMENT  ---------------------------
+    //--------------------------------------------------------------------------------------
+    // Thin role-gated wrappers around the internal helpers in RateLimitedToken — the
+    // rate-limit semantics live in the helper / EtherFiRateLimiter; this contract just
+    // declares the access split (Guardian = tighten, Operating Multisig = set + delete).
+
+    function tightenAddressRateLimit(address user, uint64 capacity, uint64 refillRate) external onlyGuardian {
+        _tightenAddressRateLimit(user, capacity, refillRate);
+    }
+
+    function tightenAddressRateLimits(
+        address[] calldata users,
+        uint64[] calldata capacities,
+        uint64[] calldata refillRates
+    ) external onlyGuardian {
+        _tightenAddressRateLimits(users, capacities, refillRates);
+    }
+
+    function setAddressRateLimit(address user, uint64 capacity, uint64 refillRate) external onlyOperatingMultisig {
+        _setAddressRateLimit(user, capacity, refillRate);
+    }
+
+    function setAddressRateLimits(
+        address[] calldata users,
+        uint64[] calldata capacities,
+        uint64[] calldata refillRates
+    ) external onlyOperatingMultisig {
+        _setAddressRateLimits(users, capacities, refillRates);
+    }
+
+    function deleteAddressRateLimit(address user) external onlyOperatingMultisig {
+        _deleteAddressRateLimit(user);
+    }
+
+    function deleteAddressRateLimits(address[] calldata users) external onlyOperatingMultisig {
+        _deleteAddressRateLimits(users);
+    }
 
     function transfer(address _recipient, uint256 _amount) external override(IeETH, IERC20Upgradeable) returns (bool) {
         _transfer(msg.sender, _recipient, _amount);
@@ -153,12 +191,12 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         return true;
     }
 
-    function pause() external onlyOperations {
+    function pause() external onlyOperatingMultisig {
         paused = true;
         emit Paused();
     }
 
-    function unpause() external onlyOperations {
+    function unpause() external onlyOperatingMultisig {
         paused = false;
         emit Unpaused();
     }
@@ -167,7 +205,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         _pauseUntil();
     }
 
-    function unpauseContractUntil() external onlyOperations {
+    function unpauseContractUntil() external onlyOperatingMultisig {
         _unpauseUntil();
     }
 
@@ -238,11 +276,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         emit TransferShares(_sender, _recipient, _sharesAmount);
     }
 
-    function _authorizeUpgrade(
-        address /* newImplementation */
-    ) internal view override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     function _useNonce(address owner) internal virtual returns (uint256 current) {
         CountersUpgradeable.Counter storage nonce = _nonces[owner];
@@ -296,19 +330,10 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     }
 
     // [MODIFIERS]
-    // `onlyGuardian` and `onlyOperations` are inherited from RateLimitedToken.
+    // Role modifiers (`onlyAdmin`, `onlyOperatingMultisig`, `onlyGuardian`, `onlySuperGuardian`,
+    // `onlyUpgradeTimelock`, ...) are inherited from RolesLibrary.
     modifier onlyPoolContract() {
         if (msg.sender != address(liquidityPool)) revert IncorrectCaller();
-        _;
-    }
-
-    modifier onlyAdmin() {
-        roleRegistry.onlyOperatingTimelock(msg.sender);
-        _;
-    }
-
-    modifier onlySuperGuardian() {
-        roleRegistry.onlySuperGuardian(msg.sender);
         _;
     }
 

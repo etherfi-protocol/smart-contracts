@@ -44,26 +44,32 @@ contract ConsolidationThroughEOATest is Test {
         console2.log("=== SETUP ===");
         vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
 
-        // Upgrade RoleRegistry in place so newly-added role getters defined in
+        // Upgrade EtherFiNodesManager and EtherFiRateLimiter FIRST, while the
+        // deployed RoleRegistry still exposes the legacy `onlyProtocolUpgrader`
+        // selector their `_authorizeUpgrade` calls into. Once we swap
+        // RoleRegistry below, that selector is gone.
+        newEtherFiNodesManagerImpl = new EtherFiNodesManager(address(stakingManager), address(roleRegistry), address(rateLimiter));
+        vm.prank(roleRegistry.owner());
+        etherFiNodesManager.upgradeTo(address(newEtherFiNodesManagerImpl));
+
+        // Upgrade the on-chain rate limiter so it uses the consolidated role model
+        // and the new per-address bucket API (3-arg constructor takes eETH/weETH).
+        address newRateLimiterImpl = address(new EtherFiRateLimiter(address(roleRegistry), 0x35fA164735182de50811E8e2E824cFb9B6118ac2, 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee));
+        vm.prank(roleRegistry.owner());
+        EtherFiRateLimiter(address(rateLimiter)).upgradeTo(newRateLimiterImpl);
+
+        // Now swap RoleRegistry so newly-added role getters defined in
         // RolesLibrary are reachable on the deployed proxy.
         vm.prank(roleRegistry.owner());
         roleRegistry.upgradeTo(address(new RoleRegistry(address(0))));
 
-        //upgrade the etherfi nodes manager contract
-        newEtherFiNodesManagerImpl = new EtherFiNodesManager(address(stakingManager), address(roleRegistry), address(rateLimiter));
         vm.startPrank(roleRegistry.owner());
-        etherFiNodesManager.upgradeTo(address(newEtherFiNodesManagerImpl));
         roleRegistry.grantRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), realElExiter);
 
         // Setup consolidation rate limiter bucket (required for new rate limiting)
         roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), roleRegistry.owner());
         // RateLimiter mutators (createNewLimiter, updateConsumers) are now onlyAdmin → OPERATION_TIMELOCK_ROLE.
         roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), roleRegistry.owner());
-
-        // Upgrade the on-chain rate limiter so it uses the consolidated role model
-        // (the on-chain impl still checks ETHERFI_RATE_LIMITER_ADMIN_ROLE).
-        address newRateLimiterImpl = address(new EtherFiRateLimiter(address(roleRegistry), 0x35fA164735182de50811E8e2E824cFb9B6118ac2, 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee));
-        EtherFiRateLimiter(address(rateLimiter)).upgradeTo(newRateLimiterImpl);
 
         vm.stopPrank();
 

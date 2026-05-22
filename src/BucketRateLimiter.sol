@@ -7,10 +7,10 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
 import "src/interfaces/IRateLimiter.sol";
-import "src/interfaces/IRoleRegistry.sol";
 import "lib/BucketLimiter.sol";
+import "./utils/RolesLibrary.sol";
 
-contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, OwnableUpgradeable, UUPSUpgradeable {
+contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, OwnableUpgradeable, UUPSUpgradeable, RolesLibrary {
     using Math for uint256;
 
     error IncorrectCaller();
@@ -27,12 +27,8 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
 
     mapping(address => BucketLimiter.Limit) public limitsPerToken;
 
-    // Immutables are not part of proxy storage; stored in implementation bytecode only.
-    IRoleRegistry public immutable roleRegistry;
-
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _roleRegistry) {
-        roleRegistry = IRoleRegistry(_roleRegistry);
+    constructor(address _roleRegistry) RolesLibrary(_roleRegistry) {
         _disableInitializers();
     }
 
@@ -94,11 +90,11 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
         consumer = _consumer;
     }
 
-    function pauseContract() external onlyOperations {
+    function pauseContract() external onlyOperatingMultisig {
         _pause();
     }
 
-    function unPauseContract() external onlyOperations {
+    function unPauseContract() external onlyOperatingMultisig {
         _unpause();
     }
 
@@ -106,17 +102,5 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
         return _getImplementation();
     }
 
-    modifier onlyAdmin() {
-        roleRegistry.onlyOperatingTimelock(msg.sender);
-        _;
-    }
-
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
-        _;
-    }
-
-    function _authorizeUpgrade(address newImplementation) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 }

@@ -1387,7 +1387,7 @@ contract StakingManagerTest is TestSetup {
     }
     
     function test_instantiateEtherFiNodeFailsIfNotAuthorized() public {
-        vm.expectRevert(IStakingManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyExecutorOperations.selector);
         stakingManagerInstance.instantiateEtherFiNode(false);
     }
 
@@ -1432,31 +1432,8 @@ contract StakingManagerTest is TestSetup {
         stakingManagerInstance.backfillExistingEtherFiNodes(nodes);
     }
 
-    function test_unPauseContract() public {
-        // StakingManager pause/unpause is gated by onlyAdmin (OPERATION_MULTISIG_ROLE).
-        address pauser = roleRegistryInstance.roleHolders(roleRegistryInstance.OPERATION_MULTISIG_ROLE())[0];
-        vm.startPrank(pauser);
-        stakingManagerInstance.pauseContract();
-        vm.stopPrank();
-        assertTrue(stakingManagerInstance.paused());
-
-        vm.prank(pauser);
-        stakingManagerInstance.unPauseContract();
-        assertFalse(stakingManagerInstance.paused());
-    }
-
-    function test_unPauseContractFailsIfNotAuthorized() public {
-        address pauser = roleRegistryInstance.roleHolders(roleRegistryInstance.OPERATION_MULTISIG_ROLE())[0];
-        vm.prank(pauser);
-        stakingManagerInstance.pauseContract();
-
-        vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
-        stakingManagerInstance.unPauseContract();
-    }
-
     function test_upgradeEtherFiNode() public {
-        address newImpl = address(new EtherFiNode(address(0), address(0), address(0), address(0), address(roleRegistryInstance)));
+        address newImpl = address(new EtherFiNode(address(0), address(0), address(0), address(0)));
         
         address roleRegistryOwner = roleRegistryInstance.owner();
         
@@ -1466,9 +1443,9 @@ contract StakingManagerTest is TestSetup {
     }
 
     function test_upgradeEtherFiNodeFailsIfNotAuthorized() public {
-        address newImpl = address(new EtherFiNode(address(0), address(0), address(0), address(0), address(roleRegistryInstance)));
-        
-        vm.expectRevert(IRoleRegistry.OnlyProtocolUpgrader.selector);
+        address newImpl = address(new EtherFiNode(address(0), address(0), address(0), address(0)));
+
+        vm.expectRevert(IRoleRegistry.OnlyUpgradeTimelock.selector);
         stakingManagerInstance.upgradeEtherFiNode(newImpl);
     }
 

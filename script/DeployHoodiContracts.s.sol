@@ -48,8 +48,7 @@ contract DeployHoodiContracts is Script {
             liquidityPoolProxy,
             etherFiNodesManagerProxy,
             eigenPodManagerProxy,
-            delegationManagerProxy,
-            roleRegistryProxy
+            delegationManagerProxy
         );
         console.log("EtherFiNode deployed at:", address(newNode));
 

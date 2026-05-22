@@ -1,14 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import "./interfaces/IRoleRegistry.sol";
-import "./interfaces/IAuctionManager.sol";
-import "./interfaces/IStakingManager.sol";
-import "./interfaces/IDepositContract.sol";
-import "./interfaces/IEtherFiNode.sol";
-import "./interfaces/IEtherFiNodesManager.sol";
-import "./libraries/DepositDataRootGenerator.sol";
-
 import "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 import "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/beacon/IBeaconUpgradeable.sol";
@@ -17,6 +9,14 @@ import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
+import "./interfaces/IAuctionManager.sol";
+import "./interfaces/IStakingManager.sol";
+import "./interfaces/IDepositContract.sol";
+import "./interfaces/IEtherFiNode.sol";
+import "./interfaces/IEtherFiNodesManager.sol";
+import "./libraries/DepositDataRootGenerator.sol";
+import "./utils/RolesLibrary.sol";
+
 contract StakingManager is
     Initializable,
     IStakingManager,
@@ -24,7 +24,8 @@ contract StakingManager is
     OwnableUpgradeable,
     PausableUpgradeable,
     ReentrancyGuardUpgradeable,
-    UUPSUpgradeable
+    UUPSUpgradeable,
+    RolesLibrary
 {
 
     address public immutable liquidityPool;
@@ -36,7 +37,6 @@ contract StakingManager is
     IDepositContract public immutable depositContractEth2;
     IAuctionManager public immutable auctionManager;
     UpgradeableBeacon public immutable etherFiNodeBeacon;
-    IRoleRegistry public immutable roleRegistry;
 
     //---------------------------------------------------------------------------
     //-----------------------------  Storage  -----------------------------------
@@ -57,34 +57,23 @@ contract StakingManager is
         address _auctionManager,
         address _etherFiNodeBeacon,
         address _roleRegistry
-    ) {
+    ) RolesLibrary(_roleRegistry) {
         liquidityPool = _liquidityPool;
         etherFiNodesManager = IEtherFiNodesManager(_etherFiNodesManager);
         depositContractEth2 = IDepositContract(_ethDepositContract);
         auctionManager = IAuctionManager(_auctionManager);
         etherFiNodeBeacon = UpgradeableBeacon(_etherFiNodeBeacon);
-        roleRegistry = IRoleRegistry(_roleRegistry);
 
         _disableInitializers();
     }
 
-    function _authorizeUpgrade(address _newImplementation) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
-    }
-
-    function pauseContract() external onlyOperations {
-        _pause();
-    }
-    function unPauseContract() external onlyOperations {
-        _unpause();
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     //---------------------------------------------------------------------------
     //------------------------- Deposit Flow ------------------------------------
     //---------------------------------------------------------------------------
     
-    function invalidateRegisteredBeaconValidator(DepositData calldata depositData, uint256 bidId, address etherFiNode) external {
-        if (!roleRegistry.hasRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
+    function invalidateRegisteredBeaconValidator(DepositData calldata depositData, uint256 bidId, address etherFiNode) external onlyOracleOperations {
         bytes32 validatorCreationDataHash = keccak256(abi.encode(depositData.publicKey, depositData.signature, depositData.depositDataRoot, depositData.ipfsHashForEncryptedValidatorKey, bidId, etherFiNode));
         if (validatorCreationStatus[validatorCreationDataHash] != ValidatorCreationStatus.REGISTERED) revert InvalidValidatorCreationStatus();
         validatorCreationStatus[validatorCreationDataHash] = ValidatorCreationStatus.INVALIDATED;
@@ -203,8 +192,7 @@ contract StakingManager is
 
     /// @notice Upgrades the etherfi node
     /// @param _newImplementation The new address of the etherfi node
-    function upgradeEtherFiNode(address _newImplementation) external {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
+    function upgradeEtherFiNode(address _newImplementation) external onlyUpgradeTimelock {
         if (_newImplementation == address(0)) revert InvalidUpgrade();
 
         etherFiNodeBeacon.upgradeTo(_newImplementation);
@@ -223,9 +211,7 @@ contract StakingManager is
 
     /// @dev create a new proxy instance of the etherFiNode withdrawal safe contract.
     /// @param _createEigenPod whether or not to create an associated eigenPod contract.
-    function instantiateEtherFiNode(bool _createEigenPod) external returns (address) {
-        if (!roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
-
+    function instantiateEtherFiNode(bool _createEigenPod) external onlyExecutorOperations returns (address) {
         BeaconProxy proxy = new BeaconProxy(address(etherFiNodeBeacon), "");
         address node = address(proxy);
 
@@ -241,7 +227,7 @@ contract StakingManager is
 
     /// @dev this method is for backfilling the addresses of etherFiNodes the protocol has previously deployed
     ///    Once this data has been backfilled we can delete this method
-    function backfillExistingEtherFiNodes(address[] calldata nodes) external onlyOperations {
+    function backfillExistingEtherFiNodes(address[] calldata nodes) external onlyOperatingMultisig {
         for (uint256 i = 0; i < nodes.length; i++) {
             address node = nodes[i];
             if (deployedEtherFiNodes[node]) continue; // already linked
@@ -250,14 +236,4 @@ contract StakingManager is
             emit EtherFiNodeDeployed(node);
         }
     }
-
-    //--------------------------------------------------------------------------------------
-    //-----------------------------------  MODIFIERS  --------------------------------------
-    //--------------------------------------------------------------------------------------
-
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
-        _;
-    }
-
 }

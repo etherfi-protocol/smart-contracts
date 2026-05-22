@@ -103,15 +103,11 @@ contract MinAmountForShareForkTest is TestSetup, Deployed {
     // Immutable wiring
     // ---------------------------------------------------------------------
 
-    /// Pre-upgrade: mainnet's currently-deployed LP impl predates this branch, so the
-    /// `minAmountForShare` getter selector does not exist on the deployed bytecode.
-    /// The proxy delegatecall returns no data and reverts. Asserting this guards against
-    /// silent regressions in the pre-upgrade baseline this test suite assumes.
-    function test_fork_minAmount_getter_absent_pre_upgrade() public {
-        (bool ok, ) = address(liquidityPoolInstance).staticcall(
-            abi.encodeWithSignature("minAmountForShare()")
-        );
-        assertFalse(ok, "minAmountForShare getter unexpectedly exists pre-upgrade");
+    /// Post-baseline (after `initializeRealisticFork` upgrades LP in place):
+    /// the `minAmountForShare` getter is present and reads back as zero, since
+    /// TestSetup constructs the LP impl with `minAmountForShare = 0`.
+    function test_fork_minAmount_getter_present_post_setup_upgrade() public view {
+        assertEq(liquidityPoolInstance.minAmountForShare(), 0);
     }
 
     function test_fork_minAmount_immutable_set_after_upgrade() public {

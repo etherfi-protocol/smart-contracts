@@ -840,21 +840,6 @@ contract AuctionManagerTest is TestSetup {
         auctionInstance.cancelBid(bidIds[0]);      
     }
 
-    function test_SetAccumulatedRevenueThreshold() public {
-        vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
-        auctionInstance.setAccumulatedRevenueThreshold(0.005 ether);
-
-        // TODO: consider if 0 is an invalid threshold amount
-        // vm.prank(alice);
-        // vm.expectRevert("Invalid Amount");
-        // auctionInstance.updateAccumulatedRevenueThreshold(0);
-
-        vm.prank(alice);
-        auctionInstance.setAccumulatedRevenueThreshold(2 ether);
-        assertEq(auctionInstance.accumulatedRevenueThreshold(), 2 ether);
-    }
-
     /*
     function test_AccumulateAuctionRevenue() public {
         vm.startPrank(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
