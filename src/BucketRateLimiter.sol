@@ -4,12 +4,14 @@ import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 
 import "src/interfaces/IRateLimiter.sol";
 import "src/interfaces/IRoleRegistry.sol";
 import "lib/BucketLimiter.sol";
 
 contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, OwnableUpgradeable, UUPSUpgradeable {
+    using Math for uint256;
 
     error IncorrectCaller();
     error RateLimitExceeded();
@@ -45,14 +47,14 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
     function updateRateLimit(address sender, address tokenIn, uint256 amountIn, uint256 amountOut) external whenNotPaused {
         if (msg.sender != consumer) revert IncorrectCaller();
         // Count both 'amountIn' and 'amountOut' as rate limit consumption
-        uint64 consumedAmount = SafeCast.toUint64((amountIn + amountOut + RATE_PRECISION - 1) / RATE_PRECISION);
+        uint64 consumedAmount = SafeCast.toUint64((amountIn + amountOut).ceilDiv(RATE_PRECISION));
         if (!BucketLimiter.consume(limit, consumedAmount)) revert RateLimitExceeded();
         if (limitsPerToken[tokenIn].lastRefill != 0 && !BucketLimiter.consume(limitsPerToken[tokenIn], consumedAmount)) revert TokenRateLimitExceeded();
     }
 
     function canConsume(address tokenIn, uint256 amountIn, uint256 amountOut) external view returns (bool) {
         // Count both 'amountIn' and 'amountOut' as rate limit consumption
-        uint64 consumedAmount = SafeCast.toUint64((amountIn + amountOut + RATE_PRECISION - 1) / RATE_PRECISION);
+        uint64 consumedAmount = SafeCast.toUint64((amountIn + amountOut).ceilDiv(RATE_PRECISION));
         bool globalConsumable = BucketLimiter.canConsume(limit, consumedAmount);
         bool perTokenConsumable = limitsPerToken[tokenIn].lastRefill == 0 || BucketLimiter.canConsume(limitsPerToken[tokenIn], consumedAmount);
         return globalConsumable && perTokenConsumable;

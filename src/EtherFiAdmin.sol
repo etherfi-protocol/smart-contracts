@@ -3,6 +3,7 @@ pragma solidity ^0.8.13;
 
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 
 import "./RoleRegistry.sol";
 
@@ -21,7 +22,7 @@ interface IEtherFiPausable {
 }
 
 contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
-
+    using Math for uint256;
 
     struct TaskStatus {
         bool completed;
@@ -275,7 +276,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             return;
         }
 
-        uint256 numBatches = (_report.validatorsToApprove.length + validatorTaskBatchSize - 1) / validatorTaskBatchSize;
+        uint256 numBatches = (_report.validatorsToApprove.length).ceilDiv(validatorTaskBatchSize);
 
         for (uint256 i = 0; i < numBatches; i++) {
             uint256 start = i * validatorTaskBatchSize;
@@ -371,13 +372,13 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function _validateValidatorApprovals(IEtherFiOracle.OracleReport calldata _report, uint256 elapsedTime) internal view returns (bool, string memory) {
-        uint256 numValidatorsToApprovePerDay = (_report.validatorsToApprove.length * 1 days) / elapsedTime;
+        uint256 numValidatorsToApprovePerDay = _report.validatorsToApprove.length.mulDiv(1 days, elapsedTime);
         if (numValidatorsToApprovePerDay > maxNumValidatorsToApprovePerDay) return (false, "EtherFiAdmin: number of validators to approve exceeds max");
         return (true, "");
     }
 
     function _validateWithdrawals(IEtherFiOracle.OracleReport calldata _report, uint256 elapsedTime) internal view returns (bool, string memory) {
-        uint256 finalizedWithdrawalAmountPerDay = (_report.finalizedWithdrawalAmount * 1 days) / elapsedTime;
+        uint256 finalizedWithdrawalAmountPerDay = uint256(_report.finalizedWithdrawalAmount).mulDiv(1 days, elapsedTime);
         if (finalizedWithdrawalAmountPerDay > maxFinalizedWithdrawalAmountPerDay) return (false, "EtherFiAdmin: finalized withdrawal amount exceeds max");
         if (_report.finalizedWithdrawalAmount > liquidityPool.totalValueInLp()) return (false, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
 

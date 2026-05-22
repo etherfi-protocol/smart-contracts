@@ -7,6 +7,7 @@ import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 
 import "./interfaces/ILiquifier.sol";
 import "./interfaces/ILiquidityPool.sol";
@@ -51,6 +52,7 @@ interface IERC20Burnable is IERC20 {
 /// Go wild, spread eETH/weETH to the world
 contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable, PausableUntil, ReentrancyGuardUpgradeable, ILiquifier {
     using SafeERC20 for IERC20;
+    using Math for uint256;
 
     uint32 private DEPRECATED_eigenLayerWithdrawalClaimGasCost;
     uint32 public timeBoundCapRefreshInterval; // seconds
@@ -360,9 +362,9 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
                 (, int256 answer, , uint256 updatedAt,) = stEthPriceFeed.latestRoundData();
                 if (answer <= 0) revert InvalidPriceFeed();
                 if (updatedAt + stalePriceWindow < block.timestamp) revert StalePriceFeed();
-                uint256 pricefeedValue = (uint256(answer) * _amount) / SHARE_UNIT;
+                uint256 pricefeedValue = uint256(answer).mulDiv(_amount, SHARE_UNIT);
                 uint256 deviation = pricefeedValue > _marketValue ? pricefeedValue - _marketValue : _marketValue - pricefeedValue;
-                if (deviation * BASIS_POINT_SCALE / _marketValue > maxPriceDeviationInBps) revert InvalidStEthPrice();
+                if (deviation.mulDiv(BASIS_POINT_SCALE, _marketValue) > maxPriceDeviationInBps) revert InvalidStEthPrice();
             } else {
                 _marketValue = _amount; /// 1:1 from stETH to eETH
             }
@@ -378,7 +380,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     function quoteByDiscountedValue(address _token, uint256 _amount) public view returns (uint256) {
         uint256 marketValue = quoteByMarketValue(_token, _amount);
 
-        return (BASIS_POINT_SCALE - tokenInfos[_token].discountInBasisPoints) * marketValue / BASIS_POINT_SCALE;
+        return (BASIS_POINT_SCALE - tokenInfos[_token].discountInBasisPoints).mulDiv(marketValue, BASIS_POINT_SCALE);
     }
 
     function isTokenWhitelisted(address _token) public view returns (bool) {
