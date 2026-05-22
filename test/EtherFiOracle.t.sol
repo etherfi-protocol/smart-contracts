@@ -1455,6 +1455,44 @@ contract EtherFiOracleTest is TestSetup {
         _executeAdminTasks(report, "EtherFiAdmin: finalized withdrawal amount exceeds max");
     }
 
+    // EtherFiAdmin gained `maxNumberOfRequestsToFinalizePerReport` (configured to 1000 in
+    // setUpTests). A report claiming to finalize a range larger than that must be rejected
+    // even when every other gate (per-day cap, LP liquidity, ascending id) is satisfied.
+    // No actual requests need to exist — the cap check sits BEFORE the sum-of-requests loop.
+    function test_executeTasks_revertsWhenRequestRangeExceedsCap() public {
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        // delta from lastFinalizedRequestId(=0) = 1001 > cap(1000)
+        report.lastFinalizedWithdrawalRequestId = 1001;
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report, "EtherFiAdmin: number of requests to finalize exceeds max");
+    }
+
+    // Boundary check: a report with delta == cap (1000) must pass the new range gate.
+    // We pin the gate by submitting delta = 1000 and a single real request — finalizeRequests
+    // is happy because the underlying share rate is in range, and the validation loop walks
+    // requests [1, 1000] where only id=1 has non-zero amount (matches finalizedWithdrawalAmount).
+    function test_executeTasks_passesRangeCapAtBoundary() public {
+        _unpauseWithdrawNFT();
+        _seedLp(200 ether);
+        uint256 requestId = _makeWithdrawRequest(1 ether);
+        assertEq(requestId, 1);
+
+        // Move the next-request cursor up so report can point at id=1000 (delta = 1000 == cap).
+        bytes32 slot306 = vm.load(address(withdrawRequestNFTInstance), bytes32(uint256(306)));
+        uint256 cleared = uint256(slot306) & ~uint256(0xffffffff);          // clear nextRequestId
+        uint256 patched = cleared | uint256(1001);                           // nextRequestId = 1001
+        vm.store(address(withdrawRequestNFTInstance), bytes32(uint256(306)), bytes32(patched));
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.lastFinalizedWithdrawalRequestId = 1000;       // delta = 1000 - 0 == cap
+        report.finalizedWithdrawalAmount = 1 ether;           // backed by request #1 only
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report);
+        assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), 1000);
+    }
+
     function test_executeTasks_revertsWhenValidatorApprovalsExceedCap() public {
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
         report.validatorsToApprove = new uint256[](400); // > 200/day cap

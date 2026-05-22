@@ -1662,14 +1662,16 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         priorityQueue.claimWithdraw(request);
 
         uint256 remainderAmount = priorityQueue.getRemainderAmount();
-        
-        // Only test if there are remainder shares
+
+        // Only test if there are remainder shares. The remainder is just a few wei on mainnet
+        // fork (rounding dust), so halving it can round `sharesForAmount(eEthAmount)` to zero
+        // and leave `totalRemainderShares` untouched. Sweep the full remainder so the share
+        // delta is non-zero and the post-condition can fire.
         if (remainderAmount > 0) {
-            uint256 amountToHandle = remainderAmount / 2;
             uint256 remainderBefore = priorityQueue.totalRemainderShares();
 
             vm.prank(alice);
-            priorityQueue.handleRemainder(amountToHandle);
+            priorityQueue.handleRemainder(remainderAmount);
 
             assertLt(priorityQueue.totalRemainderShares(), remainderBefore, "Remainder should decrease");
         }
