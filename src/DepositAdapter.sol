@@ -158,7 +158,7 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable, RolesLibrary {
     ///      lets operations recover the residual balance of any ERC20 left here.
     /// @param _token Address of the ERC20 to sweep
     /// @param _to Recipient of the swept tokens
-    function sweepDust(address _token, address _to) external onlyOperations {
+    function sweepDust(address _token, address _to) external onlyOperatingMultisig {
         if (_to == address(0)) revert InvalidRecipient();
         uint256 balance = IERC20(_token).balanceOf(address(this));
         if (balance == 0) revert InsufficientBalance();
@@ -170,11 +170,6 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable, RolesLibrary {
 
     modifier nonBlacklisted() {
         blacklister.nonBlacklisted(msg.sender);
-        _;
-    }
-
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }
 }
