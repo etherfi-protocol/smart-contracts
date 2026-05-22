@@ -14,7 +14,7 @@ import "./interfaces/ILiquidityPool.sol";
 import "./AssetRecovery.sol";
 import "./utils/RolesLibrary.sol";
 import "./interfaces/IBlacklister.sol";
-import "./RateLimitedToken.sol";
+import "./utils/RateLimitedToken.sol";
 import "./utils/PausableUntil.sol";
 
 contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, IERC20PermitUpgradeable, IeETH, AssetRecovery, RolesLibrary, RateLimitedToken {
@@ -117,10 +117,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     // Thin role-gated wrappers around the internal helpers in RateLimitedToken — the
     // rate-limit semantics live in the helper / EtherFiRateLimiter; this contract just
     // declares the access split (Guardian = tighten, Operating Multisig = set + delete).
-
-    function tightenAddressRateLimit(address user, uint64 capacity, uint64 refillRate) external onlyGuardian {
-        _tightenAddressRateLimit(user, capacity, refillRate);
-    }
+    // For a single user, pass a length-1 array.
 
     function tightenAddressRateLimits(
         address[] calldata users,
@@ -130,20 +127,12 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         _tightenAddressRateLimits(users, capacities, refillRates);
     }
 
-    function setAddressRateLimit(address user, uint64 capacity, uint64 refillRate) external onlyOperatingMultisig {
-        _setAddressRateLimit(user, capacity, refillRate);
-    }
-
     function setAddressRateLimits(
         address[] calldata users,
         uint64[] calldata capacities,
         uint64[] calldata refillRates
     ) external onlyOperatingMultisig {
         _setAddressRateLimits(users, capacities, refillRates);
-    }
-
-    function deleteAddressRateLimit(address user) external onlyOperatingMultisig {
-        _deleteAddressRateLimit(user);
     }
 
     function deleteAddressRateLimits(address[] calldata users) external onlyOperatingMultisig {

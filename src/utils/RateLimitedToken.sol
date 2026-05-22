@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
-import "./interfaces/IEtherFiRateLimiter.sol";
+import "../interfaces/IEtherFiRateLimiter.sol";
 
 /// @title  RateLimitedToken
 /// @notice Token-side helpers for the per-address rate-limit feature on EtherFiRateLimiter.
@@ -45,10 +45,8 @@ abstract contract RateLimitedToken {
 
     /// @dev Token must gate this to the Guardian. See EtherFiRateLimiter for the
     ///      tightening invariant: new capacity / refill ≤ current; `cap = 0` = freeze.
-    function _tightenAddressRateLimit(address user, uint64 capacity, uint64 refillRate) internal {
-        rateLimiter.tightenAddressLimit(user, capacity, refillRate);
-    }
-
+    ///      Use a length-1 array for the single-user case — there's no separate
+    ///      single-address entry point.
     function _tightenAddressRateLimits(
         address[] calldata users,
         uint64[] calldata capacities,
@@ -66,10 +64,6 @@ abstract contract RateLimitedToken {
 
     /// @dev Token must gate this to the Operating Multisig. Fully resets the bucket
     ///      (`remaining` returns to capacity); this is the unfreeze / raise path.
-    function _setAddressRateLimit(address user, uint64 capacity, uint64 refillRate) internal {
-        rateLimiter.setAddressLimit(user, capacity, refillRate);
-    }
-
     function _setAddressRateLimits(
         address[] calldata users,
         uint64[] calldata capacities,
@@ -83,10 +77,6 @@ abstract contract RateLimitedToken {
 
     /// @dev Token must gate this to the Operating Multisig. Deletes the bucket entirely;
     ///      the user returns to the unrestricted default.
-    function _deleteAddressRateLimit(address user) internal {
-        rateLimiter.deleteAddressLimit(user);
-    }
-
     function _deleteAddressRateLimits(address[] calldata users) internal {
         for (uint256 i; i < users.length; ++i) {
             rateLimiter.deleteAddressLimit(users[i]);
