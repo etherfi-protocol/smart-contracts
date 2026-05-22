@@ -4,6 +4,8 @@ pragma solidity ^0.8.13;
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "./interfaces/IeETH.sol";
 import "./interfaces/IMembershipManager.sol";
@@ -18,6 +20,7 @@ import "./libraries/GlobalIndexLibrary.sol";
 import "forge-std/console.sol";
 
 contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable, IMembershipManager {
+    using SafeERC20 for IERC20;
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
@@ -75,6 +78,9 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
 
     bytes32 public constant MEMBERSHIP_MANAGER_OPERATIONS_ROLE = keccak256("MEMBERSHIP_MANAGER_OPERATIONS_ROLE");
 
+    uint256 public constant BASIS_POINTS_DENOMINATOR = 10000;
+    uint256 public constant FEE_UNIT = 0.001 ether;
+
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
@@ -101,9 +107,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     //--------------------------------------------------------------------------------------
 
     error Deprecated();
-    error DisallowZeroAddress();
     error WrongVersion();
-    error BlacklistedUser();
     error InvalidEAPRollover();
 
     /// @notice EarlyAdopterPool users can re-deposit and mint a membership NFT claiming their points & tiers
@@ -138,7 +142,6 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     }
 
     error InvalidDeposit();
-    error InvalidAllocation();
     error InvalidAmount();
     error InsufficientBalance();
 
@@ -148,7 +151,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     /// @param _amountForPoints amount of ETH to boost earnings of {loyalty, tier} points
     /// @return tokenId The ID of the minted membership NFT.
     function wrapEth(uint256 _amount, uint256 _amountForPoints, address _referral) public payable whenNotPaused nonBlacklisted returns (uint256) {
-        uint256 feeAmount = uint256(mintFee) * 0.001 ether;
+        uint256 feeAmount = uint256(mintFee) * FEE_UNIT;
         uint256 depositPerNFT = _amount + _amountForPoints;
         uint256 ethNeededPerNFT = depositPerNFT + feeAmount;
 
@@ -172,7 +175,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         (uint256 totalBalance, uint256 feeAmount) = _withdrawAndBurn(_tokenId);
 
         // transfer 'eEthShares' of eETH to the owner
-        eETH.transfer(msg.sender, totalBalance - feeAmount);
+        IERC20(address(eETH)).safeTransfer(msg.sender, totalBalance - feeAmount);
 
         if (feeAmount > 0) {
             liquidityPool.withdraw(address(this), feeAmount);
@@ -197,17 +200,12 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     }
 
     error ExceededMaxWithdrawal();
-    error InsufficientLiquidity();
-    error RequireTokenUnlocked();
     error InvalidCaller();
     error TierLimitExceeded();
     error OutOfBound();
     error WrongTokenMinted();
     error UnexpectedTier();
-    error NotEnoughReservedRewards();
-    error NotInV0();
     error OnlyTokenOwner();
-    error IntegerOverflow();
     error IncorrectRole();
 
     /// @notice Requests exchange of membership points tokens for ETH.
@@ -230,7 +228,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         _applyUnwrapPenalty(_tokenId, prevAmount, _amount);
 
         // send EETH to recipient before requesting withdraw?
-        eETH.approve(address(liquidityPool), _amount);
+        IERC20(address(eETH)).safeIncreaseAllowance(address(liquidityPool), _amount);
         uint256 withdrawTokenId = liquidityPool.requestMembershipNFTWithdraw(address(msg.sender), _amount, uint64(0));
 
         _emitNftUpdateEvent(_tokenId);
@@ -250,7 +248,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
 
         (uint256 totalBalance, uint256 feeAmount) = _withdrawAndBurn(_tokenId);
 
-        eETH.approve(address(liquidityPool), totalBalance);
+        IERC20(address(eETH)).safeIncreaseAllowance(address(liquidityPool), totalBalance);
         uint256 withdrawTokenId = liquidityPool.requestMembershipNFTWithdraw(msg.sender, totalBalance, feeAmount);
         
         return withdrawTokenId;
@@ -281,6 +279,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         // The balance of MembershipManager contract is used to reward ether.fan stakers (not eETH stakers)
         // Eth Rewards Amount per NFT = (eETH share amount of the NFT) * (total rewards ETH amount) / (total eETH share amount in ether.fan)
         uint256 etherFanEEthShares = eETH.shares(address(this));
+        if (etherFanEEthShares == 0) return;
         uint256 thresholdAmount = fanBoostThresholdEthAmount();
         if (address(this).balance >= thresholdAmount) {
             uint256 mintedShare = liquidityPool.deposit{value: thresholdAmount}(address(this), address(0));
@@ -366,14 +365,14 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         _feeAmountSanityCheck(_mintFeeAmount);
         _feeAmountSanityCheck(_burnFeeAmount);
         _feeAmountSanityCheck(_upgradeFeeAmount);
-        mintFee = uint16(_mintFeeAmount / 0.001 ether);
-        burnFee = uint16(_burnFeeAmount / 0.001 ether);
-        upgradeFee = uint16(_upgradeFeeAmount / 0.001 ether);
+        mintFee = uint16(_mintFeeAmount / FEE_UNIT);
+        burnFee = uint16(_burnFeeAmount / FEE_UNIT);
+        upgradeFee = uint16(_upgradeFeeAmount / FEE_UNIT);
         burnFeeWaiverPeriodInDays = _burnFeeWaiverPeriodInDays;
     }
 
     function setFanBoostThresholdEthAmount(uint256 _fanBoostThresholdEthAmount) external onlyOperations {
-        fanBoostThreshold = uint16(_fanBoostThresholdEthAmount / 0.001 ether);
+        fanBoostThreshold = uint16(_fanBoostThresholdEthAmount / FEE_UNIT);
     }
 
     //Pauses the contract
@@ -427,7 +426,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         if (tokenData[_tokenId].version != 1) revert WrongVersion();
 
         // subtract fee from provided ether. Will revert if not enough eth provided
-        uint256 upgradeFeeAmount = uint256(upgradeFee) * 0.001 ether;
+        uint256 upgradeFeeAmount = uint256(upgradeFee) * FEE_UNIT;
         uint256 additionalDeposit = msg.value - upgradeFeeAmount;
         if (!canTopUp(_tokenId, additionalDeposit, _amount, _amountForPoints)) revert InvalidDeposit();
 
@@ -461,7 +460,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         uint8 tier = tokenData[_tokenId].tier;
         uint256 vaultShare = tokenData[_tokenId].vaultShare;
         uint256 ethAmount = ethAmountForVaultShare(tier, vaultShare);
-        uint256 feeAmount = hasMetBurnFeeWaiverPeriod(_tokenId) ? 0 : uint256(burnFee) * 0.001 ether;
+        uint256 feeAmount = hasMetBurnFeeWaiverPeriod(_tokenId) ? 0 : uint256(burnFee) * FEE_UNIT;
         if (ethAmount < feeAmount) revert InsufficientBalance();
 
         _withdraw(_tokenId, ethAmount);
@@ -648,7 +647,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     }
 
     function fanBoostThresholdEthAmount() public view returns (uint256) {
-        return uint256(fanBoostThreshold) * 0.001 ether;
+        return uint256(fanBoostThreshold) * FEE_UNIT;
     }
 
     function hasMetBurnFeeWaiverPeriod(uint256 _tokenId) public view returns (bool) {
@@ -665,7 +664,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     }
 
     function _feeAmountSanityCheck(uint256 _feeAmount) internal pure {
-        if (_feeAmount % 0.001 ether != 0 || _feeAmount / 0.001 ether > type(uint16).max) revert InvalidAmount();
+        if (_feeAmount % FEE_UNIT != 0 || _feeAmount / FEE_UNIT > type(uint16).max) revert InvalidAmount();
     }
 
     function _min(uint256 _a, uint256 _b) internal pure returns (uint256) {
@@ -690,8 +689,8 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         uint40 degradeTierPenalty = curTierPoints - tierData[prevTier].requiredTierPoints;
 
         // point deduction if scaled proportional to withdrawal amount
-        uint256 ratio = (10000 * _withdrawalAmount) / _prevAmount;
-        uint40 scaledTierPointsPenalty = uint40((ratio * curTierPoints) / 10000);
+        uint256 ratio = (BASIS_POINTS_DENOMINATOR * _withdrawalAmount) / _prevAmount;
+        uint40 scaledTierPointsPenalty = uint40((ratio * curTierPoints) / BASIS_POINTS_DENOMINATOR);
 
         uint40 penalty = uint40(_max(degradeTierPenalty, scaledTierPointsPenalty));
 
@@ -750,7 +749,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
 
     // returns (mintFeeAmount, burnFeeAmount, upgradeFeeAmount)
     function getFees() external view returns (uint256 mintFeeAmount, uint256 burnFeeAmount, uint256 upgradeFeeAmount) {
-        return (uint256(mintFee) * 0.001 ether, uint256(burnFee) * 0.001 ether, uint256(upgradeFee) * 0.001 ether);
+        return (uint256(mintFee) * FEE_UNIT, uint256(burnFee) * FEE_UNIT, uint256(upgradeFee) * FEE_UNIT);
     }
 
     function rewardsGlobalIndex(uint8 _tier) external view returns (uint256) {

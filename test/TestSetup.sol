@@ -847,7 +847,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         TNFTInstance.initializeOnUpgrade(address(managerInstance));
 
         // BNFT — fresh proxy; constructor immutables wired to predeployed proxies
-        BNFTImplementation = new BNFT(address(stakingManagerProxy), address(etherFiNodeManagerProxy));
+        BNFTImplementation = new BNFT();
         BNFTProxy = new UUPSProxy(address(BNFTImplementation), "");
         BNFTInstance = BNFT(address(BNFTProxy));
         BNFTInstance.initialize(address(stakingManagerInstance));
@@ -1017,21 +1017,21 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 roleRegistry: address(roleRegistryInstance),
                 priorityWithdrawalQueue: address(priorityQueueProxy)
             }),
-            10_000, 1_000, 7200, 100_000 ether, 500
+            10_000, 1_000, 7200, 100_000 ether, 500, 1000
         );
         etherFiAdminInstance.upgradeTo(address(etherFiAdminImplementation));
 
         // CumulativeMerkleRewardsDistributor (no circular deps)
         cumulativeMerkleRewardsDistributorImplementation = new CumulativeMerkleRewardsDistributor(address(roleRegistryInstance));
         cumulativeMerkleRewardsDistributorProxy = new UUPSProxy(address(cumulativeMerkleRewardsDistributorImplementation), "");
-        cumulativeMerkleRewardsDistributorInstance = CumulativeMerkleRewardsDistributor(address(cumulativeMerkleRewardsDistributorProxy));
+        cumulativeMerkleRewardsDistributorInstance = CumulativeMerkleRewardsDistributor(payable(address(cumulativeMerkleRewardsDistributorProxy)));
         cumulativeMerkleRewardsDistributorInstance.initialize();
 
         // CumulativeMerkleRewardsDistributor admin/claim-delay-setter consolidated into EXECUTOR_OPERATIONS_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.EXECUTOR_OPERATIONS_ROLE(), admin);
 
         // EtherFiOracle
-        etherFiOracleImplementation = new EtherFiOracle(address(etherFiAdminProxy), address(roleRegistryInstance));
+        etherFiOracleImplementation = new EtherFiOracle(1, address(etherFiAdminProxy), address(roleRegistryInstance));
         etherFiOracleInstance.upgradeTo(address(etherFiOracleImplementation));
 
         // EtherFiRestaker — constructor reads from liquifier, which is initialized above
@@ -1108,9 +1108,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         withdrawRequestNFTInstance.initialize(payable(address(liquidityPoolProxy)), payable(address(eETHProxy)), payable(address(membershipManagerProxy)));
         // initializeOnUpgrade now reverts (checks immutable roleRegistry == 0). Set the
-        // share-remainder split + paused state it used to bootstrap directly. Also seed
-        // the scan cursor (current = 1, last = 0) so isScanOfShareRemainderCompleted()
-        // is true from the start, matching post-initializeOnUpgrade behaviour.
+        // share-remainder split + paused state it used to bootstrap directly.
         withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(1000);
         {
             // Slot 306 packs (nextRequestId, lastFinalizedRequestId, shareRemainderSplit,
@@ -1207,6 +1205,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.startPrank(alice);
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
         liquidityPoolInstance.setValidatorSizeWei(32 ether);
+        liquidityPoolInstance.setMinWithdrawAmount(0.001 ether);
+        liquidityPoolInstance.setMaxWithdrawAmount(1000 ether);
         // Pause WithdrawRequestNFT so existing tests that unPauseContract in their
         // own setUp continue to find it paused (initializeOnUpgrade used to set this).
         withdrawRequestNFTInstance.pauseContract();
@@ -1325,13 +1325,13 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 priorityWithdrawalQueue: address(priorityQueueInstance)
             }),
             10_000, 1_000, 7200
-        , 100_000 ether, 500));
+        , 100_000 ether, 500, 1000));
         vm.prank(etherFiAdminInstance.owner());
         etherFiAdminInstance.upgradeTo(newAdminImpl);
     }
 
     function _upgradeOracleAndAdminForFork() internal {
-        address newOracleImpl = address(new EtherFiOracle(address(etherFiAdminInstance), address(roleRegistryInstance)));
+        address newOracleImpl = address(new EtherFiOracle(1, address(etherFiAdminInstance), address(roleRegistryInstance)));
         vm.prank(etherFiOracleInstance.owner());
         etherFiOracleInstance.upgradeTo(newOracleImpl);
 
@@ -1348,7 +1348,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 priorityWithdrawalQueue: address(priorityQueueInstance)
             }),
             10_000, 1_000, 7200
-        , 100_000 ether, 500));
+        , 100_000 ether, 500, 1000));
         vm.prank(roleRegistryInstance.owner());
         etherFiAdminInstance.upgradeTo(newAdminImpl);
     }

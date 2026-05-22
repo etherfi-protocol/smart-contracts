@@ -79,7 +79,7 @@ contract RoleMigrationStorageIntegrityTest is Test, Deployed {
         bytes32[] memory preOracle = _snapshot(ETHERFI_ORACLE);
         bytes32[] memory preNOM    = _snapshot(NODE_OPERATOR_MANAGER);
 
-        address newOracle = address(new EtherFiOracle(ETHERFI_ADMIN, ROLE_REGISTRY));
+        address newOracle = address(new EtherFiOracle(1, ETHERFI_ADMIN, ROLE_REGISTRY));
         address newNOM    = address(new NodeOperatorManager(ROLE_REGISTRY, AUCTION_MANAGER));
 
         _upgradeProxy(ETHERFI_ORACLE,        newOracle);

@@ -684,7 +684,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
                 pubkey,
                 signature,
                 withdrawalCreds,
-                stakingManager.initialDepositAmount()
+                stakingManager.INITIAL_DEPOSIT_AMOUNT()
             );
 
             depositData[i] = IStakingManager.DepositData({

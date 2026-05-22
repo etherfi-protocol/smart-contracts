@@ -1984,10 +1984,10 @@ contract LiquidityPoolTest is TestSetup {
         // escrowMigrationCompleted is at slot 226, byte offset 0 (bool).
         // It should already be false after initializeTestingFork; no-op write to be safe.
         {
-            bytes32 slot226 = bytes32(uint256(226));
-            bytes32 current = vm.load(address(liquidityPoolInstance), slot226);
+            bytes32 slot228 = bytes32(uint256(228));
+            bytes32 current = vm.load(address(liquidityPoolInstance), slot228);
             bytes32 newVal  = current & bytes32(~uint256(0xff)); // clear byte 0
-            vm.store(address(liquidityPoolInstance), slot226, newVal);
+            vm.store(address(liquidityPoolInstance), slot228, newVal);
         }
         assertFalse(liquidityPoolInstance.escrowMigrationCompleted());
 
@@ -2287,10 +2287,10 @@ contract LiquidityPoolTest is TestSetup {
     function test_addEthAmountLockedForWithdrawal_revertsIfMigrationIncomplete() public {
         // setUp already ran initializeOnUpgradeV2. Reset the flag to simulate pre-migration state.
         {
-            bytes32 slot226 = bytes32(uint256(226));
-            bytes32 current = vm.load(address(liquidityPoolInstance), slot226);
+            bytes32 slot228 = bytes32(uint256(228));
+            bytes32 current = vm.load(address(liquidityPoolInstance), slot228);
             bytes32 newVal  = current & bytes32(~uint256(0xff)); // clear byte 0 (the bool)
-            vm.store(address(liquidityPoolInstance), slot226, newVal);
+            vm.store(address(liquidityPoolInstance), slot228, newVal);
         }
         assertFalse(liquidityPoolInstance.escrowMigrationCompleted(), "pre-condition: migration flag reset");
 
@@ -2315,13 +2315,8 @@ contract LiquidityPoolTest is TestSetup {
     //----------------------  MIN / MAX WITHDRAW AMOUNT TESTS  -----------------------------
     //--------------------------------------------------------------------------------------
 
-    function test_constants_minMaxWithdrawAmount() public view {
-        assertEq(liquidityPoolInstance.MIN_WITHDRAW_AMOUNT(), 0.01 ether, "MIN_WITHDRAW_AMOUNT mismatch");
-        assertEq(liquidityPoolInstance.MAX_WITHDRAW_AMOUNT(), 1000 ether, "MAX_WITHDRAW_AMOUNT mismatch");
-    }
-
     function test_requestWithdraw_atMin_succeeds() public {
-        uint96 amt = uint96(liquidityPoolInstance.MIN_WITHDRAW_AMOUNT());
+        uint96 amt = uint96(liquidityPoolInstance.minWithdrawAmount());
 
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 1 ether}();
@@ -2330,11 +2325,11 @@ contract LiquidityPoolTest is TestSetup {
         vm.stopPrank();
 
         WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(requestId);
-        assertEq(request.amountOfEEth, amt, "MIN_WITHDRAW_AMOUNT request should be created");
+        assertEq(request.amountOfEEth, amt, "minWithdrawAmount request should be created");
     }
 
     function test_requestWithdraw_belowMin_amountNotEqualToBalance_reverts() public {
-        uint96 amt = uint96(liquidityPoolInstance.MIN_WITHDRAW_AMOUNT()) - 1;
+        uint96 amt = uint96(liquidityPoolInstance.minWithdrawAmount()) - 1;
 
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 1 ether}();
@@ -2344,7 +2339,7 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_requestWithdraw_atMax_succeeds() public {
-        uint96 amt = uint96(liquidityPoolInstance.MAX_WITHDRAW_AMOUNT());
+        uint96 amt = uint96(liquidityPoolInstance.maxWithdrawAmount());
 
         vm.deal(bob, uint256(amt) + 1 ether);
         vm.startPrank(bob);
@@ -2354,11 +2349,11 @@ contract LiquidityPoolTest is TestSetup {
         vm.stopPrank();
 
         WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(requestId);
-        assertEq(request.amountOfEEth, amt, "MAX_WITHDRAW_AMOUNT request should be created");
+        assertEq(request.amountOfEEth, amt, "maxWithdrawAmount request should be created");
     }
 
     function test_requestWithdraw_aboveMax_reverts() public {
-        uint96 amt = uint96(liquidityPoolInstance.MAX_WITHDRAW_AMOUNT()) + 1;
+        uint96 amt = uint96(liquidityPoolInstance.maxWithdrawAmount()) + 1;
 
         vm.deal(bob, uint256(amt) + 1 ether);
         vm.startPrank(bob);
@@ -2381,7 +2376,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.startPrank(address(membershipManagerInstance));
         liquidityPoolInstance.deposit{value: 1 ether}(address(membershipManagerInstance), address(0));
 
-        uint256 dust = liquidityPoolInstance.MIN_WITHDRAW_AMOUNT() - 1; // below user cap
+        uint256 dust = liquidityPoolInstance.minWithdrawAmount() - 1; // below user cap
         eETHInstance.approve(address(liquidityPoolInstance), dust);
         uint256 reqId = liquidityPoolInstance.requestMembershipNFTWithdraw(alice, dust, 0);
         vm.stopPrank();
@@ -2391,7 +2386,7 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_requestMembershipNFTWithdraw_aboveMax_succeeds() public {
-        uint256 large = liquidityPoolInstance.MAX_WITHDRAW_AMOUNT() + 1 ether; // above user cap
+        uint256 large = liquidityPoolInstance.maxWithdrawAmount() + 1 ether; // above user cap
 
         // Seed the MembershipManager with enough eETH to cover the large request.
         vm.deal(address(membershipManagerInstance), large + 1 ether);
@@ -2408,11 +2403,11 @@ contract LiquidityPoolTest is TestSetup {
 
     /// @dev Contrast with `requestMembershipNFTWithdraw`, which accepts both dust
     ///      and whale amounts unchanged. Via the user-facing `requestWithdraw`:
-    ///        - dust (< MIN) is rewritten to the caller's full eETH balance
+    ///        - dust (< MIN) reverts with InvalidWithdrawalAmount
     ///        - large (> MAX) still reverts with InvalidWithdrawalAmount
-    function test_requestWithdraw_userFlow_dustWithdrawsFullBalance_largeReverts() public {
-        uint256 dust = liquidityPoolInstance.MIN_WITHDRAW_AMOUNT() - 1;
-        uint256 large = liquidityPoolInstance.MAX_WITHDRAW_AMOUNT() + 1 ether;
+    function test_requestWithdraw_userFlow_dustRevertsWithInvalidWithdrawalAmount_largeRevertsWithInvalidWithdrawalAmount() public {
+        uint256 dust = liquidityPoolInstance.minWithdrawAmount() - 1;
+        uint256 large = liquidityPoolInstance.maxWithdrawAmount() + 1 ether;
 
         vm.deal(bob, dust);
         vm.startPrank(bob);
@@ -2420,9 +2415,8 @@ contract LiquidityPoolTest is TestSetup {
         uint256 balance = eETHInstance.balanceOf(bob);
         eETHInstance.approve(address(liquidityPoolInstance), balance);
 
-        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, dust);
-        WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(requestId);
-        assertEq(request.amountOfEEth, balance, "dust request should withdraw bob's full balance");
+        vm.expectRevert(LiquidityPool.InvalidWithdrawalAmount.selector);
+        liquidityPoolInstance.requestWithdraw(bob, dust);
 
         vm.expectRevert(LiquidityPool.InvalidWithdrawalAmount.selector);
         liquidityPoolInstance.requestWithdraw(bob, large);

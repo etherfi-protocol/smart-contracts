@@ -39,6 +39,8 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     IEtherFiAdmin public immutable etherFiAdmin;
     IRoleRegistry public immutable roleRegistry;
 
+    uint32 public immutable minQuorumSize;
+
     event CommitteeMemberAdded(address indexed member);
     event CommitteeMemberRemoved(address indexed member);
     event CommitteeMemberUpdated(address indexed member, bool enabled);
@@ -65,6 +67,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     error WrongBlockTo();
     error ReportBlockTooOld();
     error ConsensusNotReached();
+    error ReportExecuted();
     error AlreadyRegistered();
     error AlreadyInTargetState();
     error InvalidReportPeriod();
@@ -72,7 +75,8 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     error InvalidQuorum();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _etherFiAdmin, address _roleRegistry) {
+    constructor(uint32 _minQuorumSize, address _etherFiAdmin, address _roleRegistry) {
+        minQuorumSize = _minQuorumSize;
         etherFiAdmin = IEtherFiAdmin(_etherFiAdmin);
         roleRegistry = IRoleRegistry(_roleRegistry);
         _disableInitializers();
@@ -284,6 +288,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     }
 
     function setQuorumSize(uint32 _quorumSize) public onlyAdmin {
+        if (_quorumSize < minQuorumSize) revert InvalidQuorum();
         quorumSize = _quorumSize;
         _checkQuorum();
         emit QuorumUpdated(_quorumSize);
@@ -303,10 +308,14 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         emit ConsensusVersionUpdated(_consensusVersion);
     }
 
-    function unpublishReport(bytes32 _hash) external onlyOperations {
+    function unpublishReport(OracleReport calldata _report) public onlyOperations {
+        bytes32 _hash = generateReportHash(_report);
         if (!consensusStates[_hash].consensusReached) revert ConsensusNotReached();
+        if (_report.refSlotTo <= etherFiAdmin.lastHandledReportRefSlot()) revert ReportExecuted();
         consensusStates[_hash].support = 0;
         consensusStates[_hash].consensusReached = false;
+        lastPublishedReportRefSlot = _report.refSlotFrom - 1;
+        lastPublishedReportRefBlock = _report.refBlockFrom - 1;
         emit ReportUnpublished(_hash);
     }
 

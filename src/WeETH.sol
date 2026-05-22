@@ -5,6 +5,7 @@ import "@openzeppelin-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/draft-ERC20PermitUpgradeable.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IeETH.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IRateProvider.sol";
@@ -17,6 +18,7 @@ import "./interfaces/IEtherFiRateLimiter.sol";
 import "./libraries/RateLimitMath.sol";
 
 contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, ERC20PermitUpgradeable, IRateProvider, AssetRecovery {
+    using SafeERC20 for IERC20;
 
     IeETH public immutable eETH;
     ILiquidityPool public immutable liquidityPool;
@@ -88,7 +90,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         uint256 weEthAmount = liquidityPool.sharesForAmount(_eETHAmount);
         rateLimiter.consumeIfConfigured(WEETH_MINT_LIMIT_ID, RateLimitMath.toBucketUnit(weEthAmount));
         _mint(msg.sender, weEthAmount);
-        eETH.transferFrom(msg.sender, address(this), _eETHAmount);
+        IERC20(address(eETH)).safeTransferFrom(msg.sender, address(this), _eETHAmount);
         return weEthAmount;
     }
 
@@ -111,7 +113,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         uint256 eETHAmount = liquidityPool.amountForShare(_weETHAmount);
         rateLimiter.consumeIfConfigured(WEETH_BURN_LIMIT_ID, RateLimitMath.toBucketUnit(_weETHAmount));
         _burn(msg.sender, _weETHAmount);
-        eETH.transfer(msg.sender, eETHAmount);
+        IERC20(address(eETH)).safeTransfer(msg.sender, eETHAmount);
         return eETHAmount;
     }
 
@@ -137,16 +139,16 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
-    function recoverETH(address payable to, uint256 amount) external onlyOperations {
+    function recoverETH(address payable to, uint256 amount) external onlyAdmin {
         _recoverETH(to, amount);
     }
 
-    function recoverERC20(address token, address to, uint256 amount) external onlyOperations {
+    function recoverERC20(address token, address to, uint256 amount) external onlyAdmin {
         if (token == address(eETH)) revert CannotRecoverEETH();
         _recoverERC20(token, to, amount);
     }
 
-    function recoverERC721(address token, address to, uint256 tokenId) external onlyOperations {
+    function recoverERC721(address token, address to, uint256 tokenId) external onlyAdmin {
         _recoverERC721(token, to, tokenId);
     }
 

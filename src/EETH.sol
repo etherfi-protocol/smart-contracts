@@ -63,7 +63,6 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     error TransferAmountExceedsBalance();
     error ContractPaused();
 
-    // TODO: Figure our what `name` and `version` are for
     constructor(address _liquidityPool, address _roleRegistry, address _blacklister, address _rateLimiter) {
         bytes32 hashedName = keccak256("EETH");
         bytes32 hashedVersion = keccak256("1");
@@ -201,15 +200,15 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         _approve(owner, spender, value);
     }
 
-    function recoverETH(address payable to, uint256 amount) external onlyOperations {
+    function recoverETH(address payable to, uint256 amount) external onlyAdmin {
         _recoverETH(to, amount);
     }
 
-    function recoverERC20(address token, address to, uint256 amount) external onlyOperations{
+    function recoverERC20(address token, address to, uint256 amount) external onlyAdmin{
         _recoverERC20(token, to, amount);
     }
 
-    function recoverERC721(address token, address to, uint256 tokenId) external onlyOperations {
+    function recoverERC721(address token, address to, uint256 tokenId) external onlyAdmin {
         _recoverERC721(token, to, tokenId);
     }
 

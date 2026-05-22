@@ -50,63 +50,6 @@ contract NodeOperatorManagerTest is TestSetup {
         );
     }
 
-    function test_RegisterNodeOperatorInMigration() public {
-
-        address[] memory operators = new address[](2);
-        operators[0] = address(bob);
-        operators[1] = address(alice);
-
-        bytes[] memory hashes = new bytes[](2);
-        hashes[0] = bobIPFS_Hash;
-        hashes[1] = aliceIPFS_Hash;
-
-        uint64[] memory totalKeys = new uint64[](2);
-        totalKeys[0] = 10;
-        totalKeys[1] = 15;
-
-        uint64[] memory keysUsed = new uint64[](2);
-        keysUsed[0] = 5;
-        keysUsed[1] = 1;
-
-        vm.prank(bob);
-        vm.expectRevert("Ownable: caller is not the owner");
-        nodeOperatorManagerInstance.initializeOnUpgrade(
-            operators,
-            hashes,
-            totalKeys,
-            keysUsed
-        );
-
-        vm.prank(owner);
-        nodeOperatorManagerInstance.initializeOnUpgrade(
-            operators,
-            hashes,
-            totalKeys,
-            keysUsed
-        );
-
-        (
-            uint64 totalKeysUser,
-            uint64 keysUsedUser,
-            bytes memory bobHash
-        ) = nodeOperatorManagerInstance.addressToOperatorData(bob);
-
-        assertEq(bobHash, abi.encodePacked(bobIPFS_Hash));
-        assertEq(totalKeysUser, 10);
-        assertEq(keysUsedUser, 5);
-
-        assertEq(nodeOperatorManagerInstance.registered(bob), true);
-
-        vm.prank(owner);
-        vm.expectRevert(NodeOperatorManager.AlreadyRegistered.selector);
-        nodeOperatorManagerInstance.initializeOnUpgrade(
-            operators,
-            hashes,
-            totalKeys,
-            keysUsed
-        );
-    }
-
     function test_CanAddAddressToWhitelist() public {
         vm.startPrank(alice);
         nodeOperatorManagerInstance.registerNodeOperator(

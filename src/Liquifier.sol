@@ -7,6 +7,7 @@ import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 
 import "./interfaces/ILiquifier.sol";
 import "./interfaces/ILiquidityPool.sol";
@@ -51,6 +52,7 @@ interface IERC20Burnable is IERC20 {
 /// Go wild, spread eETH/weETH to the world
 contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable, PausableUntil, ReentrancyGuardUpgradeable, ILiquifier {
     using SafeERC20 for IERC20;
+    using Math for uint256;
 
     uint32 private DEPRECATED_eigenLayerWithdrawalClaimGasCost;
     uint32 public timeBoundCapRefreshInterval; // seconds
@@ -91,8 +93,13 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     address private DEPRECATED_etherfiRestaker;
 
     uint256 public constant BASIS_POINT_SCALE = 10_000;
+    uint256 public constant SHARE_UNIT = 1e18;
     uint32 public constant MAX_TIME_BOUND_CAP_IN_ETHER = 500_000_000;
     uint32 public constant MAX_TOTAL_CAP_IN_ETHER = 2_000_000_000;
+
+    /// @dev Suggested gas stipend for contract receiving ETH to perform a few
+    /// storage reads and writes, but low enough to prevent griefing.
+    uint256 internal constant GAS_STIPEND_NO_GRIEF = 100_000;
 
     ILiquidityPool public immutable liquidityPool;
     ILidoWithdrawalQueue public immutable lidoWithdrawalQueue;
@@ -119,12 +126,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     error NotSupportedToken();
     error EthTransferFailed();
-    error NotEnoughBalance();
     error AlreadyRegistered();
-    error NotRegistered();
-    error WrongOutput();
     error IncorrectCaller();
-    error IncorrectAmount();
     error IncorrectRole();
     error InvalidDiscountRate();
     error InvalidDepositCap();
@@ -143,6 +146,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     error InvalidStEthPrice();
     error NotAllowed();
     error Capped();
+    error AddressZero();
+    error InvalidTotalSupply();
 
     struct ConstructorAddresses {
         address liquidityPool;
@@ -205,7 +210,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     /// @param _referral The referral address
     /// @return mintedAmount the amount of eETH minted to the caller (= msg.sender)
     /// If the token is l2Eth, only the l2SyncPool can call this function
-    function depositWithERC20(address _token, uint256 _amount, address _referral) public whenNotPaused nonReentrant nonBlacklisted returns (uint256) {        
+    function depositWithERC20(address _token, uint256 _amount, address _referral) public nonReentrant whenNotPaused nonBlacklisted returns (uint256) {        
         if (!isTokenWhitelisted(_token) || (tokenInfos[_token].isL2Eth && msg.sender != l1SyncPool)) revert NotAllowed();
 
         // Measure actual amount received to handle stETH's 1-2 wei rounding issue
@@ -243,7 +248,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     function withdrawEther() external {
         if (!roleRegistry.hasRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
         uint256 amountToLiquidityPool = _min(address(this).balance, liquidityPool.totalValueOutOfLp());
-        (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
+        (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: GAS_STIPEND_NO_GRIEF}("");
         if (!sent) revert EthTransferFailed();
     }
 
@@ -267,7 +272,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         if (_timeBoundCapInEther > MAX_TIME_BOUND_CAP_IN_ETHER || _totalCapInEther > MAX_TOTAL_CAP_IN_ETHER) revert InvalidDepositCap();
         if (tokenInfos[_token].timeBoundCapClockStartTime != 0) revert AlreadyRegistered();
         if (_isL2Eth) {
-            if (_token == address(0) || _target != address(0)) revert();
+            if (_token == address(0) || _target != address(0)) revert AddressZero();
             dummies.push(IERC20(_token));
         } else {
             // _target = EigenLayer's Strategy contract
@@ -357,9 +362,9 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
                 (, int256 answer, , uint256 updatedAt,) = stEthPriceFeed.latestRoundData();
                 if (answer <= 0) revert InvalidPriceFeed();
                 if (updatedAt + stalePriceWindow < block.timestamp) revert StalePriceFeed();
-                uint256 pricefeedValue = (uint256(answer) * _amount) / 1e18;
+                uint256 pricefeedValue = uint256(answer).mulDiv(_amount, SHARE_UNIT);
                 uint256 deviation = pricefeedValue > _marketValue ? pricefeedValue - _marketValue : _marketValue - pricefeedValue;
-                if (deviation * BASIS_POINT_SCALE / _marketValue > maxPriceDeviationInBps) revert InvalidStEthPrice();
+                if (deviation.mulDiv(BASIS_POINT_SCALE, _marketValue) > maxPriceDeviationInBps) revert InvalidStEthPrice();
             } else {
                 _marketValue = _amount; /// 1:1 from stETH to eETH
             }
@@ -375,7 +380,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     function quoteByDiscountedValue(address _token, uint256 _amount) public view returns (uint256) {
         uint256 marketValue = quoteByMarketValue(_token, _amount);
 
-        return (BASIS_POINT_SCALE - tokenInfos[_token].discountInBasisPoints) * marketValue / BASIS_POINT_SCALE;
+        return (BASIS_POINT_SCALE - tokenInfos[_token].discountInBasisPoints).mulDiv(marketValue, BASIS_POINT_SCALE);
     }
 
     function isTokenWhitelisted(address _token) public view returns (bool) {
@@ -447,7 +452,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     function _L2SanityChecks(address _token) internal view {
-        if (IERC20(_token).totalSupply() != IERC20(_token).balanceOf(address(this))) revert();
+        if (IERC20(_token).totalSupply() != IERC20(_token).balanceOf(address(this))) revert InvalidTotalSupply();
     }
 
     function _min(uint256 _a, uint256 _b) internal pure returns (uint256) {

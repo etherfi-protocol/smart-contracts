@@ -41,11 +41,12 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
     IRoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
 
+    uint256 public constant BASIS_POINTS_DENOMINATOR = 10000;
+
     event MerkleUpdated(bytes32, bytes32);
     event MintingPaused(bool isPaused);
     event TokenLocked(uint256 indexed _tokenId, uint256 until);
     
-    error DisallowZeroAddress();
     error MintingIsPaused();
     error InvalidEAPRollover();
     error RequireTokenUnlocked();
@@ -284,7 +285,7 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
 
         uint256 elapsed = _until - _since;
         uint256 effectiveBalanceForEarningPoints = shares;
-        uint256 earning = effectiveBalanceForEarningPoints * elapsed * pointsGrowthRate / 10000;
+        uint256 earning = effectiveBalanceForEarningPoints * elapsed * pointsGrowthRate / BASIS_POINTS_DENOMINATOR;
 
         // 0.001         ether   earns 1     wei   points per day
         // == 1          ether   earns 1     kwei  points per day

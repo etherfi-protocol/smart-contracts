@@ -48,6 +48,7 @@ contract EtherFiNodesManager is
     bytes32 public constant CONSOLIDATION_REQUEST_LIMIT_ID = keccak256("CONSOLIDATION_REQUEST_LIMIT_ID");
     // maximum exitable balance in gwei
     uint256 public constant FULL_EXIT_GWEI = 2_048_000_000_000;
+    uint256 public constant VALIDATOR_PUBKEY_LENGTH = 48;
 
     //-------------------------------------------------------------------------
     //-----------------------------  Admin  -----------------------------------
@@ -218,7 +219,7 @@ contract EtherFiNodesManager is
      *        - amountGwei: 0 for full exit, >0 for partial to pod
      * @custom:fee Send EXACT ETH to cover sum of (feePerPod * requestsForPod).
      */
-    function requestExecutionLayerTriggeredWithdrawal(IEigenPod.WithdrawalRequest[] calldata requests) external payable onlyConsolidationExecutor whenNotPaused nonReentrant {
+    function requestExecutionLayerTriggeredWithdrawal(IEigenPod.WithdrawalRequest[] calldata requests) external payable nonReentrant onlyConsolidationExecutor whenNotPaused {
         if (requests.length == 0) revert EmptyWithdrawalsRequest();
 
         // rate limit the amount of the that can be withdrawn from beacon chain
@@ -262,7 +263,7 @@ contract EtherFiNodesManager is
      * @dev EigenLayer validates that validators belong to the pod automatically.
      * @custom:fee Send EXACT ETH to cover consolidation fees.
      */
-    function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable onlyConsolidationExecutor whenNotPaused nonReentrant {
+    function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable nonReentrant onlyConsolidationExecutor whenNotPaused {
         if (requests.length == 0) revert EmptyConsolidationRequest();
 
         // rate limit consolidation requests - each request could affect up to FULL_EXIT_GWEI
@@ -324,7 +325,7 @@ contract EtherFiNodesManager is
 
     ///@notice Calculates the pubkey hash of a validator's pubkey as per SSZ spec
     function calculateValidatorPubkeyHash(bytes memory pubkey) public pure returns (bytes32) {
-        if (pubkey.length != 48) revert InvalidPubKeyLength();
+        if (pubkey.length != VALIDATOR_PUBKEY_LENGTH) revert InvalidPubKeyLength();
         return sha256(abi.encodePacked(pubkey, bytes16(0)));
     }
 
