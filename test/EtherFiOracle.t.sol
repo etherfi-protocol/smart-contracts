@@ -2466,7 +2466,7 @@ contract EtherFiOracleTest is TestSetup {
 
         etherFiAdminInstance.finalizeWithdrawalsWhenStale();
 
-        vm.warp(block.timestamp + etherFiAdminInstance.STALE_REPORT_FINALIZATION_COOLDOWN() + 1);
+        vm.roll(block.number + etherFiAdminInstance.STALE_REPORT_FINALIZATION_COOLDOWN() + 1);
 
         vm.expectRevert(EtherFiAdmin.NoWithdrawalsToFinalize.selector);
         etherFiAdminInstance.finalizeWithdrawalsWhenStale();
@@ -2494,7 +2494,7 @@ contract EtherFiOracleTest is TestSetup {
         // doesn't trip its own InsufficientLiquidity guard.
         _seedLp(10 ether);
 
-        vm.warp(block.timestamp + etherFiAdminInstance.STALE_REPORT_FINALIZATION_COOLDOWN() + 1);
+        vm.roll(block.number + etherFiAdminInstance.STALE_REPORT_FINALIZATION_COOLDOWN() + 1);
 
         etherFiAdminInstance.finalizeWithdrawalsWhenStale();
         assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), uint32(r2));

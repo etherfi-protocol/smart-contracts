@@ -97,9 +97,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     uint256 public constant MIN_WITHDRAW_AMOUNT = 0.001 ether;
     uint256 public constant MAX_WITHDRAW_AMOUNT = 1000 ether;
     uint256 public constant SHARE_UNIT = 1e18;
-    uint256 public constant LP_INITIAL_VALIDATOR_DEPOSIT = 1 ether;
-    uint256 public constant MIN_VALIDATOR_SIZE_WEI = 32 ether;
-    uint256 public constant MAX_VALIDATOR_SIZE_WEI = 2048 ether;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -396,7 +393,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         if (!roleRegistry.hasRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
 
         // liquidity pool supplies 1 eth per validator
-        uint256 outboundEthAmountFromLp = LP_INITIAL_VALIDATOR_DEPOSIT * _bidIds.length;
+        uint256 outboundEthAmountFromLp = stakingManager.INITIAL_DEPOSIT_AMOUNT() * _bidIds.length;
         stakingManager.createBeaconValidators{value: outboundEthAmountFromLp}(_depositData, _bidIds, _etherFiNode);
 
         _accountForEthSentOut(outboundEthAmountFromLp);
@@ -411,7 +408,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         bytes[] calldata _signatures
     ) external nonReentrant whenNotPaused {
         if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
-        if (validatorSizeWei < MIN_VALIDATOR_SIZE_WEI || validatorSizeWei > MAX_VALIDATOR_SIZE_WEI) revert InvalidValidatorSize();
+        if (validatorSizeWei < stakingManager.MIN_VALIDATOR_SIZE_WEI() || validatorSizeWei > stakingManager.MAX_VALIDATOR_SIZE_WEI()) revert InvalidValidatorSize();
         if (_validatorIds.length == 0 || _validatorIds.length != _pubkeys.length || _validatorIds.length != _signatures.length) revert InvalidArrayLengths();
 
         // we have already deposited the initial amount to create the validator on the beacon chain
@@ -454,7 +451,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         uint256 _validatorSizeWei
     ) external nonReentrant whenNotPaused {
         if (!roleRegistry.hasRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
-        if (_validatorSizeWei < MIN_VALIDATOR_SIZE_WEI || _validatorSizeWei > MAX_VALIDATOR_SIZE_WEI) revert InvalidValidatorSize();
+        if (_validatorSizeWei < stakingManager.MIN_VALIDATOR_SIZE_WEI() || _validatorSizeWei > stakingManager.MAX_VALIDATOR_SIZE_WEI()) revert InvalidValidatorSize();
 
         // we have already deposited the initial amount to create the validator on the beacon chain
         uint256 remainingEthPerValidator = _validatorSizeWei - stakingManager.INITIAL_DEPOSIT_AMOUNT();
@@ -469,7 +466,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     ///   In a future upgrade this will be a parameter to that call but was done like this to
     ///   to limit changes to other dependent contracts
     function setValidatorSizeWei(uint256 _validatorSizeWei) external onlyAdmin {
-        if (_validatorSizeWei < MIN_VALIDATOR_SIZE_WEI || _validatorSizeWei > MAX_VALIDATOR_SIZE_WEI) revert InvalidValidatorSize();
+        if (_validatorSizeWei < stakingManager.MIN_VALIDATOR_SIZE_WEI() || _validatorSizeWei > stakingManager.MAX_VALIDATOR_SIZE_WEI()) revert InvalidValidatorSize();
         validatorSizeWei = _validatorSizeWei;
     }
 

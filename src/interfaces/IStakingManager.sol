@@ -21,6 +21,8 @@ interface IStakingManager {
     }
 
     function INITIAL_DEPOSIT_AMOUNT() external view returns (uint256);
+    function MIN_VALIDATOR_SIZE_WEI() external view returns (uint256);
+    function MAX_VALIDATOR_SIZE_WEI() external view returns (uint256);
 
     // deposit flow
     function registerBeaconValidators(DepositData[] calldata depositData, uint256[] calldata bidIds, address etherFiNode) external;

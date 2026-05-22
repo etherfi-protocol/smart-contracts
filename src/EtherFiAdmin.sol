@@ -54,13 +54,13 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     RoleRegistry private DEPRECATED_roleRegistry;
 
-    uint256 public lastStaleReportFinalizationTimestamp;
+    uint256 public lastStaleReportFinalizationBlock;
     uint256 public maxFinalizedWithdrawalAmountPerDay;
     uint256 public maxNumValidatorsToApprovePerDay;
 
     // Protocol fees must not exceed 1/MAX_PROTOCOL_FEE_INV_RATIO of total rewards (currently 20%).
     uint256 public constant MAX_PROTOCOL_FEE_INV_RATIO = 5;
-    uint256 public constant STALE_REPORT_FINALIZATION_COOLDOWN = 1 days;
+    uint256 public constant STALE_REPORT_FINALIZATION_COOLDOWN = 7200; // 1 day
     uint256 public constant BASIS_POINTS_DENOMINATOR = 10_000;
 
     IEtherFiOracle public immutable etherFiOracle;
@@ -227,7 +227,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     ///         if no valid pending requests can be covered.
     function finalizeWithdrawalsWhenStale() external {
         if (block.number < etherFiOracle.lastPublishedReportRefBlock() + staleOracleReportBlockWindow) revert OracleReportNotStale();
-        if (block.timestamp < lastStaleReportFinalizationTimestamp + STALE_REPORT_FINALIZATION_COOLDOWN) revert StaleReportFinalizationCooldown();
+        if (block.number < lastStaleReportFinalizationBlock + STALE_REPORT_FINALIZATION_COOLDOWN) revert StaleReportFinalizationCooldown();
 
         uint256 liquidity = liquidityPool.totalValueInLp();
         uint32 currentRequestId = withdrawRequestNft.nextRequestId() - 1;
@@ -235,6 +235,9 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         uint32 requestId = lastFinalizedRequestId;
         uint128 finalizedWithdrawalAmount;
         while (requestId < currentRequestId) {
+            if (requestId - lastFinalizedRequestId > maxNumberOfRequestsToFinalizePerReport) {
+                break;
+            }
             IWithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNft.getRequest(requestId + 1);
             if (!request.isValid) {
                 requestId++;
@@ -248,7 +251,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
         if (finalizedWithdrawalAmount == 0) revert NoWithdrawalsToFinalize();
         _finalizeWithdrawals(requestId, finalizedWithdrawalAmount);
-        lastStaleReportFinalizationTimestamp = block.timestamp;
+        lastStaleReportFinalizationBlock = block.number;
     }
 
     //protocol owns the eth that was distributed to NO and treasury in eigenpods and etherfinodes 
