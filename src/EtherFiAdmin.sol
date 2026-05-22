@@ -102,7 +102,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     error IncorrectRole();
     error InvalidMaxAcceptableFinalizedWithdrawalAmount();
-    error InvalidMaxNumberOfRequestsToFinalizePerDay();
+    error InvalidMaxNumberOfRequestsToFinalizePerReport();
     error InvalidMaxFinalizedWithdrawalAmountPerDay();
     error InvalidMaxNumValidatorsToApprovePerDay();
     error InvalidAcceptableRebaseApr();
@@ -132,7 +132,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (_maxValidatorTaskBatchSize == 0) revert InvalidValidatorTaskBatchSize();
         if (_staleOracleReportBlockWindow == 0) revert InvalidStaleOracleReportBlockWindow();
         if (_maxAcceptableFinalizedWithdrawalAmountPerDay == 0) revert InvalidMaxAcceptableFinalizedWithdrawalAmount();
-        if (_maxNumberOfRequestsToFinalizePerReport == 0) revert InvalidMaxNumberOfRequestsToFinalizePerDay();
+        if (_maxNumberOfRequestsToFinalizePerReport == 0) revert InvalidMaxNumberOfRequestsToFinalizePerReport();
 
         etherFiOracle = IEtherFiOracle(_constructorAddresses.etherFiOracle);
         stakingManager = IStakingManager(_constructorAddresses.stakingManager);

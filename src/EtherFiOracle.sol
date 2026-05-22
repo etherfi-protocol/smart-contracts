@@ -308,14 +308,14 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         emit ConsensusVersionUpdated(_consensusVersion);
     }
 
-    function unpublishReport(OracleReport calldata _report, uint32 _lastPublishedReportRefSlot, uint32 _lastPublishedReportRefBlock) public onlyOperations {
+    function unpublishReport(OracleReport calldata _report) public onlyOperations {
         bytes32 _hash = generateReportHash(_report);
         if (!consensusStates[_hash].consensusReached) revert ConsensusNotReached();
         if (_report.refSlotTo <= etherFiAdmin.lastHandledReportRefSlot()) revert ReportExecuted();
         consensusStates[_hash].support = 0;
         consensusStates[_hash].consensusReached = false;
-        lastPublishedReportRefSlot = _lastPublishedReportRefSlot;
-        lastPublishedReportRefBlock = _lastPublishedReportRefBlock;
+        lastPublishedReportRefSlot = _report.refSlotFrom - 1;
+        lastPublishedReportRefBlock = _report.refBlockFrom - 1;
         emit ReportUnpublished(_hash);
     }
 
