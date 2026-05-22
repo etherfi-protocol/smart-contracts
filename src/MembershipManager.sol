@@ -76,8 +76,6 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     IRoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
 
-    bytes32 public constant MEMBERSHIP_MANAGER_OPERATIONS_ROLE = keccak256("MEMBERSHIP_MANAGER_OPERATIONS_ROLE");
-
     uint256 public constant BASIS_POINTS_DENOMINATOR = 10000;
     uint256 public constant FEE_UNIT = 0.001 ether;
 
@@ -770,7 +768,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     }
 
     modifier onlyOperations() {
-        if (!roleRegistry.hasRole(MEMBERSHIP_MANAGER_OPERATIONS_ROLE, msg.sender)) revert IncorrectRole();
+        roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }
 }

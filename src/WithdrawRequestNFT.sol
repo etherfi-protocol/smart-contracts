@@ -61,7 +61,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     uint32 public nextRequestId;
     uint32 public lastFinalizedRequestId;
     uint16 public shareRemainderSplitToTreasuryInBps;
-    uint16 public _unused_gap;
+    uint16 private _unused_gap;
 
     // inclusive
     uint32 private DEPRECATED_currentRequestIdToScanFromForShareRemainder;

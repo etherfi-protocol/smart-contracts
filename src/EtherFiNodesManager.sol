@@ -139,22 +139,22 @@ contract EtherFiNodesManager is
         verifyCheckpointProofs(etherfiNodeAddress(id), balanceContainerProof, proofs);
     }
 
-    function setProofSubmitter(address node, address proofSubmitter) public onlyEigenlayerAdmin whenNotPaused {
+    function setProofSubmitter(address node, address proofSubmitter) public onlyOperations whenNotPaused {
         _validateNode(node);
         IEtherFiNode(node).setProofSubmitter(proofSubmitter);
     }
     
-    function setProofSubmitter(uint256 id, address proofSubmitter) external onlyEigenlayerAdmin whenNotPaused {
+    function setProofSubmitter(uint256 id, address proofSubmitter) external onlyOperations whenNotPaused {
         setProofSubmitter(etherfiNodeAddress(id), proofSubmitter);
     }
 
-    function queueETHWithdrawal(address node, uint256 amount) public onlyEigenlayerAdmin whenNotPaused returns (bytes32 withdrawalRoot) {
+    function queueETHWithdrawal(address node, uint256 amount) public onlyConsolidationExecutor whenNotPaused returns (bytes32 withdrawalRoot) {
         _validateNode(node);
         rateLimiter.consume(UNRESTAKING_LIMIT_ID, SafeCast.toUint64(amount / 1 gwei));
         return IEtherFiNode(node).queueETHWithdrawal(amount);
     }
     
-    function queueETHWithdrawal(uint256 id, uint256 amount) external onlyEigenlayerAdmin whenNotPaused returns (bytes32 withdrawalRoot) {
+    function queueETHWithdrawal(uint256 id, uint256 amount) external onlyConsolidationExecutor whenNotPaused returns (bytes32 withdrawalRoot) {
         return queueETHWithdrawal(etherfiNodeAddress(id), amount);
     }
 

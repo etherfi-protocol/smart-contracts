@@ -72,13 +72,6 @@ contract StakingManager is
         roleRegistry.onlyProtocolUpgrader(msg.sender);
     }
 
-    function pauseContract() external onlyOperations {
-        _pause();
-    }
-    function unPauseContract() external onlyOperations {
-        _unpause();
-    }
-
     //---------------------------------------------------------------------------
     //------------------------- Deposit Flow ------------------------------------
     //---------------------------------------------------------------------------

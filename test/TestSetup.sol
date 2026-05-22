@@ -815,7 +815,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(blacklisterInstance),
             address(nodeOperatorManagerProxy),
             address(stakingManagerProxy),
-            address(membershipManagerProxy)
+            address(membershipManagerProxy),
+            address(treasuryInstance)
         );
         auctionInstance.upgradeTo(address(auctionImplementation));
         auctionInstance.initialize(address(nodeOperatorManagerInstance));

@@ -9,6 +9,8 @@ import "../interfaces/IRoleRegistry.sol";
 contract Blacklister is Initializable, UUPSUpgradeable {
     IRoleRegistry public immutable roleRegistry;
 
+    uint256 public constant BLACKLIST_DURATION = 3 days;
+
     mapping(address => uint256) public blacklistedUntil;
 
     error BlacklistedUser(address user);
@@ -33,8 +35,8 @@ contract Blacklister is Initializable, UUPSUpgradeable {
 
     function blacklistUserUntil(address user) external onlyGuardian {
         if (blacklistedUntil[user] > block.timestamp) revert UserAlreadyBlacklisted(user);
-        blacklistedUntil[user] = block.timestamp + 1 days;
-        emit UserBlacklistedUntil(user, block.timestamp + 1 days);
+        blacklistedUntil[user] = block.timestamp + BLACKLIST_DURATION;
+        emit UserBlacklistedUntil(user, block.timestamp + BLACKLIST_DURATION);
     }
 
     function setBlacklistUntil(address user, uint256 until) external onlyOperations {

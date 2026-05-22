@@ -88,7 +88,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         vm.prank(liquidityPool.owner());
         liquidityPool.upgradeTo(address(liquidityPoolImpl));
 
-        AuctionManager auctionManagerImpl = new AuctionManager(address(roleRegistry), address(blacklister), address(nodeOperatorManager), address(stakingManager), 0x3d320286E014C3e1ce99Af6d6B00f0C1D63E3000);
+        AuctionManager auctionManagerImpl = new AuctionManager(address(roleRegistry), address(blacklister), address(nodeOperatorManager), address(stakingManager), 0x3d320286E014C3e1ce99Af6d6B00f0C1D63E3000, 0x0c83EAe1FE72c390A02E426572854931EefF93BA);
         vm.prank(auctionManager.owner());
         auctionManager.upgradeTo(address(auctionManagerImpl));
 

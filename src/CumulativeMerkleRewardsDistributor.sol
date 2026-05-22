@@ -53,7 +53,7 @@ using SafeERC20 for IERC20;
         claimDelay = 2 days; // 48 hours
     }
 
-    function setClaimDelay(uint256 _claimDelay) external onlyOperations {
+    function setClaimDelay(uint256 _claimDelay) external onlyAdmin {
         claimDelay = _claimDelay;
         emit ClaimDelayUpdated(claimDelay);
     }
@@ -131,7 +131,7 @@ using SafeERC20 for IERC20;
         emit Claimed(token, account, amount);
     }
 
-    function updateWhitelistedRecipient(address user, bool isWhitelisted) external onlyOperations {
+    function updateWhitelistedRecipient(address user, bool isWhitelisted) external onlyAdmin {
         whitelistedRecipient[user] = isWhitelisted;
         emit RecipientStatusUpdated(user, isWhitelisted);
     }

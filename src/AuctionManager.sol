@@ -54,6 +54,7 @@ contract AuctionManager is
     INodeOperatorManager public immutable nodeOperatorManager;
     address public immutable stakingManagerContractAddress;
     address public immutable membershipManagerContractAddress;
+    address public immutable treasury;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -79,14 +80,16 @@ contract AuctionManager is
     error InvalidMaxBid();
     error InvalidWhitelistAmount();
     error IncorrectCaller();
+    error IncorrectRole();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _roleRegistry, address _blacklister, address _nodeOperatorManagerContract, address _stakingManagerContractAddress, address _membershipManagerContractAddress) {
+    constructor(address _roleRegistry, address _blacklister, address _nodeOperatorManagerContract, address _stakingManagerContractAddress, address _membershipManagerContractAddress, address _treasury) {
         roleRegistry = IRoleRegistry(_roleRegistry);
         blacklister = IBlacklister(_blacklister);
         nodeOperatorManager = INodeOperatorManager(_nodeOperatorManagerContract);
         stakingManagerContractAddress = _stakingManagerContractAddress;
         membershipManagerContractAddress = _membershipManagerContractAddress;
+        treasury = _treasury;
         _disableInitializers();
     }
 
@@ -231,10 +234,11 @@ contract AuctionManager is
         }
     }
 
-    function transferAccumulatedRevenue() external onlyOperations {
+    function transferAccumulatedRevenue() external {
+        if (!roleRegistry.hasRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
         uint256 transferAmount = accumulatedRevenue;
         accumulatedRevenue = 0;
-        (bool sent, ) = membershipManagerContractAddress.call{value: transferAmount}("");
+        (bool sent, ) = treasury.call{value: transferAmount}("");
         if (!sent) revert EtherTransferFailed();
     }
 

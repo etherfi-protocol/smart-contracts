@@ -46,6 +46,36 @@ interface ILido is IERC20 {
     function DOMAIN_SEPARATOR() external view returns (bytes32);
 }
 
+/// @title Router token swapping functionality
+/// @notice Functions for swapping tokens via PancakeSwap V3
+interface IPancackeV3SwapRouter {
+    function WETH9() external returns (address);
+
+    struct ExactInputSingleParams {
+        address tokenIn;
+        address tokenOut;
+        uint24 fee;
+        address recipient;
+        uint256 deadline;
+        uint256 amountIn;
+        uint256 amountOutMinimum;
+        uint160 sqrtPriceLimitX96;
+    }
+
+    /// @notice Swaps `amountIn` of one token for as much as possible of another token
+    /// @dev Setting `amountIn` to 0 will cause the contract to look up its own balance,
+    /// and swap the entire amount, enabling contracts to send tokens before calling this function.
+    /// @param params The parameters necessary for the swap, encoded as `ExactInputSingleParams` in calldata
+    /// @return amountOut The amount of the received token
+    function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256 amountOut);
+
+    function unwrapWETH9(uint256 amountMinimum, address recipient) external payable;
+}
+
+interface IERC20Burnable is IERC20 {
+    function burn(uint256 amount) external;
+}
+
 // mainnet: 0x858646372CC42E1A627fcE94aa7A7033e7CF075A
 interface IEigenLayerStrategyManager is IStrategyManager {
     function withdrawalRootPending(bytes32 _withdrawalRoot) external view returns (bool);

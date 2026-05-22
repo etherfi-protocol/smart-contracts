@@ -339,18 +339,18 @@ contract EtherFiNodesManagerTest is TestSetup {
     
     function test_setProofSubmitter_byAddress() public {
         address newSubmitter = address(0x123);
-        vm.prank(eigenlayerAdmin);
+        vm.prank(owner);
         managerInstance.setProofSubmitter(testNode, newSubmitter);
     }
     
     function test_setProofSubmitter_byId() public {
         address newSubmitter = address(0x123);
-        vm.prank(eigenlayerAdmin);
+        vm.prank(owner);
         managerInstance.setProofSubmitter(testLegacyId, newSubmitter);
     }
     
     function test_setProofSubmitter_unauthorized() public {
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         vm.prank(bob);
         managerInstance.setProofSubmitter(testNode, address(0x123));
     }
@@ -987,7 +987,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         _grantNmPauseUntilRoles();
         _pauseUntil();
         _expectPausedUntilRevert();
-        vm.prank(eigenlayerAdmin);
+        vm.prank(owner);
         managerInstance.setProofSubmitter(testNode, bob);
     }
 
@@ -995,7 +995,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         _grantNmPauseUntilRoles();
         _pauseUntil();
         _expectPausedUntilRevert();
-        vm.prank(eigenlayerAdmin);
+        vm.prank(owner);
         managerInstance.setProofSubmitter(testLegacyId, bob);
     }
 
@@ -1003,7 +1003,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         _grantNmPauseUntilRoles();
         _pauseUntil();
         _expectPausedUntilRevert();
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         managerInstance.queueETHWithdrawal(testNode, 1 ether);
     }
 
@@ -1011,7 +1011,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         _grantNmPauseUntilRoles();
         _pauseUntil();
         _expectPausedUntilRevert();
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         managerInstance.queueETHWithdrawal(testLegacyId, 1 ether);
     }
 

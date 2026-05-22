@@ -689,7 +689,7 @@ contract PreludeTest is Test, ArrayTestHelper {
             .with_key(etherFiNodeAddress)
             .checked_write_int(int256(10_000 ether));
 
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(pubkeyHash), 1 ether);
 
         uint256 startingBalance = address(liquidityPool).balance;
@@ -745,7 +745,7 @@ contract PreludeTest is Test, ArrayTestHelper {
             .with_key(nodeAddr)
             .checked_write_int(int256(10_000 ether));
 
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         bytes32 root = etherFiNodesManager.queueETHWithdrawal(uint256(pubkeyHash), 1 ether);
 
         // build the explicit Withdrawal struct that mirrors what the node queued
@@ -861,7 +861,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.startPrank(user);
 
         // Normal user should fail for all eigenlayer functions
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         etherFiNodesManager.setProofSubmitter(nodeId, address(0));
 
         vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
@@ -982,7 +982,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         IEtherFiNode newNode = IEtherFiNode(stakingManager.instantiateEtherFiNode(/*createEigenPod=*/true));
         address newSubmitter = vm.addr(0xabc123);
 
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.setProofSubmitter(address(newNode), newSubmitter);
 
         IEigenPod pod = newNode.getEigenPod();
@@ -1091,7 +1091,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         uint256 startingLPBalance = address(liquidityPool).balance;
 
         // should be able to withdraw arbitrary amounts not tied to any particular validator
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val1.pubkeyHash), 1234 ether);
 
         // need to fast forward so that withdrawal is claimable
@@ -1120,11 +1120,11 @@ contract PreludeTest is Test, ArrayTestHelper {
         TestValidator memory val = helper_createValidator(params);
 
         // queue up multiple withdrawals
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 1 ether);
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 1 ether);
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 1 ether);
 
         // need to fast forward so that withdrawal is claimable
@@ -1392,16 +1392,16 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.stopPrank();
 
         // First withdrawal within limit should succeed
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 5 ether);
 
         // Second withdrawal within limit should succeed
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 4 ether);
 
         // Third withdrawal exceeding limit should fail
         vm.expectRevert();
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 2 ether);
     }
 
@@ -1513,7 +1513,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.stopPrank();
 
         // Test consuming within capacity - should succeed
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 30 ether);
         
         // Check remaining capacity is reduced
@@ -1522,11 +1522,11 @@ contract PreludeTest is Test, ArrayTestHelper {
         
         // Test consuming more than remaining capacity - should fail
         vm.expectRevert(abi.encodeWithSignature("LimitExceeded()"));
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 25 ether);
         
         // Test consuming exactly remaining capacity - should succeed
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 20 ether);
         
         // Verify capacity is now exhausted
@@ -1585,13 +1585,13 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.stopPrank();
 
         // Test multiple consumption attempts within capacity - all should succeed
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val1.pubkeyHash), 25 ether);
         
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val2.pubkeyHash), 30 ether);
         
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val3.pubkeyHash), 20 ether);
         
         // Check remaining capacity after multiple consumptions (100 - 25 - 30 - 20 = 25 ETH)
@@ -1609,11 +1609,11 @@ contract PreludeTest is Test, ArrayTestHelper {
         
         // Test final consumption that would exceed remaining capacity should fail
         vm.expectRevert(abi.encodeWithSignature("LimitExceeded()"));
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val1.pubkeyHash), 30 ether);
         
         // Test final consumption within remaining capacity should succeed
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val1.pubkeyHash), 25 ether);
         
         // Verify capacity is now exhausted

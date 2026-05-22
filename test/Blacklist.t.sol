@@ -332,30 +332,30 @@ contract BlacklistTest is TestSetup {
         roleRegistryInstance.grantRole(role, who);
     }
 
-    function test_blacklistUserUntil_default_sets_one_day_window() public {
+    function test_blacklistUserUntil_default_sets_three_days_window() public {
         _grantBlacklistUntilRoleTo(owner);
 
         uint256 t0 = block.timestamp;
         vm.prank(owner);
         blacklisterInstance.blacklistUserUntil(tempBlacklisted);
 
-        assertEq(blacklisterInstance.blacklistedUntil(tempBlacklisted), t0 + 1 days);
+        assertEq(blacklisterInstance.blacklistedUntil(tempBlacklisted), t0 + 3 days);
 
         // Inside the window: gate closed.
         _expectBlacklistedRevert(tempBlacklisted);
         blacklisterInstance.nonBlacklisted(tempBlacklisted);
 
         // One second before expiry: still closed.
-        vm.warp(t0 + 1 days - 1);
+        vm.warp(t0 + 3 days - 1);
         _expectBlacklistedRevert(tempBlacklisted);
         blacklisterInstance.nonBlacklisted(tempBlacklisted);
 
         // At expiry (strict `>` check): gate opens.
-        vm.warp(t0 + 1 days);
+        vm.warp(t0 + 3 days);
         blacklisterInstance.nonBlacklisted(tempBlacklisted);
 
         // After expiry: still open.
-        vm.warp(t0 + 1 days + 1);
+        vm.warp(t0 + 3 days + 1);
         blacklisterInstance.nonBlacklisted(tempBlacklisted);
     }
 
@@ -371,7 +371,7 @@ contract BlacklistTest is TestSetup {
         _grantBlacklistUntilRoleTo(owner);
 
         vm.expectEmit(false, false, false, true, address(blacklisterInstance));
-        emit Blacklister.UserBlacklistedUntil(tempBlacklisted, block.timestamp + 1 days);
+        emit Blacklister.UserBlacklistedUntil(tempBlacklisted, block.timestamp + 3 days);
 
         vm.prank(owner);
         blacklisterInstance.blacklistUserUntil(tempBlacklisted);

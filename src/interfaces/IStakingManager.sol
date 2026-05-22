@@ -37,10 +37,6 @@ interface IStakingManager {
     function getEtherFiNodeBeacon() external view returns (address);
     function deployedEtherFiNodes(address etherFiNode) external view returns (bool);
 
-    // protocol
-    function pauseContract() external;
-    function unPauseContract() external;
-
     // prevent storage shift on upgrade
     struct LegacyStakingManagerState {
         uint256[14] legacyState;
