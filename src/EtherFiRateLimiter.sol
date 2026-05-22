@@ -5,12 +5,10 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 
 import "./interfaces/IEtherFiRateLimiter.sol";
-import "./interfaces/IRoleRegistry.sol";
+import "./utils/RolesLibrary.sol";
 import "lib/BucketLimiter.sol";
 
-contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeable, PausableUpgradeable {
-
-    IRoleRegistry public immutable roleRegistry;
+contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeable, PausableUpgradeable, RolesLibrary {
 
     //---------------------------------------------------------------------------
     //---------------------------  Storage  -------------------------------------
@@ -21,8 +19,7 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     //-------------------------------------------------------------------------
     //-------------------------  Deployment  ----------------------------------
     //-------------------------------------------------------------------------
-    constructor(address _roleRegistry) {
-        roleRegistry = IRoleRegistry(_roleRegistry);
+    constructor(address _roleRegistry) RolesLibrary(_roleRegistry) {
         _disableInitializers();
     }
 
@@ -32,7 +29,7 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     }
 
     function _authorizeUpgrade(address newImplementation) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
+        _onlyProtocolUpgrader();
     }
 
     //-------------------------------------------------------------------------
@@ -91,12 +88,12 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     }
 
     /// @notice Pauses the contract, preventing consumption operations
-    function pauseContract() external onlyOperations {
+    function pauseContract() external onlyOperatingMultisig {
         _pause();
     }
 
     /// @notice Unpauses the contract, allowing consumption operations
-    function unPauseContract() external onlyOperations {
+    function unPauseContract() external onlyOperatingMultisig {
         _unpause();
     }
 
@@ -182,19 +179,5 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     function limitExists(bytes32 id) public view returns (bool) {
         BucketLimiter.Limit memory limit = limits[id];
         return limit.capacity != 0 || limit.remaining != 0 || limit.lastRefill != 0 || limit.refillRate != 0;
-    }
-
-    //--------------------------------------------------------------------------------------
-    //-----------------------------------  MODIFIERS  --------------------------------------
-    //--------------------------------------------------------------------------------------
-
-    modifier onlyAdmin() {
-        roleRegistry.onlyOperatingTimelock(msg.sender);
-        _;
-    }
-
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
-        _;
     }
 }

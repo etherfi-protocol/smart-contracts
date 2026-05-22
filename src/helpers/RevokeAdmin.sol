@@ -4,13 +4,11 @@ pragma solidity ^0.8.27;
 
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
-import "../interfaces/IRoleRegistry.sol";
+import "../utils/RolesLibrary.sol";
 
-contract RevokeAdmin is Initializable, UUPSUpgradeable {
-    IRoleRegistry public immutable roleRegistry;
+contract RevokeAdmin is Initializable, UUPSUpgradeable, RolesLibrary {
 
-    constructor(address _roleRegistry) {
-        roleRegistry = IRoleRegistry(_roleRegistry);
+    constructor(address _roleRegistry) RolesLibrary(_roleRegistry) {
         _disableInitializers();
     }
 
@@ -19,31 +17,30 @@ contract RevokeAdmin is Initializable, UUPSUpgradeable {
     }
 
     function _authorizeUpgrade(address newImplementation) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
+        _onlyProtocolUpgrader();
     }
 
-    function revokeGuardianRole(address account) external onlyOperations {
-        roleRegistry.revokeFast(roleRegistry.GUARDIAN_ROLE(), account);
+    function revokeGuardianRole(address account) external onlyOperatingMultisig {
+        _revokeFast(roleRegistry.GUARDIAN_ROLE(), account);
     }
 
-    function revokeOracleOperationsRole(address account) external onlyOperations {
-        roleRegistry.revokeFast(roleRegistry.ORACLE_OPERATIONS_ROLE(), account);
+    function revokeOracleOperationsRole(address account) external onlyOperatingMultisig {
+        _revokeFast(roleRegistry.ORACLE_OPERATIONS_ROLE(), account);
     }
 
-    function revokeHousekeepingOperationsRole(address account) external onlyOperations {
-        roleRegistry.revokeFast(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), account);
+    function revokeHousekeepingOperationsRole(address account) external onlyOperatingMultisig {
+        _revokeFast(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), account);
     }
 
-    function revokeExecutorOperationsRole(address account) external onlyOperations {
-        roleRegistry.revokeFast(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), account);
+    function revokeExecutorOperationsRole(address account) external onlyOperatingMultisig {
+        _revokeFast(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), account);
     }
 
-    function revokeEigenpodOperationsRole(address account) external onlyOperations {
-        roleRegistry.revokeFast(roleRegistry.EIGENPOD_OPERATIONS_ROLE(), account);
+    function revokeEigenpodOperationsRole(address account) external onlyOperatingMultisig {
+        _revokeFast(roleRegistry.EIGENPOD_OPERATIONS_ROLE(), account);
     }
 
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
-        _;
+    function _revokeFast(bytes32 role, address account) internal {
+        roleRegistry.revokeFast(role, account);
     }
 }

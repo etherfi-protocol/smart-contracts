@@ -1857,7 +1857,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
     function test_revert_handleRemainderNotFeeClaimer() public {
         vm.prank(regularUser);
-        vm.expectRevert(PriorityWithdrawalQueue.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
         priorityQueue.handleRemainder(1 ether);
     }
 
@@ -1894,7 +1894,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         requests[0] = request;
 
         vm.prank(regularUser);
-        vm.expectRevert(PriorityWithdrawalQueue.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOracleOperations.selector);
         priorityQueue.fulfillRequests(requests);
     }
 

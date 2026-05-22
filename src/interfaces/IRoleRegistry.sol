@@ -117,6 +117,34 @@ interface IRoleRegistry {
     function onlyGuardian(address account) external view;
 
     /**
+     * @notice Checks if an account is the oracle operations
+     * @dev Reverts if the account is not the oracle operations
+     * @param account The address to check
+     */
+    function onlyOracleOperations(address account) external view;
+
+    /**
+     * @notice Checks if an account is the housekeeping operations
+     * @dev Reverts if the account is not the housekeeping operations
+     * @param account The address to check
+     */
+    function onlyHousekeepingOperations(address account) external view;
+
+    /**
+     * @notice Checks if an account is the executor operations
+     * @dev Reverts if the account is not the executor operations
+     * @param account The address to check
+     */
+    function onlyExecutorOperations(address account) external view;
+
+    /**
+     * @notice Checks if an account is the eigenpod operations
+     * @dev Reverts if the account is not the eigenpod operations
+     * @param account The address to check
+     */
+    function onlyEigenpodOperations(address account) external view;
+
+    /**
      * @notice Returns the current owner of the contract
      * @return The address of the current owner
      */

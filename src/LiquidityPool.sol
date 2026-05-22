@@ -7,7 +7,6 @@ import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
-import "./utils/PausableUntil.sol";
 import "./interfaces/IeETH.sol";
 import "./interfaces/IStakingManager.sol";
 import "./interfaces/IWithdrawRequestNFT.sol";
@@ -16,12 +15,13 @@ import "./interfaces/ILiquifier.sol";
 import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/IEtherFiRedemptionManager.sol";
-import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IPriorityWithdrawalQueue.sol";
 import "./interfaces/IBlacklister.sol";
 import "./utils/ReentrancyGuardNamespaced.sol";
+import "./utils/RolesLibrary.sol";
+import "./utils/PausableUntil.sol";
 
-contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardNamespaced, PausableUntil, ILiquidityPool {
+contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardNamespaced, PausableUntil, RolesLibrary, ILiquidityPool {
     using SafeERC20 for IERC20;
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
@@ -86,7 +86,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     IWithdrawRequestNFT public immutable withdrawRequestNFT;
     ILiquifier public immutable liquifier;
     IEtherFiRedemptionManager public immutable etherFiRedemptionManager;
-    IRoleRegistry public immutable roleRegistry;
     IPriorityWithdrawalQueue public immutable priorityWithdrawalQueue;
     IBlacklister public immutable blacklister;
     address public immutable etherFiAdminContract;
@@ -136,7 +135,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     error DataNotSet();
     error InsufficientLiquidity();
     error SendFail();
-    error IncorrectRole();
     error InvalidValidatorSize();
     error InvalidArrayLengths();
     error InvalidAmountForShare();
@@ -166,14 +164,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(ConstructorAddresses memory _constructorAddresses, uint256 _minAmountForShare) {
+    constructor(ConstructorAddresses memory _constructorAddresses, uint256 _minAmountForShare) RolesLibrary(_constructorAddresses.roleRegistry) {
         stakingManager = IStakingManager(_constructorAddresses.stakingManager);
         nodesManager = IEtherFiNodesManager(_constructorAddresses.nodesManager);
         eETH = IeETH(_constructorAddresses.eETH);
         withdrawRequestNFT = IWithdrawRequestNFT(_constructorAddresses.withdrawRequestNFT);
         liquifier = ILiquifier(_constructorAddresses.liquifier);
         etherFiRedemptionManager = IEtherFiRedemptionManager(payable(_constructorAddresses.etherFiRedemptionManager));
-        roleRegistry = IRoleRegistry(_constructorAddresses.roleRegistry);
         priorityWithdrawalQueue = IPriorityWithdrawalQueue(_constructorAddresses.priorityWithdrawalQueue);
         blacklister = IBlacklister(_constructorAddresses.blacklister);
         etherFiAdminContract = _constructorAddresses.etherFiAdminContract;
@@ -391,9 +388,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         IStakingManager.DepositData[] calldata _depositData,
         uint256[] calldata _bidIds,
         address _etherFiNode
-    ) external nonReentrant whenNotPaused {
-        if (!roleRegistry.hasRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
-
+    ) external nonReentrant whenNotPaused onlyOracleOperations {
         // liquidity pool supplies 1 eth per validator
         uint256 outboundEthAmountFromLp = stakingManager.INITIAL_DEPOSIT_AMOUNT() * _bidIds.length;
         stakingManager.createBeaconValidators{value: outboundEthAmountFromLp}(_depositData, _bidIds, _etherFiNode);
@@ -451,8 +446,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     function confirmAndFundBeaconValidators(
         IStakingManager.DepositData[] calldata _depositData,
         uint256 _validatorSizeWei
-    ) external nonReentrant whenNotPaused {
-        if (!roleRegistry.hasRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
+    ) external nonReentrant whenNotPaused onlyOracleOperations {
         if (_validatorSizeWei < stakingManager.MIN_VALIDATOR_SIZE_WEI() || _validatorSizeWei > stakingManager.MAX_VALIDATOR_SIZE_WEI()) revert InvalidValidatorSize();
 
         // we have already deposited the initial amount to create the validator on the beacon chain
@@ -484,7 +478,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     /// @notice Removes a Validator Spawner
     /// @param _user the address of the Validator Spawner to remove
-    function unregisterValidatorSpawner(address _user) external onlyOperations {
+    function unregisterValidatorSpawner(address _user) external onlyOperatingMultisig {
         if (!validatorSpawner[_user].registered) revert NotRegistered();
 
         delete validatorSpawner[_user];
@@ -526,7 +520,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     // Pauses the contract
-    function pauseContract() external onlyOperations {
+    function pauseContract() external onlyOperatingMultisig {
         if (paused) revert("Pausable: already paused");
 
         paused = true;
@@ -534,7 +528,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     // Unpauses the contract
-    function unPauseContract() external onlyOperations {
+    function unPauseContract() external onlyOperatingMultisig {
         if (!paused) revert("Pausable: not paused");
 
         paused = false;
@@ -547,7 +541,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     // Unpauses contract from pauseUntil
-    function unpauseContractUntil() external onlyOperations {
+    function unpauseContractUntil() external onlyOperatingMultisig {
         _unpauseUntil();
     }
 
@@ -556,13 +550,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
-    function setMinWithdrawAmount(uint256 _minWithdrawAmount) external onlyOperations {
+    function setMinWithdrawAmount(uint256 _minWithdrawAmount) external onlyOperatingMultisig {
         if (_minWithdrawAmount > maxWithdrawAmount) revert InvalidAmount();
         minWithdrawAmount = _minWithdrawAmount;
         emit MinWithdrawAmountSet(_minWithdrawAmount);
     }
 
-    function setMaxWithdrawAmount(uint256 _maxWithdrawAmount) external onlyOperations {
+    function setMaxWithdrawAmount(uint256 _maxWithdrawAmount) external onlyOperatingMultisig {
         if (_maxWithdrawAmount == 0 || _maxWithdrawAmount < minWithdrawAmount) revert InvalidAmount();
         maxWithdrawAmount = _maxWithdrawAmount;
         emit MaxWithdrawAmountSet(_maxWithdrawAmount);
@@ -671,7 +665,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     function _authorizeUpgrade(address newImplementation) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
+        _onlyProtocolUpgrader();
     }
 
     //--------------------------------------------------------------------------------------
@@ -756,22 +750,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     modifier nonBlacklisted() {
         blacklister.nonBlacklisted(msg.sender);
-        _;
-    }
-
-
-    modifier onlyAdmin() {
-        roleRegistry.onlyOperatingTimelock(msg.sender);
-        _;
-    }
-
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
-        _;
-    }
-
-    modifier onlyGuardian() {
-        roleRegistry.onlyGuardian(msg.sender);
         _;
     }
 

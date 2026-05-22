@@ -129,15 +129,6 @@ contract RestakingRewardsRouterTest is Test {
         );
     }
 
-    function test_constructor_revertsWithZeroRoleRegistry() public {
-        vm.expectRevert(RestakingRewardsRouter.InvalidAddress.selector);
-        new RestakingRewardsRouter(
-            address(0),
-            address(rewardToken),
-            address(liquidityPool)
-        );
-    }
-
     function test_constructor_disablesInitializers() public {
         vm.expectRevert();
         routerImpl.initialize();
@@ -324,7 +315,7 @@ contract RestakingRewardsRouterTest is Test {
         rewardToken.mint(address(router), amount);
 
         vm.prank(unauthorizedUser);
-        vm.expectRevert(RestakingRewardsRouter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
         router.recoverERC20();
 
         // Should still have tokens since transfer failed

@@ -390,10 +390,10 @@ contract PreludeTest is Test, ArrayTestHelper {
         // user with no role should not be able to forward calls
         vm.startPrank(user);
         {
-            vm.expectRevert(IEtherFiNode.IncorrectRole.selector);
+            vm.expectRevert(RoleRegistry.OnlyEigenpodOperations.selector);
             etherFiNodesManager.forwardEigenPodCall(toArray(etherFiNode), toArray_bytes(""));
 
-            vm.expectRevert(IEtherFiNode.IncorrectRole.selector);
+            vm.expectRevert(RoleRegistry.OnlyEigenpodOperations.selector);
             etherFiNodesManager.forwardExternalCall(toArray(etherFiNode), toArray_bytes(""), address(0));
         }
         vm.stopPrank();
@@ -710,12 +710,12 @@ contract PreludeTest is Test, ArrayTestHelper {
         // Random caller: revert.
         address rando = makeAddr("rando");
         vm.prank(rando);
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
         etherFiNodesManager.sweepFunds(nodeId);
 
         // ADMIN_ROLE alone (held by `admin`) no longer satisfies sweep.
         vm.prank(admin);
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
         etherFiNodesManager.sweepFunds(nodeId);
 
         // EIGENLAYER_ADMIN_ROLE can sweep (no-op when node has no balance).
@@ -864,7 +864,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         etherFiNodesManager.setProofSubmitter(nodeId, address(0));
 
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyEigenpodOperations.selector);
         etherFiNodesManager.startCheckpoint(nodeId);
 
         BeaconChainProofs.BalanceProof[] memory balanceProofs = new BeaconChainProofs.BalanceProof[](1);
@@ -872,36 +872,36 @@ contract PreludeTest is Test, ArrayTestHelper {
             balanceContainerRoot: bytes32(uint256(1)),
             proof: ""
         });
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyEigenpodOperations.selector);
         etherFiNodesManager.verifyCheckpointProofs(nodeId, containerProof, balanceProofs);
 
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyExecutorOperations.selector);
         etherFiNodesManager.queueETHWithdrawal(nodeId, 1 ether);
 
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
         etherFiNodesManager.completeQueuedETHWithdrawals(nodeId, true);
 
         IDelegationManager.QueuedWithdrawalParams[] memory params = new IDelegationManager.QueuedWithdrawalParams[](1);
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
         etherFiNodesManager.queueWithdrawals(nodeId, params);
 
         IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
         IERC20[][] memory tokens = new IERC20[][](1);
         bool[] memory receiveAsTokens = new bool[](1);
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
         etherFiNodesManager.completeQueuedWithdrawals(nodeId, withdrawals, tokens, receiveAsTokens);
 
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
         etherFiNodesManager.sweepFunds(nodeId);
 
         // normal user should fail for all call forwarding
         address[] memory nodes = new address[](1);
         bytes[] memory data = new bytes[](1);
 
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyEigenpodOperations.selector);
         etherFiNodesManager.forwardEigenPodCall(nodes, data);
 
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyEigenpodOperations.selector);
         etherFiNodesManager.forwardExternalCall(nodes, data, address(0));
 
         vm.stopPrank();
@@ -1029,7 +1029,7 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // only POD_PROVER can start checkpoint
         vm.prank(eigenlayerAdmin);
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyEigenpodOperations.selector);
         etherFiNodesManager.startCheckpoint(uint256(val.pubkeyHash));
 
         // initiate a checkpoint
@@ -1053,7 +1053,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         pubkeys[2] = vm.randomBytes(48);
 
         // should fail if not admin
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyExecutorOperations.selector);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
 
         vm.prank(elExiter);
@@ -1599,7 +1599,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         assertEq(remaining, 25_000_000_000);
         
         // Test that unauthorized access is blocked by the access control
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyExecutorOperations.selector);
         vm.prank(user);
         etherFiNodesManager.queueETHWithdrawal(uint256(val1.pubkeyHash), 10 ether);
         

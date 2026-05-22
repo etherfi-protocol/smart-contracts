@@ -101,7 +101,6 @@ interface IStakingManager {
     error InactiveBid();
     error InvalidEtherFiNode();
     error InvalidValidatorSize();
-    error IncorrectRole();
     error InvalidUpgrade();
     error InvalidValidatorCreationStatus();
 

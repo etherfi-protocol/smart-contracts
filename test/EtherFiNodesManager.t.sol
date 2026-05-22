@@ -247,12 +247,12 @@ contract EtherFiNodesManagerTest is TestSetup {
     }
 
     function test_sweepFunds_unauthorized() public {
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
         vm.prank(bob);
         managerInstance.sweepFunds(testLegacyId);
 
         // ADMIN_ROLE alone is not enough — sweepFunds requires EIGENLAYER_ADMIN_ROLE.
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
         vm.prank(admin);
         managerInstance.sweepFunds(testLegacyId);
     }
@@ -323,7 +323,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     }
     
     function test_startCheckpoint_unauthorized() public {
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyEigenpodOperations.selector);
         vm.prank(bob);
         managerInstance.startCheckpoint(testNode);
     }
@@ -356,13 +356,13 @@ contract EtherFiNodesManagerTest is TestSetup {
     }
             
     function test_queueETHWithdrawal_unauthorized() public {
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyExecutorOperations.selector);
         vm.prank(bob);
         managerInstance.queueETHWithdrawal(testNode, 1 ether);
     }
-    
+
     function test_completeQueuedETHWithdrawals_unauthorized() public {
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
         vm.prank(bob);
         managerInstance.completeQueuedETHWithdrawals(testNode, true);
     }
@@ -510,7 +510,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     }
     
     function test_forwardExternalCall_unauthorized() public {
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyEigenpodOperations.selector);
         vm.prank(bob);
         address[] memory nodes = new address[](1);
         bytes[] memory data = new bytes[](1);
@@ -629,7 +629,7 @@ contract EtherFiNodesManagerTest is TestSetup {
             amountGwei: 0
         });
         
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyExecutorOperations.selector);
         vm.prank(bob);
         managerInstance.requestExecutionLayerTriggeredWithdrawal(requests);
     }
@@ -710,7 +710,7 @@ contract EtherFiNodesManagerTest is TestSetup {
             targetPubkey: testPubkey
         });
         
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyExecutorOperations.selector);
         vm.prank(bob);
         managerInstance.requestConsolidation(requests);
     }

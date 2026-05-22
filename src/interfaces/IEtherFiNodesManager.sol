@@ -141,7 +141,6 @@ interface IEtherFiNodesManager {
     error InvalidPubKeyLength();
     error LengthMismatch();
     error InvalidCaller();
-    error IncorrectRole();
     error ForwardedCallNotAllowed();
     error InvalidForwardedCall();
     error EmptyWithdrawalsRequest();

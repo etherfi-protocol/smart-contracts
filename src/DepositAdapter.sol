@@ -13,10 +13,10 @@ import "./interfaces/IeETH.sol";
 import "./interfaces/IWeETH.sol";
 import "./interfaces/IWETH.sol";
 import "./interfaces/IwstETH.sol";
-import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IBlacklister.sol";
+import "./utils/RolesLibrary.sol";
 
-contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
+contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable, RolesLibrary {
     using SafeERC20 for IERC20;
 
     ILiquidityPool public immutable liquidityPool;
@@ -26,7 +26,6 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
     IWETH public immutable wETH;
     IERC20Upgradeable public immutable stETH;
     IwstETH public immutable wstETH;
-    IRoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
 
      enum SourceOfFunds {
@@ -43,7 +42,7 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
     error PermitExpired();
     error EthTransfersNotAccepted();
 
-    constructor(address _liquidityPool, address _liquifier, address _weETH, address _eETH, address _wETH, address _stETH, address _wstETH, address _roleRegistry, address _blacklister) {
+    constructor(address _liquidityPool, address _liquifier, address _weETH, address _eETH, address _wETH, address _stETH, address _wstETH, address _roleRegistry, address _blacklister) RolesLibrary(_roleRegistry) {
         liquidityPool = ILiquidityPool(_liquidityPool);
         liquifier = ILiquifier(_liquifier);
         eETH = IeETH(_eETH);
@@ -51,7 +50,6 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
         wETH = IWETH(_wETH);
         stETH = IERC20Upgradeable(_stETH);
         wstETH = IwstETH(_wstETH);
-        roleRegistry = IRoleRegistry(_roleRegistry);
         blacklister = IBlacklister(_blacklister);
 
         _disableInitializers();
@@ -154,7 +152,7 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
     }
 
     function _authorizeUpgrade(address newImplementation) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
+        _onlyProtocolUpgrader();
     }
 
     modifier nonBlacklisted() {

@@ -12,13 +12,13 @@ import "@openzeppelin-upgradeable/contracts/utils/cryptography/ECDSAUpgradeable.
 import "./interfaces/IeETH.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./AssetRecovery.sol";
-import "./interfaces/IRoleRegistry.sol";
+import "./utils/RolesLibrary.sol";
 import "./interfaces/IBlacklister.sol";
 import "./interfaces/IEtherFiRateLimiter.sol";
 import "./libraries/RateLimitMath.sol";
 import "./utils/PausableUntil.sol";
 
-contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, IERC20PermitUpgradeable, IeETH, AssetRecovery {
+contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, IERC20PermitUpgradeable, IeETH, AssetRecovery, RolesLibrary {
     using CountersUpgradeable for CountersUpgradeable.Counter;
     ILiquidityPool private DEPRECATED_liquidityPool;
 
@@ -41,7 +41,6 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     bytes32 private immutable _TYPE_HASH;
 
     ILiquidityPool public immutable liquidityPool;
-    IRoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
     IEtherFiRateLimiter public immutable rateLimiter;
 
@@ -63,7 +62,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     error TransferAmountExceedsBalance();
     error ContractPaused();
 
-    constructor(address _liquidityPool, address _roleRegistry, address _blacklister, address _rateLimiter) {
+    constructor(address _liquidityPool, address _roleRegistry, address _blacklister, address _rateLimiter) RolesLibrary(_roleRegistry) {
         bytes32 hashedName = keccak256("EETH");
         bytes32 hashedVersion = keccak256("1");
         bytes32 typeHash = keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
@@ -76,7 +75,6 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
 
         if (_liquidityPool == address(0) || _roleRegistry == address(0) || _blacklister == address(0)) revert AddressZero();
         liquidityPool = ILiquidityPool(_liquidityPool);
-        roleRegistry = IRoleRegistry(_roleRegistry);
         blacklister = IBlacklister(_blacklister);
         rateLimiter = IEtherFiRateLimiter(_rateLimiter);
 
@@ -157,12 +155,12 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         return true;
     }
 
-    function pause() external onlyOperations {
+    function pause() external onlyOperatingMultisig {
         paused = true;
         emit Paused();
     }
 
-    function unpause() external onlyOperations {
+    function unpause() external onlyOperatingMultisig {
         paused = false;
         emit Unpaused();
     }
@@ -171,7 +169,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         _pauseUntil();
     }
 
-    function unpauseContractUntil() external onlyOperations {
+    function unpauseContractUntil() external onlyOperatingMultisig {
         _unpauseUntil();
     }
 
@@ -243,7 +241,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     function _authorizeUpgrade(
         address /* newImplementation */
     ) internal view override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
+        _onlyProtocolUpgrader();
     }
 
     function _useNonce(address owner) internal virtual returns (uint256 current) {
@@ -300,26 +298,6 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     // [MODIFIERS]
     modifier onlyPoolContract() {
         if (msg.sender != address(liquidityPool)) revert IncorrectCaller();
-        _;
-    }
-
-    modifier onlyAdmin() {
-        roleRegistry.onlyOperatingTimelock(msg.sender);
-        _;
-    }
-
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
-        _;
-    }
-
-    modifier onlySuperGuardian() {
-        roleRegistry.onlySuperGuardian(msg.sender);
-        _;
-    }
-
-    modifier onlyGuardian() {
-        roleRegistry.onlyGuardian(msg.sender);
         _;
     }
 

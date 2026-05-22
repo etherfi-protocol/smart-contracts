@@ -12,9 +12,9 @@ import {IWeETH} from "../interfaces/IWeETH.sol";
 import {IeETH} from "../interfaces/IeETH.sol";
 import {ILiquidityPool} from "../interfaces/ILiquidityPool.sol";
 import {IWithdrawRequestNFT} from "../interfaces/IWithdrawRequestNFT.sol";
-import {IRoleRegistry} from "../interfaces/IRoleRegistry.sol";
 import {IBlacklister} from "../interfaces/IBlacklister.sol";
 import {PausableUntil} from "../utils/PausableUntil.sol";
+import {RolesLibrary} from "../utils/RolesLibrary.sol";
 
 /**
  * @title WeETHWithdrawAdapter
@@ -26,6 +26,7 @@ contract WeETHWithdrawAdapter is
     UUPSUpgradeable, 
     OwnableUpgradeable, 
     PausableUntil,
+    RolesLibrary,
     IWeETHWithdrawAdapter 
 {
     using SafeERC20 for IERC20;
@@ -38,7 +39,6 @@ contract WeETHWithdrawAdapter is
     IeETH public immutable eETH;
     ILiquidityPool public immutable liquidityPool;
     IWithdrawRequestNFT public immutable withdrawRequestNFT;
-    IRoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
 
     bool public paused;
@@ -71,12 +71,11 @@ contract WeETHWithdrawAdapter is
         address _withdrawRequestNFT,
         address _roleRegistry,
         address _blacklister
-    ) {
+    ) RolesLibrary(_roleRegistry) {
         if (_weETH == address(0) ||
             _eETH == address(0) ||
             _liquidityPool == address(0) ||
             _withdrawRequestNFT == address(0) ||
-            _roleRegistry == address(0) ||
             _blacklister == address(0)) {
             revert ZeroAddress();
         }
@@ -85,7 +84,6 @@ contract WeETHWithdrawAdapter is
         eETH = IeETH(_eETH);
         liquidityPool = ILiquidityPool(_liquidityPool);
         withdrawRequestNFT = IWithdrawRequestNFT(_withdrawRequestNFT);
-        roleRegistry = IRoleRegistry(_roleRegistry);
         blacklister = IBlacklister(_blacklister);
 
         _disableInitializers();
@@ -169,7 +167,7 @@ contract WeETHWithdrawAdapter is
     /**
      * @notice Pause the contract
      */
-    function pauseContract() external onlyOperations {
+    function pauseContract() external onlyOperatingMultisig {
         if (paused) revert("Pausable: already paused");
 
         paused = true;
@@ -179,7 +177,7 @@ contract WeETHWithdrawAdapter is
     /**
      * @notice Unpause the contract
      */
-    function unPauseContract() external onlyOperations {
+    function unPauseContract() external onlyOperatingMultisig {
         if (!paused) revert("Pausable: not paused");
 
         paused = false;
@@ -196,7 +194,7 @@ contract WeETHWithdrawAdapter is
     /**
      * @notice Unpause the contract from pauseUntil
      */
-    function unpauseContractUntil() external onlyOperations {
+    function unpauseContractUntil() external onlyOperatingMultisig {
         _unpauseUntil();
     }
 
@@ -237,7 +235,7 @@ contract WeETHWithdrawAdapter is
      * @notice Authorize contract upgrades
      */
     function _authorizeUpgrade(address /* newImplementation */) internal view override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
+        _onlyProtocolUpgrader();
     }
 
     /**
@@ -259,21 +257,6 @@ contract WeETHWithdrawAdapter is
 
     modifier nonBlacklisted() {
         blacklister.nonBlacklisted(msg.sender);
-        _;
-    }
-
-    modifier onlyAdmin() {
-        roleRegistry.onlyOperatingTimelock(msg.sender);
-        _;
-    }
-
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
-        _;
-    }
-
-    modifier onlyGuardian() {
-        roleRegistry.onlyGuardian(msg.sender);
         _;
     }
 }

@@ -501,7 +501,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         bidIds[0] = 1; 
 
         vm.prank(unauthorizedUser);
-        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOracleOperations.selector);
         liquidityPool.batchCreateBeaconValidators(depositDataArray, bidIds, etherFiNode);
     }
 
@@ -751,7 +751,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
 
         // Try to invalidate without the role
         vm.prank(unauthorizedUser);
-        vm.expectRevert(IStakingManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOracleOperations.selector);
         stakingManager.invalidateRegisteredBeaconValidator(depositData, createdBids[0], etherFiNode);
     }
 

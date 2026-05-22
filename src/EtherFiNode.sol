@@ -20,7 +20,6 @@ contract EtherFiNode is IEtherFiNode {
 
     ILiquidityPool public immutable liquidityPool;
     IEtherFiNodesManager public immutable etherFiNodesManager;
-    IRoleRegistry public immutable roleRegistry;
 
     // eigenlayer core contracts
     IEigenPodManager public immutable eigenPodManager;
@@ -47,7 +46,6 @@ contract EtherFiNode is IEtherFiNode {
         etherFiNodesManager = IEtherFiNodesManager(_etherFiNodesManager);
         eigenPodManager = IEigenPodManager(_eigenPodManager);
         delegationManager = IDelegationManager(_delegationManager);
-        roleRegistry = IRoleRegistry(_roleRegistry);
     }
 
     fallback() external payable {}

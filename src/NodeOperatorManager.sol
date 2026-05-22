@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "../src/interfaces/INodeOperatorManager.sol";
-import "../src/interfaces/IAuctionManager.sol";
-import "../src/interfaces/IRoleRegistry.sol";
-import "../src/LiquidityPool.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
+import "./interfaces/INodeOperatorManager.sol";
+import "./interfaces/IAuctionManager.sol";
+import "./interfaces/ILiquidityPool.sol";
+import "./utils/RolesLibrary.sol";
+
 /// Contract which helps us control our node operators and their permissions in different aspects of the protocol
-contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgradeable, PausableUpgradeable, OwnableUpgradeable {
+contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgradeable, PausableUpgradeable, OwnableUpgradeable, RolesLibrary {
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -43,16 +44,14 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
 
     // Immutables are not part of proxy storage; stored in implementation bytecode only.
     address public immutable auctionManagerContractAddress;
-    IRoleRegistry public immutable roleRegistry;
 
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _roleRegistry, address _auctionManagerContractAddress) {
+    constructor(address _roleRegistry, address _auctionManagerContractAddress) RolesLibrary(_roleRegistry) {
         auctionManagerContractAddress = _auctionManagerContractAddress;
-        roleRegistry = IRoleRegistry(_roleRegistry);
         _disableInitializers();
     }
 
@@ -116,7 +115,7 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
         address[] memory _users, 
         LiquidityPool.SourceOfFunds[] memory _approvedTags, 
         bool[] memory _approvals
-    ) external onlyOperations {
+    ) external onlyOperatingMultisig {
         if ((_users.length != _approvedTags.length) || (_users.length != _approvals.length)) revert InvalidArrayLengths();
 
         for(uint256 x; x < _approvedTags.length; x++) {
@@ -127,7 +126,7 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
 
     /// @notice Adds an address to the whitelist
     /// @param _address Address of the user to add
-    function addToWhitelist(address _address) external onlyOperations {
+    function addToWhitelist(address _address) external onlyOperatingMultisig {
         whitelistedAddresses[_address] = true;
 
         emit AddedToWhitelist(_address);
@@ -135,19 +134,19 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
 
     /// @notice Removed an address from the whitelist
     /// @param _address Address of the user to remove
-    function removeFromWhitelist(address _address) external onlyOperations {
+    function removeFromWhitelist(address _address) external onlyOperatingMultisig {
         whitelistedAddresses[_address] = false;
 
         emit RemovedFromWhitelist(_address);
     }
 
     //Pauses the contract
-    function pauseContract() external onlyOperations {
+    function pauseContract() external onlyOperatingMultisig {
         _pause();
     }
 
     //Unpauses the contract
-    function unPauseContract() external onlyOperations {
+    function unPauseContract() external onlyOperatingMultisig {
         _unpause();
     }
 
@@ -205,7 +204,7 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
     function _authorizeUpgrade(
         address newImplementation
     ) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
+        _onlyProtocolUpgrader();
     }
 
     //--------------------------------------------------------------------------------------
@@ -214,11 +213,6 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
 
     modifier onlyAuctionManagerContract() {
         if (msg.sender != auctionManagerContractAddress) revert IncorrectCaller();
-        _;
-    }
-
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }
 }

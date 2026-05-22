@@ -6,7 +6,6 @@ import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
 import "./interfaces/IeETH.sol";
 import "./interfaces/ILiquidityPool.sol";
-import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IWithdrawRequestNFT.sol";
 import "./interfaces/IMembershipManager.sol";
 import "./interfaces/IBlacklister.sol";
@@ -14,11 +13,9 @@ import "./interfaces/IBlacklister.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/Checkpoints.sol";
-import "./RoleRegistry.sol";
 import "./utils/ReentrancyGuardNamespaced.sol";
 import "./utils/PausableUntil.sol";
-
-
+import "./utils/RolesLibrary.sol";
 
 /// @title WithdrawRequestNFT — share-rate-freeze invariants
 /// @notice
@@ -41,7 +38,7 @@ import "./utils/PausableUntil.sol";
 ///      `shareOfEEth * rate / 1e18 >= LP.amountForShare(shareOfEEth)` and
 ///      `ceil(amount * 1e18 / rate) <= shareOfEEth`. These keep solvency checks and
 ///      the share burn within the request's own share allocation.
-contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuardNamespaced, PausableUntil, IWithdrawRequestNFT {
+contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuardNamespaced, PausableUntil, RolesLibrary, IWithdrawRequestNFT {
     using Math for uint256;
     using SafeERC20 for IERC20;
     using Checkpoints for Checkpoints.Trace224;
@@ -71,7 +68,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     uint256 public totalRemainderEEthShares;
 
     bool public paused;
-    RoleRegistry private DEPRECATED_roleRegistry;
+    address private DEPRECATED_roleRegistry;
 
     uint128 public ethAmountLockedForWithdrawal;
 
@@ -84,7 +81,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     ILiquidityPool public immutable liquidityPool;
     IeETH public immutable eETH;
     IMembershipManager public immutable membershipManager;
-    IRoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
 
     uint256 public immutable minAcceptableShareRate;
@@ -101,7 +97,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     event Paused();
     event Unpaused();
 
-    error IncorrectRole();
     error IncorrectCaller();
     error AddressZero();
     error AlreadyPaused();
@@ -133,14 +128,13 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     error InvalidEEthShares();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _treasury, address _eETH, address _liquidityPool, address _membershipManager, address _roleRegistry, address _blacklister,  address _etherFiAdmin, uint256 _minAcceptableShareRate, uint256 _maxAcceptableShareRate) {
+    constructor(address _treasury, address _eETH, address _liquidityPool, address _membershipManager, address _roleRegistry, address _blacklister,  address _etherFiAdmin, uint256 _minAcceptableShareRate, uint256 _maxAcceptableShareRate) RolesLibrary(_roleRegistry) {
         if (_minAcceptableShareRate == 0) revert InvalidMinAcceptableShareRate();
         if (_maxAcceptableShareRate <= _minAcceptableShareRate) revert InvalidMinMaxAcceptableShareRate();
         treasury = _treasury;
         eETH = IeETH(_eETH);
         liquidityPool = ILiquidityPool(_liquidityPool);
         membershipManager = IMembershipManager(_membershipManager);
-        roleRegistry = IRoleRegistry(_roleRegistry);
         blacklister = IBlacklister(_blacklister);
         etherFiAdmin = _etherFiAdmin;
         minAcceptableShareRate = _minAcceptableShareRate;
@@ -307,7 +301,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     function finalizeRequests(uint256 requestId) external {
-        if (msg.sender != address(etherFiAdmin)) revert IncorrectRole();
+        if (msg.sender != address(etherFiAdmin)) revert IncorrectCaller();
         if (requestId < lastFinalizedRequestId) revert CannotUndoFinalization();
         if (requestId >= nextRequestId) revert CannotFinalizeFutureRequests();
 
@@ -349,13 +343,13 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         shareRemainderSplitToTreasuryInBps = _shareRemainderSplitToTreasuryInBps;
     }
 
-    function pauseContract() external onlyOperations {
+    function pauseContract() external onlyOperatingMultisig {
         if (paused) revert AlreadyPaused();
         paused = true;
         emit Paused();
     }
 
-    function unPauseContract() external onlyOperations {
+    function unPauseContract() external onlyOperatingMultisig {
         if (!paused) revert NotPaused();
 
 
@@ -367,7 +361,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         _pauseUntil();
     }
 
-    function unpauseContractUntil() external onlyOperations {
+    function unpauseContractUntil() external onlyOperatingMultisig {
         _unpauseUntil();
     }
 
@@ -381,8 +375,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     ///  - Treasury: treasury gets a split of the remainder
     ///   - Burn: the rest of the remainder is burned
     /// @param _eEthAmount: the remainder of the eEth amount
-    function handleRemainder(uint256 _eEthAmount) external {
-        if(!roleRegistry.hasRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
+    function handleRemainder(uint256 _eEthAmount) external onlyHousekeepingOperations {
         if (_eEthAmount == 0) revert EETHAmountCannotBeZero(); 
         if (getEEthRemainderAmount() < _eEthAmount) revert NotEnoughEEthRemainder();
 
@@ -436,7 +429,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     function _authorizeUpgrade(address newImplementation) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
+        _onlyProtocolUpgrader();
     }
 
     function getImplementation() external view returns (address) {
@@ -449,26 +442,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     modifier onlyLiquidityPool() {
         if (msg.sender != address(liquidityPool)) revert IncorrectCaller();
-        _;
-    }
-
-    modifier onlyUpgradeTimelock() {
-        roleRegistry.onlyUpgradeTimelock(msg.sender);
-        _;
-    }
-
-    modifier onlyAdmin() {
-        roleRegistry.onlyOperatingTimelock(msg.sender);
-        _;
-    }
-
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
-        _;
-    }
-
-    modifier onlyGuardian() {
-        roleRegistry.onlyGuardian(msg.sender);
         _;
     }
 

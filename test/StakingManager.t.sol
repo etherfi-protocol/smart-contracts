@@ -1387,7 +1387,7 @@ contract StakingManagerTest is TestSetup {
     }
     
     function test_instantiateEtherFiNodeFailsIfNotAuthorized() public {
-        vm.expectRevert(IStakingManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyExecutorOperations.selector);
         stakingManagerInstance.instantiateEtherFiNode(false);
     }
 

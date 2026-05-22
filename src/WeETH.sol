@@ -12,17 +12,16 @@ import "./interfaces/IRateProvider.sol";
 
 import "./AssetRecovery.sol";
 import "./utils/PausableUntil.sol";
-import "./interfaces/IRoleRegistry.sol";
+import "./utils/RolesLibrary.sol";
 import "./interfaces/IBlacklister.sol";
 import "./interfaces/IEtherFiRateLimiter.sol";
 import "./libraries/RateLimitMath.sol";
 
-contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, ERC20PermitUpgradeable, IRateProvider, AssetRecovery {
+contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, ERC20PermitUpgradeable, IRateProvider, AssetRecovery, RolesLibrary {
     using SafeERC20 for IERC20;
 
     IeETH public immutable eETH;
     ILiquidityPool public immutable liquidityPool;
-    IRoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
     IEtherFiRateLimiter public immutable rateLimiter;
 
@@ -58,11 +57,10 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _eETH, address _liquidityPool, address _roleRegistry, address _blacklister, address _rateLimiter) {
-        if(_eETH == address(0) || _liquidityPool == address(0) || _roleRegistry == address(0) || _blacklister == address(0) || _rateLimiter == address(0)) revert AddressZero();
+    constructor(address _eETH, address _liquidityPool, address _roleRegistry, address _blacklister, address _rateLimiter) RolesLibrary(_roleRegistry) {
+        if(_eETH == address(0) || _liquidityPool == address(0) || _blacklister == address(0) || _rateLimiter == address(0)) revert AddressZero();
         eETH = IeETH(_eETH);
         liquidityPool = ILiquidityPool(_liquidityPool);
-        roleRegistry = IRoleRegistry(_roleRegistry);
         blacklister = IBlacklister(_blacklister);
         rateLimiter = IEtherFiRateLimiter(_rateLimiter);
         _disableInitializers();
@@ -117,12 +115,12 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         return eETHAmount;
     }
 
-    function pause() external onlyOperations {
+    function pause() external onlyOperatingMultisig {
         paused = true;
         emit Paused();
     }
 
-    function unpause() external onlyOperations {
+    function unpause() external onlyOperatingMultisig {
         paused = false;
         emit Unpaused();
     }
@@ -131,7 +129,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         _pauseUntil();
     }
 
-    function unpauseContractUntil() external onlyOperations {
+    function unpauseContractUntil() external onlyOperatingMultisig {
         _unpauseUntil();
     }
 
@@ -159,7 +157,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     function _authorizeUpgrade(
         address /* newImplementation */
     ) internal view override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
+        _onlyProtocolUpgrader();
     }
 
     function _beforeTokenTransfer(
@@ -202,25 +200,5 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
 
     function getImplementation() external view returns (address) {
         return _getImplementation();
-    }
-
-    modifier onlyAdmin() {
-        roleRegistry.onlyOperatingTimelock(msg.sender);
-        _;
-    }
-
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
-        _;
-    }
-
-    modifier onlySuperGuardian() {
-        roleRegistry.onlySuperGuardian(msg.sender);
-        _;
-    }
-
-    modifier onlyGuardian() {
-        roleRegistry.onlyGuardian(msg.sender);
-        _;
     }
 }
