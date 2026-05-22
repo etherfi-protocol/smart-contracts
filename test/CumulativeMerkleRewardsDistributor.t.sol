@@ -407,7 +407,7 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
         vm.deal(cmrd, 1 ether);
 
         vm.prank(bob); // bob holds no roles
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         cumulativeMerkleRewardsDistributorInstance.recoverETH(payable(bob), 1 ether);
     }
 
@@ -429,7 +429,7 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
 
     function test_recoverERC20_revertsForNonOperator() public {
         vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         cumulativeMerkleRewardsDistributorInstance.recoverERC20(address(rETH), bob, 1 ether);
     }
 }

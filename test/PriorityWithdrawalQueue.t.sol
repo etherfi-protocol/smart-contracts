@@ -96,6 +96,9 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             liquidityPoolInstance.initializeOnUpgradeV2();
         }
 
+        liquidityPoolInstance.setMinWithdrawAmount(0.001 ether);
+        liquidityPoolInstance.setMaxWithdrawAmount(1000 ether);
+
         // Grant roles — consolidated to the 8-tier model.
         // PWQ admin → OPERATION_TIMELOCK_ROLE; pauser → OPERATION_MULTISIG_ROLE;
         // whitelist manager → HOUSEKEEPING_OPERATIONS_ROLE; request manager → ORACLE_OPERATIONS_ROLE; IMPLICIT_FEE_CLAIMER → HOUSEKEEPING_OPERATIONS_ROLE.

@@ -72,6 +72,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     IRoleRegistry private DEPRECATED_roleRegistry;
     uint256 public validatorSizeWei;
+    uint256 public maxWithdrawAmount;
+    uint256 public minWithdrawAmount;
     bool public escrowMigrationCompleted;
 
     //--------------------------------------------------------------------------------------
@@ -94,8 +96,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     //--------------------------------------------------------------------------------------
     //---------------------------------  CONSTANTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-    uint256 public constant MIN_WITHDRAW_AMOUNT = 0.001 ether;
-    uint256 public constant MAX_WITHDRAW_AMOUNT = 1000 ether;
     uint256 public constant SHARE_UNIT = 1e18;
 
     //--------------------------------------------------------------------------------------
@@ -122,6 +122,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     event ProtocolFeePaid(uint128 protocolFees);
     event WhitelistStatusUpdated(bool value);
     event ValidatorExitRequested(uint256 indexed validatorId);
+    event MinWithdrawAmountSet(uint256 minWithdrawAmount);
+    event MaxWithdrawAmountSet(uint256 maxWithdrawAmount);
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ERRORS  ---------------------------------------
@@ -312,7 +314,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     function requestWithdraw(address recipient, uint256 amount) public nonReentrant whenNotPaused nonBlacklisted returns (uint256) {
         blacklister.nonBlacklisted(recipient);
         if (amount == 0) revert InvalidWithdrawalAmount();
-        if (amount < MIN_WITHDRAW_AMOUNT || amount > MAX_WITHDRAW_AMOUNT) revert InvalidWithdrawalAmount();
+        if (amount < minWithdrawAmount || amount > maxWithdrawAmount) revert InvalidWithdrawalAmount();
         uint256 share = sharesForAmount(amount);
         if (share == 0) revert InvalidShareAmount();
 
@@ -552,6 +554,17 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /// @notice Sets the pause duration for the contract
     function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
         _setPauseUntilDuration(_pauseUntilDuration);
+    }
+
+    function setMinWithdrawAmount(uint256 _minWithdrawAmount) external onlyOperations {
+        minWithdrawAmount = _minWithdrawAmount;
+        emit MinWithdrawAmountSet(_minWithdrawAmount);
+    }
+
+    function setMaxWithdrawAmount(uint256 _maxWithdrawAmount) external onlyOperations {
+        if (_maxWithdrawAmount ==0 || _maxWithdrawAmount < minWithdrawAmount) revert InvalidAmount();
+        maxWithdrawAmount = _maxWithdrawAmount;
+        emit MaxWithdrawAmountSet(_maxWithdrawAmount);
     }
 
     /// @notice Locks ETH for finalized NFT withdrawals by transferring from LP to WithdrawRequestNFT. TVL preserved by InLp/OutOfLp rebalance; share rate unchanged.
