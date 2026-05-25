@@ -28,6 +28,8 @@ import "../src/BNFT.sol";
 import "../src/TNFT.sol";
 import "../src/EtherFiNode.sol";
 import "../src/EtherFiRateLimiter.sol";
+import "../src/ProtocolInvariants.sol";
+import "../src/interfaces/IProtocolInvariants.sol";
 import "../src/LiquidityPool.sol";
 import "../src/Liquifier.sol";
 import "../src/EtherFiRestaker.sol";
@@ -138,6 +140,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     UUPSProxy public stakingManagerProxy;
     UUPSProxy public etherFiNodeManagerProxy;
     UUPSProxy public rateLimiterProxy;
+    UUPSProxy public protocolInvariantsProxy;
     UUPSProxy public protocolRevenueManagerProxy;
     UUPSProxy public TNFTProxy;
     UUPSProxy public BNFTProxy;
@@ -175,6 +178,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
     EtherFiRateLimiter public rateLimiterInstance;
     EtherFiRateLimiter public rateLimiterImplementation;
+
+    ProtocolInvariants public protocolInvariantsInstance;
+    ProtocolInvariants public protocolInvariantsImplementation;
 
     RegulationsManager public regulationsManagerInstance;
     RegulationsManager public regulationsManagerImplementation;
@@ -560,6 +566,17 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // ETHERFI_RATE_LIMITER_ADMIN_ROLE, which the consolidated role model no
         // longer uses, and predates the per-address bucket immutables.
         address newRateLimiterImpl = address(new EtherFiRateLimiter(address(roleRegistryInstance), address(eETHInstance), address(weEthInstance)));
+
+        // ProtocolInvariants is brand-new — no on-chain version to upgrade.
+        // Deploy fresh and start in OBSERVE mode so the rest of the fork suite
+        // can call wrap/unwrap without an enforce-mode revert risk.
+        protocolInvariantsImplementation = new ProtocolInvariants(address(roleRegistryInstance), address(eETHInstance), address(weEthInstance));
+        protocolInvariantsProxy = new UUPSProxy(
+            address(protocolInvariantsImplementation),
+            abi.encodeWithSelector(ProtocolInvariants.initialize.selector, IProtocolInvariants.Mode.OBSERVE)
+        );
+        protocolInvariantsInstance = ProtocolInvariants(address(protocolInvariantsProxy));
+
         vm.prank(roleRegistryInstance.owner());
         rateLimiterInstance.upgradeTo(newRateLimiterImpl);
 
@@ -660,7 +677,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(liquidityPoolInstance),
             address(roleRegistryInstance),
             address(blacklisterInstance),
-            address(rateLimiterInstance)
+            address(rateLimiterInstance),
+            address(protocolInvariantsInstance)
         ));
         vm.prank(weEthInstance.owner());
         weEthInstance.upgradeTo(newWeETHImpl);
@@ -948,6 +966,17 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         rateLimiterInstance = EtherFiRateLimiter(address(rateLimiterProxy));
         rateLimiterInstance.initialize();
 
+        // ProtocolInvariants has the same chicken-and-egg as the rate limiter
+        // (takes eETH/weETH as immutables). Deploy AFTER both proxies exist,
+        // BEFORE WeETH impl (which takes this as a constructor immutable).
+        // Start in OBSERVE mode so tests can validate before any reverts.
+        protocolInvariantsImplementation = new ProtocolInvariants(address(roleRegistryInstance), address(eETHProxy), address(weETHProxy));
+        protocolInvariantsProxy = new UUPSProxy(
+            address(protocolInvariantsImplementation),
+            abi.encodeWithSelector(ProtocolInvariants.initialize.selector, IProtocolInvariants.Mode.OBSERVE)
+        );
+        protocolInvariantsInstance = ProtocolInvariants(address(protocolInvariantsProxy));
+
         membershipNftProxy = new UUPSProxy(address(placeholderImpl), "");
         membershipNftInstance = MembershipNFT(payable(membershipNftProxy));
 
@@ -1150,7 +1179,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         eETHInstance.initialize(payable(address(liquidityPoolProxy)));
 
         // WeETH
-        weEthImplementation = new WeETH(address(eETHProxy), address(liquidityPoolProxy), address(roleRegistryInstance), address(blacklisterInstance), address(rateLimiterInstance));
+        weEthImplementation = new WeETH(address(eETHProxy), address(liquidityPoolProxy), address(roleRegistryInstance), address(blacklisterInstance), address(rateLimiterInstance), address(protocolInvariantsInstance));
         vm.expectRevert("Initializable: contract is already initialized");
         weEthImplementation.initialize(payable(address(liquidityPoolProxy)), address(eETHProxy));
         weEthInstance.upgradeTo(address(weEthImplementation));
@@ -1467,7 +1496,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function _upgrade_weETH() internal {
-        address newWeETHImpl = address(new WeETH(address(eETHInstance), address(liquidityPoolInstance), address(roleRegistryInstance), address(blacklisterInstance), address(rateLimiterInstance)));
+        address newWeETHImpl = address(new WeETH(address(eETHInstance), address(liquidityPoolInstance), address(roleRegistryInstance), address(blacklisterInstance), address(rateLimiterInstance), address(protocolInvariantsInstance)));
         vm.prank(owner);
         weEthInstance.upgradeTo(newWeETHImpl);
         // No bucket bootstrap needed — per-address rate limits are opt-in and the

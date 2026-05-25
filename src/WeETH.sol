@@ -12,6 +12,7 @@ import "./interfaces/IRateProvider.sol";
 
 import "./AssetRecovery.sol";
 import "./interfaces/IBlacklister.sol";
+import "./interfaces/IProtocolInvariants.sol";
 import "./utils/PausableUntil.sol";
 import "./utils/RolesLibrary.sol";
 import "./utils/RateLimitedToken.sol";
@@ -23,6 +24,14 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     ILiquidityPool public immutable liquidityPool;
     IBlacklister public immutable blacklister;
     // `roleRegistry` is inherited from RolesLibrary; `rateLimiter` from RateLimitedToken.
+
+    /// @dev On-chain conservation check (see ProtocolInvariants.sol). Runs in
+    ///      `_afterTokenTransfer` on supply changes (mint = wrap, burn = unwrap).
+    ///      Transfers don't change supply and skip the check. Held as an
+    ///      immutable so the wiring is obvious on-chain and can't be silently
+    ///      re-pointed; to swap implementations, upgrade the proxy at this
+    ///      address.
+    IProtocolInvariants public immutable protocolInvariants;
 
     event Paused();
     event Unpaused();
@@ -45,14 +54,28 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _eETH, address _liquidityPool, address _roleRegistry, address _blacklister, address _rateLimiter)
+    constructor(
+        address _eETH,
+        address _liquidityPool,
+        address _roleRegistry,
+        address _blacklister,
+        address _rateLimiter,
+        address _protocolInvariants
+    )
         RolesLibrary(_roleRegistry)
         RateLimitedToken(_rateLimiter)
     {
-        if(_eETH == address(0) || _liquidityPool == address(0) || _blacklister == address(0) || _rateLimiter == address(0)) revert AddressZero();
+        if (
+            _eETH == address(0) ||
+            _liquidityPool == address(0) ||
+            _blacklister == address(0) ||
+            _rateLimiter == address(0) ||
+            _protocolInvariants == address(0)
+        ) revert AddressZero();
         eETH = IeETH(_eETH);
         liquidityPool = ILiquidityPool(_liquidityPool);
         blacklister = IBlacklister(_blacklister);
+        protocolInvariants = IProtocolInvariants(_protocolInvariants);
         _disableInitializers();
     }
 
@@ -73,11 +96,19 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     /// @notice Wraps eEth
     /// @param _eETHAmount the amount of eEth to wrap
     /// @return returns the amount of weEth the user receives
+    /// @dev Order: pull eETH from user FIRST, then mint weETH. This is the
+    ///      deposit-then-mint pattern and is REQUIRED for the on-chain backing
+    ///      invariant (`weETH.totalSupply <= eETH.shares(weETHProxy)`) to hold
+    ///      at the `_afterTokenTransfer` hook point inside `_mint`. The old
+    ///      mint-then-pull order would trip the invariant transiently at the
+    ///      hook because `weETH.totalSupply` would be updated before
+    ///      `eETH.shares(proxy)`. With the new order, the proxy's eETH share
+    ///      balance is already raised when the hook runs.
     function wrap(uint256 _eETHAmount) public returns (uint256) {
         if (_eETHAmount == 0) revert ZeroAmount();
         uint256 weEthAmount = liquidityPool.sharesForAmount(_eETHAmount);
-        _mint(msg.sender, weEthAmount);
         IERC20(address(eETH)).safeTransferFrom(msg.sender, address(this), _eETHAmount);
+        _mint(msg.sender, weEthAmount);
         return weEthAmount;
     }
 
@@ -183,6 +214,24 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         uint64 amt = toBucketUnit(amount);
         if (from != address(0)) rateLimiter.consumeForAddressIfConfigured(from, amt);
         if (to   != address(0)) rateLimiter.consumeForAddressIfConfigured(to,   amt);
+    }
+
+    /// @dev Invariant 1 check: runs after every mint/burn. Transfers don't
+    ///      change `totalSupply` and can't break the backing invariant, so
+    ///      they skip. Respects the ProtocolInvariants mode toggle:
+    ///      DISABLED no-op, OBSERVE emit-only, ENFORCE revert.
+    ///
+    ///      Timing: `wrap` is ordered deposit-then-mint, so by the time the
+    ///      `_mint` triggers this hook, the proxy's eETH share balance has
+    ///      already been raised. `unwrap` is ordered burn-then-withdraw, so
+    ///      when this hook fires on `_burn`, `weETH.totalSupply` is the
+    ///      lower side of the inequality and the invariant trivially holds.
+    ///      A future bridge adapter that mints directly should pull backing
+    ///      eETH BEFORE calling `_mint`, the same as wrap.
+    function _afterTokenTransfer(address from, address to, uint256 /*amount*/) internal virtual override {
+        if (from == address(0) || to == address(0)) {
+            protocolInvariants.check_weETH_backed();
+        }
     }
 
     //--------------------------------------------------------------------------------------
