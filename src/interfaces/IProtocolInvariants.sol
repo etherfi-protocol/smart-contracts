@@ -22,11 +22,14 @@ interface IProtocolInvariants {
     //--------------------------------------------------------------------------
     error AddressZero();
     error WeETHUnderbacked(uint256 weETHSupply, uint256 proxyShares);
+    error EETHRateDeflation(uint256 P0, uint256 S0, uint256 P1, uint256 S1);
+    error OnlyLiquidityPool();
 
     //--------------------------------------------------------------------------
     //                                  Functions
     //--------------------------------------------------------------------------
     function check_weETH_backed() external;
+    function check_eETHRateMonotonic(uint256 P0, uint256 S0, uint256 P1, uint256 S1) external;
     function weETHBackingDelta() external view returns (uint256 supply, uint256 proxyShares, bool underbacked);
     function setMode(Mode newMode) external;
     function mode() external view returns (Mode);

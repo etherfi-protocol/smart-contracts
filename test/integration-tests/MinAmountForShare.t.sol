@@ -50,7 +50,8 @@ contract MinAmountForShareForkTest is TestSetup, Deployed {
                 priorityWithdrawalQueue: address(priorityQueueInstance),
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: address(etherFiAdminInstance),
-                membershipManager: address(membershipManagerInstance)
+                membershipManager: address(membershipManagerInstance),
+                protocolInvariants: address(protocolInvariantsInstance)
             }),
             minAmount
         );

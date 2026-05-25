@@ -63,7 +63,8 @@ contract RestakingRewardsRouterTest is Test {
                 priorityWithdrawalQueue: address(0),
                 blacklister: address(0),
                 etherFiAdminContract: address(0),
-                membershipManager: address(0)
+                membershipManager: address(0),
+                protocolInvariants: address(0)
             }),
             0
         );

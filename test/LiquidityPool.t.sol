@@ -42,7 +42,8 @@ contract LiquidityPoolTest is TestSetup {
             priorityWithdrawalQueue: pwq,
             blacklister: blacklister,
             etherFiAdminContract: address(etherFiAdminInstance),
-            membershipManager: address(membershipManagerInstance)
+            membershipManager: address(membershipManagerInstance),
+            protocolInvariants: address(protocolInvariantsInstance)
         });
     }
 

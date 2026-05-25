@@ -17,6 +17,7 @@ import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/IEtherFiRedemptionManager.sol";
 import "./interfaces/IPriorityWithdrawalQueue.sol";
 import "./interfaces/IBlacklister.sol";
+import "./interfaces/IProtocolInvariants.sol";
 import "./utils/ReentrancyGuardNamespaced.sol";
 import "./utils/RolesLibrary.sol";
 import "./utils/PausableUntil.sol";
@@ -92,6 +93,11 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     address public immutable membershipManager;
     uint256 public immutable minAmountForShare;
 
+    /// @dev On-chain conservation check. Called via the `nonDecreasingRate`
+    ///      modifier on every share-changing path. See ProtocolInvariants.sol
+    ///      for full rationale; LP only owns the snapshot.
+    IProtocolInvariants public immutable protocolInvariants;
+
     //--------------------------------------------------------------------------------------
     //---------------------------------  CONSTANTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
@@ -157,6 +163,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         address blacklister;
         address etherFiAdminContract;
         address membershipManager;
+        address protocolInvariants;
     }
 
     //--------------------------------------------------------------------------------------
@@ -175,6 +182,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         blacklister = IBlacklister(_constructorAddresses.blacklister);
         etherFiAdminContract = _constructorAddresses.etherFiAdminContract;
         membershipManager = _constructorAddresses.membershipManager;
+        protocolInvariants = IProtocolInvariants(_constructorAddresses.protocolInvariants);
         minAmountForShare = _minAmountForShare;
         _disableInitializers();
     }
@@ -228,14 +236,14 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     // Used by eETH staking flow
-    function deposit(address _referral) public payable nonReentrant whenNotPaused nonBlacklisted returns (uint256) {
+    function deposit(address _referral) public payable nonReentrant whenNotPaused nonBlacklisted nonDecreasingRate returns (uint256) {
         emit Deposit(msg.sender, msg.value, SourceOfFunds.EETH, _referral);
 
         return _deposit(msg.sender, msg.value, 0);
     }
 
     // Used by eETH staking flow through Liquifier contract; deVamp or to pay protocol fees
-    function depositToRecipient(address _recipient, uint256 _amount, address _referral) public nonReentrant whenNotPaused returns (uint256) {
+    function depositToRecipient(address _recipient, uint256 _amount, address _referral) public nonReentrant whenNotPaused nonDecreasingRate returns (uint256) {
         if (msg.sender != address(liquifier) && msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
         blacklister.nonBlacklisted(_recipient);
 
@@ -245,7 +253,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     // Used by ether.fan staking flow
-    function deposit(address _user, address _referral) external payable nonReentrant whenNotPaused returns (uint256) {
+    function deposit(address _user, address _referral) external payable nonReentrant whenNotPaused nonDecreasingRate returns (uint256) {
         if (msg.sender != address(membershipManager)) revert IncorrectCaller();
         blacklister.nonBlacklisted(_user);
 
@@ -257,7 +265,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /// @notice Burns shares and pays ETH. For NFT/queue callers, ETH is paid by the caller from its own segregated balance; LP only does accounting. Other callers receive ETH from LP.
     /// @notice Live-rate withdraw for membershipManager and etherFiRedemptionManager.
     ///         Burns shares at the live rate and pays ETH from the LP to `_recipient`.
-    function withdraw(address _recipient, uint256 _amount) external nonReentrant whenNotPaused returns (uint256) {
+    function withdraw(address _recipient, uint256 _amount) external nonReentrant whenNotPaused nonDecreasingRate returns (uint256) {
         if (msg.sender != address(membershipManager) && msg.sender != address(etherFiRedemptionManager)) {
             revert IncorrectCaller();
         }
@@ -285,7 +293,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /// @dev    `_rate == 0` is rejected — callers (WRNFT / Queue) are responsible for resolving
     ///         any pre-upgrade legacy snapshot to a live rate locally via `amountPerShareCeil()`
     ///         before invoking this function. Single codepath: one ceiling math expression.
-    function withdraw(uint256 _amount, uint256 _rate) external nonReentrant returns (uint256) {
+    function withdraw(uint256 _amount, uint256 _rate) external nonReentrant nonDecreasingRate returns (uint256) {
         if (msg.sender != address(withdrawRequestNFT) && msg.sender != address(priorityWithdrawalQueue)) {
             revert IncorrectCaller();
         }
@@ -603,13 +611,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         _checkMinAmountForShare();
     }
 
-    function burnEEthShares(uint256 shares) external {
+    function burnEEthShares(uint256 shares) external nonDecreasingRate {
         if (msg.sender != address(etherFiRedemptionManager) && msg.sender != address(withdrawRequestNFT) && msg.sender != address(priorityWithdrawalQueue)) revert IncorrectCaller();
         eETH.burnShares(msg.sender, shares);
         _checkMinAmountForShare();
     }
 
-    function burnEEthSharesForNonETHWithdrawal(uint256 _amountSharesToBurn, uint256 _withdrawalValueInETH) external {
+    function burnEEthSharesForNonETHWithdrawal(uint256 _amountSharesToBurn, uint256 _withdrawalValueInETH) external nonDecreasingRate {
         uint256 share = sharesForWithdrawalAmount(_withdrawalValueInETH);
         if (msg.sender != address(etherFiRedemptionManager)) revert IncorrectCaller();
         if (_amountSharesToBurn == 0 || _withdrawalValueInETH == 0) revert InvalidAmount();
@@ -754,5 +762,25 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     modifier onlyEtherFiAdmin() {
         if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
         _;
+    }
+
+    /// @notice Asserts the eETH exchange rate does not decrease across this
+    ///         call. See ProtocolInvariants.sol for the full rationale.
+    /// @dev    Snapshots `totalPooledEther / totalShares` before and after the
+    ///         function body, then forwards both pairs to
+    ///         `protocolInvariants.check_eETHRateMonotonic` which owns the
+    ///         policy (DISABLED no-op / OBSERVE emit-only / ENFORCE emit + revert).
+    ///         Applied to every share-changing path on LP. Rebase / oracle
+    ///         paths intentionally don't carry this modifier — they change
+    ///         the rate without changing shares, which is their purpose.
+    ///         (If they did carry it, the `S0 == S1` guard inside
+    ///         check_eETHRateMonotonic would no-op anyway.)
+    modifier nonDecreasingRate() {
+        uint256 P0 = getTotalPooledEther();
+        uint256 S0 = eETH.totalShares();
+        _;
+        uint256 P1 = getTotalPooledEther();
+        uint256 S1 = eETH.totalShares();
+        protocolInvariants.check_eETHRateMonotonic(P0, S0, P1, S1);
     }
 }

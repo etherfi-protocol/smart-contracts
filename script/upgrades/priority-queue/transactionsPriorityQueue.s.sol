@@ -266,7 +266,12 @@ contract PriorityQueueTransactions is Script, Utils {
                 priorityWithdrawalQueue: priorityWithdrawalQueueProxy,
                 blacklister: address(0),
                 etherFiAdminContract: address(0),
-                membershipManager: address(0)
+                membershipManager: address(0),
+                // TODO: this is a stale priority-queue migration script. If
+                // re-run after ProtocolInvariants ships, this MUST be wired
+                // to the deployed ProtocolInvariants proxy or LP deposits
+                // will revert at the rate-monotonicity modifier.
+                protocolInvariants: address(0)
             }),
             0
         );

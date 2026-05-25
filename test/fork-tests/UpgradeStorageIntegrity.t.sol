@@ -10,6 +10,8 @@ import "../../src/utils/ReentrancyGuardNamespaced.sol";
 import "../../src/RoleRegistry.sol";
 import "../../src/UUPSProxy.sol";
 import "../../src/helpers/Blacklister.sol";
+import "../../src/ProtocolInvariants.sol";
+import "../../src/interfaces/IProtocolInvariants.sol";
 
 interface IUUPSProxy {
     function upgradeTo(address newImpl) external;
@@ -46,6 +48,22 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         0xcd24049d7dcc1fde21494dba8ad7a067afb6b8f14dfe804abeeec84903344e97;
 
     Blacklister internal blacklisterInstance;
+    ProtocolInvariants internal protocolInvariantsInstance;
+
+    /// @dev LP's new constructor takes ProtocolInvariants as an immutable. This
+    ///      fork test doesn't extend TestSetup so it can't reuse the shared
+    ///      deployment; spin up a fresh one in OBSERVE mode pointing at the
+    ///      live mainnet eETH/weETH/LP addresses. OBSERVE mode means even if
+    ///      the invariant is violated mid-test we'd only emit an event, not
+    ///      revert — keeps this test focused on storage layout, not invariants.
+    function _deployInvariants() internal {
+        ProtocolInvariants impl = new ProtocolInvariants(ROLE_REGISTRY, EETH, WEETH, LIQUIDITY_POOL);
+        UUPSProxy proxy = new UUPSProxy(
+            address(impl),
+            abi.encodeWithSelector(ProtocolInvariants.initialize.selector, IProtocolInvariants.Mode.OBSERVE)
+        );
+        protocolInvariantsInstance = ProtocolInvariants(address(proxy));
+    }
 
     struct LPSnap {
         address eeth;
@@ -150,6 +168,11 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         // input is well-formed.
         Blacklister bImpl = new Blacklister(ROLE_REGISTRY);
         blacklisterInstance = Blacklister(address(new UUPSProxy(address(bImpl), abi.encodeWithSelector(Blacklister.initialize.selector))));
+
+        // ProtocolInvariants is new; LP's constructor takes it as an immutable
+        // and the deposit() this test exercises invokes the modifier. Wire it
+        // up here in OBSERVE mode.
+        _deployInvariants();
     }
 
     /// @dev Upgrade RoleRegistry to the new impl (after LP/WRN/PQ have already
@@ -223,7 +246,8 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
                 priorityWithdrawalQueue: PRIORITY_WITHDRAWAL_QUEUE,
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: ETHERFI_ADMIN,
-                membershipManager: MEMBERSHIP_MANAGER
+                membershipManager: MEMBERSHIP_MANAGER,
+                protocolInvariants: address(protocolInvariantsInstance)
             }),
             0
         ));
@@ -417,7 +441,8 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
                 priorityWithdrawalQueue: PRIORITY_WITHDRAWAL_QUEUE,
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: ETHERFI_ADMIN,
-                membershipManager: MEMBERSHIP_MANAGER
+                membershipManager: MEMBERSHIP_MANAGER,
+                protocolInvariants: address(protocolInvariantsInstance)
             }),
             0
         ));
@@ -472,7 +497,8 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
                 priorityWithdrawalQueue: PRIORITY_WITHDRAWAL_QUEUE,
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: ETHERFI_ADMIN,
-                membershipManager: MEMBERSHIP_MANAGER
+                membershipManager: MEMBERSHIP_MANAGER,
+                protocolInvariants: address(protocolInvariantsInstance)
             }),
             0
         ));

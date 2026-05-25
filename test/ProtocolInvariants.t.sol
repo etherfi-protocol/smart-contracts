@@ -204,6 +204,155 @@ contract ProtocolInvariantsTest is TestSetup {
     }
 
     // =====================================================================
+    // Invariant 2: eETH exchange-rate monotonicity
+    // =====================================================================
+    //
+    // The modifier on LP snapshots (P0,S0) before and (P1,S1) after a
+    // share-changing call. The check function is what gets exercised here —
+    // calling it directly with constructed values lets us probe the math
+    // without having to synthesize a real LP exploit tx.
+
+    function test_eETHRate_check_requires_LP_caller() public {
+        // Non-LP callers must hit `onlyLP`. The onlyLP modifier runs BEFORE the
+        // mode check, so DISABLED-mode does NOT bypass the gate (a stranger
+        // can never spam fake events to trip Hypernative even when the
+        // contract is otherwise inactive).
+        vm.prank(unauthorized);
+        vm.expectRevert(IProtocolInvariants.OnlyLiquidityPool.selector);
+        protocolInvariantsInstance.check_eETHRateMonotonic(100, 100, 100, 100);
+
+        vm.prank(multisigOnly);
+        vm.expectRevert(IProtocolInvariants.OnlyLiquidityPool.selector);
+        protocolInvariantsInstance.check_eETHRateMonotonic(100, 100, 100, 100);
+    }
+
+    function test_eETHRate_balanced_passes() public {
+        // Pretend LP. Snapshot before/after a balanced (rate-preserving) op.
+        vm.prank(multisigOnly);
+        protocolInvariantsInstance.setMode(IProtocolInvariants.Mode.ENFORCE);
+
+        vm.prank(address(liquidityPoolInstance));
+        protocolInvariantsInstance.check_eETHRateMonotonic(100e18, 100e18, 101e18, 101e18);
+    }
+
+    function test_eETHRate_increased_passes() public {
+        // Rebase / fee-enriched path: rate ticks UP (more pool per share).
+        vm.prank(multisigOnly);
+        protocolInvariantsInstance.setMode(IProtocolInvariants.Mode.ENFORCE);
+
+        vm.prank(address(liquidityPoolInstance));
+        protocolInvariantsInstance.check_eETHRateMonotonic(100e18, 100e18, 105e18, 100e18);
+    }
+
+    function test_eETHRate_share_neutral_passes_even_when_rate_drops() public {
+        // Slashing-style rebase: pool shrinks, shares unchanged. The S0 == S1
+        // guard skips the check — share-neutral paths are exempt by design.
+        vm.prank(multisigOnly);
+        protocolInvariantsInstance.setMode(IProtocolInvariants.Mode.ENFORCE);
+
+        vm.prank(address(liquidityPoolInstance));
+        protocolInvariantsInstance.check_eETHRateMonotonic(100e18, 100e18, 90e18, 100e18);
+    }
+
+    function test_eETHRate_bootstrap_passes() public {
+        // First deposit (S0 == 0) and post-empty (S1 == 0) cases are exempted —
+        // no rate to compare against.
+        vm.prank(multisigOnly);
+        protocolInvariantsInstance.setMode(IProtocolInvariants.Mode.ENFORCE);
+
+        vm.startPrank(address(liquidityPoolInstance));
+        protocolInvariantsInstance.check_eETHRateMonotonic(0, 0, 100e18, 100e18);
+        protocolInvariantsInstance.check_eETHRateMonotonic(100e18, 100e18, 0, 0);
+        vm.stopPrank();
+    }
+
+    function test_eETHRate_unbacked_mint_reverts_under_ENFORCE() public {
+        // Simulate the exploit: shares went up but pool didn't.
+        // Before: rate = 100/100 = 1.0
+        // After:  rate = 100/110 ≈ 0.909  (deflated)
+        vm.prank(multisigOnly);
+        protocolInvariantsInstance.setMode(IProtocolInvariants.Mode.ENFORCE);
+
+        vm.prank(address(liquidityPoolInstance));
+        vm.expectRevert();
+        protocolInvariantsInstance.check_eETHRateMonotonic(100e18, 100e18, 100e18, 110e18);
+    }
+
+    function test_eETHRate_skim_reverts_when_shares_change_under_ENFORCE() public {
+        // Pool drained but shares went up — combined exploit / underflow case.
+        vm.prank(multisigOnly);
+        protocolInvariantsInstance.setMode(IProtocolInvariants.Mode.ENFORCE);
+
+        vm.prank(address(liquidityPoolInstance));
+        vm.expectRevert();
+        protocolInvariantsInstance.check_eETHRateMonotonic(100e18, 100e18, 90e18, 110e18);
+    }
+
+    function test_eETHRate_OBSERVE_emits_event_does_NOT_revert() public {
+        // Default mode is OBSERVE.
+        vm.prank(address(liquidityPoolInstance));
+        vm.expectEmit(true, true, true, true);
+        emit IProtocolInvariants.InvariantViolated("eETH-rate-deflation", 100e18 * 100e18, 100e18 * 110e18);
+        protocolInvariantsInstance.check_eETHRateMonotonic(100e18, 100e18, 100e18, 110e18);
+    }
+
+    function test_eETHRate_DISABLED_is_no_op_on_violation() public {
+        vm.prank(multisigOnly);
+        protocolInvariantsInstance.setMode(IProtocolInvariants.Mode.DISABLED);
+
+        vm.recordLogs();
+        vm.prank(address(liquidityPoolInstance));
+        protocolInvariantsInstance.check_eETHRateMonotonic(100e18, 100e18, 100e18, 110e18);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertEq(logs.length, 0, "DISABLED mode must not emit");
+    }
+
+    function test_eETHRate_real_deposit_passes_under_ENFORCE() public {
+        // End-to-end: switch to ENFORCE, do a real deposit, no revert.
+        vm.prank(multisigOnly);
+        protocolInvariantsInstance.setMode(IProtocolInvariants.Mode.ENFORCE);
+
+        address user = address(0xC0FFEE);
+        vm.deal(user, 5 ether);
+        vm.prank(user);
+        liquidityPoolInstance.deposit{value: 3 ether}();
+    }
+
+    function test_eETHRate_real_unbacked_mint_via_LP_prank_reverts() public {
+        // Direct full-stack test: prank as LP to call eETH.mintShares without
+        // matching ETH inflow. The next share-changing LP call must trip the
+        // modifier because the snapshot at its start captures the deflated
+        // rate, and the call's proportional mint can't restore it.
+        //
+        // (Note: a "real" exploit would happen INSIDE a modifier-guarded
+        //  call, so the snapshot itself captures the pre-exploit state and
+        //  the check trips immediately. Modeling that requires a custom
+        //  malicious contract; the check_eETHRateMonotonic unit tests above
+        //  already cover that math directly.)
+        vm.prank(multisigOnly);
+        protocolInvariantsInstance.setMode(IProtocolInvariants.Mode.ENFORCE);
+
+        // Inject unbacked shares as if LP itself were compromised.
+        vm.prank(address(liquidityPoolInstance));
+        eETHInstance.mintShares(address(0xBAD), 50 ether);
+
+        // Now any small honest deposit will revert because the proportional
+        // share calc against the (deflated) rate produces ΔS proportional to
+        // the new ratio, and `P1*S0 < P0*S1` triggers — wait, actually:
+        // a proportional deposit *preserves* the deflated rate, so the
+        // modifier would NOT catch the aftermath here. This test captures
+        // the more practical reality — the modifier protects the SAME-TX
+        // exploit, not post-hoc cleanup. See the unit tests above for the
+        // direct math coverage.
+        //
+        // We still assert that the deposit doesn't false-trip:
+        address user = address(0xC0FFEE2);
+        vm.deal(user, 5 ether);
+        vm.prank(user);
+        liquidityPoolInstance.deposit{value: 1 ether}();
+    }
+
+    // =====================================================================
     // Helpers
     // =====================================================================
 

@@ -124,7 +124,8 @@ contract WithdrawEscrowE2ETest is TestSetup {
                 priorityWithdrawalQueue: address(pQueue),
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: address(etherFiAdminInstance),
-                membershipManager: address(membershipManagerInstance)
+                membershipManager: address(membershipManagerInstance),
+                protocolInvariants: address(protocolInvariantsInstance)
             }),
             0
         )));

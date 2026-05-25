@@ -21,7 +21,8 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
                 priorityWithdrawalQueue: PRIORITY_WITHDRAWAL_QUEUE,
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: ETHERFI_ADMIN,
-                membershipManager: MEMBERSHIP_MANAGER
+                membershipManager: MEMBERSHIP_MANAGER,
+                protocolInvariants: address(protocolInvariantsInstance)
             }),
             0
         ));

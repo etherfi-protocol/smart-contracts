@@ -65,7 +65,8 @@ contract PriorityWithdrawalQueueTest is TestSetup {
                 priorityWithdrawalQueue: address(priorityQueue),
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: address(etherFiAdminInstance),
-                membershipManager: address(membershipManagerInstance)
+                membershipManager: address(membershipManagerInstance),
+                protocolInvariants: address(protocolInvariantsInstance)
             }),
             0
         );

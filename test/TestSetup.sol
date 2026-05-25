@@ -570,7 +570,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // ProtocolInvariants is brand-new — no on-chain version to upgrade.
         // Deploy fresh and start in OBSERVE mode so the rest of the fork suite
         // can call wrap/unwrap without an enforce-mode revert risk.
-        protocolInvariantsImplementation = new ProtocolInvariants(address(roleRegistryInstance), address(eETHInstance), address(weEthInstance));
+        protocolInvariantsImplementation = new ProtocolInvariants(address(roleRegistryInstance), address(eETHInstance), address(weEthInstance), address(liquidityPoolInstance));
         protocolInvariantsProxy = new UUPSProxy(
             address(protocolInvariantsImplementation),
             abi.encodeWithSelector(ProtocolInvariants.initialize.selector, IProtocolInvariants.Mode.OBSERVE)
@@ -613,7 +613,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 priorityWithdrawalQueue: address(priorityQueueInstance),
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: address(etherFiAdminInstance),
-                membershipManager: address(membershipManagerV1Instance)
+                membershipManager: address(membershipManagerV1Instance),
+                protocolInvariants: address(protocolInvariantsInstance)
             }),
             0
         ));
@@ -967,10 +968,11 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         rateLimiterInstance.initialize();
 
         // ProtocolInvariants has the same chicken-and-egg as the rate limiter
-        // (takes eETH/weETH as immutables). Deploy AFTER both proxies exist,
-        // BEFORE WeETH impl (which takes this as a constructor immutable).
-        // Start in OBSERVE mode so tests can validate before any reverts.
-        protocolInvariantsImplementation = new ProtocolInvariants(address(roleRegistryInstance), address(eETHProxy), address(weETHProxy));
+        // (takes eETH/weETH/LP as immutables). Deploy AFTER all three proxies
+        // exist, BEFORE WeETH and LP impls (which take this as a constructor
+        // immutable). Start in OBSERVE mode so tests can validate before any
+        // reverts.
+        protocolInvariantsImplementation = new ProtocolInvariants(address(roleRegistryInstance), address(eETHProxy), address(weETHProxy), address(liquidityPoolProxy));
         protocolInvariantsProxy = new UUPSProxy(
             address(protocolInvariantsImplementation),
             abi.encodeWithSelector(ProtocolInvariants.initialize.selector, IProtocolInvariants.Mode.OBSERVE)
@@ -1131,7 +1133,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 priorityWithdrawalQueue: address(0x0),
                 blacklister: address(0x0),
                 etherFiAdminContract: address(0x0),
-                membershipManager: address(0x0)
+                membershipManager: address(0x0),
+                protocolInvariants: address(0x0)
             }),
             0
         );
@@ -1312,7 +1315,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 priorityWithdrawalQueue: address(priorityQueueProxy),
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: address(etherFiAdminProxy),
-                membershipManager: address(membershipManagerProxy)
+                membershipManager: address(membershipManagerProxy),
+                protocolInvariants: address(protocolInvariantsInstance)
             }),
             0
         );
@@ -2236,7 +2240,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 priorityWithdrawalQueue: address(priorityQueueInstance),
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: address(etherFiAdminInstance),
-                membershipManager: address(membershipManagerInstance)
+                membershipManager: address(membershipManagerInstance),
+                protocolInvariants: address(protocolInvariantsInstance)
             }),
             0
         ));
