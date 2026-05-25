@@ -1,21 +1,33 @@
 # RFC: Invariant-Based Supply Safety for eETH / weETH
 
-**Status:** Draft — for discussion
+**Status:** **Implemented** in PR #426. This document records the design and
+the findings surfaced during build — including two additional candidate
+invariants that were considered and rejected as redundant with existing
+on-chain checks.
 **Author:** Seongyun
-**Date:** 2026-05-25
-**Related:** #423 (per-address rate limits), #424 (wrap-aware global supply circuit breaker), #425 (rate-limiter consistency polish)
+**Date:** 2026-05-25 (initial draft) · 2026-05-25 (build findings appended)
+**Related:** #423 (per-address rate limits), #424 (wrap-aware global supply
+circuit breaker), #425 (rate-limiter consistency polish), **#426 (this RFC's
+implementation)**
 
 ## TL;DR
 
-Replace the bucket-based supply rate limits on eETH/weETH with on-chain
-**conservation invariants** that revert any transaction violating "tokens are
-backed by underlying ETH." The protocol then has a hard, path-independent
-defense against unbacked-mint exploits, the wrap-flag transient-storage carve-out
-in #424 becomes unnecessary, and the threshold-sizing problem disappears.
+Add two on-chain **conservation invariants** that revert any transaction
+violating "tokens are backed by underlying ETH":
 
-Per-address rate limits stay — they're the right tool for the targeted-throttle
-threat. The invariant layer protects against unbacked supply. The two tools
-solve different problems and shouldn't be conflated.
+1. **Invariant 1** — weETH supply is fully backed by eETH shares held in the
+   weETH proxy.
+2. **Invariant 2** — on every **mint** of eETH shares, the eETH exchange rate
+   does not decrease.
+
+Per-address rate limits (#423) stay — they're the right tool for the
+targeted-throttle threat. The two invariants solve a different problem
+(unbacked-supply prevention) and the two layers compose.
+
+Ships **live** (`enabled = true` at deploy). No observe→enforce rollout phase.
+An OperatingMultisig-gated `setEnabled(false)` kill switch exists only for
+the case where the invariant code itself has a bug blocking legitimate
+traffic; normal operation never touches it.
 
 ## Motivation
 
@@ -97,39 +109,58 @@ proxy donations.
 **Cost:** ~2 SLOADs per state-changing call (one for each side). Negligible
 relative to rebase-token transfer cost.
 
-### Invariant 2: eETH share supply matches LP-tracked claims
+### Invariant 2: eETH exchange-rate monotonicity (mint-side)
 
-For every state-changing call on `EETH`:
+> **Note on scope evolution.** The original draft of this RFC proposed
+> `eETH.totalShares == LP.totalShares()`. During implementation we confirmed
+> LP does **not** maintain an independent share counter — every reference in
+> `LiquidityPool.sol` reads `eETH.totalShares()` directly. That comparison is
+> tautological. The meaningful eETH-side check we ended up shipping is a
+> **mint-side rate-monotonicity invariant**, described here.
+
+On every call that **increases** `eETH.totalShares`, the eETH exchange rate
+(`totalPooledEther / totalShares`) must not decrease:
 
 ```
-eETH.totalShares == LP.totalShares()   // (or whatever LP-side variable
-                                       //  represents the share supply LP
-                                       //  thinks should exist)
+P1 * S0 >= P0 * S1     where  P = LP.getTotalPooledEther()
+                              S = eETH.totalShares()
+                              0 = before, 1 = after
 ```
 
-**Background:** LP is the *only* contract authorized to mint/burn eETH
-shares (`mintShares` / `burnShares` are gated `onlyPoolContract`). LP holds
-its own ledger of how many shares should exist. If LP and eETH agree, all
-is well. If they disagree, one of them is buggy / compromised.
+**Why mints only?** A healthy deposit pulls ETH in and mints shares in
+proportion via the OLD rate (rounded down on the shares side). The rate
+stays equal or ticks UP after the mint — never down. Conversely, withdrawal
+paths can legitimately drop the rate (the frozen-rate NFT/queue settlement
+path uses a rate snapshotted at finalize time; if the live rate has since
+drifted up, the burn at fulfillment produces a small rate drop). That's
+by-design accounting, not an exploit. **Restricting the invariant to
+mints catches the threat we care about without false-positives on
+withdrawal-side rate drift.**
 
-**This is currently true by construction.** The question is whether it
-should be *enforced* by reverting on violation rather than just assumed.
+This narrowing was surfaced by the test suite — see "Findings during build"
+below.
 
 **What this catches:**
-- A bug or exploit that mints eETH shares directly without going through LP
-  (e.g., a future feature that forgets to update LP-side accounting; an
-  exploit that finds a delegatecall-y path).
-- A drift between LP and eETH state due to a partial-failure path that
-  updates one but not the other.
+- Shares minted without proportional ETH inflow (LP compromise, future mint
+  authority that forgot to wire backing in, accounting bug that produces
+  shares-without-ETH on a deposit path).
 
-**Caveat:** this invariant is only meaningful if LP itself isn't compromised.
-If LP is compromised, the attacker controls LP.totalShares too and can keep
-the invariant satisfied while doing whatever they want. The protection here
-is against *paths outside LP* that touch eETH share state.
+**Where it lives:** as a `nonDecreasingRate` modifier on LP's 3 deposit
+overloads (`deposit(referral)`, `depositToRecipient(...)`,
+`deposit(user, referral)`). The modifier snapshots P0/S0 before and
+P1/S1 after, then forwards both pairs to
+`ProtocolInvariants.check_eETHRateMonotonic` which owns the
+kill-switch policy. The check function itself short-circuits when
+`S1 <= S0` (anything that isn't a mint) and when `S0 == 0` (bootstrap),
+so adding the modifier accidentally to a non-mint path is a gas waste
+but not a correctness hazard.
 
-**On the LP-compromise threat:** invariants don't help. The right defense is
-upgrade controls (timelock, multisig) + audits + pause + Hypernative. None
-of those go away with this RFC.
+**Caveat — LP compromise:** if LP itself is compromised, the attacker
+controls the rate function and can keep the invariant satisfied while
+doing whatever they want. The protection here is against *non-LP-compromise*
+paths that mint eETH (bugs, future bridge integrations, exploited
+oracle paths). LP compromise is handled by upgrade governance and pause,
+as it is today. The RFC doesn't claim to solve LP compromise.
 
 ### Invariant 3 (optional, harder): eETH backing reconciliation
 
@@ -161,159 +192,115 @@ with them." That's the layer we can enforce cheaply.
 
 Mention here only so it's clear what we're NOT proposing.
 
-## Implementation sketch
+## What shipped
 
-### A new contract: `ProtocolInvariants`
+See `src/ProtocolInvariants.sol`, `src/interfaces/IProtocolInvariants.sol`,
+and the integration points in `src/WeETH.sol` and `src/LiquidityPool.sol`.
+Summary:
+
+### Contract surface
 
 ```solidity
-contract ProtocolInvariants {
+contract ProtocolInvariants is Initializable, UUPSUpgradeable, RolesLibrary {
     IeETH   public immutable eETH;
-    IWeETH  public immutable weETH;
-    ILiquidityPool public immutable liquidityPool;
+    address public immutable weETH;
+    address public immutable liquidityPool;
+    bool    public enabled;              // default true at deploy; multisig kill switch
 
+    function check_weETH_backed() external view;
+    function check_eETHRateMonotonic(uint256 P0, uint256 S0, uint256 P1, uint256 S1) external view onlyLP;
+    function setEnabled(bool _enabled) external onlyOperatingMultisig;
+    function weETHBackingDelta() external view returns (uint256 supply, uint256 proxyShares, bool underbacked);
+
+    error AddressZero();
     error WeETHUnderbacked(uint256 weETHSupply, uint256 proxyShares);
-    error EETHSharesDrift(uint256 eETHTotal, uint256 lpTotal);
-
-    /// @notice Asserts weETH is at-least-fully-backed by eETH shares
-    ///         held in the weETH proxy. Cheap (~2 SLOADs).
-    function assertWeETHBacked() external view {
-        uint256 supply = weETH.totalSupply();
-        uint256 proxyShares = eETH.shares(address(weETH));
-        if (supply > proxyShares) revert WeETHUnderbacked(supply, proxyShares);
-    }
-
-    /// @notice Asserts eETH share supply matches LP's view.
-    function assertEETHSharesConsistent() external view {
-        uint256 eETHTotal = eETH.totalShares();
-        uint256 lpTotal   = liquidityPool.totalShares(); // adjust if name differs
-        if (eETHTotal != lpTotal) revert EETHSharesDrift(eETHTotal, lpTotal);
-    }
+    error EETHRateDeflation(uint256 P0, uint256 S0, uint256 P1, uint256 S1);
+    error OnlyLiquidityPool();
 }
 ```
 
-### Integration points
+### Integration
 
-Two natural patterns; pick one based on what the team finds clearer.
+- **WeETH.** `_afterTokenTransfer` hook (Pattern B). Fires the check on
+  every mint/burn (skips transfers). The hook is impossible to forget on
+  new supply paths because the OZ ERC20 base calls it automatically.
+  `wrap()` reordered to deposit-then-mint so the hook sees consistent
+  state.
+- **LiquidityPool.** `nonDecreasingRate` modifier (Pattern A) on the 3
+  deposit overloads only. Snapshots `(getTotalPooledEther(), totalShares)`
+  before and after, forwards both pairs to ProtocolInvariants. Modifier
+  is **not** on burn paths — see Findings F2.
 
-**Pattern A — modifier on token methods.** Each state-changing token method
-calls `invariants.assertWeETHBacked()` (or `assertEETHSharesConsistent()`)
-at the end. Pro: locality — invariant lives at the call site. Con: every
-new state-changing method needs the modifier.
+### Why a separate contract (not a library)
 
-```solidity
-modifier checkBacking() {
-    _;
-    invariants.assertWeETHBacked();
-}
+A standalone proxy gives the kill switch a stable address and a single
+upgrade path, decoupled from the underlying token / LP upgrade cadence.
+Library inlining would have been cheaper per-call but coupled every
+invariant change to a token-proxy upgrade. The kill switch is the
+load-bearing reason — it needs to live behind one storage slot that
+multisig can flip in seconds.
 
-function wrap(uint256 amt) checkBacking external returns (uint256) { ... }
-function unwrap(uint256 amt) checkBacking external returns (uint256) { ... }
-```
+## Operational model
 
-**Pattern B — invariant runs in `_afterTokenTransfer` (OZ ERC20 hook).**
-For weETH this is automatic — every supply change goes through the hook.
-For eETH, hook into `_transferShares` / `mintShares` / `burnShares`.
-Pro: impossible to forget. Con: slightly more gas per call (the SLOADs
-happen even on no-op-like paths).
+The draft of this RFC sketched a 3-phase rollout (Observe → Enforce → Retire
+buckets). After review, that was rejected:
 
-Recommend **Pattern B for weETH** (one hook covers everything), **Pattern A
-for eETH** (only three call sites, modifier is clearer than threading
-through `_transferShares`).
+- The team's position is that **releases go live with checks active**. There
+  is no observe-only stage.
+- A bool kill switch (`enabled`, default true at deploy) is sufficient for
+  the only scenario where you'd actually want to disable an invariant
+  mid-flight — the invariant code itself misfiring during an incident.
+- The bool flip is gated to **OperatingMultisig**. Guardian is too low a bar
+  for a switch with this blast radius, and a timelock is too slow for an
+  active incident.
 
-### What gets retired when this lands
+**Implementation note:** the kill switch lives inside `ProtocolInvariants`,
+not in LP / eETH / weETH. A single `setEnabled(false)` call disables both
+invariants protocol-wide. The token / LP modifiers still execute (snapshot
+state, forward to ProtocolInvariants), but the check function short-circuits.
+This keeps the snapshot cost (negligible) constant whether or not the
+invariant is active, and centralizes the failure-recovery decision.
 
-- `WEETH_MINT_LIMIT_ID` / `WEETH_BURN_LIMIT_ID` (added in #424) — invariant
-  catches the threat path-independently.
-- The wrap-aware transient-storage flag in `WeETH` — no need to carve out
-  wrap/unwrap, the invariant is path-agnostic.
-- `EETH_MINT_LIMIT_ID` / `EETH_BURN_LIMIT_ID` — invariant 2 catches the
-  threat. Only retire AFTER invariant 2 is enforce-mode (see rollout).
+### What retires?
 
-Per-address rate limits stay. They solve a different problem (targeted
-throttling, not unbacked-mint prevention).
-
-## Phased rollout
-
-Conservative path that lets us validate the invariant formulas against real
-mainnet activity before they can revert anything.
-
-### Phase 0 — Spec & numerical review (1 week)
-
-- Get a numerical-analysis eye on the exact-equality forms. eETH is a
-  rebase token; share/balance conversions have rounding. Confirm
-  `weETH.totalSupply() <= eETH.shares(proxy)` is exact, not approximately
-  exact, under all paths (wrap, unwrap, transfers, rebase).
-- Confirm `eETH.totalShares == LP.totalShares` is exact at all observable
-  call boundaries (not mid-call).
-- Pen-test against historical mainnet txs: replay last 6 months of weETH
-  state-changing calls in a fork, assert invariants hold at every block.
-
-**Exit criterion:** invariants verified to hold across 6 months of mainnet
-history with zero false positives.
-
-### Phase 1 — Observe mode (4 weeks on mainnet)
-
-- Deploy `ProtocolInvariants` contract.
-- Wire it into eETH and weETH **emitting events on violation, NOT reverting**:
-
-  ```solidity
-  function assertWeETHBacked() external {
-      uint256 supply = weETH.totalSupply();
-      uint256 proxyShares = eETH.shares(address(weETH));
-      if (supply > proxyShares) emit InvariantViolated("weETHUnderbacked", supply, proxyShares);
-  }
-  ```
-
-- Hypernative subscribes to `InvariantViolated` events; auto-pause if fired.
-- Operations team monitors. Any violation event is an immediate triage.
-
-**Exit criterion:** 4 weeks of mainnet activity with zero `InvariantViolated`
-events.
-
-### Phase 2 — Enforce mode (revert on violation)
-
-- Upgrade eETH/weETH (or the invariant contract itself if hooked external)
-  to revert on violation rather than emit.
-- Keep the global MINT/BURN buckets (#424) live in parallel for one cycle
-  as belt-and-suspenders.
-
-**Exit criterion:** 4 weeks in enforce mode with no incidents.
-
-### Phase 3 — Retire global rate-limit buckets
-
-- Remove `EETH_{MINT,BURN}_LIMIT_ID`, `WEETH_{MINT,BURN}_LIMIT_ID` consumption
-  from token paths.
-- Remove the wrap-aware transient flag from `WeETH`.
-- Keep per-address buckets.
-- 3CP simplifies: no bootstrap-order requirement for global buckets.
+The original draft proposed retiring #424's global MINT/BURN buckets once
+the invariants are stable. **Status: deferred.** The invariants and the
+buckets coexist productively: invariants are precise (catch unbacked mints
+of any size, path-agnostic); rate limits are coarse (catch volume-based
+anomalies regardless of whether they're unbacked). The cost of running
+both is small. The team can revisit retirement once production data
+informs the decision.
 
 ## Risks and mitigations
 
 ### R1 — Invariant function has a bug, bricks the protocol
 
 The blast radius is total: a buggy invariant can lock every wrap/unwrap and
-every eETH transfer. The Phase-1 observe mode is specifically designed to
-catch this before it can revert. Even in Phase 2, the invariant contract
-itself must be:
-- Pause-able by Operating Multisig (`disableInvariant()` switch).
-- Upgradable by Upgrade Timelock (separate from the token upgrade path).
-- Constructed with `assert` semantics, NOT `require` — i.e., reverts return
-  a clear typed error, no string concatenation, no external calls in the
-  invariant function.
+every eETH deposit. The shipped mitigation is the `setEnabled(false)`
+kill switch (OperatingMultisig-gated) on `ProtocolInvariants`. Flip it
+off, the modifiers continue to execute but the check function short-
+circuits, traffic flows. Cost of having the bool: ~1 storage slot. Cost of
+NOT having it: multi-day brick during an active incident waiting for
+upgrade-timelock recovery.
 
-The `disableInvariant()` switch is non-negotiable. The cost of being able
-to flip it off in an emergency is approximately zero (one bool); the cost
-of NOT being able to is potentially a multi-day brick.
+Defensive properties baked into the check functions:
+- Reverts return clear typed errors (`WeETHUnderbacked`,
+  `EETHRateDeflation`), no string concatenation, no external calls inside
+  the check.
+- The contract is UUPS-upgradable via `UPGRADE_TIMELOCK_ROLE` for a more
+  considered repair path once the bug is understood.
+- Functions are `view` — no storage writes, no callback risk.
 
 ### R2 — Rounding / off-by-one false positives
 
 eETH share/balance math has rounding. If we get the invariant form even
 slightly wrong (e.g., strict equality where `<=` is right), we get
-intermittent reverts under benign rebase.
+intermittent reverts under benign protocol activity.
 
-Mitigation: Phase 0 pen-test is exactly this. Replay 6 months of mainnet,
-assert the invariant holds at every block under the exact form we're
-proposing to ship. If it doesn't, we have the wrong form — iterate.
+Mitigation: caught during build via the test suite. The broad-sweep test
+run flagged 22 withdrawal-side tests asserting legitimate rate drops at the
+frozen-rate fulfillment path; that surfaced the **scope narrowing of
+Invariant 2 to mint paths only**. See "Findings during build" below.
 
 ### R3 — Gas cost on hot paths
 
@@ -336,14 +323,17 @@ upgrade governance and pause, as it is today.
 This isn't a mitigation — it's a scope clarification. The RFC doesn't claim
 to solve LP compromise.
 
-### R5 — Future state-changing methods forget the modifier (Pattern A)
+### R5 — Future state-changing methods forget the modifier
 
-If we go with Pattern A and someone adds a new state-changing method
-without the modifier, the invariant doesn't run on that path.
+For weETH: shipped using the OZ `_afterTokenTransfer` hook (Pattern B from
+the original draft). Every mint/burn already routes through it, so new
+weETH supply paths are covered automatically.
 
-Mitigation: prefer Pattern B (hook into `_afterTokenTransfer` / `_transferShares`)
-wherever possible — the OZ template enforces hook coverage on supply changes
-automatically. Pattern A only for paths that don't naturally hit a hook.
+For LP: shipped using the modifier pattern (Pattern A) on the 3 deposit
+overloads. The check function short-circuits on `S1 <= S0`, so accidentally
+adding the modifier to a burn path is a gas waste but not a correctness
+hazard. Future mint paths must remember to add `nonDecreasingRate` — this
+is documented in `LiquidityPool.sol`'s modifier docstring.
 
 ## What does NOT change
 
@@ -357,45 +347,146 @@ automatically. Pattern A only for paths that don't naturally hit a hook.
 - **Upgrade governance** stays. Invariants don't replace the timelock /
   multisig story for LP compromise.
 
-## Open questions
+## Findings during build
 
-1. **Pattern A vs B for eETH.** EETH doesn't use the OZ ERC20 base —
-   `_transferShares` is custom. The hook insertion point isn't free. Maybe
-   Pattern A (modifier on `mintShares`, `burnShares`, `_transfer`) is the
-   pragmatic call. Worth a 30-min code review with @yash / @pankaj to
-   pick.
+Three things changed materially between the original draft and what
+actually shipped. Recorded here for future readers and audit firms.
 
-2. **Where does `ProtocolInvariants` live?** Standalone contract behind a
-   proxy (upgradable, pause-able, but adds a contract to the upgrade
-   surface)? Library called from eETH/weETH (cheaper, but coupled)?
-   Recommend standalone contract — keeps the pause switch (R1) clean.
+### F1. Invariant 2's first form was tautological — replaced
 
-3. **Should invariant violations also auto-pause the token?** Vs just
-   reverting the offending tx. Auto-pause is more conservative ("stop
-   everything if anything weird happens") but more disruptive. Lean
-   towards revert-only first, escalate to pause if we see real production
-   violations.
+The draft's Invariant 2 was `eETH.totalShares == LP.totalShares()`. The build
+confirmed that **LP does not maintain an independent share counter** —
+every reference in `LiquidityPool.sol` reads `eETH.totalShares()` directly.
+So the comparison is the same value on both sides, providing zero defense.
 
-4. **Does this extend to cross-chain weETH?** L2 weETH supply ↔ L1 OFT
-   escrow balance is conceptually a similar invariant. Out of scope for
-   v1 but worth flagging — Phase 4 could extend the same pattern to
-   the OFT adapter.
+The shipped Invariant 2 is the mint-side rate-monotonicity check described
+above — a structurally different check that catches the same threat
+(unbacked eETH mint) via a different on-chain property.
 
-5. **Do we want a `TotalAssetsRouter`-style aggregator** (sum across
-   contracts) for Invariant 3? Hard problem; not proposing it now; flagging
-   for someone-someday.
+### F2. Rate monotonicity had to be narrowed to mint paths
 
-## Decision needed
+The first build of Invariant 2 covered all share-changing calls
+(both mints and burns). Broad-sweep testing flagged 22 withdrawal-side
+tests asserting **legitimate** rate drops:
 
-Before this RFC moves further:
+- **Frozen-rate NFT/queue settlement.** A request finalized at rate R0
+  gets fulfilled later when the live rate is R1 > R0; the burn at
+  fulfillment computes shares against R0, producing a small rate drop
+  at the burn point. By design — protects the user from rate drift
+  between request and fulfillment.
+- **Rounding in `sharesForWithdrawalAmount` (ceil).** Favors the protocol
+  on the burn-side but can interact with frozen-rate paths to drop the
+  rate by a few wei.
 
-1. **Is the team aligned that invariant-based is the right long-term
-   direction**, with rate limits demoted to a per-address tool only?
-2. **Who owns the Phase 0 numerical review?** Needs someone with both
-   eETH rebase-math fluency and an audit mindset.
-3. **Timeline.** I'd suggest starting Phase 0 the week after #423 + #424
-   + #425 land, so we have a stable baseline to replay against. Phase 1
-   observe-mode could go live ~3 weeks after that.
+The threat we want to catch — unbacked mint — only manifests when
+`totalShares` **increases**. Withdrawal-side rate drift is accounting,
+not exploit. So the shipped check no-ops when `S1 <= S0`, and the LP
+modifier was removed from burn paths (saves ~5k gas per burn).
+
+### F3. The phased rollout was rejected
+
+Originally proposed: Observe → Enforce → Retire. The team's actual
+operational model is to ship with checks live (`enabled = true`) and use
+a single bool kill switch as the only operational lever. The 3-phase
+state machine, the events-only mode, and the gradual retirement of #424
+buckets are all replaced by:
+
+- One bool, OperatingMultisig-gated.
+- Default `true` at deploy.
+- Coexist with #424 buckets indefinitely (no retirement path scheduled).
+
+## Considered and rejected
+
+During implementation we scouted two additional invariants. Both turned out
+to be **redundant with existing on-chain checks** that the protocol already
+enforces locally. Recording them so future reviewers don't re-derive the
+same dead ends.
+
+### R1. Withdrawal-escrow solvency
+
+**Proposed invariant:**
+```
+WithdrawRequestNFT:        balance >= ethAmountLockedForWithdrawal
+PriorityWithdrawalQueue:   balance >= ethAmountLockedForPriorityWithdrawal
+```
+
+**Verdict: redundant.** Both contracts already enforce exactly this check
+inline at every counter-mutating point:
+
+- `WithdrawRequestNFT._checkEthAmountLockedForWithdrawal()` called from
+  `receive()`, `_claimWithdraw`, `handleRemainder`.
+- `PriorityWithdrawalQueue._checkEthAmountLockedForPriorityWithdrawal()`
+  called from `receive()`, `fulfillRequests`, `claimWithdraw`.
+
+These are the **only** code paths that move the counter, so the existing
+checks cover every mutation. Additionally:
+
+- Neither contract has a `recoverETH` function, so accidental ETH egress
+  outside the claim/handleRemainder paths is structurally impossible.
+- Counter arithmetic is `uint128 +=/-= uint128(msg.value)` in Solidity
+  0.8.27 — checked arithmetic reverts on overflow/underflow rather than
+  silently corrupting.
+- The `receive()` functions are `onlyLiquidityPool`-gated, so misrouted
+  funding is impossible.
+
+Adding a duplicate check to `ProtocolInvariants` would have zero security
+value.
+
+### R2. Rebase magnitude bound
+
+**Proposed invariant:**
+```
+On rebase: |ΔP / P| <= MAX_PCT_PER_REBASE
+```
+
+To catch oracle compromise pushing a manipulated rate update.
+
+**Verdict: redundant.** `EtherFiAdmin._validateRebaseApr` (around line 344
+of `EtherFiAdmin.sol`) already enforces an APR-bounded variant of exactly
+this, with the comment: *"Permanent invariant — protects against runaway
+rebase or slashing leakage in a single report."*
+
+Their implementation is actually **better** than the bound I was about to
+propose:
+
+- Time-normalized (computes annualized APR from `accruedRewards / TVL /
+  elapsedTime` rather than a flat percent-per-rebase), which handles
+  reports covering different windows correctly.
+- Direction-agnostic — takes the absolute value, so it caps inflation
+  AND deflation symmetrically.
+- Cap (`acceptableRebaseAprInBps`) is configurable per-deployment rather
+  than baked in.
+
+Adding a flat percent-per-call bound to `ProtocolInvariants` would be both
+redundant and weaker than what already exists.
+
+## Lessons for future invariant proposals
+
+1. **Grep `_check*` and `validate*` first.** Before proposing a new
+   on-chain invariant, search the relevant contracts for existing checks
+   with similar shape. The protocol's local invariants are stronger than
+   they look from the outside.
+2. **`ProtocolInvariants`' niche is cross-contract.** Single-contract
+   invariants belong inside the contract whose state they're checking
+   (locality, gas, audit clarity). `ProtocolInvariants` adds value
+   specifically when the property spans two contracts that don't naturally
+   share state — Invariant 1 spans weETH and eETH; Invariant 2 spans LP
+   and eETH.
+3. **The cross-contract niche may be the complete set.** After scouting,
+   Invariant 1 and Invariant 2 may genuinely be the entire space worth
+   adding for ether.fi's current architecture. New cross-contract paths
+   (bridge adapter, restaker integration, new mint authority) are the
+   natural triggers for the next round of invariant work.
+
+## Decisions made
+
+1. **Direction:** invariant-based supply safety is additive to rate limits,
+   not a replacement. Both layers coexist indefinitely (no scheduled
+   retirement of #424's buckets).
+2. **Rollout model:** ship live with checks active. No observe-only stage.
+   Single bool kill switch for emergencies, OperatingMultisig-gated.
+3. **Scope:** two invariants — weETH backing (`<=`) and eETH mint-side rate
+   monotonicity. Additional candidates were scouted and rejected (see above).
 
 ## Appendix — quick sanity check of Invariant 1
 
@@ -416,11 +507,13 @@ ignores the benign cases.
 
 ---
 
-## Sign-off
+## Status: closed
 
-This RFC is not a PR. It's a direction proposal. If the team agrees with
-the direction, the next step is Phase 0 — a focused 1-week scoped piece
-of work to validate the invariant formulas against mainnet history. I can
-own that if useful, or hand off to whoever has the eETH-math expertise.
+Implemented in PR #426. Both invariants live in production behavior the moment
+#426 merges and the new LP / weETH impls are upgraded. The kill switch
+(`ProtocolInvariants.setEnabled`) is the only operational lever; it exists for
+emergencies and is not part of normal protocol operations.
 
-Comments / pushback welcome inline on the issue, on the doc PR, or in DM.
+Future invariant proposals: new cross-contract paths (bridge adapter, restaker
+integration, new mint authority) are the natural triggers for a follow-up
+round. See "Lessons for future invariant proposals" above before drafting.
