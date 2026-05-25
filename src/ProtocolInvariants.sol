@@ -109,34 +109,42 @@ contract ProtocolInvariants is IProtocolInvariants, Initializable, UUPSUpgradeab
     //                Invariant 2: eETH exchange-rate monotonicity
     //--------------------------------------------------------------------------
 
-    /// @notice Invariant 2 — on every MINT (totalShares increase), the eETH
-    ///         exchange rate does not decrease.
-    /// @dev    SCOPE: this check only fires when `totalShares` increased
-    ///         during the wrapped call. Withdrawals are intentionally out of
-    ///         scope:
-    ///           - Frozen-rate withdrawal flows (NFT/queue settle at a rate
-    ///             snapshotted at finalize time) can move the rate DOWN at
-    ///             fulfillment when the live rate has since drifted up; that
-    ///             is by-design accounting, not an exploit.
-    ///           - Rounding in `sharesForWithdrawalAmount` (ceil) favors the
-    ///             protocol but with the locked-rate paths can still produce
-    ///             a small rate drop.
-    ///         Mints can't legitimately drop the rate. A healthy deposit
-    ///         (`LP._deposit`) computes shares = sharesForAmount(msg.value)
-    ///         using the OLD rate and floor-rounds — so after the mint the
-    ///         rate stays equal or ticks UP (rounding favors holders). The
-    ///         ONE scenario where shares go up AND the rate drops is the
-    ///         threat: shares were minted without proportional ETH inflow
-    ///         (LP compromise, future mint authority that forgets to wire
-    ///         backing in, accounting bug). The invariant catches that with
-    ///         the cross-multiplied form `P1 * S0 >= P0 * S1`.
+    /// @notice Invariant 2 — across the wrapped LP call, the eETH exchange
+    ///         rate (`totalPooledEther / totalShares`) does not decrease.
+    /// @dev    SCOPE: applies to every share-changing LP entry point where
+    ///         the rate is *supposed* to be preserved or increase by
+    ///         construction. The intended on-chain guarantee is:
     ///
-    ///         CALL PATTERN: LP wraps a `_;` modifier around mint paths
-    ///         (deposits), snapshotting P0/S0 before and passing P0/S0/P1/S1
-    ///         after. The check happens here so the kill-switch policy lives
-    ///         in one place, but the snapshot has to happen in the caller's
-    ///         stack frame — there's no on-chain primitive that lets us
-    ///         bracket a foreign function.
+    ///             "The eETH exchange rate can only decrease via:
+    ///                 (a) `rebase()`     (oracle path, bounded by
+    ///                                     EtherFiAdmin._validateRebaseApr's
+    ///                                     APR cap), OR
+    ///                 (b) `withdraw(uint256, uint256)` (frozen-rate
+    ///                                     finalized claim, bounded by the
+    ///                                     oracle-finalized `_rate`)."
+    ///
+    ///         Both (a) and (b) are intentional rate-changing paths and
+    ///         do NOT carry the `nonDecreasingRate` modifier in LP. Every
+    ///         other share-changing path does — mints (3 deposit overloads),
+    ///         the live-rate withdraw, and the ERM/WRN/PQ burn primitives
+    ///         (`burnEEthShares`, `burnEEthSharesForNonETHWithdrawal`). On
+    ///         those paths the math is either rate-preserving (proportional
+    ///         mint/burn with rounding favoring the protocol) or rate-up
+    ///         (burn-without-P-side-decrement), so this check fires only
+    ///         if a bug or exploit produces an unintended rate drop.
+    ///
+    ///         RATIONALE: rebase is no longer the ONLY rate-changing path
+    ///         (claim-time burns also nudge it up), but it should be the
+    ///         only path that can move it DOWN outside of the well-defined
+    ///         frozen-rate withdraw exemption. This invariant enforces that
+    ///         on-chain.
+    ///
+    ///         CALL PATTERN: LP wraps a `_;` modifier around the protected
+    ///         entry points, snapshotting P0/S0 before and passing
+    ///         P0/S0/P1/S1 after. The check happens here so the kill-switch
+    ///         policy lives in one place, but the snapshot has to happen in
+    ///         the caller's stack frame — there's no on-chain primitive
+    ///         that lets us bracket a foreign function.
     ///
     ///         GATING: only `liquidityPool` may call this. An attacker could
     ///         otherwise self-revert with crafted values — harmless to the
@@ -145,15 +153,13 @@ contract ProtocolInvariants is IProtocolInvariants, Initializable, UUPSUpgradeab
     function check_eETHRateMonotonic(uint256 P0, uint256 S0, uint256 P1, uint256 S1) external view onlyLP {
         if (!enabled) return;
 
-        // Skip cases where the check doesn't apply:
-        //   - S1 <= S0: not a mint. Withdrawals and rebases can move the
-        //     rate either direction without it being an exploit (see scope
-        //     note above). This invariant is mint-side only.
-        //   - S0 == 0: bootstrap; no previous rate to compare against.
-        if (S1 <= S0 || S0 == 0) return;
+        // Bootstrap exempt: no previous rate to compare against.
+        if (S0 == 0 || S1 == 0) return;
 
         // Cross-multiplied form of: P1/S1 >= P0/S0
         //   integer-exact, division-free, no rounding tolerance needed.
+        // Works for mints (S1 > S0), live-rate burns (S1 < S0), and
+        // share-only burns (S1 < S0, P1 == P0 — rate goes up).
         // Practical overflow bound: P, S each fit in uint128 in any plausible
         // protocol state (total ETH supply ~1.2e26 wei, shares similar);
         // P*S ≈ 1.4e52 ≪ uint256 max (~1.16e77). Safe by inspection.

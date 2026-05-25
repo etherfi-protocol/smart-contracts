@@ -173,11 +173,43 @@ contract ProtocolInvariantsTest is TestSetup {
         protocolInvariantsInstance.check_eETHRateMonotonic(100e18, 100e18, 105e18, 100e18);
     }
 
-    function test_eETHRate_share_neutral_passes_even_when_rate_drops() public {
-        // Slashing-style rebase: pool shrinks, shares unchanged. The S0 == S1
-        // guard skips the check — share-neutral paths are exempt by design.
+    function test_eETHRate_skim_without_share_change_reverts() public {
+        // Pool drained while shares unchanged — same shape as a slashing
+        // rebase, but the modifier is NOT applied to the rebase path. So
+        // any call reaching the check with this state is an ETH skim from
+        // an entry point that should have been rate-preserving. Reverts.
         vm.prank(address(liquidityPoolInstance));
+        vm.expectRevert();
         protocolInvariantsInstance.check_eETHRateMonotonic(100e18, 100e18, 90e18, 100e18);
+    }
+
+    function test_eETHRate_no_op_passes() public {
+        // No change at all → trivially passes.
+        vm.prank(address(liquidityPoolInstance));
+        protocolInvariantsInstance.check_eETHRateMonotonic(100e18, 100e18, 100e18, 100e18);
+    }
+
+    function test_eETHRate_burn_only_rate_up_passes() public {
+        // Shares burned without P decrement (the LP.burnEEthShares path).
+        // P unchanged, S down → rate up. Passes.
+        vm.prank(address(liquidityPoolInstance));
+        protocolInvariantsInstance.check_eETHRateMonotonic(100e18, 100e18, 100e18, 90e18);
+    }
+
+    function test_eETHRate_live_rate_withdraw_passes() public {
+        // Proportional burn: S=100→90, P=100→90. Rate preserved exactly.
+        vm.prank(address(liquidityPoolInstance));
+        protocolInvariantsInstance.check_eETHRateMonotonic(100e18, 100e18, 90e18, 90e18);
+    }
+
+    function test_eETHRate_burn_overpays_reverts() public {
+        // Burn path that pays out MORE ETH than shares justify → rate drops.
+        // E.g., 10 shares burned for 12 ETH out. This is the threat the
+        // extended modifier catches: a buggy live-rate withdraw or
+        // burnEEthShares caller that overpays.
+        vm.prank(address(liquidityPoolInstance));
+        vm.expectRevert();
+        protocolInvariantsInstance.check_eETHRateMonotonic(100e18, 100e18, 88e18, 90e18);
     }
 
     function test_eETHRate_bootstrap_passes() public {

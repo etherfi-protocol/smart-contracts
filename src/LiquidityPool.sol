@@ -265,7 +265,10 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /// @notice Burns shares and pays ETH. For NFT/queue callers, ETH is paid by the caller from its own segregated balance; LP only does accounting. Other callers receive ETH from LP.
     /// @notice Live-rate withdraw for membershipManager and etherFiRedemptionManager.
     ///         Burns shares at the live rate and pays ETH from the LP to `_recipient`.
-    function withdraw(address _recipient, uint256 _amount) external nonReentrant whenNotPaused returns (uint256) {
+    /// @dev    Carries `nonDecreasingRate` — `sharesForWithdrawalAmount` rounds up
+    ///         (favors protocol) so the rate is preserved or ticks up; modifier
+    ///         catches any future bug that breaks that property.
+    function withdraw(address _recipient, uint256 _amount) external nonReentrant whenNotPaused nonDecreasingRate returns (uint256) {
         if (msg.sender != address(membershipManager) && msg.sender != address(etherFiRedemptionManager)) {
             revert IncorrectCaller();
         }
@@ -611,13 +614,19 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         _checkMinAmountForShare();
     }
 
-    function burnEEthShares(uint256 shares) external {
+    /// @dev Share-only burn: no P-side change, so the rate ticks UP. Carries
+    ///      `nonDecreasingRate` as defense in depth — if a future caller is
+    ///      added that also moves ETH out of LP, the modifier catches any
+    ///      bug that drops the rate.
+    function burnEEthShares(uint256 shares) external nonDecreasingRate {
         if (msg.sender != address(etherFiRedemptionManager) && msg.sender != address(withdrawRequestNFT) && msg.sender != address(priorityWithdrawalQueue)) revert IncorrectCaller();
         eETH.burnShares(msg.sender, shares);
         _checkMinAmountForShare();
     }
 
-    function burnEEthSharesForNonETHWithdrawal(uint256 _amountSharesToBurn, uint256 _withdrawalValueInETH) external {
+    /// @dev Carries `nonDecreasingRate` as belt-and-suspenders alongside the
+    ///      local `share > _amountSharesToBurn` check on line below.
+    function burnEEthSharesForNonETHWithdrawal(uint256 _amountSharesToBurn, uint256 _withdrawalValueInETH) external nonDecreasingRate {
         uint256 share = sharesForWithdrawalAmount(_withdrawalValueInETH);
         if (msg.sender != address(etherFiRedemptionManager)) revert IncorrectCaller();
         if (_amountSharesToBurn == 0 || _withdrawalValueInETH == 0) revert InvalidAmount();
@@ -765,15 +774,32 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     /// @notice Asserts the eETH exchange rate does not decrease across this
-    ///         mint call. See ProtocolInvariants.sol for the full rationale.
+    ///         call. See ProtocolInvariants.sol for the full rationale.
     /// @dev    Snapshots `totalPooledEther / totalShares` before and after the
     ///         function body, then forwards both pairs to
-    ///         `protocolInvariants.check_eETHRateMonotonic`. Applied ONLY to
-    ///         mint paths (deposits) — withdrawals can legitimately drop the
-    ///         rate (frozen-rate NFT/queue fulfillment) and rebases don't
-    ///         touch shares. The check function itself short-circuits when
-    ///         `S1 <= S0`, but skipping the snapshot at the modifier level
-    ///         saves ~5k gas on every burn path.
+    ///         `protocolInvariants.check_eETHRateMonotonic`.
+    ///
+    ///         APPLIED to every share-changing entry point where the rate is
+    ///         supposed to stay equal or move UP by construction:
+    ///           - deposit() / depositToRecipient / deposit(user, ref)
+    ///             — proportional mint with floor-rounded shares (rate up)
+    ///           - withdraw(address, uint256)
+    ///             — live-rate burn with ceil-rounded shares (rate up)
+    ///           - burnEEthShares
+    ///             — share-only burn, no P-side change (rate up)
+    ///           - burnEEthSharesForNonETHWithdrawal
+    ///             — already locally checks rate non-decrease; modifier is
+    ///               belt-and-suspenders
+    ///
+    ///         INTENTIONALLY NOT applied to:
+    ///           - withdraw(uint256, uint256) — frozen-rate finalized claim,
+    ///             rate-drop bounded by the oracle-signed `_rate` parameter
+    ///           - rebase() — oracle path, rate-change bounded by
+    ///             EtherFiAdmin._validateRebaseApr's APR cap
+    ///
+    ///         These two are the only intentional rate-changing paths in the
+    ///         protocol. Anything else that drops the rate is a bug or
+    ///         exploit and trips the modifier.
     modifier nonDecreasingRate() {
         uint256 P0 = getTotalPooledEther();
         uint256 S0 = eETH.totalShares();
