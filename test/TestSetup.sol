@@ -759,10 +759,14 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             liquidityPoolInstance.initializeOnUpgradeV2();
         }
 
-        // The upgraded WeETH/EETH use per-address rate-limit buckets (opt-in);
-        // there are no longer global mint/burn/transfer buckets to bootstrap.
-        // Tests that exercise rate-limit behaviour create buckets via the
-        // Guardian/Multisig entry points on EETH/WeETH.
+        // The upgraded WeETH/EETH still have global MINT/BURN circuit-breaker
+        // buckets (plus the new opt-in per-address buckets for transfers).
+        // Bootstrap MINT/BURN at unbounded capacity on the fork so generic
+        // tests don't revert UnknownLimit. Pranked as `owner` which holds
+        // OPERATION_TIMELOCK_ROLE in the upgraded role model.
+        vm.startPrank(owner);
+        _setupGlobalMintBurnBuckets();
+        vm.stopPrank();
     }
 
     function updateShouldSetRoleRegistry(bool shouldSetup) public {
@@ -1163,9 +1167,12 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // EETH/WEETH operating admin consolidated into OPERATION_MULTISIG_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), admin);
 
-        // Per-address rate-limit buckets are opt-in (Guardian creates them on demand);
-        // no global bootstrap needed — tests that exercise rate limiting create their
-        // own buckets via EETH/WeETH entry points.
+        // Per-address rate-limit buckets are opt-in (Guardian creates them on demand).
+        // The global MINT/BURN buckets ARE required — eETH/weETH call consumeIfConfigured
+        // on every supply change and that reverts UnknownLimit if the bucket is missing.
+        // Bootstrap at unbounded capacity here so generic tests aren't rate-limited;
+        // rate-limit-specific tests override capacity/refill via the admin path.
+        _setupGlobalMintBurnBuckets();
 
         vm.stopPrank();
         vm.prank(alice);
@@ -1470,8 +1477,42 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         address newWeETHImpl = address(new WeETH(address(eETHInstance), address(liquidityPoolInstance), address(roleRegistryInstance), address(blacklisterInstance), address(rateLimiterInstance)));
         vm.prank(owner);
         weEthInstance.upgradeTo(newWeETHImpl);
-        // No bucket bootstrap needed — per-address rate limits are opt-in and the
-        // hot-path consume is a no-op for users without a configured bucket.
+        // The upgraded weETH calls consumeIfConfigured(WEETH_{MINT,BURN}_LIMIT_ID, ...)
+        // on every mint/burn; bootstrap those at unbounded capacity for fork tests.
+        // Caller has no active prank here, so prank as `owner` (granted OPERATION_TIMELOCK_ROLE upstream).
+        vm.startPrank(owner);
+        _setupGlobalMintBurnBuckets();
+        vm.stopPrank();
+    }
+
+    /// @dev Idempotently creates the 4 global MINT/BURN buckets at unbounded capacity
+    ///      and whitelists eETH/weETH as consumers of their respective IDs. IDs are
+    ///      computed via keccak256 directly so this works even on the realistic-fork
+    ///      path where eETH isn't upgraded yet (calling `eETHInstance.EETH_MINT_LIMIT_ID()`
+    ///      on the deployed impl would revert with "unrecognized selector").
+    ///      Caller must already be pranked as a holder of OPERATION_TIMELOCK_ROLE.
+    function _setupGlobalMintBurnBuckets() internal {
+        uint64 maxUint64 = type(uint64).max;
+        bytes32 eethMintId   = keccak256("EETH_MINT_LIMIT_ID");
+        bytes32 eethBurnId   = keccak256("EETH_BURN_LIMIT_ID");
+        bytes32 weethMintId  = keccak256("WEETH_MINT_LIMIT_ID");
+        bytes32 weethBurnId  = keccak256("WEETH_BURN_LIMIT_ID");
+
+        bytes32[2] memory eethIds  = [eethMintId,  eethBurnId];
+        bytes32[2] memory weethIds = [weethMintId, weethBurnId];
+
+        for (uint256 i = 0; i < eethIds.length; i++) {
+            if (!rateLimiterInstance.limitExists(eethIds[i])) {
+                rateLimiterInstance.createNewLimiter(eethIds[i], maxUint64, maxUint64);
+            }
+            rateLimiterInstance.updateConsumers(eethIds[i], address(eETHInstance), true);
+        }
+        for (uint256 i = 0; i < weethIds.length; i++) {
+            if (!rateLimiterInstance.limitExists(weethIds[i])) {
+                rateLimiterInstance.createNewLimiter(weethIds[i], maxUint64, maxUint64);
+            }
+            rateLimiterInstance.updateConsumers(weethIds[i], address(weEthInstance), true);
+        }
     }
 
     function _upgrade_etherfiAdmin() internal {

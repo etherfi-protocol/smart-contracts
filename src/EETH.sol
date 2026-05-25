@@ -43,6 +43,17 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     IBlacklister public immutable blacklister;
     // `roleRegistry` is inherited from RolesLibrary; `rateLimiter` from RateLimitedToken.
 
+    /// @dev Protocol-wide circuit breakers on supply changes. Mints and burns
+    ///      each draw from their own global bucket via `consumeIfConfigured`,
+    ///      independent of (and additive with) the per-address buckets. A
+    ///      compromise that bypasses per-address gating (e.g. attacker minting
+    ///      to a fresh wallet with no bucket) still has to fit inside the
+    ///      global cap. Transfers are intentionally NOT globally rate-limited
+    ///      — they don't change supply and the per-address path is the right
+    ///      tool there.
+    bytes32 public constant EETH_MINT_LIMIT_ID = keccak256("EETH_MINT_LIMIT_ID");
+    bytes32 public constant EETH_BURN_LIMIT_ID = keccak256("EETH_BURN_LIMIT_ID");
+
     event Paused();
     event Unpaused();
     event TransferShares( address indexed from, address indexed to, uint256 sharesValue);
@@ -91,7 +102,9 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         totalShares += _share;
 
         uint256 amount = liquidityPool.amountForShare(_share);
-        rateLimiter.consumeForAddressIfConfigured(_user, toBucketUnit(amount));
+        uint64 amt = toBucketUnit(amount);
+        rateLimiter.consumeIfConfigured(EETH_MINT_LIMIT_ID, amt);
+        rateLimiter.consumeForAddressIfConfigured(_user, amt);
 
         emit Transfer(address(0), _user, amount);
         emit TransferShares(address(0), _user, _share);
@@ -105,7 +118,9 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         totalShares -= _share;
 
         uint256 amount = liquidityPool.amountForShare(_share);
-        rateLimiter.consumeForAddressIfConfigured(_user, toBucketUnit(amount));
+        uint64 amt = toBucketUnit(amount);
+        rateLimiter.consumeIfConfigured(EETH_BURN_LIMIT_ID, amt);
+        rateLimiter.consumeForAddressIfConfigured(_user, amt);
 
         emit Transfer(_user, address(0), amount);
         emit TransferShares(_user, address(0), _share);
