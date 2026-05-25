@@ -52,15 +52,15 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
 
     /// @dev LP's new constructor takes ProtocolInvariants as an immutable. This
     ///      fork test doesn't extend TestSetup so it can't reuse the shared
-    ///      deployment; spin up a fresh one in OBSERVE mode pointing at the
-    ///      live mainnet eETH/weETH/LP addresses. OBSERVE mode means even if
-    ///      the invariant is violated mid-test we'd only emit an event, not
-    ///      revert — keeps this test focused on storage layout, not invariants.
+    ///      deployment; spin up a fresh one pointing at the live mainnet
+    ///      eETH/weETH/LP addresses. Deploys enabled by default; this test
+    ///      exercises a single 1-ether deposit which the invariants will
+    ///      pass cleanly (storage-layout test, not an invariant-stress test).
     function _deployInvariants() internal {
         ProtocolInvariants impl = new ProtocolInvariants(ROLE_REGISTRY, EETH, WEETH, LIQUIDITY_POOL);
         UUPSProxy proxy = new UUPSProxy(
             address(impl),
-            abi.encodeWithSelector(ProtocolInvariants.initialize.selector, IProtocolInvariants.Mode.OBSERVE)
+            abi.encodeWithSelector(ProtocolInvariants.initialize.selector)
         );
         protocolInvariantsInstance = ProtocolInvariants(address(proxy));
     }
@@ -171,7 +171,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
 
         // ProtocolInvariants is new; LP's constructor takes it as an immutable
         // and the deposit() this test exercises invokes the modifier. Wire it
-        // up here in OBSERVE mode.
+        // up here.
         _deployInvariants();
     }
 

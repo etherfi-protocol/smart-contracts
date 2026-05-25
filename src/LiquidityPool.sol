@@ -265,7 +265,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /// @notice Burns shares and pays ETH. For NFT/queue callers, ETH is paid by the caller from its own segregated balance; LP only does accounting. Other callers receive ETH from LP.
     /// @notice Live-rate withdraw for membershipManager and etherFiRedemptionManager.
     ///         Burns shares at the live rate and pays ETH from the LP to `_recipient`.
-    function withdraw(address _recipient, uint256 _amount) external nonReentrant whenNotPaused nonDecreasingRate returns (uint256) {
+    function withdraw(address _recipient, uint256 _amount) external nonReentrant whenNotPaused returns (uint256) {
         if (msg.sender != address(membershipManager) && msg.sender != address(etherFiRedemptionManager)) {
             revert IncorrectCaller();
         }
@@ -293,7 +293,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /// @dev    `_rate == 0` is rejected — callers (WRNFT / Queue) are responsible for resolving
     ///         any pre-upgrade legacy snapshot to a live rate locally via `amountPerShareCeil()`
     ///         before invoking this function. Single codepath: one ceiling math expression.
-    function withdraw(uint256 _amount, uint256 _rate) external nonReentrant nonDecreasingRate returns (uint256) {
+    function withdraw(uint256 _amount, uint256 _rate) external nonReentrant returns (uint256) {
         if (msg.sender != address(withdrawRequestNFT) && msg.sender != address(priorityWithdrawalQueue)) {
             revert IncorrectCaller();
         }
@@ -611,13 +611,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         _checkMinAmountForShare();
     }
 
-    function burnEEthShares(uint256 shares) external nonDecreasingRate {
+    function burnEEthShares(uint256 shares) external {
         if (msg.sender != address(etherFiRedemptionManager) && msg.sender != address(withdrawRequestNFT) && msg.sender != address(priorityWithdrawalQueue)) revert IncorrectCaller();
         eETH.burnShares(msg.sender, shares);
         _checkMinAmountForShare();
     }
 
-    function burnEEthSharesForNonETHWithdrawal(uint256 _amountSharesToBurn, uint256 _withdrawalValueInETH) external nonDecreasingRate {
+    function burnEEthSharesForNonETHWithdrawal(uint256 _amountSharesToBurn, uint256 _withdrawalValueInETH) external {
         uint256 share = sharesForWithdrawalAmount(_withdrawalValueInETH);
         if (msg.sender != address(etherFiRedemptionManager)) revert IncorrectCaller();
         if (_amountSharesToBurn == 0 || _withdrawalValueInETH == 0) revert InvalidAmount();
@@ -765,16 +765,15 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     /// @notice Asserts the eETH exchange rate does not decrease across this
-    ///         call. See ProtocolInvariants.sol for the full rationale.
+    ///         mint call. See ProtocolInvariants.sol for the full rationale.
     /// @dev    Snapshots `totalPooledEther / totalShares` before and after the
     ///         function body, then forwards both pairs to
-    ///         `protocolInvariants.check_eETHRateMonotonic` which owns the
-    ///         policy (DISABLED no-op / OBSERVE emit-only / ENFORCE emit + revert).
-    ///         Applied to every share-changing path on LP. Rebase / oracle
-    ///         paths intentionally don't carry this modifier — they change
-    ///         the rate without changing shares, which is their purpose.
-    ///         (If they did carry it, the `S0 == S1` guard inside
-    ///         check_eETHRateMonotonic would no-op anyway.)
+    ///         `protocolInvariants.check_eETHRateMonotonic`. Applied ONLY to
+    ///         mint paths (deposits) — withdrawals can legitimately drop the
+    ///         rate (frozen-rate NFT/queue fulfillment) and rebases don't
+    ///         touch shares. The check function itself short-circuits when
+    ///         `S1 <= S0`, but skipping the snapshot at the modifier level
+    ///         saves ~5k gas on every burn path.
     modifier nonDecreasingRate() {
         uint256 P0 = getTotalPooledEther();
         uint256 S0 = eETH.totalShares();

@@ -2,20 +2,10 @@
 pragma solidity ^0.8.24;
 
 interface IProtocolInvariants {
-    /// @dev Three-mode operation; see ProtocolInvariants.sol for full rationale.
-    ///        DISABLED - no-op kill switch
-    ///        OBSERVE  - emit on violation, do not revert (rollout default)
-    ///        ENFORCE  - emit AND revert on violation (hard on-chain stop)
-    enum Mode { DISABLED, OBSERVE, ENFORCE }
-
     //--------------------------------------------------------------------------
     //                                  Events
     //--------------------------------------------------------------------------
-    /// @dev Emitted on every violation, regardless of mode (except DISABLED).
-    ///      `name` identifies which invariant tripped; `lhs`/`rhs` are the
-    ///      two values that failed the comparison, for post-mortem clarity.
-    event InvariantViolated(string name, uint256 lhs, uint256 rhs);
-    event ModeChanged(Mode oldMode, Mode newMode);
+    event EnabledChanged(bool oldEnabled, bool newEnabled);
 
     //--------------------------------------------------------------------------
     //                                  Errors
@@ -28,9 +18,9 @@ interface IProtocolInvariants {
     //--------------------------------------------------------------------------
     //                                  Functions
     //--------------------------------------------------------------------------
-    function check_weETH_backed() external;
-    function check_eETHRateMonotonic(uint256 P0, uint256 S0, uint256 P1, uint256 S1) external;
+    function check_weETH_backed() external view;
+    function check_eETHRateMonotonic(uint256 P0, uint256 S0, uint256 P1, uint256 S1) external view;
     function weETHBackingDelta() external view returns (uint256 supply, uint256 proxyShares, bool underbacked);
-    function setMode(Mode newMode) external;
-    function mode() external view returns (Mode);
+    function setEnabled(bool enabled) external;
+    function enabled() external view returns (bool);
 }

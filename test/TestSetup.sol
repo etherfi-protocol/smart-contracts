@@ -568,12 +568,13 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         address newRateLimiterImpl = address(new EtherFiRateLimiter(address(roleRegistryInstance), address(eETHInstance), address(weEthInstance)));
 
         // ProtocolInvariants is brand-new — no on-chain version to upgrade.
-        // Deploy fresh and start in OBSERVE mode so the rest of the fork suite
-        // can call wrap/unwrap without an enforce-mode revert risk.
+        // Deploys live (enabled = true); the rest of the fork suite calls
+        // wrap/unwrap and deposit/withdraw on well-formed state so the
+        // invariants pass cleanly.
         protocolInvariantsImplementation = new ProtocolInvariants(address(roleRegistryInstance), address(eETHInstance), address(weEthInstance), address(liquidityPoolInstance));
         protocolInvariantsProxy = new UUPSProxy(
             address(protocolInvariantsImplementation),
-            abi.encodeWithSelector(ProtocolInvariants.initialize.selector, IProtocolInvariants.Mode.OBSERVE)
+            abi.encodeWithSelector(ProtocolInvariants.initialize.selector)
         );
         protocolInvariantsInstance = ProtocolInvariants(address(protocolInvariantsProxy));
 
@@ -970,12 +971,12 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // ProtocolInvariants has the same chicken-and-egg as the rate limiter
         // (takes eETH/weETH/LP as immutables). Deploy AFTER all three proxies
         // exist, BEFORE WeETH and LP impls (which take this as a constructor
-        // immutable). Start in OBSERVE mode so tests can validate before any
-        // reverts.
+        // immutable). Deploys enabled by default — there is no observe-only
+        // mode, releases go live with checks active.
         protocolInvariantsImplementation = new ProtocolInvariants(address(roleRegistryInstance), address(eETHProxy), address(weETHProxy), address(liquidityPoolProxy));
         protocolInvariantsProxy = new UUPSProxy(
             address(protocolInvariantsImplementation),
-            abi.encodeWithSelector(ProtocolInvariants.initialize.selector, IProtocolInvariants.Mode.OBSERVE)
+            abi.encodeWithSelector(ProtocolInvariants.initialize.selector)
         );
         protocolInvariantsInstance = ProtocolInvariants(address(protocolInvariantsProxy));
 
