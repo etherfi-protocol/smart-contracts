@@ -759,6 +759,12 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             liquidityPoolInstance.initializeOnUpgradeV2();
         }
 
+        // Stored-rate model: the new LP impl introduces an `exchangeRate`
+        // state variable that's set on every rebase. Snap it from the
+        // current derived rate before the rest of the suite runs.
+        vm.prank(_roleRegOwner);
+        liquidityPoolInstance.initializeExchangeRate();
+
         // The upgraded WeETH/EETH still have global MINT/BURN circuit-breaker
         // buckets (plus the new opt-in per-address buckets for transfers).
         // Bootstrap MINT/BURN at unbounded capacity on the fork so generic
