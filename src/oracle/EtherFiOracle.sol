@@ -253,25 +253,27 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         return BEACON_GENESIS_TIME;
     }
 
-    function addCommitteeMember(address _address) public onlyAdmin {
+    function addCommitteeMember(address _address, uint32 _quorumSize) public onlyAdmin {
         if (committeeMemberStates[_address].registered) revert AlreadyRegistered();
         numCommitteeMembers++;
         numActiveCommitteeMembers++;
         committeeMemberStates[_address] = CommitteeMemberState(true, true, 0, 0);
+        quorumSize = _quorumSize;
         _checkQuorum();
         emit CommitteeMemberAdded(_address);
     }
 
-    function removeCommitteeMember(address _address) public onlyAdmin {
+    function removeCommitteeMember(address _address, uint32 _quorumSize) public onlyAdmin {
         if (!committeeMemberStates[_address].registered) revert NotRegistered();
         numCommitteeMembers--;
         if (committeeMemberStates[_address].enabled) numActiveCommitteeMembers--;
         delete committeeMemberStates[_address];
+        quorumSize = _quorumSize;
         _checkQuorum();
         emit CommitteeMemberRemoved(_address);
     }
 
-    function manageCommitteeMember(address _address, bool _enabled) public onlyOperatingMultisig {
+    function manageCommitteeMember(address _address, bool _enabled, uint32 _quorumSize) public onlyOperatingMultisig {
         if (!committeeMemberStates[_address].registered) revert NotRegistered();
         if (committeeMemberStates[_address].enabled == _enabled) revert AlreadyInTargetState();
         committeeMemberStates[_address].enabled = _enabled;
@@ -280,12 +282,12 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         } else {
             numActiveCommitteeMembers--;
         }
+        quorumSize = _quorumSize;
         _checkQuorum();
         emit CommitteeMemberUpdated(_address, _enabled);
     }
 
     function setQuorumSize(uint32 _quorumSize) public onlyAdmin {
-        if (_quorumSize < minQuorumSize) revert InvalidQuorum();
         quorumSize = _quorumSize;
         _checkQuorum();
         emit QuorumUpdated(_quorumSize);
@@ -329,7 +331,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     }
 
     function _checkQuorum() internal view {
-        if (numActiveCommitteeMembers < quorumSize || numActiveCommitteeMembers > 2 * quorumSize) revert InvalidQuorum();
+        if (quorumSize < minQuorumSize || numActiveCommitteeMembers < quorumSize || numActiveCommitteeMembers >= 2 * quorumSize) revert InvalidQuorum();
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}

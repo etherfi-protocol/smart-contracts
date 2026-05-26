@@ -107,11 +107,17 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         // (registered=true, enabled=true, lastReportRefSlot=0, numReports=0), clearing any stale
         // submission from mainnet without adding new committee members.
         address oracleOwner = etherFiOracleInstance.owner();
+        // Each add/remove now requires a _quorumSize that satisfies the strict-majority
+        // invariant for the resulting numActive. Compute a fresh value at each step
+        // so this works regardless of mainnet's current quorum.
         vm.startPrank(oracleOwner);
-        etherFiOracleInstance.removeCommitteeMember(AVS_OPERATOR_1);
-        etherFiOracleInstance.addCommitteeMember(AVS_OPERATOR_1);
-        etherFiOracleInstance.removeCommitteeMember(AVS_OPERATOR_2);
-        etherFiOracleInstance.addCommitteeMember(AVS_OPERATOR_2);
+        uint32 active = etherFiOracleInstance.numActiveCommitteeMembers();
+        uint32 quorumAfterRemove = active > 1 ? (active - 1) / 2 + 1 : 1;
+        uint32 quorumAfterAdd = active / 2 + 1;
+        etherFiOracleInstance.removeCommitteeMember(AVS_OPERATOR_1, quorumAfterRemove);
+        etherFiOracleInstance.addCommitteeMember(AVS_OPERATOR_1, quorumAfterAdd);
+        etherFiOracleInstance.removeCommitteeMember(AVS_OPERATOR_2, quorumAfterRemove);
+        etherFiOracleInstance.addCommitteeMember(AVS_OPERATOR_2, quorumAfterAdd);
         vm.stopPrank();
     }
 

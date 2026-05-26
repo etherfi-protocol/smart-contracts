@@ -48,7 +48,7 @@ contract EtherFiOracleTest is TestSetup {
 
         // chad is added to the committee
         vm.prank(owner);
-        etherFiOracleInstance.addCommitteeMember(chad);
+        etherFiOracleInstance.addCommitteeMember(chad, 2);
         (bool registered, bool enabled, uint32 lastReportRefSlot, uint32 numReports) = etherFiOracleInstance.committeeMemberStates(chad);
         assertEq(registered, true);
         assertEq(enabled, true);
@@ -63,7 +63,7 @@ contract EtherFiOracleTest is TestSetup {
 
         // Owner disables chad's report submission
         vm.prank(owner);
-        etherFiOracleInstance.manageCommitteeMember(chad, false);
+        etherFiOracleInstance.manageCommitteeMember(chad, false, 2);
         (registered, enabled, lastReportRefSlot, numReports) = etherFiOracleInstance.committeeMemberStates(chad);
         assertEq(registered, true);
         assertEq(enabled, false);
@@ -252,7 +252,7 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_report_submission_before_processing_last_published_one_fails() public {
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         // period 2
         _moveClock(1024 + 2 * slotsPerEpoch);
@@ -275,7 +275,7 @@ contract EtherFiOracleTest is TestSetup {
     function test_change_report_start_slot1() public { 
         vm.prank(owner);
         bytes[] memory emptyBytes = new bytes[](0);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
         _moveClock(1024 + 2 * 32);
@@ -414,7 +414,7 @@ contract EtherFiOracleTest is TestSetup {
 
         // TODO enable this test for mainnet
         // vm.expectRevert("Quorum size must be greater than 1");
-        // etherFiOracleInstance.setQuorumSize(1);
+        // etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         etherFiOracleInstance.setQuorumSize(2);
 
@@ -490,7 +490,7 @@ contract EtherFiOracleTest is TestSetup {
         // numActive=3 (alice, bob, chad), quorum stays at the default 2 because
         // setQuorumSize(5) would now revert with InvalidQuorum (numActive < quorum).
         vm.prank(owner);
-        etherFiOracleInstance.addCommitteeMember(chad);
+        etherFiOracleInstance.addCommitteeMember(chad, 2);
 
         _moveClock(1024 + 2 * slotsPerEpoch);
 
@@ -529,7 +529,7 @@ contract EtherFiOracleTest is TestSetup {
     function test_postReportWaitTimeInSlots() public {
         bytes[] memory emptyBytes = new bytes[](0);
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         // period 2
         _moveClock(1024 + 2 * slotsPerEpoch);
@@ -562,7 +562,7 @@ contract EtherFiOracleTest is TestSetup {
     function test_report_earlier_than_last_admin_execution_fails() public {
         vm.prank(owner);
         bytes[] memory emptyBytes = new bytes[](0);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
         _moveClock(1024 + 2 * 32);
@@ -606,8 +606,7 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_consensus_scenario_example1() public {
         vm.startPrank(owner);
-        etherFiOracleInstance.addCommitteeMember(chad);
-        etherFiOracleInstance.setQuorumSize(2);
+        etherFiOracleInstance.addCommitteeMember(chad, 2);
         vm.stopPrank();
 
         _moveClock(1024 + 2 * slotsPerEpoch);
@@ -652,8 +651,7 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_execute_task_treasury_payout() public {
         vm.startPrank(owner);
-        etherFiOracleInstance.addCommitteeMember(chad);
-        etherFiOracleInstance.setQuorumSize(2);
+        etherFiOracleInstance.addCommitteeMember(chad, 2);
         liquidityPoolInstance.setFeeRecipient(address(owner));
         vm.stopPrank();
 
@@ -672,38 +670,38 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_removeCommitteeMember() public {
         vm.prank(owner);
-        etherFiOracleInstance.addCommitteeMember(chad);
-        
+        etherFiOracleInstance.addCommitteeMember(chad, 2);
+
         assertEq(etherFiOracleInstance.numCommitteeMembers(), 3); // alice, bob, chad
         assertEq(etherFiOracleInstance.numActiveCommitteeMembers(), 3);
 
         vm.prank(owner);
-        etherFiOracleInstance.removeCommitteeMember(chad);
+        etherFiOracleInstance.removeCommitteeMember(chad, 2);
 
         assertEq(etherFiOracleInstance.numCommitteeMembers(), 2);
         assertEq(etherFiOracleInstance.numActiveCommitteeMembers(), 2);
-        
+
         (bool registered, bool enabled,,) = etherFiOracleInstance.committeeMemberStates(chad);
         assertEq(registered, false);
         assertEq(enabled, false);
 
         vm.prank(owner);
         vm.expectRevert(EtherFiOracle.NotRegistered.selector);
-        etherFiOracleInstance.removeCommitteeMember(chad);
+        etherFiOracleInstance.removeCommitteeMember(chad, 2);
     }
 
     function test_removeCommitteeMember_disabled() public {
         vm.prank(owner);
-        etherFiOracleInstance.addCommitteeMember(chad);
-        
+        etherFiOracleInstance.addCommitteeMember(chad, 2);
+
         vm.prank(owner);
-        etherFiOracleInstance.manageCommitteeMember(chad, false);
-        
+        etherFiOracleInstance.manageCommitteeMember(chad, false, 2);
+
         assertEq(etherFiOracleInstance.numCommitteeMembers(), 3);
         assertEq(etherFiOracleInstance.numActiveCommitteeMembers(), 2);
 
         vm.prank(owner);
-        etherFiOracleInstance.removeCommitteeMember(chad);
+        etherFiOracleInstance.removeCommitteeMember(chad, 2);
 
         assertEq(etherFiOracleInstance.numCommitteeMembers(), 2);
         assertEq(etherFiOracleInstance.numActiveCommitteeMembers(), 2);
@@ -711,7 +709,7 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_getConsensusTimestamp() public {
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         _moveClock(1024 + 2 * slotsPerEpoch);
 
@@ -731,7 +729,7 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_getConsensusSlot() public {
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         _moveClock(1024 + 2 * slotsPerEpoch);
         uint32 currentSlot = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
@@ -812,7 +810,7 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_slotForNextReport_edgeCases() public {
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         // Submit a report first to have a published report
         _moveClock(1024 + 2 * slotsPerEpoch);
@@ -831,7 +829,7 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_blockStampForNextReport() public {
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         // Submit a report first
         _moveClock(1024 + 2 * slotsPerEpoch);
@@ -852,36 +850,37 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_manageCommitteeMember_alreadyInTargetState() public {
         vm.prank(owner);
-        etherFiOracleInstance.addCommitteeMember(chad);
+        etherFiOracleInstance.addCommitteeMember(chad, 2);
 
         // Try to enable when already enabled
         vm.prank(owner);
         vm.expectRevert(EtherFiOracle.AlreadyInTargetState.selector);
-        etherFiOracleInstance.manageCommitteeMember(chad, true);
+        etherFiOracleInstance.manageCommitteeMember(chad, true, 2);
 
         // Disable first
         vm.prank(owner);
-        etherFiOracleInstance.manageCommitteeMember(chad, false);
+        etherFiOracleInstance.manageCommitteeMember(chad, false, 2);
 
         // Try to disable when already disabled
         vm.prank(owner);
         vm.expectRevert(EtherFiOracle.AlreadyInTargetState.selector);
-        etherFiOracleInstance.manageCommitteeMember(chad, false);
+        etherFiOracleInstance.manageCommitteeMember(chad, false, 2);
     }
 
     function test_addCommitteeMember_alreadyRegistered() public {
         vm.prank(owner);
-        etherFiOracleInstance.addCommitteeMember(chad);
+        etherFiOracleInstance.addCommitteeMember(chad, 2);
 
         vm.prank(owner);
         vm.expectRevert(EtherFiOracle.AlreadyRegistered.selector);
-        etherFiOracleInstance.addCommitteeMember(chad);
+        etherFiOracleInstance.addCommitteeMember(chad, 2);
     }
 
     // ========== _checkQuorum invariant tests ==========
     // _checkQuorum reverts with InvalidQuorum when:
+    //   - quorumSize < minQuorumSize, or
     //   - numActiveCommitteeMembers < quorumSize (too few members for the quorum), or
-    //   - numActiveCommitteeMembers / quorumSize > 2 (quorum too small relative to membership).
+    //   - numActiveCommitteeMembers >= 2 * quorumSize (quorum not a strict majority).
     // The check runs after every add/remove/manage/setQuorum mutation, so each
     // mutation needs to leave the (members, quorum) pair inside the valid band.
 
@@ -901,9 +900,9 @@ contract EtherFiOracleTest is TestSetup {
     function test_setQuorumSize_revertsWhenRatioTooLow() public {
         // First grow membership to 3 so the ratio path is reachable
         vm.prank(owner);
-        etherFiOracleInstance.addCommitteeMember(chad);
+        etherFiOracleInstance.addCommitteeMember(chad, 2);
 
-        // 3 / 1 = 3 > 2 -> revert (quorum is too small for the active set)
+        // 3 / 1 = 3 >= 2 -> revert (quorum is too small for the active set)
         vm.prank(owner);
         vm.expectRevert(EtherFiOracle.InvalidQuorum.selector);
         etherFiOracleInstance.setQuorumSize(1);
@@ -916,35 +915,32 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(etherFiOracleInstance.quorumSize(), 2);
     }
 
-    function test_addCommitteeMember_revertsWhenRatioWouldExceedTwo() public {
-        // Drop quorum to 1 first (legal at numActive=2 since 2/1=2, not > 2)
-        vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
-
-        // Adding chad makes numActive=3, and 3/1 = 3 > 2 -> revert
+    function test_addCommitteeMember_revertsWhenRatioReachesTwo() public {
+        // numActive becomes 3 after the add. Passing _quorumSize=1 means
+        // numActive >= 2 * quorum (3 >= 2) -> revert.
         vm.prank(owner);
         vm.expectRevert(EtherFiOracle.InvalidQuorum.selector);
-        etherFiOracleInstance.addCommitteeMember(chad);
+        etherFiOracleInstance.addCommitteeMember(chad, 1);
     }
 
     function test_removeCommitteeMember_revertsWhenBelowQuorum() public {
         // numActive=2, quorum=2; removing alice drops numActive to 1 < quorum -> revert
         vm.prank(owner);
         vm.expectRevert(EtherFiOracle.InvalidQuorum.selector);
-        etherFiOracleInstance.removeCommitteeMember(alice);
+        etherFiOracleInstance.removeCommitteeMember(alice, 2);
     }
 
     function test_removeCommitteeMember_okWhenMemberWasDisabled() public {
         // Disabling alice already accounted for the numActive drop, so removing her
         // (which only touches numCommitteeMembers, not numActive) keeps quorum valid.
         vm.prank(owner);
-        etherFiOracleInstance.addCommitteeMember(chad);
+        etherFiOracleInstance.addCommitteeMember(chad, 2);
         // numActive=3 after add; disable alice -> numActive=2, quorum=2 (still valid)
         vm.prank(owner);
-        etherFiOracleInstance.manageCommitteeMember(alice, false);
+        etherFiOracleInstance.manageCommitteeMember(alice, false, 2);
 
         vm.prank(owner);
-        etherFiOracleInstance.removeCommitteeMember(alice);
+        etherFiOracleInstance.removeCommitteeMember(alice, 2);
 
         assertEq(etherFiOracleInstance.numActiveCommitteeMembers(), 2);
         assertEq(etherFiOracleInstance.numCommitteeMembers(), 2);
@@ -954,20 +950,20 @@ contract EtherFiOracleTest is TestSetup {
         // numActive=2, quorum=2; disabling bob drops numActive to 1 -> revert
         vm.prank(owner);
         vm.expectRevert(EtherFiOracle.InvalidQuorum.selector);
-        etherFiOracleInstance.manageCommitteeMember(bob, false);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 2);
     }
 
     function test_manageCommitteeMember_reenableKeepsQuorumValid() public {
         // First need a disable that is legal (so add chad to give us headroom)
         vm.prank(owner);
-        etherFiOracleInstance.addCommitteeMember(chad);
+        etherFiOracleInstance.addCommitteeMember(chad, 2);
         vm.prank(owner);
-        etherFiOracleInstance.manageCommitteeMember(chad, false);
+        etherFiOracleInstance.manageCommitteeMember(chad, false, 2);
         assertEq(etherFiOracleInstance.numActiveCommitteeMembers(), 2);
 
         // Re-enable chad: numActive goes back to 3, quorum=2, still valid
         vm.prank(owner);
-        etherFiOracleInstance.manageCommitteeMember(chad, true);
+        etherFiOracleInstance.manageCommitteeMember(chad, true, 2);
         assertEq(etherFiOracleInstance.numActiveCommitteeMembers(), 3);
     }
 
@@ -1087,7 +1083,7 @@ contract EtherFiOracleTest is TestSetup {
         // RoleRegistry is already initialized and alice already has the role in setUpTests
 
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         _moveClock(1024 + 2 * slotsPerEpoch);
 
@@ -1113,7 +1109,8 @@ contract EtherFiOracleTest is TestSetup {
 
         // Execute the validator approval task
         // Note: We need valid pubKeys and signatures, but for testing we can use empty ones
-        // The actual validation happens in liquidityPool.batchApproveRegistration
+        // The actual deposit-data construction now lives in EtherFiAdmin._approveValidators
+        // which forwards to liquidityPool.confirmAndFundBeaconValidators.
         bytes[] memory pubKeys = new bytes[](1);
         bytes[] memory signatures = new bytes[](1);
         pubKeys[0] = new bytes(48);
@@ -1152,7 +1149,7 @@ contract EtherFiOracleTest is TestSetup {
         // RoleRegistry is already initialized and alice already has the role in setUpTests
 
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         _moveClock(1024 + 2 * slotsPerEpoch);
 
@@ -1179,7 +1176,7 @@ contract EtherFiOracleTest is TestSetup {
         // bob doesn't have the role, so we'll use alice for both
 
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         _moveClock(1024 + 2 * slotsPerEpoch);
 
@@ -1221,7 +1218,7 @@ contract EtherFiOracleTest is TestSetup {
         // RoleRegistry is already initialized and alice already has both roles in setUpTests
 
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         _moveClock(1024 + 2 * slotsPerEpoch);
 
@@ -1288,7 +1285,7 @@ contract EtherFiOracleTest is TestSetup {
 
         // Execute a task to set lastHandledReportRefSlot
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         _moveClock(1024 + 2 * slotsPerEpoch);
 
@@ -1312,7 +1309,7 @@ contract EtherFiOracleTest is TestSetup {
 
         // Execute a task to set lastHandledReportRefBlock
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         _moveClock(1024 + 2 * slotsPerEpoch);
 
@@ -1338,7 +1335,7 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_canExecuteTasks_edgeCases() public {
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         _moveClock(1024 + 2 * slotsPerEpoch);
 
@@ -1364,7 +1361,7 @@ contract EtherFiOracleTest is TestSetup {
     function test_executeTasks_wrongRefSlotFrom() public {
         // RoleRegistry is already initialized and alice already has the role in setUpTests
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         _moveClock(1024 + 2 * slotsPerEpoch);
 
@@ -1392,7 +1389,7 @@ contract EtherFiOracleTest is TestSetup {
     function test_executeTasks_wrongRefBlockFrom() public {
         // RoleRegistry is already initialized and alice already has the role in setUpTests
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         _moveClock(1024 + 2 * slotsPerEpoch);
 
@@ -1419,7 +1416,7 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_executeTasks_permissionless() public {
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         _moveClock(1024 + 2 * slotsPerEpoch);
 

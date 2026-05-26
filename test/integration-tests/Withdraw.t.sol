@@ -92,10 +92,16 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         vm.prank(rrOwner);
         roleRegistryInstance.grantRole(opTimelockRole, oracleOwner);
         vm.startPrank(oracleOwner);
-        etherFiOracleInstance.removeCommitteeMember(AVS_OPERATOR_1);
-        etherFiOracleInstance.addCommitteeMember(AVS_OPERATOR_1);
-        etherFiOracleInstance.removeCommitteeMember(AVS_OPERATOR_2);
-        etherFiOracleInstance.addCommitteeMember(AVS_OPERATOR_2);
+        // Each add/remove now requires a _quorumSize that satisfies the strict-majority
+        // invariant for the resulting numActive. Compute fresh values so this works
+        // regardless of mainnet's current quorum.
+        uint32 active = etherFiOracleInstance.numActiveCommitteeMembers();
+        uint32 quorumAfterRemove = active > 1 ? (active - 1) / 2 + 1 : 1;
+        uint32 quorumAfterAdd = active / 2 + 1;
+        etherFiOracleInstance.removeCommitteeMember(AVS_OPERATOR_1, quorumAfterRemove);
+        etherFiOracleInstance.addCommitteeMember(AVS_OPERATOR_1, quorumAfterAdd);
+        etherFiOracleInstance.removeCommitteeMember(AVS_OPERATOR_2, quorumAfterRemove);
+        etherFiOracleInstance.addCommitteeMember(AVS_OPERATOR_2, quorumAfterAdd);
         vm.stopPrank();
     }
 

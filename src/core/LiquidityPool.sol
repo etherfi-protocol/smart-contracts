@@ -12,7 +12,6 @@ import "@etherfi/staking/interfaces/IStakingManager.sol";
 import "@etherfi/withdrawals/interfaces/IWithdrawRequestNFT.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
 import "@etherfi/periphery/interfaces/ILiquifier.sol";
-import "@etherfi/staking/interfaces/IEtherFiNode.sol";
 import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
 import "@etherfi/withdrawals/interfaces/IEtherFiRedemptionManager.sol";
 import "@etherfi/withdrawals/interfaces/IPriorityWithdrawalQueue.sol";
@@ -120,7 +119,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     event Rebase(uint256 totalEthLocked, uint256 totalEEthShares);
     event ProtocolFeePaid(uint128 protocolFees);
     event WhitelistStatusUpdated(bool value);
-    event ValidatorExitRequested(uint256 indexed validatorId);
     event MinWithdrawAmountSet(uint256 minWithdrawAmount);
     event MaxWithdrawAmountSet(uint256 maxWithdrawAmount);
 
@@ -136,7 +134,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     error InsufficientLiquidity();
     error SendFail();
     error InvalidValidatorSize();
-    error InvalidArrayLengths();
     error InvalidAmountForShare();
     error InvalidRate();
     error AlreadyMigrated();
@@ -144,7 +141,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     error AlreadyRegistered();
     error NotRegistered();
     error ContractPaused();
-    error EETHRateDeflation(uint256 P0, uint256 S0, uint256 P1, uint256 S1);
+    error EETHRateDeflation();
 
     struct ConstructorAddresses {
         address stakingManager;
@@ -398,56 +395,16 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     /// @notice send remaining eth to deposit contract to activate the provided validators
-    /// @dev step 3 of staking flow. This version exists to remain compatible with existing callers.
-    ///   future services should use confirmAndFundBeaconValidators()
-     function batchApproveRegistration(
-        uint256[] memory _validatorIds,
-        bytes[] calldata _pubkeys,
-        bytes[] calldata _signatures
-    ) external nonReentrant whenNotPaused {
-        if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
-        if (validatorSizeWei < stakingManager.MIN_VALIDATOR_SIZE_WEI() || validatorSizeWei > stakingManager.MAX_VALIDATOR_SIZE_WEI()) revert InvalidValidatorSize();
-        if (_validatorIds.length == 0 || _validatorIds.length != _pubkeys.length || _validatorIds.length != _signatures.length) revert InvalidArrayLengths();
-
-        // we have already deposited the initial amount to create the validator on the beacon chain
-        uint256 remainingEthPerValidator = validatorSizeWei - stakingManager.INITIAL_DEPOSIT_AMOUNT();
-
-        // In order to maintain compatibility with current callers in this upgrade
-        // need to construct data from old format
-        IStakingManager.DepositData[] memory depositData = new IStakingManager.DepositData[](_validatorIds.length);
-
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            IEtherFiNode etherFiNode = IEtherFiNode(nodesManager.etherfiNodeAddress(_validatorIds[i]));
-            address eigenPod = address(etherFiNode.getEigenPod());
-            bytes memory withdrawalCredentials = nodesManager.addressToCompoundingWithdrawalCredentials(eigenPod);
-
-            bytes32 confirmDepositDataRoot = stakingManager.generateDepositDataRoot(
-                _pubkeys[i],
-                _signatures[i],
-                withdrawalCredentials,
-                remainingEthPerValidator
-            );
-            IStakingManager.DepositData memory confirmDepositData = IStakingManager.DepositData({
-                publicKey: _pubkeys[i],
-                signature: _signatures[i],
-                depositDataRoot: confirmDepositDataRoot,
-                ipfsHashForEncryptedValidatorKey: ""
-            });
-            depositData[i] = confirmDepositData;
-        }
-
-        uint256 outboundEthAmountFromLp = remainingEthPerValidator * _validatorIds.length;
-        stakingManager.confirmAndFundBeaconValidators{value: outboundEthAmountFromLp}(depositData, validatorSizeWei);
-
-        _accountForEthSentOut(outboundEthAmountFromLp);
-    }
-
-    /// @notice send remaining eth to deposit contract to activate the provided validators
-    /// @dev step 3 of staking flow
+    /// @dev step 3 of staking flow. Callable directly by oracle ops, or by EtherFiAdmin
+    ///      when forwarding from `executeValidatorApprovalTask` (which gates oracle ops at
+    ///      its own entry point and tracks task completion on-chain). Both upstream paths
+    ///      enforce oracle-ops authorization, so accepting EtherFiAdmin here doesn't widen
+    ///      the auth surface.
     function confirmAndFundBeaconValidators(
         IStakingManager.DepositData[] calldata _depositData,
         uint256 _validatorSizeWei
-    ) external nonReentrant whenNotPaused onlyOracleOperations {
+    ) external nonReentrant whenNotPaused {
+        if (msg.sender != address(etherFiAdminContract)) roleRegistry.onlyOracleOperations(msg.sender);
         if (_validatorSizeWei < stakingManager.MIN_VALIDATOR_SIZE_WEI() || _validatorSizeWei > stakingManager.MAX_VALIDATOR_SIZE_WEI()) revert InvalidValidatorSize();
 
         // we have already deposited the initial amount to create the validator on the beacon chain
@@ -459,9 +416,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         _accountForEthSentOut(outboundEthAmountFromLp);
     }
 
-    /// @dev set the size of validators created when caling batchApproveRegistration().
-    ///   In a future upgrade this will be a parameter to that call but was done like this to
-    ///   to limit changes to other dependent contracts
+    /// @dev set the size of validators created when EtherFiAdmin.executeValidatorApprovalTask
+    ///   forwards into confirmAndFundBeaconValidators(). In a future upgrade this will be a
+    ///   parameter to that call but was done like this to limit changes to other dependent contracts.
     function setValidatorSizeWei(uint256 _validatorSizeWei) external onlyAdmin {
         if (_validatorSizeWei < stakingManager.MIN_VALIDATOR_SIZE_WEI() || _validatorSizeWei > stakingManager.MAX_VALIDATOR_SIZE_WEI()) revert InvalidValidatorSize();
         validatorSizeWei = _validatorSizeWei;
@@ -485,14 +442,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         delete validatorSpawner[_user];
 
         emit ValidatorSpawnerUnregistered(_user);
-    }
-
-    /// @notice Send the exit requests as the T-NFT holder of the LiquidityPool validators
-    function DEPRECATED_sendExitRequests(uint256[] calldata _validatorIds) external onlyAdmin {
-
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            emit ValidatorExitRequested(_validatorIds[i]);
-        }
     }
 
     /// @notice Rebase by ether.fi
@@ -566,31 +515,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /// @notice Locks ETH for finalized NFT withdrawals by transferring from LP to WithdrawRequestNFT. TVL preserved by InLp/OutOfLp rebalance; share rate unchanged.
     function addEthAmountLockedForWithdrawal(uint128 _amount) external {
         if (msg.sender != address(etherFiAdminContract) && msg.sender != address(withdrawRequestNFT)) revert IncorrectCaller();
-        if (!escrowMigrationCompleted) revert MigrationNotComplete();
-        if (totalValueInLp < _amount) revert InsufficientLiquidity();
-
-        totalValueInLp     -= _amount;
-        totalValueOutOfLp  += _amount;
-
-        _sendFund(address(withdrawRequestNFT), _amount);
-
-        _checkTotalValueInLp();
-        _checkMinAmountForShare();
+        _lockEth(address(withdrawRequestNFT), _amount);
     }
 
     /// @notice Locks ETH for the priority withdrawal queue by transferring from LP to the queue contract. TVL preserved by InLp/OutOfLp rebalance.
     function transferLockedEthForPriority(uint128 _amount) external {
         if (msg.sender != address(priorityWithdrawalQueue)) revert IncorrectCaller();
-        if (!escrowMigrationCompleted) revert MigrationNotComplete();
-        if (totalValueInLp < _amount) revert InsufficientLiquidity();
-
-        totalValueInLp     -= _amount;
-        totalValueOutOfLp  += _amount;
-
-        _sendFund(address(priorityWithdrawalQueue), _amount);
-
-        _checkTotalValueInLp();
-        _checkMinAmountForShare();
+        _lockEth(address(priorityWithdrawalQueue), _amount);
     }
 
     /// @notice Returns ETH from the priority queue back to LP on a finalized cancel. Inverse of transferLockedEthForPriority.
@@ -656,6 +587,20 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         uint256 balance = address(this).balance;
         (bool sent, ) = _recipient.call{value: _amount}("");
         if (!sent || address(this).balance < balance - _amount) revert SendFail();
+    }
+
+    /// @dev Shared body for `addEthAmountLockedForWithdrawal` and `transferLockedEthForPriority`.
+    ///      Both move ETH out of LP into a segregated escrow (WRNFT or PQ) while keeping TVL
+    ///      invariant by rebalancing `totalValueInLp` -> `totalValueOutOfLp`. Caller-gating
+    ///      lives in the two external entry points.
+    function _lockEth(address _dest, uint128 _amount) internal {
+        if (!escrowMigrationCompleted) revert MigrationNotComplete();
+        if (totalValueInLp < _amount) revert InsufficientLiquidity();
+        totalValueInLp    -= _amount;
+        totalValueOutOfLp += _amount;
+        _sendFund(_dest, _amount);
+        _checkTotalValueInLp();
+        _checkMinAmountForShare();
     }
 
     function _accountForEthSentOut(uint256 _amount) internal {
@@ -787,13 +732,25 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     ///
     ///         Overflow note: P, S each fit in uint128 in any plausible
     ///         protocol state; P*S ≈ 1.4e52 ≪ uint256 max. Safe by inspection.
+    ///
+    ///         Implementation note: the snapshot / check pair lives in two
+    ///         internal view helpers so the body isn't duplicated at every
+    ///         site Solidity inlines this modifier into. Same semantics,
+    ///         ~1 KB smaller runtime.
     modifier nonDecreasingRate() {
-        uint256 P0 = getTotalPooledEther();
-        uint256 S0 = eETH.totalShares();
+        (uint256 P0, uint256 S0) = _snapRate();
         _;
-        uint256 P1 = getTotalPooledEther();
-        uint256 S1 = eETH.totalShares();
+        _checkRateNonDec(P0, S0);
+    }
+
+    function _snapRate() internal view returns (uint256 P, uint256 S) {
+        P = getTotalPooledEther();
+        S = eETH.totalShares();
+    }
+
+    function _checkRateNonDec(uint256 P0, uint256 S0) internal view {
+        (uint256 P1, uint256 S1) = _snapRate();
         // Bootstrap exempt (no rate before/after to compare).
-        if (S0 != 0 && S1 != 0 && P1 * S0 < P0 * S1) revert EETHRateDeflation(P0, S0, P1, S1);
+        if (S0 != 0 && S1 != 0 && P1 * S0 < P0 * S1) revert EETHRateDeflation();
     }
 }

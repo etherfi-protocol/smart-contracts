@@ -43,6 +43,7 @@ interface ILiquidityPool {
 
     function totalValueOutOfLp() external view returns (uint128);
     function totalValueInLp() external view returns (uint128);
+    function validatorSizeWei() external view returns (uint256);
     function getTotalEtherClaimOf(address _user) external view returns (uint256);
     function getTotalPooledEther() external view returns (uint256);
     function sharesForAmount(uint256 _amount) external view returns (uint256);
@@ -65,9 +66,7 @@ interface ILiquidityPool {
 
     function batchRegister(IStakingManager.DepositData[] calldata _depositData, uint256[] calldata _bidIds, address _etherFiNode) external;
     function batchCreateBeaconValidators(IStakingManager.DepositData[] calldata _depositData, uint256[] calldata _bidIds, address _etherFiNode) external;
-    function batchApproveRegistration(uint256[] memory _validatorIds, bytes[] calldata _pubkeys, bytes[] calldata _signatures) external;
     function confirmAndFundBeaconValidators(IStakingManager.DepositData[] calldata depositData, uint256 validatorSizeWei) external;
-    function DEPRECATED_sendExitRequests(uint256[] calldata _validatorIds) external;
 
     function registerValidatorSpawner(address _user) external;
     function unregisterValidatorSpawner(address _user) external;

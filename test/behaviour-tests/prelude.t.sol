@@ -378,14 +378,26 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.prank(admin);
         liquidityPool.setValidatorSizeWei(33 ether);
 
-        // batchApproveRegistration is now restricted to msg.sender == etherFiAdminContract
-        // after the role-consolidation refactor.
+        // The old batchApproveRegistration entry on LP is gone; the equivalent path is now
+        // EtherFiAdmin.executeValidatorApprovalTask -> LP.confirmAndFundBeaconValidators.
+        // Build DepositData here and call confirmAndFundBeaconValidators directly,
+        // pranking the etherFiAdminContract (which carries the oracle-operations role).
+        uint256 validatorSizeWei = liquidityPool.validatorSizeWei();
+        uint256 remainingEthPerValidator = validatorSizeWei - stakingManager.INITIAL_DEPOSIT_AMOUNT();
+        address eigenPod = address(IEtherFiNode(etherFiNodesManager.etherfiNodeAddress(bidId)).getEigenPod());
+        bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod);
+        bytes32 depositDataRoot = stakingManager.generateDepositDataRoot(pubkey, signature, withdrawalCredentials, remainingEthPerValidator);
+
+        IStakingManager.DepositData[] memory depositData = new IStakingManager.DepositData[](1);
+        depositData[0] = IStakingManager.DepositData({
+            publicKey: pubkey,
+            signature: signature,
+            depositDataRoot: depositDataRoot,
+            ipfsHashForEncryptedValidatorKey: ""
+        });
+
         vm.prank(LiquidityPool(payable(address(liquidityPool))).etherFiAdminContract());
-        liquidityPool.batchApproveRegistration(
-            toArray_u256(bidId),
-            toArray_bytes(pubkey),
-            toArray_bytes(signature)
-        );
+        liquidityPool.confirmAndFundBeaconValidators(depositData, validatorSizeWei);
     }
 
     function test_forwardingWhitelist() public {
