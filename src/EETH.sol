@@ -44,7 +44,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     // `roleRegistry` is inherited from RolesLibrary; `rateLimiter` from RateLimitedToken.
 
     /// @dev Protocol-wide circuit breakers on supply changes. Mints and burns
-    ///      each draw from their own global bucket via `consumeIfConfigured`,
+    ///      each draw from their own global bucket via `consumeToken`,
     ///      independent of (and additive with) the per-address buckets. A
     ///      compromise that bypasses per-address gating (e.g. attacker minting
     ///      to a fresh wallet with no bucket) still has to fit inside the
@@ -103,7 +103,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
 
         uint256 amount = liquidityPool.amountForShare(_share);
         uint64 amt = toBucketUnit(amount);
-        rateLimiter.consumeIfConfigured(EETH_MINT_LIMIT_ID, amt);
+        rateLimiter.consumeToken(EETH_MINT_LIMIT_ID, amt);
         rateLimiter.consumeForAddressIfConfigured(_user, amt);
 
         emit Transfer(address(0), _user, amount);
@@ -119,7 +119,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
 
         uint256 amount = liquidityPool.amountForShare(_share);
         uint64 amt = toBucketUnit(amount);
-        rateLimiter.consumeIfConfigured(EETH_BURN_LIMIT_ID, amt);
+        rateLimiter.consumeToken(EETH_BURN_LIMIT_ID, amt);
         rateLimiter.consumeForAddressIfConfigured(_user, amt);
 
         emit Transfer(_user, address(0), amount);

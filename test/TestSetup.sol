@@ -1168,7 +1168,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), admin);
 
         // Per-address rate-limit buckets are opt-in (Guardian creates them on demand).
-        // The global MINT/BURN buckets ARE required — eETH/weETH call consumeIfConfigured
+        // The global MINT/BURN buckets ARE required — eETH/weETH call consumeToken
         // on every supply change and that reverts UnknownLimit if the bucket is missing.
         // Bootstrap at unbounded capacity here so generic tests aren't rate-limited;
         // rate-limit-specific tests override capacity/refill via the admin path.
@@ -1477,7 +1477,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         address newWeETHImpl = address(new WeETH(address(eETHInstance), address(liquidityPoolInstance), address(roleRegistryInstance), address(blacklisterInstance), address(rateLimiterInstance)));
         vm.prank(owner);
         weEthInstance.upgradeTo(newWeETHImpl);
-        // The upgraded weETH calls consumeIfConfigured(WEETH_{MINT,BURN}_LIMIT_ID, ...)
+        // The upgraded weETH calls consumeToken(WEETH_{MINT,BURN}_LIMIT_ID, ...)
         // on every mint/burn; bootstrap those at unbounded capacity for fork tests.
         // Caller has no active prank here, so prank as `owner` (granted OPERATION_TIMELOCK_ROLE upstream).
         vm.startPrank(owner);

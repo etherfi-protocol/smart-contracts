@@ -727,7 +727,7 @@ contract TokenRateLimitTest is TestSetup {
 
     function test_global_eETH_mint_and_burn_buckets_are_independent() public {
         // Tighten only MINT to a tiny non-zero cap. NOTE: capacity == 0 on a
-        // global bucket means "disabled (no-op)" per consumeIfConfigured —
+        // global bucket means "disabled (no-op)" per consumeToken —
         // NOT frozen. Use 1 gwei as the smallest non-zero cap to actually
         // throttle. (Per-address buckets behave differently — capacity=0
         // there reverts on consume.)
@@ -804,5 +804,216 @@ contract TokenRateLimitTest is TestSetup {
 
         assertFalse(rateLimiterInstance.addressLimitExists(address(eETHInstance), alice));
         assertFalse(rateLimiterInstance.addressLimitExists(address(eETHInstance), bob));
+    }
+
+    // =====================================================================
+    // Bootstrap-ordering invariants  (READ THIS BEFORE UPGRADING eETH/weETH)
+    // =====================================================================
+    //
+    // The four global MINT/BURN buckets — EETH_MINT_LIMIT_ID, EETH_BURN_LIMIT_ID,
+    // WEETH_MINT_LIMIT_ID, WEETH_BURN_LIMIT_ID — MUST be created via
+    // `createNewLimiter` AND have eETH/weETH whitelisted via `updateConsumers`
+    // BEFORE the new eETH/weETH impls are activated. `_setupGlobalMintBurnBuckets`
+    // in TestSetup is the reference bootstrap.
+    //
+    // The tests below tabulate, in code, every distinct global-bucket state and
+    // the exact revert selector each one produces. If a future agent is debugging
+    // an eETH/weETH upgrade revert, this is the lookup table:
+    //
+    //   Global-bucket state                                    | consumeToken behavior
+    //   -------------------------------------------------------|-----------------------------
+    //   1. Bucket never created (no createNewLimiter)          | revert UnknownLimit
+    //   2. Bucket created, consumer not whitelisted            | revert InvalidConsumer
+    //   3. Bucket created, consumer whitelisted, capacity == 0 | revert LimitExceeded
+    //   4. Bucket created, consumer whitelisted, sufficient    | succeed, decrement remaining
+    //   5. Bucket created, consumer whitelisted, insufficient  | revert LimitExceeded
+    //
+    // Per-address `consumeForAddressIfConfigured` uses the SAME `capacity == 0`
+    // semantic on an existing bucket (reverts LimitExceeded) — see
+    // `test_addressLimit_lastRefill_sentinel_distinguishes_not_created_from_frozen`
+    // and `test_cap0_reverts_symmetric_on_global_and_perAddress` below. The only
+    // per-address-specific state is `lastRefill == 0` ("never created" →
+    // no-op / unrestricted user), which the global path doesn't need because
+    // missing globals revert UnknownLimit instead.
+    //
+    // To soft-disable a global rate limit without un-whitelisting the consumer,
+    // set capacity to type(uint64).max (effectively unlimited, never trips).
+    //
+    // Why this matters operationally: if a 3CP upgrade bundle swaps the eETH/weETH
+    // impls WITHOUT including the four createNewLimiter + updateConsumers calls in
+    // the same bundle, the failure mode is total — every LP deposit and every
+    // burnShares reverts UnknownLimit. Wrap/unwrap on weETH continues to work
+    // (transient-storage flag bypasses the global on those paths), which can
+    // make the incident look partial and confusing. These tests pin down each
+    // signal so the diagnosis is unambiguous.
+
+    function test_bootstrap_state1_uncreated_bucket_reverts_UnknownLimit() public {
+        // The four real IDs are already created by TestSetup and there's no API
+        // to delete a global bucket. Prove the failure mode using a synthetic
+        // ID that has never been created — same code path eETH would hit on an
+        // unbootstrapped upgrade.
+        bytes32 neverCreatedId = keccak256("BOOTSTRAP_TEST_FAKE_ID");
+
+        vm.prank(address(eETHInstance));
+        vm.expectRevert(IEtherFiRateLimiter.UnknownLimit.selector);
+        rateLimiterInstance.consumeToken(neverCreatedId, 1);
+
+        // Implication: a 3CP that upgrades eETH/weETH impls WITHOUT first calling
+        // createNewLimiter for EETH_MINT_LIMIT_ID / EETH_BURN_LIMIT_ID /
+        // WEETH_MINT_LIMIT_ID / WEETH_BURN_LIMIT_ID will revert every LP deposit
+        // and every burnShares with this exact selector. Include the four
+        // createNewLimiter calls in the same bundle as the impl upgrade.
+    }
+
+    function test_bootstrap_state2_LP_deposit_reverts_InvalidConsumer_when_consumer_not_whitelisted() public {
+        // Bucket exists (TestSetup created it at uint64.max) but if eETH is
+        // removed from the consumer whitelist, the consume call reverts
+        // InvalidConsumer BEFORE any capacity check.
+        // NOTE: resolve the bucket ID into a local BEFORE `vm.prank` — calling
+        // `eETHInstance.EETH_MINT_LIMIT_ID()` is itself an external call and
+        // would consume the single-call prank intended for `updateConsumers`.
+        bytes32 mintId = eETHInstance.EETH_MINT_LIMIT_ID();
+        vm.prank(admin);
+        rateLimiterInstance.updateConsumers(mintId, address(eETHInstance), false);
+
+        vm.deal(chad, 1 ether);
+        vm.prank(chad);
+        vm.expectRevert(IEtherFiRateLimiter.InvalidConsumer.selector);
+        liquidityPoolInstance.deposit{value: 1 ether}();
+
+        // Implication: a 3CP that calls createNewLimiter but forgets the matching
+        // updateConsumers(id, eETH, true) reverts every deposit with this selector.
+        // Recovery is a single tx from OPERATION_TIMELOCK, but the failure is
+        // total until that tx lands. Keep both calls in the same bundle.
+    }
+
+    function test_bootstrap_state2_LP_burn_reverts_InvalidConsumer_when_consumer_not_whitelisted() public {
+        // Same story for the burn side — confirms both directions of the supply
+        // change are gated by the same consumer-whitelist check.
+        bytes32 burnId = eETHInstance.EETH_BURN_LIMIT_ID();
+        vm.prank(admin);
+        rateLimiterInstance.updateConsumers(burnId, address(eETHInstance), false);
+
+        uint256 oneEthShare = liquidityPoolInstance.sharesForAmount(1 ether);
+        vm.prank(address(liquidityPoolInstance));
+        vm.expectRevert(IEtherFiRateLimiter.InvalidConsumer.selector);
+        eETHInstance.burnShares(alice, oneEthShare);
+    }
+
+    function test_bootstrap_state2_weETH_wrap_STILL_succeeds_when_consumer_not_whitelisted() public {
+        // Subtle and important: wrap/unwrap survives consumer revocation because
+        // the transient-storage wrap-context flag short-circuits the global consume
+        // BEFORE we ever reach the rate limiter. This is by design — wrap/unwrap
+        // is value-neutral and must never be DOSable via global-bucket state.
+        //
+        // Any NON-wrap mint reach (a future bridge adapter, a new mint authority,
+        // an exploit) would NOT set the transient flag and WOULD hit the consumer
+        // check, reverting InvalidConsumer. The safety property still holds: the
+        // global bucket remains an enforced circuit breaker for unauthorized
+        // supply changes even if wrap/unwrap continues to function.
+        bytes32 wMintId = weEthInstance.WEETH_MINT_LIMIT_ID();
+        vm.prank(admin);
+        rateLimiterInstance.updateConsumers(wMintId, address(weEthInstance), false);
+
+        vm.startPrank(alice);
+        eETHInstance.approve(address(weEthInstance), type(uint256).max);
+        weEthInstance.wrap(1 ether);
+        vm.stopPrank();
+
+        // Implication: during a half-bootstrapped upgrade, wrap/unwrap will look
+        // healthy in monitoring while LP deposits and burns are all reverting.
+        // Don't be fooled into thinking the rate limiter is "mostly working" —
+        // the wrap-skip is intentional and doesn't tell you anything about
+        // whether the rest of the wiring is correct.
+    }
+
+    function test_cap0_reverts_symmetric_on_global_and_perAddress() public {
+        // Symmetry invariant: `cap == 0` on an existing bucket reverts
+        // LimitExceeded on BOTH the global and per-address paths. The only
+        // path-specific "soft no-op" state is the per-address `lastRefill == 0`
+        // (never created → unrestricted user); there is no equivalent soft state
+        // on the global side (missing globals revert UnknownLimit).
+        //
+        // To soft-disable a global rate limit without un-whitelisting the
+        // consumer, set capacity to type(uint64).max — effectively unlimited,
+        // any consume succeeds.
+
+        bytes32 mintId = eETHInstance.EETH_MINT_LIMIT_ID();
+
+        // GLOBAL leg: setCapacity(id, 0) reverts on every consume.
+        vm.startPrank(admin);
+        rateLimiterInstance.setCapacity(mintId, 0);
+        rateLimiterInstance.setRemaining(mintId, 0);
+        vm.stopPrank();
+
+        vm.deal(chad, 1 ether);
+        vm.prank(chad);
+        vm.expectRevert(IEtherFiRateLimiter.LimitExceeded.selector);
+        liquidityPoolInstance.deposit{value: 1 ether}();
+
+        // Restore the global so the per-address leg below isn't shadowed by the
+        // still-zeroed global. Use uint64.max as the documented soft-disable
+        // idiom (effectively unlimited).
+        vm.startPrank(admin);
+        rateLimiterInstance.setCapacity(mintId, type(uint64).max);
+        rateLimiterInstance.setRemaining(mintId, type(uint64).max);
+        vm.stopPrank();
+
+        // PER-ADDRESS leg: tighten to (0, 0) freezes; consume reverts the same way.
+        vm.prank(guardianOnly);
+        _tightenEth(dan, 0, 0);
+
+        vm.deal(dan, 1 ether);
+        vm.prank(dan);
+        vm.expectRevert(IEtherFiRateLimiter.LimitExceeded.selector);
+        liquidityPoolInstance.deposit{value: 1 ether}();
+    }
+
+    function test_bootstrap_sentinel_matrix_via_rateLimiter_direct() public {
+        // Same matrix as the LP-level tests above, but called directly on the
+        // rate limiter so future agents can see all five outcomes in one
+        // executable lookup table.
+        bytes32 fakeId = keccak256("BOOTSTRAP_TEST_SENTINEL_MATRIX");
+        bytes32 realId = eETHInstance.EETH_MINT_LIMIT_ID();
+
+        // State 1: bucket never created.
+        vm.prank(address(eETHInstance));
+        vm.expectRevert(IEtherFiRateLimiter.UnknownLimit.selector);
+        rateLimiterInstance.consumeToken(fakeId, 1);
+
+        // State 2: bucket created, consumer revoked.
+        vm.prank(admin);
+        rateLimiterInstance.updateConsumers(realId, address(eETHInstance), false);
+        vm.prank(address(eETHInstance));
+        vm.expectRevert(IEtherFiRateLimiter.InvalidConsumer.selector);
+        rateLimiterInstance.consumeToken(realId, 1);
+
+        // Re-whitelist for the remaining states.
+        vm.prank(admin);
+        rateLimiterInstance.updateConsumers(realId, address(eETHInstance), true);
+
+        // State 3: cap == 0 → revert LimitExceeded (symmetric with per-address freeze).
+        vm.startPrank(admin);
+        rateLimiterInstance.setCapacity(realId, 0);
+        rateLimiterInstance.setRemaining(realId, 0);
+        vm.stopPrank();
+        vm.prank(address(eETHInstance));
+        vm.expectRevert(IEtherFiRateLimiter.LimitExceeded.selector);
+        rateLimiterInstance.consumeToken(realId, 1);
+
+        // State 4: cap > 0, sufficient → succeeds.
+        vm.startPrank(admin);
+        rateLimiterInstance.setCapacity(realId, 100);
+        rateLimiterInstance.setRemaining(realId, 100);
+        rateLimiterInstance.setRefillRate(realId, 0);
+        vm.stopPrank();
+        vm.prank(address(eETHInstance));
+        rateLimiterInstance.consumeToken(realId, 50);
+
+        // State 5: cap > 0, insufficient → LimitExceeded.
+        // After the 50-unit consume above, remaining == 50. Asking for 51 reverts.
+        vm.prank(address(eETHInstance));
+        vm.expectRevert(IEtherFiRateLimiter.LimitExceeded.selector);
+        rateLimiterInstance.consumeToken(realId, 51);
     }
 }
