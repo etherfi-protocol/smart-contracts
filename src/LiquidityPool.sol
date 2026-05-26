@@ -120,7 +120,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     event Rebase(uint256 totalEthLocked, uint256 totalEEthShares);
     event ProtocolFeePaid(uint128 protocolFees);
     event WhitelistStatusUpdated(bool value);
-    event ValidatorExitRequested(uint256 indexed validatorId);
     event MinWithdrawAmountSet(uint256 minWithdrawAmount);
     event MaxWithdrawAmountSet(uint256 maxWithdrawAmount);
 
@@ -485,14 +484,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         delete validatorSpawner[_user];
 
         emit ValidatorSpawnerUnregistered(_user);
-    }
-
-    /// @notice Send the exit requests as the T-NFT holder of the LiquidityPool validators
-    function DEPRECATED_sendExitRequests(uint256[] calldata _validatorIds) external onlyAdmin {
-
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            emit ValidatorExitRequested(_validatorIds[i]);
-        }
     }
 
     /// @notice Rebase by ether.fi

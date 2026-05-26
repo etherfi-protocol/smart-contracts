@@ -285,13 +285,6 @@ contract LiquidityPoolTest is TestSetup {
     }
 
 
-    function test_sendExitRequestFails() public {
-        uint256[] memory newValidators = new uint256[](10);
-        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
-        vm.prank(elvis);
-        liquidityPoolInstance.DEPRECATED_sendExitRequests(newValidators);
-    }
-
     // TODO(dave): update when v3 changes finalized
 
     function test_fallback() public {
