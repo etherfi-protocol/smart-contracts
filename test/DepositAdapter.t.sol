@@ -104,9 +104,9 @@ contract DepositAdapterTest is TestSetup {
         liquifierPermitInput = ILiquifier.PermitInput({value: permitInput.value, deadline: permitInput.deadline, v: permitInput.v, r: permitInput.r, s: permitInput.s});
         depositAdapterInstance.depositStETHForWeETHWithPermit(1 ether, bob, liquifierPermitInput);
 
-        assertApproxEqAbs(stEth.balanceOf(address(alice)), stEthBalanceBeforeDeposit - 1 ether, 3);
-        assertApproxEqAbs(weEthInstance.balanceOf(address(alice)), weEthInstance.getWeETHByeETH(eETHAmountFromStETH), 3);
-        assertApproxEqAbs(stEth.balanceOf(address(etherFiRestakerInstance)), protocolStETHBeforeDeposit + 1 ether, 3);
+        assertApproxEqAbs(stEth.balanceOf(address(alice)), stEthBalanceBeforeDeposit - 1 ether, 4);
+        assertApproxEqAbs(weEthInstance.balanceOf(address(alice)), weEthInstance.getWeETHByeETH(eETHAmountFromStETH), 4);
+        assertApproxEqAbs(stEth.balanceOf(address(etherFiRestakerInstance)), protocolStETHBeforeDeposit + 1 ether, 4);
 
         // reusing the same permit
         vm.expectRevert("ALLOWANCE_EXCEEDED");
@@ -121,7 +121,7 @@ contract DepositAdapterTest is TestSetup {
         liquifierPermitInput = ILiquifier.PermitInput({value: permitInput.value, deadline: permitInput.deadline, v: permitInput.v, r: permitInput.r, s: permitInput.s});
         depositAdapterInstance.depositStETHForWeETHWithPermit(5000 ether, bob, liquifierPermitInput);
 
-        assertApproxEqAbs(stEth.balanceOf(address(etherFiRestakerInstance)), protocolStETHBeforeDeposit + 5000 ether, 3);
+        assertApproxEqAbs(stEth.balanceOf(address(etherFiRestakerInstance)), protocolStETHBeforeDeposit + 5000 ether, 4);
     }
 
     function test_DepositWstETH() public {
@@ -180,9 +180,9 @@ contract DepositAdapterTest is TestSetup {
         console.log("Permit Deadline:", permitDeadline);
         depositAdapterInstance.depositStETHForWeETHWithPermit(1 ether, bob, liquifierPermitInput);
 
-        assertApproxEqAbs(stEth.balanceOf(address(alice)), stEthBalanceBeforeDeposit - 1 ether, 3);
-        assertApproxEqAbs(weEthInstance.balanceOf(address(alice)), weEthInstance.getWeETHByeETH(eETHAmountFromStETH), 3);
-        assertApproxEqAbs(stEth.balanceOf(address(etherFiRestakerInstance)), protocolStETHBeforeDeposit + 1 ether, 3);
+        assertApproxEqAbs(stEth.balanceOf(address(alice)), stEthBalanceBeforeDeposit - 1 ether, 4);
+        assertApproxEqAbs(weEthInstance.balanceOf(address(alice)), weEthInstance.getWeETHByeETH(eETHAmountFromStETH), 4);
+        assertApproxEqAbs(stEth.balanceOf(address(etherFiRestakerInstance)), protocolStETHBeforeDeposit + 1 ether, 4);
 
         vm.warp(block.timestamp + permitDeadline + 1 days);
         

@@ -233,11 +233,11 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         if (from == address(0)) {
             // mint: value-neutral wraps skip the global; everything else (bridge,
             // future mint authority, exploit) trips the global circuit breaker.
-            if (wrapCtx == 0) rateLimiter.consumeIfConfigured(WEETH_MINT_LIMIT_ID, amt);
+            if (wrapCtx == 0) rateLimiter.consumeToken(WEETH_MINT_LIMIT_ID, amt);
             rateLimiter.consumeForAddressIfConfigured(to, amt);
         } else if (to == address(0)) {
             // burn: same — unwrap is value-neutral; anything else trips global BURN.
-            if (wrapCtx == 0) rateLimiter.consumeIfConfigured(WEETH_BURN_LIMIT_ID, amt);
+            if (wrapCtx == 0) rateLimiter.consumeToken(WEETH_BURN_LIMIT_ID, amt);
             rateLimiter.consumeForAddressIfConfigured(from, amt);
         } else {
             // transfer: no supply change, per-address only.

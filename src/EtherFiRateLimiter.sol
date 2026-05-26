@@ -175,39 +175,30 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     /// @param amount The amount to consume in gwei
     /// @dev Reverts if the consumer is not whitelisted or if insufficient capacity is available
     function consume(bytes32 id, uint64 amount) external whenNotPaused {
-        if (!limitExists(id)) revert UnknownLimit();
-        if (!consumers[id][msg.sender]) revert InvalidConsumer(); // must be whitelisted consumer
-
-        // returns false if full amount cannot be consumed
-        if (!BucketLimiter.consume(limits[id], amount)) revert LimitExceeded();
+        _consume(id, amount);
     }
 
-    /// @notice Consume capacity, or no-op if the bucket is disabled (capacity == 0).
+    /// @notice Consume capacity from a global rate limit; reverts on insufficient capacity.
     /// @param id The rate limit identifier
     /// @param amount The amount to consume in gwei
-    /// @dev Designed for token transfer/mint/burn paths that want a gas-cheap soft rate-limit
-    ///      in a single external call. Intentionally skips `whenNotPaused` — pausing the rate
-    ///      limiter must not halt token transfers; operators pause the token contract itself
-    ///      for a hard stop. Still enforces bucket existence and the consumer whitelist, so
-    ///      this is not a backdoor: only consumers explicitly whitelisted by an admin (e.g.
-    ///      eETH, weETH for their respective buckets) can use it.
+    /// @dev Token-only entry point for transfer/mint/burn paths. Intentionally skips
+    ///      `whenNotPaused` — pausing the rate limiter must not halt token transfers;
+    ///      operators pause the token contract itself for a hard stop. `onlyToken`
+    ///      restricts callers to eETH/weETH, and `_consume` still enforces the consumer
+    ///      whitelist, so the token must also be admin-whitelisted on the target bucket.
     ///
-    ///      CAPACITY == 0 SEMANTICS: on this global-bucket path, `capacity == 0` means
-    ///      "not configured / disabled" and the call passes through as a no-op. This is
-    ///      deliberate — admins set cap=0 to retire a bucket without breaking the live
-    ///      consumer's call path. Compare against `consumeForAddressIfConfigured` below,
-    ///      where `capacity == 0` on an existing per-address bucket means "frozen" and
-    ///      reverts. The split is intentional: the global bucket has only one creation
-    ///      lifecycle (admin opt-in), while per-address buckets have a freeze/delete
-    ///      distinction baked into the Guardian/Multisig access split. Monitoring should
-    ///      watch the existing `CapacityUpdated(id, 0)` event to detect buckets entering
-    ///      disabled mode.
-    function consumeIfConfigured(bytes32 id, uint64 amount) external {
+    ///      CAPACITY == 0 SEMANTICS: `capacity == 0` on an existing bucket reverts
+    ///      LimitExceeded (symmetric with `consumeForAddressIfConfigured` below). To
+    ///      soft-disable a global rate limit without un-whitelisting the consumer,
+    ///      set capacity to type(uint64).max — effectively unlimited, the consume
+    ///      always succeeds.
+    function consumeToken(bytes32 id, uint64 amount) external onlyToken {
+        _consume(id, amount);
+    }
+
+    function _consume(bytes32 id, uint64 amount) internal {
         if (!limitExists(id)) revert UnknownLimit();
         if (!consumers[id][msg.sender]) revert InvalidConsumer();
-
-        if (limits[id].capacity == 0) return;
-
         if (!BucketLimiter.consume(limits[id], amount)) revert LimitExceeded();
     }
 
@@ -215,14 +206,13 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     /// @dev Callable only by eETH/weETH. `lastRefill == 0` uniquely identifies "never
     ///      created" (unrestricted user) and short-circuits to a no-op.
     ///
-    ///      CAPACITY == 0 SEMANTICS: differs from `consumeIfConfigured` above. Here a
-    ///      bucket with `lastRefill > 0` AND `capacity == 0` is treated as **frozen** —
-    ///      the underlying `BucketLimiter.consume` returns false (refill can't push
-    ///      `remaining` above a zero capacity) and we revert `LimitExceeded`. This is
-    ///      the freeze path the Guardian uses via `tightenAddressLimit(user, 0, 0)`;
-    ///      the Multisig clears it via `deleteAddressLimit` (returns to "never created")
-    ///      or `setAddressLimit` (creates fresh with non-zero cap). Two distinct sentinel
-    ///      states (deleted vs frozen) keep the Guardian/Multisig split meaningful.
+    ///      CAPACITY == 0 SEMANTICS: `capacity == 0` on an existing bucket reverts
+    ///      LimitExceeded (symmetric with `consumeToken` above). This is the
+    ///      freeze path the Guardian uses via `tightenAddressLimit(user, 0, 0)`; the
+    ///      Multisig clears it via `deleteAddressLimit` (returns to "never created" →
+    ///      no-op) or `setAddressLimit` (creates fresh with non-zero cap). The two
+    ///      distinct sentinel states — deleted (lastRefill == 0) vs frozen (cap == 0,
+    ///      lastRefill > 0) — keep the Guardian/Multisig access split meaningful.
     ///
     ///      Intentionally skips `whenNotPaused`: pausing the rate limiter must not halt
     ///      token transfers.

@@ -4,7 +4,6 @@ pragma solidity ^0.8.13;
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC1155/ERC1155Upgradeable.sol";
-import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
 import "./interfaces/IMembershipManager.sol";
@@ -42,12 +41,8 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
 
     uint256 public constant BASIS_POINTS_DENOMINATOR = 10000;
 
-    event MerkleUpdated(bytes32, bytes32);
-    event MintingPaused(bool isPaused);
     event TokenLocked(uint256 indexed _tokenId, uint256 until);
-    
-    error MintingIsPaused();
-    error InvalidEAPRollover();
+
     error RequireTokenUnlocked();
     error OnlyMembershipManagerContract();
 
@@ -67,14 +62,6 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
         maxTokenId = 1000;
     }
 
-    function mint(address _to, uint256 _amount) external onlyMembershipManagerContract returns (uint256) {
-        if (mintingPaused || nextMintTokenId > maxTokenId) revert MintingIsPaused();
-
-        uint32 tokenId = nextMintTokenId++;
-        _mint(_to, tokenId, _amount, "");
-        return tokenId;
-    }
-
     function burn(address _from, uint256 _tokenId, uint256 _amount) onlyMembershipManagerContract external {
         _burn(_from, _tokenId, _amount);
     }
@@ -88,37 +75,6 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
             nftData[_tokenId].transferLockedUntil = target;
             emit TokenLocked(_tokenId, target);
         }
-    }
-
-    function processDepositFromEapUser(address _user, uint32  _eapDepositBlockNumber, uint256 _snapshotEthAmount, uint256 _points, bytes32[] calldata _merkleProof) onlyMembershipManagerContract external {
-        if (eapDepositProcessed[_user] == true) revert InvalidEAPRollover();
-        bytes32 leaf = keccak256(abi.encodePacked(_user,_snapshotEthAmount, _points, _eapDepositBlockNumber));
-        if (!MerkleProof.verify(_merkleProof, eapMerkleRoot, leaf)) revert InvalidEAPRollover(); 
-
-        eapDepositProcessed[_user] = true;
-    }
-
-    //--------------------------------------------------------------------------------------
-    //--------------------------------------  SETTER  --------------------------------------
-    //--------------------------------------------------------------------------------------
-
-    function setMaxTokenId(uint32 _maxTokenId) external onlyOperatingMultisig {
-        maxTokenId = _maxTokenId;
-    }
-
-    /// @notice Set up for EAP migration; Updates the merkle root, Set the required loyalty points per tier
-    /// @param _newMerkleRoot new merkle root used to verify the EAP user data (deposits, points)
-    /// @param _requiredEapPointsPerEapDeposit required EAP points per deposit for each tier
-    function setUpForEap(bytes32 _newMerkleRoot, uint64[] calldata _requiredEapPointsPerEapDeposit) external onlyOperatingMultisig {
-        bytes32 oldMerkleRoot = eapMerkleRoot;
-        eapMerkleRoot = _newMerkleRoot;
-        requiredEapPointsPerEapDeposit = _requiredEapPointsPerEapDeposit;
-        emit MerkleUpdated(oldMerkleRoot, _newMerkleRoot);
-    }
-    
-    function setMintingPaused(bool _paused) external onlyOperatingMultisig {
-        mintingPaused = _paused;
-        emit MintingPaused(_paused);
     }
 
     //--------------------------------------------------------------------------------------
@@ -248,10 +204,6 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
         return uint40(earnedPoints);
     }
 
-    function canTopUp(uint256 _tokenId, uint256 _totalAmount, uint128 _amount, uint128 _amountForPoints) public view returns (bool) {
-        return membershipManager.canTopUp(_tokenId, _totalAmount, _amount, _amountForPoints);
-    }
-
     function isWithdrawable(uint256 _tokenId, uint256 _withdrawalAmount) public view returns (bool) {
         // cap withdrawals to 50% of lifetime max balance. Otherwise need to fully withdraw and burn NFT
         uint256 totalDeposit = valueOf(_tokenId);
@@ -290,49 +242,6 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
         // - A user with 1 Million ether can earn points for 1000 days
         earning = _min((earning / 1 days) / 0.001 ether, type(uint40).max);
         return uint40(earning);
-    }
-
-    function computeTierPointsForEap(uint32 _eapDepositBlockNumber) public view returns (uint40) {
-        uint8 numTiers = membershipManager.numberOfTiers();
-        uint32[] memory lastBlockNumbers = new uint32[](numTiers);
-        uint32 eapCloseBlockNumber = 17664247; // https://etherscan.io/tx/0x1ff2ade678bea8b4e5633841ff21390283e57bc50fced4dea54b11ebc929b10c
-        
-        lastBlockNumbers[0] = 0;
-        lastBlockNumbers[1] = eapCloseBlockNumber;
-        lastBlockNumbers[2] = 16970393; // https://etherscan.io/tx/0x65bc8e0e5c038fc1569c3b7d9663438696a1e261451a6a57d44373266eda5a19
-        lastBlockNumbers[3] = 16755015; // https://etherscan.io/tx/0xe579a56c6c1b1878b368836b682b8fa7c39fe54d6f07750158b570844597e5b4
-        
-        uint8 tierId;
-        if (_eapDepositBlockNumber <= lastBlockNumbers[3]) {
-            tierId = 3; // PLATINUM
-        } else if (_eapDepositBlockNumber <= lastBlockNumbers[2]) {
-            tierId = 2; // GOLD
-        } else if (_eapDepositBlockNumber <= lastBlockNumbers[1]) {
-            tierId = 1; // SILVER
-        } else {
-            tierId = 0; // BRONZE
-        }
-        uint8 nextTierId = (tierId < numTiers - 1) ? tierId + 1 : tierId;
-
-        (,uint40 current,, ) = membershipManager.tierData(tierId);
-        (,uint40 next,, ) = membershipManager.tierData(nextTierId);
-
-        // Minimum tierPoints for the current tier
-        uint40 tierPoints = current;
-
-        // Linear projection of TierPoints within the tier
-        // so that the days in EAP is taken into account for the days remaining for the next tier
-        if (tierId != nextTierId) {
-            tierPoints += (next - current) * (lastBlockNumbers[tierId] - _eapDepositBlockNumber) / (lastBlockNumbers[tierId] - lastBlockNumbers[nextTierId]);
-        }
-
-        // They kept staking with us after the EAP ended
-        // One tier point per hour
-        // While the actual block generation time is slightly larger than 12 seconds
-        // we use 13 seconds to compenstae our users pain during the days after the EAP
-        tierPoints += (13 * (uint40(block.number) - eapCloseBlockNumber)) / 3600;
-
-        return tierPoints;
     }
 
     function _min(uint256 _a, uint256 _b) internal pure returns (uint256) {
