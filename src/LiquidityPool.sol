@@ -144,6 +144,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     error AlreadyRegistered();
     error NotRegistered();
     error ContractPaused();
+    error EETHRateDeflation(uint256 P0, uint256 S0, uint256 P1, uint256 S1);
 
     struct ConstructorAddresses {
         address stakingManager;
@@ -228,14 +229,14 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     // Used by eETH staking flow
-    function deposit(address _referral) public payable nonReentrant whenNotPaused nonBlacklisted returns (uint256) {
+    function deposit(address _referral) public payable nonReentrant whenNotPaused nonBlacklisted nonDecreasingRate returns (uint256) {
         emit Deposit(msg.sender, msg.value, SourceOfFunds.EETH, _referral);
 
         return _deposit(msg.sender, msg.value, 0);
     }
 
     // Used by eETH staking flow through Liquifier contract; deVamp or to pay protocol fees
-    function depositToRecipient(address _recipient, uint256 _amount, address _referral) public nonReentrant whenNotPaused returns (uint256) {
+    function depositToRecipient(address _recipient, uint256 _amount, address _referral) public nonReentrant whenNotPaused nonDecreasingRate returns (uint256) {
         if (msg.sender != address(liquifier) && msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
         blacklister.nonBlacklisted(_recipient);
 
@@ -245,7 +246,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     // Used by ether.fan staking flow
-    function deposit(address _user, address _referral) external payable nonReentrant whenNotPaused returns (uint256) {
+    function deposit(address _user, address _referral) external payable nonReentrant whenNotPaused nonDecreasingRate returns (uint256) {
         if (msg.sender != address(membershipManager)) revert IncorrectCaller();
         blacklister.nonBlacklisted(_user);
 
@@ -257,7 +258,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /// @notice Burns shares and pays ETH. For NFT/queue callers, ETH is paid by the caller from its own segregated balance; LP only does accounting. Other callers receive ETH from LP.
     /// @notice Live-rate withdraw for membershipManager and etherFiRedemptionManager.
     ///         Burns shares at the live rate and pays ETH from the LP to `_recipient`.
-    function withdraw(address _recipient, uint256 _amount) external nonReentrant whenNotPaused returns (uint256) {
+    function withdraw(address _recipient, uint256 _amount) external nonReentrant whenNotPaused nonDecreasingRate returns (uint256) {
         if (msg.sender != address(membershipManager) && msg.sender != address(etherFiRedemptionManager)) {
             revert IncorrectCaller();
         }
@@ -603,13 +604,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         _checkMinAmountForShare();
     }
 
-    function burnEEthShares(uint256 shares) external {
+    function burnEEthShares(uint256 shares) external nonDecreasingRate {
         if (msg.sender != address(etherFiRedemptionManager) && msg.sender != address(withdrawRequestNFT) && msg.sender != address(priorityWithdrawalQueue)) revert IncorrectCaller();
         eETH.burnShares(msg.sender, shares);
         _checkMinAmountForShare();
     }
 
-    function burnEEthSharesForNonETHWithdrawal(uint256 _amountSharesToBurn, uint256 _withdrawalValueInETH) external {
+    function burnEEthSharesForNonETHWithdrawal(uint256 _amountSharesToBurn, uint256 _withdrawalValueInETH) external nonDecreasingRate {
         uint256 share = sharesForWithdrawalAmount(_withdrawalValueInETH);
         if (msg.sender != address(etherFiRedemptionManager)) revert IncorrectCaller();
         if (_amountSharesToBurn == 0 || _withdrawalValueInETH == 0) revert InvalidAmount();
@@ -754,5 +755,45 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     modifier onlyEtherFiAdmin() {
         if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
         _;
+    }
+
+    /// @notice Invariant — the eETH exchange rate
+    ///         (`totalPooledEther / totalShares`) does not decrease across
+    ///         this call. Snapshots (P0, S0) before the function body, then
+    ///         (P1, S1) after, and asserts `P1 * S0 >= P0 * S1` (the
+    ///         cross-multiplied form of `P1/S1 >= P0/S0`, integer-exact).
+    ///
+    ///         APPLIED to every share-changing entry point where the rate
+    ///         is supposed to stay equal or move UP by construction:
+    ///           - deposit() / depositToRecipient / deposit(user, ref)
+    ///             — proportional mint, floor-rounded shares (rate up)
+    ///           - withdraw(address, uint256)
+    ///             — live-rate burn, ceil-rounded shares (rate up)
+    ///           - burnEEthShares
+    ///             — share-only burn, no P-side change (rate up)
+    ///           - burnEEthSharesForNonETHWithdrawal
+    ///             — already locally checks rate non-decrease; modifier is
+    ///               belt-and-suspenders
+    ///
+    ///         INTENTIONALLY NOT applied to:
+    ///           - withdraw(uint256, uint256) — frozen-rate finalized claim,
+    ///             rate-drop bounded by the oracle-signed `_rate` parameter
+    ///             (WRN/PQ-only)
+    ///           - rebase() — oracle path, rate-change bounded by
+    ///             EtherFiAdmin._validateRebaseApr's APR cap
+    ///
+    ///         These two are the only intentional rate-changing paths.
+    ///         Anything else that drops the rate trips the modifier.
+    ///
+    ///         Overflow note: P, S each fit in uint128 in any plausible
+    ///         protocol state; P*S ≈ 1.4e52 ≪ uint256 max. Safe by inspection.
+    modifier nonDecreasingRate() {
+        uint256 P0 = getTotalPooledEther();
+        uint256 S0 = eETH.totalShares();
+        _;
+        uint256 P1 = getTotalPooledEther();
+        uint256 S1 = eETH.totalShares();
+        // Bootstrap exempt (no rate before/after to compare).
+        if (S0 != 0 && S1 != 0 && P1 * S0 < P0 * S1) revert EETHRateDeflation(P0, S0, P1, S1);
     }
 }
