@@ -6,15 +6,15 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/draft-ERC20PermitUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "./interfaces/IeETH.sol";
-import "./interfaces/ILiquidityPool.sol";
-import "./interfaces/IRateProvider.sol";
+import "@etherfi/core/interfaces/IeETH.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/rate-limiting/interfaces/IRateProvider.sol";
 
-import "./AssetRecovery.sol";
-import "./interfaces/IBlacklister.sol";
-import "./utils/PausableUntil.sol";
-import "./utils/RolesLibrary.sol";
-import "./utils/RateLimitedToken.sol";
+import "@etherfi/utils/AssetRecovery.sol";
+import "@etherfi/governance/interfaces/IBlacklister.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
+import "@etherfi/governance/utils/RolesLibrary.sol";
+import "@etherfi/rate-limiting/RateLimitedToken.sol";
 
 contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, ERC20PermitUpgradeable, IRateProvider, AssetRecovery, RolesLibrary, RateLimitedToken {
     using SafeERC20 for IERC20;

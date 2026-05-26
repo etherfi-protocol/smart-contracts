@@ -6,12 +6,12 @@ import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
-import "./interfaces/IAuctionManager.sol";
-import "./interfaces/INodeOperatorManager.sol";
-import "./interfaces/IProtocolRevenueManager.sol";
-import "./interfaces/IBlacklister.sol";
-import "./utils/PausableUntil.sol";
-import "./utils/RolesLibrary.sol";
+import "@etherfi/staking/interfaces/IAuctionManager.sol";
+import "@etherfi/staking/interfaces/INodeOperatorManager.sol";
+import "@etherfi/interfaces/IProtocolRevenueManager.sol";
+import "@etherfi/governance/interfaces/IBlacklister.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
+import "@etherfi/governance/utils/RolesLibrary.sol";
 
 contract AuctionManager is
     Initializable,

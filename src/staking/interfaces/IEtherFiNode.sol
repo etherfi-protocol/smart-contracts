@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./IEtherFiNodesManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
 
-import "../eigenlayer-interfaces/IDelegationManager.sol";
-import "../eigenlayer-interfaces/IEigenPod.sol";
+import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
+import "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
 
 interface IEtherFiNode {
 

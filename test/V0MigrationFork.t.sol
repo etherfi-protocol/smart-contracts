@@ -3,9 +3,9 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
 import "forge-std/StdJson.sol";
-import "../src/MembershipManager.sol";
-import "../src/interfaces/IMembershipManager.sol";
-import "../script/operations/v0-migration/MembershipV0Migrator.sol";
+import "@etherfi/membership/MembershipManager.sol";
+import "@etherfi/membership/interfaces/IMembershipManager.sol";
+import "@scripts/operations/v0-migration/MembershipV0Migrator.sol";
 
 /// @notice Fork test for the V0 → V1 batch migration. Confirms three things:
 ///   (1) Every V0 NFT in v0_ids_flat.json gets fully migrated (no leftovers).

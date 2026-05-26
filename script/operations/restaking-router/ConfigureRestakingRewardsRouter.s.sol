@@ -2,9 +2,9 @@
 pragma solidity ^0.8.24;
 
 import "forge-std/Script.sol";
-import "../../../src/RestakingRewardsRouter.sol";
-import "../../../src/interfaces/IRoleRegistry.sol";
-import "../../utils/utils.sol";
+import "@etherfi/periphery/RestakingRewardsRouter.sol";
+import "@etherfi/governance/interfaces/IRoleRegistry.sol";
+import "@scripts/utils/utils.sol";
 
 // forge script script/operations/restaking-router/ConfigureRestakingRewardsRouter.s.sol --fork-url $MAINNET_RPC_URL -vvvv
 contract ConfigureRestakingRewardsRouter is Script, Utils {

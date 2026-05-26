@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import "../../utils/utils.sol";
-import "../../../src/EtherFiTimelock.sol";
-import "../../../src/EtherFiRedemptionManager.sol";
-import "../../../src/LiquidityPool.sol";
-import "../../../src/PriorityWithdrawalQueue.sol";
-import "../../../src/RoleRegistry.sol";
-import "../../../src/UUPSProxy.sol";
+import "@scripts/utils/utils.sol";
+import "@etherfi/governance/EtherFiTimelock.sol";
+import "@etherfi/withdrawals/EtherFiRedemptionManager.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/withdrawals/PriorityWithdrawalQueue.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/utils/UUPSProxy.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
-import {ContractCodeChecker} from "../../../script/ContractCodeChecker.sol";
+import {ContractCodeChecker} from "@scripts/ContractCodeChecker.sol";
 
 /// @title PriorityQueueTransactions
 /// @notice Generates timelock transactions for upgrading LiquidityPool, EtherFiRedemptionManager, and granting roles for PriorityWithdrawalQueue

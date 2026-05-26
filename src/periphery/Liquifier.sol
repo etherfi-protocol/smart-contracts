@@ -9,14 +9,14 @@ import "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
-import "./interfaces/ILiquifier.sol";
-import "./interfaces/ILiquidityPool.sol";
-import "./interfaces/IBlacklister.sol";
-import "./utils/PausableUntil.sol";
-import "./utils/RolesLibrary.sol";
+import "@etherfi/periphery/interfaces/ILiquifier.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/governance/interfaces/IBlacklister.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
+import "@etherfi/governance/utils/RolesLibrary.sol";
 
-import "./eigenlayer-interfaces/IStrategyManager.sol";
-import "./eigenlayer-interfaces/IDelegationManager.sol";
+import "@etherfi/eigenlayer-interfaces/IStrategyManager.sol";
+import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
 
 /// Go wild, spread eETH/weETH to the world
 contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable, PausableUntil, ReentrancyGuardUpgradeable, ILiquifier, RolesLibrary {

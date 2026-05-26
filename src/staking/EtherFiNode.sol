@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import {IEtherFiNode} from "../src/interfaces/IEtherFiNode.sol";
-import {IEtherFiNodesManager} from "../src/interfaces/IEtherFiNodesManager.sol";
-import {ILiquidityPool} from "../src/interfaces/ILiquidityPool.sol";
+import {IEtherFiNode} from "@etherfi/staking/interfaces/IEtherFiNode.sol";
+import {IEtherFiNodesManager} from "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
+import {ILiquidityPool} from "@etherfi/core/interfaces/ILiquidityPool.sol";
 
-import {IDelegationManager} from "../src/eigenlayer-interfaces/IDelegationManager.sol";
-import {IDelegationManagerTypes} from "../src/eigenlayer-interfaces/IDelegationManager.sol";
-import {IEigenPodManager} from "../src/eigenlayer-interfaces/IEigenPodManager.sol";
-import {IEigenPod} from "../src/eigenlayer-interfaces/IEigenPod.sol";
-import {IStrategy} from "../src/eigenlayer-interfaces/IStrategy.sol";
-import {BeaconChainProofs} from "../src/eigenlayer-libraries/BeaconChainProofs.sol";
+import {IDelegationManager} from "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
+import {IDelegationManagerTypes} from "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
+import {IEigenPodManager} from "@etherfi/eigenlayer-interfaces/IEigenPodManager.sol";
+import {IEigenPod} from "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
+import {IStrategy} from "@etherfi/eigenlayer-interfaces/IStrategy.sol";
+import {BeaconChainProofs} from "@etherfi/eigenlayer-libraries/BeaconChainProofs.sol";
 
-import {IERC20} from "../lib/openzeppelin-contracts/contracts/interfaces/IERC20.sol";
-import {LibCall} from "../lib/solady/src/utils/LibCall.sol";
+import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
+import {LibCall} from "solady/utils/LibCall.sol";
 
 contract EtherFiNode is IEtherFiNode {
 

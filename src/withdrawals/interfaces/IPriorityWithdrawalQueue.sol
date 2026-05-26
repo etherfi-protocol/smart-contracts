@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./IWeETH.sol";
+import "@etherfi/core/interfaces/IWeETH.sol";
 
 interface IPriorityWithdrawalQueue {
     /// @notice Withdrawal request struct stored as hash in EnumerableSet

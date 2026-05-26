@@ -2,11 +2,11 @@
 pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
-import "../../script/deploys/Deployed.s.sol";
-import "../../src/EtherFiOracle.sol";
-import "../../src/NodeOperatorManager.sol";
-import "../../src/AuctionManager.sol";
-import "../../src/EtherFiRestaker.sol";
+import "@scripts/deploys/Deployed.s.sol";
+import "@etherfi/oracle/EtherFiOracle.sol";
+import "@etherfi/staking/NodeOperatorManager.sol";
+import "@etherfi/staking/AuctionManager.sol";
+import "@etherfi/periphery/EtherFiRestaker.sol";
 
 interface IUUPSProxy {
     function upgradeTo(address newImpl) external;

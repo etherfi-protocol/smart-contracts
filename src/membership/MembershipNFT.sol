@@ -6,11 +6,11 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC1155/ERC1155Upgradeable.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
-import "./interfaces/IMembershipManager.sol";
-import "./interfaces/IMembershipNFT.sol";
-import "./interfaces/ILiquidityPool.sol";
-import "./interfaces/IBlacklister.sol";
-import "./utils/RolesLibrary.sol";
+import "@etherfi/membership/interfaces/IMembershipManager.sol";
+import "@etherfi/membership/interfaces/IMembershipNFT.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/governance/interfaces/IBlacklister.sol";
+import "@etherfi/governance/utils/RolesLibrary.sol";
 
 import "forge-std/console.sol";
 

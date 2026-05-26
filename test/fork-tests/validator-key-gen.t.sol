@@ -3,23 +3,23 @@ pragma solidity ^0.8.27;
 
 import "forge-std/console2.sol";
 import "forge-std/Test.sol";
-import "../../test/common/ArrayTestHelper.sol";
-import {fundContract} from "../TestSetup.sol";
+import "@tests/common/ArrayTestHelper.sol";
+import {fundContract} from "@tests/TestSetup.sol";
 
-import "../../src/libraries/DepositDataRootGenerator.sol";
+import "@etherfi/staking/libraries/DepositDataRootGenerator.sol";
 
-import "../../src/interfaces/IStakingManager.sol";
-import "../../src/interfaces/IEtherFiNode.sol";
+import "@etherfi/staking/interfaces/IStakingManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNode.sol";
 
-import "../../src/StakingManager.sol";
-import "../../src/LiquidityPool.sol";
-import "../../src/EtherFiNodesManager.sol";
-import "../../src/EtherFiNode.sol";
-import "../../src/NodeOperatorManager.sol";
-import "../../src/AuctionManager.sol";
-import "../../src/RoleRegistry.sol";
-import "../../src/UUPSProxy.sol";
-import "../../src/helpers/Blacklister.sol";
+import "@etherfi/staking/StakingManager.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/staking/EtherFiNode.sol";
+import "@etherfi/staking/NodeOperatorManager.sol";
+import "@etherfi/staking/AuctionManager.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/utils/UUPSProxy.sol";
+import "@etherfi/governance/Blacklister.sol";
 
 // Command to run this test: forge test --match-contract ValidatorKeyGenTest
 

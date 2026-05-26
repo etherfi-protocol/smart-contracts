@@ -12,18 +12,18 @@ import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
-import "./interfaces/ILiquidityPool.sol";
-import "./interfaces/IeETH.sol";
-import "./interfaces/IWeETH.sol";
-import "./interfaces/ILiquifier.sol";
-import "./interfaces/IEtherFiRestaker.sol";
-import "./utils/PausableUntil.sol";
-import "./utils/RolesLibrary.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/core/interfaces/IeETH.sol";
+import "@etherfi/core/interfaces/IWeETH.sol";
+import "@etherfi/periphery/interfaces/ILiquifier.sol";
+import "@etherfi/periphery/interfaces/IEtherFiRestaker.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
+import "@etherfi/governance/utils/RolesLibrary.sol";
 
 import "lib/BucketLimiter.sol";
 
-import "./interfaces/IPriorityWithdrawalQueue.sol";
-import "./interfaces/IBlacklister.sol";
+import "@etherfi/withdrawals/interfaces/IPriorityWithdrawalQueue.sol";
+import "@etherfi/governance/interfaces/IBlacklister.sol";
 
 /*
     The contract allows instant redemption of eETH and weETH tokens to ETH or stETH with an exit fee.

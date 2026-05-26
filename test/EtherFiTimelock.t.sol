@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
-import "../src/EtherFiTimelock.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/governance/EtherFiTimelock.sol";
 import "forge-std/console2.sol";
 
 contract TimelockTest is TestSetup {

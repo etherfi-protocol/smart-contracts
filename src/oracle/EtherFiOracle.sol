@@ -5,9 +5,9 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 
-import "./interfaces/IEtherFiOracle.sol";
-import "./interfaces/IEtherFiAdmin.sol";
-import "./utils/RolesLibrary.sol";
+import "@etherfi/oracle/interfaces/IEtherFiOracle.sol";
+import "@etherfi/oracle/interfaces/IEtherFiAdmin.sol";
+import "@etherfi/governance/utils/RolesLibrary.sol";
 
 
 contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable, IEtherFiOracle, RolesLibrary {

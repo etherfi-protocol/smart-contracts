@@ -7,14 +7,14 @@ import {OwnableUpgradeable} from "@openzeppelin-upgradeable/contracts/access/Own
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import {IWeETHWithdrawAdapter} from "../interfaces/IWeETHWithdrawAdapter.sol";
-import {IWeETH} from "../interfaces/IWeETH.sol";
-import {IeETH} from "../interfaces/IeETH.sol";
-import {ILiquidityPool} from "../interfaces/ILiquidityPool.sol";
-import {IWithdrawRequestNFT} from "../interfaces/IWithdrawRequestNFT.sol";
-import {IBlacklister} from "../interfaces/IBlacklister.sol";
-import {PausableUntil} from "../utils/PausableUntil.sol";
-import {RolesLibrary} from "../utils/RolesLibrary.sol";
+import {IWeETHWithdrawAdapter} from "@etherfi/withdrawals/interfaces/IWeETHWithdrawAdapter.sol";
+import {IWeETH} from "@etherfi/core/interfaces/IWeETH.sol";
+import {IeETH} from "@etherfi/core/interfaces/IeETH.sol";
+import {ILiquidityPool} from "@etherfi/core/interfaces/ILiquidityPool.sol";
+import {IWithdrawRequestNFT} from "@etherfi/withdrawals/interfaces/IWithdrawRequestNFT.sol";
+import {IBlacklister} from "@etherfi/governance/interfaces/IBlacklister.sol";
+import {PausableUntil} from "@etherfi/governance/utils/PausableUntil.sol";
+import {RolesLibrary} from "@etherfi/governance/utils/RolesLibrary.sol";
 
 /**
  * @title WeETHWithdrawAdapter

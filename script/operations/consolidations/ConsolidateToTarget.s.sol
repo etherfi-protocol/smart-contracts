@@ -3,13 +3,13 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
-import "../../utils/utils.sol";
-import "../../utils/GnosisTxGeneratorLib.sol";
-import "../../utils/StringHelpers.sol";
-import "../../utils/ValidatorHelpers.sol";
-import "../../../src/EtherFiNodesManager.sol";
-import "../../../src/eigenlayer-interfaces/IEigenPod.sol";
-import "./GnosisConsolidationLib.sol";
+import "@scripts/utils/utils.sol";
+import "@scripts/utils/GnosisTxGeneratorLib.sol";
+import "@scripts/utils/StringHelpers.sol";
+import "@scripts/utils/ValidatorHelpers.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
+import "@scripts/operations/consolidations/GnosisConsolidationLib.sol";
 
 /**
  * @title ConsolidateToTarget

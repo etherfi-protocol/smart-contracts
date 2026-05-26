@@ -7,15 +7,15 @@ import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
-import "./interfaces/IAuctionManager.sol";
-import "./eigenlayer-interfaces/IEigenPod.sol";
-import "./interfaces/IEtherFiNode.sol";
-import "./interfaces/IEtherFiNodesManager.sol";
-import "./interfaces/IProtocolRevenueManager.sol";
-import "./interfaces/IStakingManager.sol";
-import "./interfaces/IEtherFiRateLimiter.sol";
-import "./utils/PausableUntil.sol";
-import "./utils/RolesLibrary.sol";
+import "@etherfi/staking/interfaces/IAuctionManager.sol";
+import "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
+import "@etherfi/staking/interfaces/IEtherFiNode.sol";
+import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
+import "@etherfi/interfaces/IProtocolRevenueManager.sol";
+import "@etherfi/staking/interfaces/IStakingManager.sol";
+import "@etherfi/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
+import "@etherfi/governance/utils/RolesLibrary.sol";
 
 contract EtherFiNodesManager is
     Initializable,

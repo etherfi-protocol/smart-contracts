@@ -3,7 +3,7 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
 import "forge-std/console.sol";
-import "../../src/interfaces/IRoleRegistry.sol";
+import "@etherfi/governance/interfaces/IRoleRegistry.sol";
 
 /**
  * @title Set Role Script

@@ -6,14 +6,14 @@ import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "./interfaces/ILiquidityPool.sol";
-import "./interfaces/ILiquifier.sol";
-import "./interfaces/IeETH.sol";
-import "./interfaces/IWeETH.sol";
-import "./interfaces/IWETH.sol";
-import "./interfaces/IwstETH.sol";
-import "./interfaces/IBlacklister.sol";
-import "./utils/RolesLibrary.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/periphery/interfaces/ILiquifier.sol";
+import "@etherfi/core/interfaces/IeETH.sol";
+import "@etherfi/core/interfaces/IWeETH.sol";
+import "@etherfi/interfaces/IWETH.sol";
+import "@etherfi/interfaces/IwstETH.sol";
+import "@etherfi/governance/interfaces/IBlacklister.sol";
+import "@etherfi/governance/utils/RolesLibrary.sol";
 
 contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable, RolesLibrary {
     using SafeERC20 for IERC20;

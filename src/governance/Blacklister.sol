@@ -4,7 +4,7 @@ pragma solidity ^0.8.27;
 
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
-import "../utils/RolesLibrary.sol";
+import "@etherfi/governance/utils/RolesLibrary.sol";
 
 contract Blacklister is Initializable, UUPSUpgradeable, RolesLibrary {
 

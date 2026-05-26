@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
-import "../src/AuctionManager.sol";
-import "../src/DepositAdapter.sol";
-import "../src/EtherFiRedemptionManager.sol";
-import "../src/LiquidityPool.sol";
-import "../src/Liquifier.sol";
-import "../src/MembershipManager.sol";
-import "../src/WithdrawRequestNFT.sol";
-import "../src/helpers/Blacklister.sol";
-import "../src/interfaces/ILiquidityPool.sol";
-import "../src/interfaces/ILiquifier.sol";
-import "../src/interfaces/IeETH.sol";
-import "../src/interfaces/IWeETH.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/staking/AuctionManager.sol";
+import "@etherfi/periphery/DepositAdapter.sol";
+import "@etherfi/withdrawals/EtherFiRedemptionManager.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/periphery/Liquifier.sol";
+import "@etherfi/membership/MembershipManager.sol";
+import "@etherfi/withdrawals/WithdrawRequestNFT.sol";
+import "@etherfi/governance/Blacklister.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/periphery/interfaces/ILiquifier.sol";
+import "@etherfi/core/interfaces/IeETH.sol";
+import "@etherfi/core/interfaces/IWeETH.sol";
 
 contract BlacklistTest is TestSetup {
     address blacklisted;

@@ -6,8 +6,8 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "./utils/RolesLibrary.sol";
-import "./interfaces/ILiquidityPool.sol";
+import "@etherfi/governance/utils/RolesLibrary.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
 
 contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable, RolesLibrary {
     using SafeERC20 for IERC20;

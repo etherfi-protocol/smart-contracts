@@ -2,14 +2,14 @@
 pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
-import "../../script/deploys/Deployed.s.sol";
-import "../../src/LiquidityPool.sol";
-import "../../src/WithdrawRequestNFT.sol";
-import "../../src/PriorityWithdrawalQueue.sol";
-import "../../src/utils/ReentrancyGuardNamespaced.sol";
-import "../../src/RoleRegistry.sol";
-import "../../src/UUPSProxy.sol";
-import "../../src/helpers/Blacklister.sol";
+import "@scripts/deploys/Deployed.s.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/withdrawals/WithdrawRequestNFT.sol";
+import "@etherfi/withdrawals/PriorityWithdrawalQueue.sol";
+import "@etherfi/governance/utils/ReentrancyGuardNamespaced.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/utils/UUPSProxy.sol";
+import "@etherfi/governance/Blacklister.sol";
 
 interface IUUPSProxy {
     function upgradeTo(address newImpl) external;

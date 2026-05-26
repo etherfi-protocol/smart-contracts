@@ -6,12 +6,12 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 
-import "../interfaces/IeETH.sol";
-import "../interfaces/IMembershipManagerV0.sol";
-import "../interfaces/IMembershipNFT.sol";
-import "../interfaces/ILiquidityPool.sol";
+import "@etherfi/core/interfaces/IeETH.sol";
+import "@etherfi/archive/interfaces/IMembershipManagerV0.sol";
+import "@etherfi/membership/interfaces/IMembershipNFT.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
 
-import "../libraries/GlobalIndexLibrary.sol";
+import "@etherfi/membership/libraries/GlobalIndexLibrary.sol";
 
 
 // Legacy view of MembershipNFT used only by this archived V0 manager. The

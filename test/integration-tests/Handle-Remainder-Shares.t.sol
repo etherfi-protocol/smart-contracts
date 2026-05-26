@@ -2,8 +2,8 @@
 pragma solidity ^0.8.13;
 
 import "forge-std/console2.sol";
-import "../TestSetup.sol";
-import "../../script/deploys/Deployed.s.sol";
+import "@tests/TestSetup.sol";
+import "@scripts/deploys/Deployed.s.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {

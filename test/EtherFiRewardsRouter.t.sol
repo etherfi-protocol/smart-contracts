@@ -2,11 +2,11 @@
 pragma solidity ^0.8.24;
 
 import "forge-std/Test.sol";
-import "../src/EtherFiRewardsRouter.sol";
-import "../src/RoleRegistry.sol";
-import "../src/UUPSProxy.sol";
-import "./TestERC20.sol";
-import "./TestERC721.sol";
+import "@etherfi/periphery/EtherFiRewardsRouter.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/utils/UUPSProxy.sol";
+import "@tests/TestERC20.sol";
+import "@tests/TestERC721.sol";
 
 contract MockLiquidityPool {
     uint128 public totalValueOutOfLp;

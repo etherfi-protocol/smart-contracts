@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "../../src/LiquidityPool.sol";
+import "@etherfi/core/LiquidityPool.sol";
 
 interface INodeOperatorManager {
     struct KeyData {

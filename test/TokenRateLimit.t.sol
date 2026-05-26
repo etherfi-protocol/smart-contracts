@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
-import "../src/interfaces/IEtherFiRateLimiter.sol";
-import "../src/utils/RateLimitedToken.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
+import "@etherfi/rate-limiting/RateLimitedToken.sol";
 
 contract TokenRateLimitTest is TestSetup {
     uint64 private constant ONE_ETHER_GWEI = 1 ether / 1 gwei; // 1e9

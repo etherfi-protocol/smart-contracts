@@ -9,13 +9,13 @@ import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
-import "./interfaces/IAuctionManager.sol";
-import "./interfaces/IStakingManager.sol";
-import "./interfaces/IDepositContract.sol";
-import "./interfaces/IEtherFiNode.sol";
-import "./interfaces/IEtherFiNodesManager.sol";
-import "./libraries/DepositDataRootGenerator.sol";
-import "./utils/RolesLibrary.sol";
+import "@etherfi/staking/interfaces/IAuctionManager.sol";
+import "@etherfi/staking/interfaces/IStakingManager.sol";
+import "@etherfi/interfaces/IDepositContract.sol";
+import "@etherfi/staking/interfaces/IEtherFiNode.sol";
+import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
+import "@etherfi/staking/libraries/DepositDataRootGenerator.sol";
+import "@etherfi/governance/utils/RolesLibrary.sol";
 
 contract StakingManager is
     Initializable,

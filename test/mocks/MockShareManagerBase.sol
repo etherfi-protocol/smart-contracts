@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import "../../src/eigenlayer-libraries/SlashingLib.sol";
-import "../../src/eigenlayer-interfaces/IStrategy.sol";
-import "../../src/eigenlayer-interfaces/IShareManager.sol";
+import "@etherfi/eigenlayer-libraries/SlashingLib.sol";
+import "@etherfi/eigenlayer-interfaces/IStrategy.sol";
+import "@etherfi/eigenlayer-interfaces/IShareManager.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 // ShareManager but all calls made virtual

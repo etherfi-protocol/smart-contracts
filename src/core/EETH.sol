@@ -9,13 +9,13 @@ import "@openzeppelin-upgradeable/contracts/utils/CountersUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/draft-IERC20PermitUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/utils/cryptography/ECDSAUpgradeable.sol";
 
-import "./interfaces/IeETH.sol";
-import "./interfaces/ILiquidityPool.sol";
-import "./AssetRecovery.sol";
-import "./utils/RolesLibrary.sol";
-import "./interfaces/IBlacklister.sol";
-import "./utils/RateLimitedToken.sol";
-import "./utils/PausableUntil.sol";
+import "@etherfi/core/interfaces/IeETH.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/utils/AssetRecovery.sol";
+import "@etherfi/governance/utils/RolesLibrary.sol";
+import "@etherfi/governance/interfaces/IBlacklister.sol";
+import "@etherfi/rate-limiting/RateLimitedToken.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
 
 contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, IERC20PermitUpgradeable, IeETH, AssetRecovery, RolesLibrary, RateLimitedToken {
     using CountersUpgradeable for CountersUpgradeable.Counter;

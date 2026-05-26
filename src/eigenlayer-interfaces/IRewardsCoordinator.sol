@@ -2,15 +2,15 @@
 pragma solidity ^0.8.27;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "../eigenlayer-libraries/OperatorSetLib.sol";
+import "@etherfi/eigenlayer-libraries/OperatorSetLib.sol";
 
-import "./IAllocationManager.sol";
-import "./IDelegationManager.sol";
-import "./IStrategyManager.sol";
-import "./IPauserRegistry.sol";
-import "./IPermissionController.sol";
-import "./IStrategy.sol";
-import "./ISemVerMixin.sol";
+import "@etherfi/eigenlayer-interfaces/IAllocationManager.sol";
+import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
+import "@etherfi/eigenlayer-interfaces/IStrategyManager.sol";
+import "@etherfi/eigenlayer-interfaces/IPauserRegistry.sol";
+import "@etherfi/eigenlayer-interfaces/IPermissionController.sol";
+import "@etherfi/eigenlayer-interfaces/IStrategy.sol";
+import "@etherfi/eigenlayer-interfaces/ISemVerMixin.sol";
 
 interface IRewardsCoordinatorErrors {
     /// @dev Thrown when msg.sender is not allowed to call a function

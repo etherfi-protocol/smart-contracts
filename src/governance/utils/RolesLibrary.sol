@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import "../interfaces/IRoleRegistry.sol";
+import "@etherfi/governance/interfaces/IRoleRegistry.sol";
 
 abstract contract RolesLibrary {
     IRoleRegistry public immutable roleRegistry;

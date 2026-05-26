@@ -3,9 +3,9 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Script.sol";
 
-import "src/CumulativeMerkleRewardsDistributor.sol";
-import "src/UUPSProxy.sol";
-import "../../src/helpers/AddressProvider.sol";
+import "@etherfi/periphery/CumulativeMerkleRewardsDistributor.sol";
+import "@etherfi/utils/UUPSProxy.sol";
+import "@etherfi/helpers/AddressProvider.sol";
 import "forge-std/console.sol";
 
 /* Deploy Command

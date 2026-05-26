@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "../TestSetup.sol";
-import "../../script/deploys/Deployed.s.sol";
+import "@tests/TestSetup.sol";
+import "@scripts/deploys/Deployed.s.sol";
 
-import "../../src/interfaces/IStakingManager.sol";
-import "../../src/interfaces/IEtherFiNode.sol";
+import "@etherfi/staking/interfaces/IStakingManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNode.sol";
 
-import "../../src/libraries/DepositDataRootGenerator.sol";
+import "@etherfi/staking/libraries/DepositDataRootGenerator.sol";
 
 contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
     function setUp() public {

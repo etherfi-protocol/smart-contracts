@@ -6,9 +6,9 @@ import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
-import "src/interfaces/IRateLimiter.sol";
+import "@etherfi/rate-limiting/interfaces/IRateLimiter.sol";
 import "lib/BucketLimiter.sol";
-import "./utils/RolesLibrary.sol";
+import "@etherfi/governance/utils/RolesLibrary.sol";
 
 contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, OwnableUpgradeable, UUPSUpgradeable, RolesLibrary {
     using Math for uint256;

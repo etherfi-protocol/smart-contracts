@@ -5,7 +5,7 @@ import "@openzeppelin-upgradeable/contracts/token/ERC721/ERC721Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
-import "./interfaces/IEtherFiNodesManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
 
 
 contract TNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {

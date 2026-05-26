@@ -5,16 +5,16 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
-import "./interfaces/IEtherFiOracle.sol";
-import "./interfaces/IStakingManager.sol";
-import "./interfaces/IAuctionManager.sol";
-import "./interfaces/IEtherFiNodesManager.sol";
-import "./interfaces/ILiquidityPool.sol";
-import "./interfaces/IMembershipManager.sol";
-import "./interfaces/IWithdrawRequestNFT.sol";
-import "./interfaces/IPriorityWithdrawalQueue.sol";
+import "@etherfi/oracle/interfaces/IEtherFiOracle.sol";
+import "@etherfi/staking/interfaces/IStakingManager.sol";
+import "@etherfi/staking/interfaces/IAuctionManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/membership/interfaces/IMembershipManager.sol";
+import "@etherfi/withdrawals/interfaces/IWithdrawRequestNFT.sol";
+import "@etherfi/withdrawals/interfaces/IPriorityWithdrawalQueue.sol";
 
-import "./utils/RolesLibrary.sol";
+import "@etherfi/governance/utils/RolesLibrary.sol";
 
 interface IEtherFiPausable {
     function paused() external view returns (bool);

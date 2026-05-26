@@ -2,8 +2,8 @@
 pragma solidity ^0.8.13;
 
 import "@openzeppelin-upgradeable/contracts/token/ERC20/IERC20Upgradeable.sol";
-import "./ILiquidityPool.sol";
-import "./IeETH.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/core/interfaces/IeETH.sol";
 
 interface IWeETH is IERC20Upgradeable {
 

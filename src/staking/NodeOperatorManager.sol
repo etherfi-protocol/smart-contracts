@@ -5,10 +5,10 @@ import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
-import "./interfaces/INodeOperatorManager.sol";
-import "./interfaces/IAuctionManager.sol";
-import "./interfaces/ILiquidityPool.sol";
-import "./utils/RolesLibrary.sol";
+import "@etherfi/staking/interfaces/INodeOperatorManager.sol";
+import "@etherfi/staking/interfaces/IAuctionManager.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/governance/utils/RolesLibrary.sol";
 
 /// Contract which helps us control our node operators and their permissions in different aspects of the protocol
 contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgradeable, PausableUpgradeable, OwnableUpgradeable, RolesLibrary {

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./IStakingManager.sol";
-import "./IeETH.sol";
+import "@etherfi/staking/interfaces/IStakingManager.sol";
+import "@etherfi/core/interfaces/IeETH.sol";
 
 interface ILiquidityPool {
 

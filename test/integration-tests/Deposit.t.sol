@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "../TestSetup.sol";
+import "@tests/TestSetup.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/draft-IERC20PermitUpgradeable.sol";
 
-import "../../src/DepositAdapter.sol";
+import "@etherfi/periphery/DepositAdapter.sol";
 
 contract DepositIntegrationTest is TestSetup {
     address internal constant MAINNET_WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;

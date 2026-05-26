@@ -3,9 +3,9 @@ pragma solidity ^0.8.13;
 
 import "forge-std/console2.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
-import "../TestSetup.sol";
-import "../../src/PriorityWithdrawalQueue.sol";
-import "../../src/interfaces/IPriorityWithdrawalQueue.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/withdrawals/PriorityWithdrawalQueue.sol";
+import "@etherfi/withdrawals/interfaces/IPriorityWithdrawalQueue.sol";
 
 /// @notice End-to-end lifecycle tests for the ETH-escrow withdrawal flows.
 ///

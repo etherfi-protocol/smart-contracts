@@ -7,12 +7,12 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
-import "./interfaces/IPriorityWithdrawalQueue.sol";
-import "./interfaces/ILiquidityPool.sol";
-import "./interfaces/IeETH.sol";
-import "./interfaces/IWeETH.sol";
-import "./utils/PausableUntil.sol";
-import "./utils/RolesLibrary.sol";
+import "@etherfi/withdrawals/interfaces/IPriorityWithdrawalQueue.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/core/interfaces/IeETH.sol";
+import "@etherfi/core/interfaces/IWeETH.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
+import "@etherfi/governance/utils/RolesLibrary.sol";
 
 /// @title PriorityWithdrawalQueue
 /// @notice Manages priority withdrawals for whitelisted users

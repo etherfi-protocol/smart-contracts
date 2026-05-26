@@ -7,19 +7,19 @@ import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
-import "./interfaces/IeETH.sol";
-import "./interfaces/IStakingManager.sol";
-import "./interfaces/IWithdrawRequestNFT.sol";
-import "./interfaces/ILiquidityPool.sol";
-import "./interfaces/ILiquifier.sol";
-import "./interfaces/IEtherFiNode.sol";
-import "./interfaces/IEtherFiNodesManager.sol";
-import "./interfaces/IEtherFiRedemptionManager.sol";
-import "./interfaces/IPriorityWithdrawalQueue.sol";
-import "./interfaces/IBlacklister.sol";
-import "./utils/ReentrancyGuardNamespaced.sol";
-import "./utils/RolesLibrary.sol";
-import "./utils/PausableUntil.sol";
+import "@etherfi/core/interfaces/IeETH.sol";
+import "@etherfi/staking/interfaces/IStakingManager.sol";
+import "@etherfi/withdrawals/interfaces/IWithdrawRequestNFT.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/periphery/interfaces/ILiquifier.sol";
+import "@etherfi/staking/interfaces/IEtherFiNode.sol";
+import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
+import "@etherfi/withdrawals/interfaces/IEtherFiRedemptionManager.sol";
+import "@etherfi/withdrawals/interfaces/IPriorityWithdrawalQueue.sol";
+import "@etherfi/governance/interfaces/IBlacklister.sol";
+import "@etherfi/governance/utils/ReentrancyGuardNamespaced.sol";
+import "@etherfi/governance/utils/RolesLibrary.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
 
 contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardNamespaced, PausableUntil, RolesLibrary, ILiquidityPool {
     using SafeERC20 for IERC20;

@@ -3,10 +3,10 @@ pragma solidity ^0.8.23;
 
 import "forge-std/Test.sol";
 
-import "../src/Liquifier.sol";
-import "../src/RoleRegistry.sol";
-import "../src/UUPSProxy.sol";
-import "./mocks/MockChainlinkPriceFeed.sol";
+import "@etherfi/periphery/Liquifier.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/utils/UUPSProxy.sol";
+import "@tests/mocks/MockChainlinkPriceFeed.sol";
 
 /// @dev Minimal stETH/ETH curve quoter mock. Only `get_dy` is exercised by
 ///      `quoteByMarketValue`; the full ICurvePool interface is not required.

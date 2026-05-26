@@ -4,15 +4,15 @@ pragma solidity ^0.8.27;
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 import "forge-std/StdJson.sol";
-import "../../utils/utils.sol";
-import "../../../src/EtherFiNodesManager.sol";
-import "../../../src/LiquidityPool.sol";
-import "../../../src/EtherFiOracle.sol";
-import "../../../src/EtherFiAdmin.sol";
-import "../../../src/RoleRegistry.sol";
-import "../../../src/StakingManager.sol";
-import "../../../src/EtherFiRateLimiter.sol";
-import "../../../test/common/ArrayTestHelper.sol";
+import "@scripts/utils/utils.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/oracle/EtherFiOracle.sol";
+import "@etherfi/oracle/EtherFiAdmin.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/staking/StakingManager.sol";
+import "@etherfi/rate-limiting/EtherFiRateLimiter.sol";
+import "@tests/common/ArrayTestHelper.sol";
 
 contract HoodiTestTopUp is Script, ArrayTestHelper {
     int256 slotsPerEpoch = 32;

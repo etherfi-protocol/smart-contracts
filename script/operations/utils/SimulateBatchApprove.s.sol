@@ -4,8 +4,8 @@ pragma solidity ^0.8.13;
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 import "forge-std/StdJson.sol";
-import "../../../src/interfaces/ILiquidityPool.sol";
-import "../../../src/interfaces/IEtherFiNodesManager.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
 
 /**
  * @title SimulateBatchApprove

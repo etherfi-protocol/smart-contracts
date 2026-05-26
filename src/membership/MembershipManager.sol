@@ -7,15 +7,15 @@ import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "./interfaces/IeETH.sol";
-import "./interfaces/IMembershipManager.sol";
-import "./interfaces/IMembershipNFT.sol";
-import "./interfaces/ILiquidityPool.sol";
-import "./interfaces/IEtherFiAdmin.sol";
-import "./interfaces/IBlacklister.sol";
-import "./utils/RolesLibrary.sol";
+import "@etherfi/core/interfaces/IeETH.sol";
+import "@etherfi/membership/interfaces/IMembershipManager.sol";
+import "@etherfi/membership/interfaces/IMembershipNFT.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/oracle/interfaces/IEtherFiAdmin.sol";
+import "@etherfi/governance/interfaces/IBlacklister.sol";
+import "@etherfi/governance/utils/RolesLibrary.sol";
 
-import "./libraries/GlobalIndexLibrary.sol";
+import "@etherfi/membership/libraries/GlobalIndexLibrary.sol";
 
 import "forge-std/console.sol";
 

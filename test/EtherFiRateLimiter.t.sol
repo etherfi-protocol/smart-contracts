@@ -3,11 +3,11 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Test.sol";
 import "forge-std/console2.sol";
-import "./TestSetup.sol";
-import "../src/EtherFiRateLimiter.sol";
-import "../src/interfaces/IEtherFiRateLimiter.sol";
-import "../src/utils/PausableUntil.sol";
-import "../lib/BucketLimiter.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/rate-limiting/EtherFiRateLimiter.sol";
+import "@etherfi/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
+import "lib/BucketLimiter.sol";
 
 contract EtherFiRateLimiterTest is TestSetup {
     EtherFiRateLimiter public rateLimiter;

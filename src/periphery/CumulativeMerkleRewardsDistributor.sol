@@ -4,10 +4,10 @@ pragma solidity ^0.8.24;
 import { SafeERC20, IERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {OwnableUpgradeable} from "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import {AssetRecovery} from "./AssetRecovery.sol";
-import {PausableUntil} from "./utils/PausableUntil.sol";
-import {RolesLibrary} from "./utils/RolesLibrary.sol";
-import {ICumulativeMerkleRewardsDistributor}  from "./interfaces/ICumulativeMerkleRewardsDistributor.sol";
+import {AssetRecovery} from "@etherfi/utils/AssetRecovery.sol";
+import {PausableUntil} from "@etherfi/governance/utils/PausableUntil.sol";
+import {RolesLibrary} from "@etherfi/governance/utils/RolesLibrary.sol";
+import {ICumulativeMerkleRewardsDistributor}  from "@etherfi/periphery/interfaces/ICumulativeMerkleRewardsDistributor.sol";
 
 contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistributor, OwnableUpgradeable, UUPSUpgradeable, PausableUntil, AssetRecovery, RolesLibrary {
 using SafeERC20 for IERC20;

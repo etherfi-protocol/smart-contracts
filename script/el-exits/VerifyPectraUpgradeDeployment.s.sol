@@ -4,12 +4,12 @@ pragma solidity ^0.8.27;
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 
-import "../../src/EtherFiNodesManager.sol";
-import "../../src/EtherFiRateLimiter.sol";
-import "../../src/StakingManager.sol";
-import "../../src/RoleRegistry.sol";
-import "../../src/EtherFiNode.sol";
-import "../../src/UUPSProxy.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/rate-limiting/EtherFiRateLimiter.sol";
+import "@etherfi/staking/StakingManager.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/staking/EtherFiNode.sol";
+import "@etherfi/utils/UUPSProxy.sol";
 
 interface ICreate2Factory {
     function computeAddress(bytes32 salt, bytes memory code) external view returns (address);

@@ -2,8 +2,8 @@
 pragma solidity ^0.8.4;
 
 import {Test} from "forge-std/Test.sol";
-import {RoleRegistry} from "../src/RoleRegistry.sol";
-import {UUPSProxy} from "../src/UUPSProxy.sol";
+import {RoleRegistry} from "@etherfi/governance/RoleRegistry.sol";
+import {UUPSProxy} from "@etherfi/utils/UUPSProxy.sol";
 
 contract RoleRegistryTest is Test {
     RoleRegistry public implementation;

@@ -4,18 +4,18 @@ import "@openzeppelin-upgradeable/contracts/token/ERC721/ERC721Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
-import "./interfaces/IeETH.sol";
-import "./interfaces/ILiquidityPool.sol";
-import "./interfaces/IWithdrawRequestNFT.sol";
-import "./interfaces/IMembershipManager.sol";
-import "./interfaces/IBlacklister.sol";
+import "@etherfi/core/interfaces/IeETH.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/withdrawals/interfaces/IWithdrawRequestNFT.sol";
+import "@etherfi/membership/interfaces/IMembershipManager.sol";
+import "@etherfi/governance/interfaces/IBlacklister.sol";
 
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/Checkpoints.sol";
-import "./utils/ReentrancyGuardNamespaced.sol";
-import "./utils/PausableUntil.sol";
-import "./utils/RolesLibrary.sol";
+import "@etherfi/governance/utils/ReentrancyGuardNamespaced.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
+import "@etherfi/governance/utils/RolesLibrary.sol";
 
 /// @title WithdrawRequestNFT — share-rate-freeze invariants
 /// @notice

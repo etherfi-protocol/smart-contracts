@@ -2,7 +2,7 @@
 pragma solidity ^0.8.27;
 
 import {Vm} from "forge-std/Vm.sol";
-import {IEigenPod, IEigenPodTypes} from "../../src/eigenlayer-interfaces/IEigenPod.sol";
+import {IEigenPod, IEigenPodTypes} from "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
 
 /// @notice Test-only helpers for forcing EigenPod state in mainnet-fork tests.
 ///

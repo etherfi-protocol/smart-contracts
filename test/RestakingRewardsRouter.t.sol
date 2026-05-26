@@ -2,12 +2,12 @@
 pragma solidity ^0.8.24;
 
 import "forge-std/Test.sol";
-import "../src/RestakingRewardsRouter.sol";
-import "../src/RoleRegistry.sol";
-import "../src/UUPSProxy.sol";
-import "../src/LiquidityPool.sol";
-import "./TestERC20.sol";
-import "../src/interfaces/ILiquidityPool.sol";
+import "@etherfi/periphery/RestakingRewardsRouter.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/utils/UUPSProxy.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@tests/TestERC20.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
 
 contract RestakingRewardsRouterTest is Test {
     RestakingRewardsRouter public router;

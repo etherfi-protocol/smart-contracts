@@ -4,8 +4,8 @@ pragma solidity ^0.8.27;
 
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
-import "../utils/RolesLibrary.sol";
-import "./interfaces/IRevokeAdmin.sol";
+import "@etherfi/governance/utils/RolesLibrary.sol";
+import "@etherfi/governance/interfaces/IRevokeAdmin.sol";
 
 contract RevokeAdmin is Initializable, UUPSUpgradeable, RolesLibrary, IRevokeAdmin {
 
