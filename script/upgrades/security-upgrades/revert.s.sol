@@ -18,7 +18,7 @@ import {Utils} from "../../utils/utils.sol";
  * Limits of what this script reverts:
  *
  *   IT REVERTS:
- *     - The ERC1967 implementation slot on each of the 16 proxies. After
+ *     - The ERC1967 implementation slot on each of the 22 proxies. After
  *       execution, each proxy delegates to the original impl address again.
  *
  *   IT DOES NOT REVERT:
@@ -32,14 +32,16 @@ import {Utils} from "../../utils/utils.sol";
  *     - PausableUntil durations set on each contract. The namespaced storage
  *       slot still holds the value; old impls just ignore it.
  *     - RoleRegistry grants. Roles persist independently of any impl pointer.
+ *     - LP min/max withdraw bounds seeded by executeLpWithdrawBounds().
  *
  * If you need any of the above undone, write a separate operation. This
- * script intentionally has the smallest possible blast radius: 16
+ * script intentionally has the smallest possible blast radius: 22
  * `upgradeTo(oldImpl)` calls.
  *
- * Snapshot taken at mainnet block 25_146_941 (Alchemy) - all current impls
- * are baked in as constants below. Re-run the revert-prep query if mainnet
- * has been upgraded since then.
+ * Every PRE_* constant below must be refreshed from the current mainnet
+ * ERC1967 implementation slot before broadcasting. _preflight() reverts if
+ * any is still address(0). Query template:
+ *   cast storage <proxy> 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc --rpc-url $MAINNET_RPC_URL
  *
  * Run:
  *   forge script script/upgrades/security-upgrades/revert.s.sol:SecurityUpgradesRevertScript \
@@ -47,26 +49,33 @@ import {Utils} from "../../utils/utils.sol";
  */
 contract SecurityUpgradesRevertScript is Script, Deployed, Utils {
     // ─────────────────────────────────────────────────────────────────────
-    // PRE-UPGRADE IMPLEMENTATIONS (snapshot @ block 25_146_941, mainnet)
+    // PRE-UPGRADE IMPLEMENTATIONS — fill from a fresh mainnet snapshot.
     // Source: ERC1967 impl slot read via UUPSProxy's custom slot:
     //         0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc
+    // _preflight() asserts every entry is non-zero before doing anything.
     // ─────────────────────────────────────────────────────────────────────
-    address constant PRE_EETH                       = 0xCB3D917A965A70214f430a135154Cd5ADdA2ad84;
-    address constant PRE_WEETH                      = 0x2d10683E941275D502173053927AD6066e6aFd6B;
-    address constant PRE_LIQUIDITY_POOL             = 0x83bc649fCdb2c8DA146b2154a559ddEDf937eF12;
-    address constant PRE_WITHDRAW_REQUEST_NFT       = 0x2f4A5921FcAB46F1F3154e8b42Fc189e08fae3Ed;
-    address constant PRE_LIQUIFIER                  = 0x0E7489D32D34CCdC12d7092067bf53Aa38bf2BF6;
-    address constant PRE_ETHERFI_ADMIN              = 0xd50f28485A75A1FdE432BA7d012d0E2543D2f20d;
-    address constant PRE_ETHERFI_ORACLE             = 0x5eefE6f65a280A6f1Eb1FdFf36Ab9e2af6f38462;
-    address constant PRE_ETHERFI_REDEMPTION_MANAGER = 0x6BD191582F40012b2f2cdf66bD3D32bDe41191F7;
-    address constant PRE_ETHERFI_RESTAKER           = 0x9D795b303B9dA3488FD3A4ca4702c872576BD0c6;
-    address constant PRE_ETHERFI_NODES_MANAGER      = 0x789CbBe0739F1458905C9Ca6d6e74f7997622A9B;
-    address constant PRE_STAKING_MANAGER            = 0xd3985048Bf1Cb613F5E199713a86B2aD3954F82A;
-    address constant PRE_AUCTION_MANAGER            = 0x68FE80C6e97E0c8613e2FED344358c6635ba5366;
-    address constant PRE_NODE_OPERATOR_MANAGER      = 0xfcC674Fc9A0602692D2a91905E7e978aE6EE2cAF;
-    address constant PRE_MEMBERSHIP_MANAGER         = 0x047A7749AD683C2Fd8A27C7904Ca8dD128F15889;
-    address constant PRE_MEMBERSHIP_NFT             = 0x290d981b41B713437265Cd7846806D7500307106;
-    address constant PRE_ETHERFI_RATE_LIMITER       = 0x1dd43C32f03f8A74b8160926D559d34358880A89;
+    address constant PRE_EETH                                = address(0);
+    address constant PRE_WEETH                               = address(0);
+    address constant PRE_LIQUIDITY_POOL                      = address(0);
+    address constant PRE_WITHDRAW_REQUEST_NFT                = address(0);
+    address constant PRE_LIQUIFIER                           = address(0);
+    address constant PRE_ETHERFI_ADMIN                       = address(0);
+    address constant PRE_ETHERFI_ORACLE                      = address(0);
+    address constant PRE_ETHERFI_REDEMPTION_MANAGER          = address(0);
+    address constant PRE_ETHERFI_RESTAKER                    = address(0);
+    address constant PRE_ETHERFI_NODES_MANAGER               = address(0);
+    address constant PRE_STAKING_MANAGER                     = address(0);
+    address constant PRE_AUCTION_MANAGER                     = address(0);
+    address constant PRE_NODE_OPERATOR_MANAGER               = address(0);
+    address constant PRE_MEMBERSHIP_MANAGER                  = address(0);
+    address constant PRE_MEMBERSHIP_NFT                      = address(0);
+    address constant PRE_ETHERFI_RATE_LIMITER                = address(0);
+    address constant PRE_PRIORITY_WITHDRAWAL_QUEUE           = address(0);
+    address constant PRE_ETHERFI_REWARDS_ROUTER              = address(0);
+    address constant PRE_RESTAKING_REWARDS_ROUTER            = address(0);
+    address constant PRE_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR = address(0);
+    address constant PRE_DEPOSIT_ADAPTER                     = address(0);
+    address constant PRE_WEETH_WITHDRAW_ADAPTER              = address(0);
 
     EtherFiTimelock constant upgradeTimelock = EtherFiTimelock(payable(UPGRADE_TIMELOCK));
     uint256 constant UPGRADE_TIMELOCK_DELAY = 10 days;
@@ -79,6 +88,7 @@ contract SecurityUpgradesRevertScript is Script, Deployed, Utils {
         string memory forkUrl = vm.envString("MAINNET_RPC_URL");
         vm.selectFork(vm.createFork(forkUrl));
 
+        _preflight();
         confirmCurrentlyOnNewImpl();
         takePreRevertSnapshots();
         executeRevert();
@@ -86,28 +96,60 @@ contract SecurityUpgradesRevertScript is Script, Deployed, Utils {
         verifyAccessControlPreservation();
     }
 
+    /// @dev Fail loudly the moment a required PRE_* constant is unset.
+    function _preflight() internal pure {
+        require(PRE_EETH                                != address(0), "preflight: PRE_EETH unset");
+        require(PRE_WEETH                               != address(0), "preflight: PRE_WEETH unset");
+        require(PRE_LIQUIDITY_POOL                      != address(0), "preflight: PRE_LIQUIDITY_POOL unset");
+        require(PRE_WITHDRAW_REQUEST_NFT                != address(0), "preflight: PRE_WITHDRAW_REQUEST_NFT unset");
+        require(PRE_LIQUIFIER                           != address(0), "preflight: PRE_LIQUIFIER unset");
+        require(PRE_ETHERFI_ADMIN                       != address(0), "preflight: PRE_ETHERFI_ADMIN unset");
+        require(PRE_ETHERFI_ORACLE                      != address(0), "preflight: PRE_ETHERFI_ORACLE unset");
+        require(PRE_ETHERFI_REDEMPTION_MANAGER          != address(0), "preflight: PRE_ETHERFI_REDEMPTION_MANAGER unset");
+        require(PRE_ETHERFI_RESTAKER                    != address(0), "preflight: PRE_ETHERFI_RESTAKER unset");
+        require(PRE_ETHERFI_NODES_MANAGER               != address(0), "preflight: PRE_ETHERFI_NODES_MANAGER unset");
+        require(PRE_STAKING_MANAGER                     != address(0), "preflight: PRE_STAKING_MANAGER unset");
+        require(PRE_AUCTION_MANAGER                     != address(0), "preflight: PRE_AUCTION_MANAGER unset");
+        require(PRE_NODE_OPERATOR_MANAGER               != address(0), "preflight: PRE_NODE_OPERATOR_MANAGER unset");
+        require(PRE_MEMBERSHIP_MANAGER                  != address(0), "preflight: PRE_MEMBERSHIP_MANAGER unset");
+        require(PRE_MEMBERSHIP_NFT                      != address(0), "preflight: PRE_MEMBERSHIP_NFT unset");
+        require(PRE_ETHERFI_RATE_LIMITER                != address(0), "preflight: PRE_ETHERFI_RATE_LIMITER unset");
+        require(PRE_PRIORITY_WITHDRAWAL_QUEUE           != address(0), "preflight: PRE_PRIORITY_WITHDRAWAL_QUEUE unset");
+        require(PRE_ETHERFI_REWARDS_ROUTER              != address(0), "preflight: PRE_ETHERFI_REWARDS_ROUTER unset");
+        require(PRE_RESTAKING_REWARDS_ROUTER            != address(0), "preflight: PRE_RESTAKING_REWARDS_ROUTER unset");
+        require(PRE_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR != address(0), "preflight: PRE_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR unset");
+        require(PRE_DEPOSIT_ADAPTER                     != address(0), "preflight: PRE_DEPOSIT_ADAPTER unset");
+        require(PRE_WEETH_WITHDRAW_ADAPTER              != address(0), "preflight: PRE_WEETH_WITHDRAW_ADAPTER unset");
+    }
+
     /// @notice Sanity check: every proxy is currently NOT on the pre-upgrade
     ///         impl. If they already are, the revert is a no-op and we abort
     ///         loudly to avoid scheduling a useless 10-day timelock.
     function confirmCurrentlyOnNewImpl() public view {
         console2.log("=== Step 0: Confirming proxies are on the new impl ===");
-        _assertNotAlreadyOnPre(EETH,                       PRE_EETH,                       "EETH");
-        _assertNotAlreadyOnPre(WEETH,                      PRE_WEETH,                      "WeETH");
-        _assertNotAlreadyOnPre(LIQUIDITY_POOL,             PRE_LIQUIDITY_POOL,             "LiquidityPool");
-        _assertNotAlreadyOnPre(WITHDRAW_REQUEST_NFT,       PRE_WITHDRAW_REQUEST_NFT,       "WithdrawRequestNFT");
-        _assertNotAlreadyOnPre(LIQUIFIER,                  PRE_LIQUIFIER,                  "Liquifier");
-        _assertNotAlreadyOnPre(ETHERFI_ADMIN,              PRE_ETHERFI_ADMIN,              "EtherFiAdmin");
-        _assertNotAlreadyOnPre(ETHERFI_ORACLE,             PRE_ETHERFI_ORACLE,             "EtherFiOracle");
-        _assertNotAlreadyOnPre(ETHERFI_REDEMPTION_MANAGER, PRE_ETHERFI_REDEMPTION_MANAGER, "EtherFiRedemptionManager");
-        _assertNotAlreadyOnPre(ETHERFI_RESTAKER,           PRE_ETHERFI_RESTAKER,           "EtherFiRestaker");
-        _assertNotAlreadyOnPre(ETHERFI_NODES_MANAGER,      PRE_ETHERFI_NODES_MANAGER,      "EtherFiNodesManager");
-        _assertNotAlreadyOnPre(STAKING_MANAGER,            PRE_STAKING_MANAGER,            "StakingManager");
-        _assertNotAlreadyOnPre(AUCTION_MANAGER,            PRE_AUCTION_MANAGER,            "AuctionManager");
-        _assertNotAlreadyOnPre(NODE_OPERATOR_MANAGER,      PRE_NODE_OPERATOR_MANAGER,      "NodeOperatorManager");
-        _assertNotAlreadyOnPre(MEMBERSHIP_MANAGER,         PRE_MEMBERSHIP_MANAGER,         "MembershipManager");
-        _assertNotAlreadyOnPre(MEMBERSHIP_NFT,             PRE_MEMBERSHIP_NFT,             "MembershipNFT");
-        _assertNotAlreadyOnPre(ETHERFI_RATE_LIMITER,       PRE_ETHERFI_RATE_LIMITER,       "EtherFiRateLimiter");
-        console2.log("[OK] all 16 proxies are on post-upgrade impls; revert is meaningful");
+        _assertNotAlreadyOnPre(EETH,                                PRE_EETH,                                "EETH");
+        _assertNotAlreadyOnPre(WEETH,                               PRE_WEETH,                               "WeETH");
+        _assertNotAlreadyOnPre(LIQUIDITY_POOL,                      PRE_LIQUIDITY_POOL,                      "LiquidityPool");
+        _assertNotAlreadyOnPre(WITHDRAW_REQUEST_NFT,                PRE_WITHDRAW_REQUEST_NFT,                "WithdrawRequestNFT");
+        _assertNotAlreadyOnPre(LIQUIFIER,                           PRE_LIQUIFIER,                           "Liquifier");
+        _assertNotAlreadyOnPre(ETHERFI_ADMIN,                       PRE_ETHERFI_ADMIN,                       "EtherFiAdmin");
+        _assertNotAlreadyOnPre(ETHERFI_ORACLE,                      PRE_ETHERFI_ORACLE,                      "EtherFiOracle");
+        _assertNotAlreadyOnPre(ETHERFI_REDEMPTION_MANAGER,          PRE_ETHERFI_REDEMPTION_MANAGER,          "EtherFiRedemptionManager");
+        _assertNotAlreadyOnPre(ETHERFI_RESTAKER,                    PRE_ETHERFI_RESTAKER,                    "EtherFiRestaker");
+        _assertNotAlreadyOnPre(ETHERFI_NODES_MANAGER,               PRE_ETHERFI_NODES_MANAGER,               "EtherFiNodesManager");
+        _assertNotAlreadyOnPre(STAKING_MANAGER,                     PRE_STAKING_MANAGER,                     "StakingManager");
+        _assertNotAlreadyOnPre(AUCTION_MANAGER,                     PRE_AUCTION_MANAGER,                     "AuctionManager");
+        _assertNotAlreadyOnPre(NODE_OPERATOR_MANAGER,               PRE_NODE_OPERATOR_MANAGER,               "NodeOperatorManager");
+        _assertNotAlreadyOnPre(MEMBERSHIP_MANAGER,                  PRE_MEMBERSHIP_MANAGER,                  "MembershipManager");
+        _assertNotAlreadyOnPre(MEMBERSHIP_NFT,                      PRE_MEMBERSHIP_NFT,                      "MembershipNFT");
+        _assertNotAlreadyOnPre(ETHERFI_RATE_LIMITER,                PRE_ETHERFI_RATE_LIMITER,                "EtherFiRateLimiter");
+        _assertNotAlreadyOnPre(PRIORITY_WITHDRAWAL_QUEUE,           PRE_PRIORITY_WITHDRAWAL_QUEUE,           "PriorityWithdrawalQueue");
+        _assertNotAlreadyOnPre(ETHERFI_REWARDS_ROUTER,              PRE_ETHERFI_REWARDS_ROUTER,              "EtherFiRewardsRouter");
+        _assertNotAlreadyOnPre(RESTAKING_REWARDS_ROUTER,            PRE_RESTAKING_REWARDS_ROUTER,            "RestakingRewardsRouter");
+        _assertNotAlreadyOnPre(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR, PRE_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR, "CumulativeMerkleRewardsDistributor");
+        _assertNotAlreadyOnPre(DEPOSIT_ADAPTER,                     PRE_DEPOSIT_ADAPTER,                     "DepositAdapter");
+        _assertNotAlreadyOnPre(WEETH_WITHDRAW_ADAPTER,              PRE_WEETH_WITHDRAW_ADAPTER,              "WeETHWithdrawAdapter");
+        console2.log("[OK] all 22 proxies are on post-upgrade impls; revert is meaningful");
         console2.log("");
     }
 
@@ -119,37 +161,43 @@ contract SecurityUpgradesRevertScript is Script, Deployed, Utils {
 
     function takePreRevertSnapshots() public {
         console2.log("=== Step 1: Snapshotting owner+paused before revert ===");
-        address[16] memory p = _proxies();
+        address[22] memory p = _proxies();
         for (uint256 i = 0; i < p.length; i++) {
             preRevertSnap[p[i]] = Snap({ owner: _getOwner(p[i]), paused: _getPaused(p[i]) });
         }
-        console2.log("[OK] snapshot taken for 16 proxies");
+        console2.log("[OK] snapshot taken for 22 proxies");
         console2.log("");
     }
 
     function executeRevert() public {
         console2.log("=== Step 2: Executing revert (UPGRADE_TIMELOCK, 10d) ===");
 
-        address[] memory targets = new address[](16);
-        bytes[]   memory data    = new bytes[](16);
-        uint256[] memory values  = new uint256[](16);
+        address[] memory targets = new address[](22);
+        bytes[]   memory data    = new bytes[](22);
+        uint256[] memory values  = new uint256[](22);
 
-        targets[0]  = EETH;                       data[0]  = _upgradeTo(PRE_EETH);
-        targets[1]  = WEETH;                      data[1]  = _upgradeTo(PRE_WEETH);
-        targets[2]  = LIQUIDITY_POOL;             data[2]  = _upgradeTo(PRE_LIQUIDITY_POOL);
-        targets[3]  = WITHDRAW_REQUEST_NFT;       data[3]  = _upgradeTo(PRE_WITHDRAW_REQUEST_NFT);
-        targets[4]  = LIQUIFIER;                  data[4]  = _upgradeTo(PRE_LIQUIFIER);
-        targets[5]  = ETHERFI_ADMIN;              data[5]  = _upgradeTo(PRE_ETHERFI_ADMIN);
-        targets[6]  = ETHERFI_ORACLE;             data[6]  = _upgradeTo(PRE_ETHERFI_ORACLE);
-        targets[7]  = ETHERFI_REDEMPTION_MANAGER; data[7]  = _upgradeTo(PRE_ETHERFI_REDEMPTION_MANAGER);
-        targets[8]  = ETHERFI_RESTAKER;           data[8]  = _upgradeTo(PRE_ETHERFI_RESTAKER);
-        targets[9]  = ETHERFI_NODES_MANAGER;      data[9]  = _upgradeTo(PRE_ETHERFI_NODES_MANAGER);
-        targets[10] = STAKING_MANAGER;            data[10] = _upgradeTo(PRE_STAKING_MANAGER);
-        targets[11] = AUCTION_MANAGER;            data[11] = _upgradeTo(PRE_AUCTION_MANAGER);
-        targets[12] = NODE_OPERATOR_MANAGER;      data[12] = _upgradeTo(PRE_NODE_OPERATOR_MANAGER);
-        targets[13] = MEMBERSHIP_MANAGER;         data[13] = _upgradeTo(PRE_MEMBERSHIP_MANAGER);
-        targets[14] = MEMBERSHIP_NFT;             data[14] = _upgradeTo(PRE_MEMBERSHIP_NFT);
-        targets[15] = ETHERFI_RATE_LIMITER;       data[15] = _upgradeTo(PRE_ETHERFI_RATE_LIMITER);
+        targets[0]  = EETH;                                data[0]  = _upgradeTo(PRE_EETH);
+        targets[1]  = WEETH;                               data[1]  = _upgradeTo(PRE_WEETH);
+        targets[2]  = LIQUIDITY_POOL;                      data[2]  = _upgradeTo(PRE_LIQUIDITY_POOL);
+        targets[3]  = WITHDRAW_REQUEST_NFT;                data[3]  = _upgradeTo(PRE_WITHDRAW_REQUEST_NFT);
+        targets[4]  = LIQUIFIER;                           data[4]  = _upgradeTo(PRE_LIQUIFIER);
+        targets[5]  = ETHERFI_ADMIN;                       data[5]  = _upgradeTo(PRE_ETHERFI_ADMIN);
+        targets[6]  = ETHERFI_ORACLE;                      data[6]  = _upgradeTo(PRE_ETHERFI_ORACLE);
+        targets[7]  = ETHERFI_REDEMPTION_MANAGER;          data[7]  = _upgradeTo(PRE_ETHERFI_REDEMPTION_MANAGER);
+        targets[8]  = ETHERFI_RESTAKER;                    data[8]  = _upgradeTo(PRE_ETHERFI_RESTAKER);
+        targets[9]  = ETHERFI_NODES_MANAGER;               data[9]  = _upgradeTo(PRE_ETHERFI_NODES_MANAGER);
+        targets[10] = STAKING_MANAGER;                     data[10] = _upgradeTo(PRE_STAKING_MANAGER);
+        targets[11] = AUCTION_MANAGER;                     data[11] = _upgradeTo(PRE_AUCTION_MANAGER);
+        targets[12] = NODE_OPERATOR_MANAGER;               data[12] = _upgradeTo(PRE_NODE_OPERATOR_MANAGER);
+        targets[13] = MEMBERSHIP_MANAGER;                  data[13] = _upgradeTo(PRE_MEMBERSHIP_MANAGER);
+        targets[14] = MEMBERSHIP_NFT;                      data[14] = _upgradeTo(PRE_MEMBERSHIP_NFT);
+        targets[15] = ETHERFI_RATE_LIMITER;                data[15] = _upgradeTo(PRE_ETHERFI_RATE_LIMITER);
+        targets[16] = PRIORITY_WITHDRAWAL_QUEUE;           data[16] = _upgradeTo(PRE_PRIORITY_WITHDRAWAL_QUEUE);
+        targets[17] = ETHERFI_REWARDS_ROUTER;              data[17] = _upgradeTo(PRE_ETHERFI_REWARDS_ROUTER);
+        targets[18] = RESTAKING_REWARDS_ROUTER;            data[18] = _upgradeTo(PRE_RESTAKING_REWARDS_ROUTER);
+        targets[19] = CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR; data[19] = _upgradeTo(PRE_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR);
+        targets[20] = DEPOSIT_ADAPTER;                     data[20] = _upgradeTo(PRE_DEPOSIT_ADAPTER);
+        targets[21] = WEETH_WITHDRAW_ADAPTER;              data[21] = _upgradeTo(PRE_WEETH_WITHDRAW_ADAPTER);
 
         bytes32 salt = keccak256(abi.encode("security-upgrades-v1-REVERT", block.number));
 
@@ -177,22 +225,28 @@ contract SecurityUpgradesRevertScript is Script, Deployed, Utils {
 
     function verifyReverted() public view {
         console2.log("=== Step 3: Verifying impl slot reverted ===");
-        _assertImpl(EETH,                       PRE_EETH,                       "EETH");
-        _assertImpl(WEETH,                      PRE_WEETH,                      "WeETH");
-        _assertImpl(LIQUIDITY_POOL,             PRE_LIQUIDITY_POOL,             "LiquidityPool");
-        _assertImpl(WITHDRAW_REQUEST_NFT,       PRE_WITHDRAW_REQUEST_NFT,       "WithdrawRequestNFT");
-        _assertImpl(LIQUIFIER,                  PRE_LIQUIFIER,                  "Liquifier");
-        _assertImpl(ETHERFI_ADMIN,              PRE_ETHERFI_ADMIN,              "EtherFiAdmin");
-        _assertImpl(ETHERFI_ORACLE,             PRE_ETHERFI_ORACLE,             "EtherFiOracle");
-        _assertImpl(ETHERFI_REDEMPTION_MANAGER, PRE_ETHERFI_REDEMPTION_MANAGER, "EtherFiRedemptionManager");
-        _assertImpl(ETHERFI_RESTAKER,           PRE_ETHERFI_RESTAKER,           "EtherFiRestaker");
-        _assertImpl(ETHERFI_NODES_MANAGER,      PRE_ETHERFI_NODES_MANAGER,      "EtherFiNodesManager");
-        _assertImpl(STAKING_MANAGER,            PRE_STAKING_MANAGER,            "StakingManager");
-        _assertImpl(AUCTION_MANAGER,            PRE_AUCTION_MANAGER,            "AuctionManager");
-        _assertImpl(NODE_OPERATOR_MANAGER,      PRE_NODE_OPERATOR_MANAGER,      "NodeOperatorManager");
-        _assertImpl(MEMBERSHIP_MANAGER,         PRE_MEMBERSHIP_MANAGER,         "MembershipManager");
-        _assertImpl(MEMBERSHIP_NFT,             PRE_MEMBERSHIP_NFT,             "MembershipNFT");
-        _assertImpl(ETHERFI_RATE_LIMITER,       PRE_ETHERFI_RATE_LIMITER,       "EtherFiRateLimiter");
+        _assertImpl(EETH,                                PRE_EETH,                                "EETH");
+        _assertImpl(WEETH,                               PRE_WEETH,                               "WeETH");
+        _assertImpl(LIQUIDITY_POOL,                      PRE_LIQUIDITY_POOL,                      "LiquidityPool");
+        _assertImpl(WITHDRAW_REQUEST_NFT,                PRE_WITHDRAW_REQUEST_NFT,                "WithdrawRequestNFT");
+        _assertImpl(LIQUIFIER,                           PRE_LIQUIFIER,                           "Liquifier");
+        _assertImpl(ETHERFI_ADMIN,                       PRE_ETHERFI_ADMIN,                       "EtherFiAdmin");
+        _assertImpl(ETHERFI_ORACLE,                      PRE_ETHERFI_ORACLE,                      "EtherFiOracle");
+        _assertImpl(ETHERFI_REDEMPTION_MANAGER,          PRE_ETHERFI_REDEMPTION_MANAGER,          "EtherFiRedemptionManager");
+        _assertImpl(ETHERFI_RESTAKER,                    PRE_ETHERFI_RESTAKER,                    "EtherFiRestaker");
+        _assertImpl(ETHERFI_NODES_MANAGER,               PRE_ETHERFI_NODES_MANAGER,               "EtherFiNodesManager");
+        _assertImpl(STAKING_MANAGER,                     PRE_STAKING_MANAGER,                     "StakingManager");
+        _assertImpl(AUCTION_MANAGER,                     PRE_AUCTION_MANAGER,                     "AuctionManager");
+        _assertImpl(NODE_OPERATOR_MANAGER,               PRE_NODE_OPERATOR_MANAGER,               "NodeOperatorManager");
+        _assertImpl(MEMBERSHIP_MANAGER,                  PRE_MEMBERSHIP_MANAGER,                  "MembershipManager");
+        _assertImpl(MEMBERSHIP_NFT,                      PRE_MEMBERSHIP_NFT,                      "MembershipNFT");
+        _assertImpl(ETHERFI_RATE_LIMITER,                PRE_ETHERFI_RATE_LIMITER,                "EtherFiRateLimiter");
+        _assertImpl(PRIORITY_WITHDRAWAL_QUEUE,           PRE_PRIORITY_WITHDRAWAL_QUEUE,           "PriorityWithdrawalQueue");
+        _assertImpl(ETHERFI_REWARDS_ROUTER,              PRE_ETHERFI_REWARDS_ROUTER,              "EtherFiRewardsRouter");
+        _assertImpl(RESTAKING_REWARDS_ROUTER,            PRE_RESTAKING_REWARDS_ROUTER,            "RestakingRewardsRouter");
+        _assertImpl(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR, PRE_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR, "CumulativeMerkleRewardsDistributor");
+        _assertImpl(DEPOSIT_ADAPTER,                     PRE_DEPOSIT_ADAPTER,                     "DepositAdapter");
+        _assertImpl(WEETH_WITHDRAW_ADAPTER,              PRE_WEETH_WITHDRAW_ADAPTER,              "WeETHWithdrawAdapter");
         console2.log("");
     }
 
@@ -204,17 +258,17 @@ contract SecurityUpgradesRevertScript is Script, Deployed, Utils {
 
     function verifyAccessControlPreservation() public view {
         console2.log("=== Step 4: Verifying owner + paused unchanged ===");
-        address[16] memory p = _proxies();
+        address[22] memory p = _proxies();
         for (uint256 i = 0; i < p.length; i++) {
             Snap memory pre = preRevertSnap[p[i]];
             require(_getOwner(p[i])  == pre.owner,  string.concat("owner changed across revert: ", vm.toString(p[i])));
             require(_getPaused(p[i]) == pre.paused, string.concat("paused changed across revert: ", vm.toString(p[i])));
         }
-        console2.log("[OK] owner + paused unchanged on all 16 proxies");
+        console2.log("[OK] owner + paused unchanged on all 22 proxies");
         console2.log("");
     }
 
-    function _proxies() internal pure returns (address[16] memory list) {
+    function _proxies() internal pure returns (address[22] memory list) {
         list[0]  = EETH;
         list[1]  = WEETH;
         list[2]  = LIQUIDITY_POOL;
@@ -231,6 +285,12 @@ contract SecurityUpgradesRevertScript is Script, Deployed, Utils {
         list[13] = MEMBERSHIP_MANAGER;
         list[14] = MEMBERSHIP_NFT;
         list[15] = ETHERFI_RATE_LIMITER;
+        list[16] = PRIORITY_WITHDRAWAL_QUEUE;
+        list[17] = ETHERFI_REWARDS_ROUTER;
+        list[18] = RESTAKING_REWARDS_ROUTER;
+        list[19] = CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR;
+        list[20] = DEPOSIT_ADAPTER;
+        list[21] = WEETH_WITHDRAW_ADAPTER;
     }
 
     function _upgradeTo(address impl) internal pure returns (bytes memory) {
