@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import "forge-std/console2.sol";
 import "@tests/TestSetup.sol";
-import "lib/BucketLimiter.sol";
+import "@etherfi/rate-limiting/libraries/BucketLimiter.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 
 contract EtherFiRedemptionManagerTest is TestSetup {

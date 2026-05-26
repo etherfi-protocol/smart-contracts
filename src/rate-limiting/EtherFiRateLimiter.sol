@@ -6,7 +6,7 @@ import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 
 import "@etherfi/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
-import "lib/BucketLimiter.sol";
+import "@etherfi/rate-limiting/libraries/BucketLimiter.sol";
 
 contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeable, PausableUpgradeable, RolesLibrary {
 

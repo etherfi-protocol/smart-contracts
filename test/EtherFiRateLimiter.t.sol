@@ -7,7 +7,7 @@ import "@tests/TestSetup.sol";
 import "@etherfi/rate-limiting/EtherFiRateLimiter.sol";
 import "@etherfi/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
-import "lib/BucketLimiter.sol";
+import "@etherfi/rate-limiting/libraries/BucketLimiter.sol";
 
 contract EtherFiRateLimiterTest is TestSetup {
     EtherFiRateLimiter public rateLimiter;
