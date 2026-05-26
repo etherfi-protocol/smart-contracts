@@ -45,8 +45,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     uint256 private constant BASIS_POINT_SCALE = 1e4;
     uint256 private constant SHARE_UNIT = 1e18;
-    // this treasury address is set to ethfi buyback wallet address
-    address public immutable treasury;
+    // this ethfiBuybackAddress address is set to ethfi buyback wallet address
+    address public immutable ethfiBuybackAddress;
     
     ILiquidityPool private DEPRECATED_liquidityPool;
     IeETH private DEPRECATED_eETH;
@@ -57,7 +57,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     uint32 public nextRequestId;
     uint32 public lastFinalizedRequestId;
-    uint16 public shareRemainderSplitToTreasuryInBps;
+    uint16 public shareRemainderSplitToBuybackInBps;
     uint16 private _unused_gap;
 
     // inclusive
@@ -92,7 +92,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     event WithdrawRequestInvalidated(uint32 indexed requestId);
     event WithdrawRequestValidated(uint32 indexed requestId);
     event WithdrawRequestSeized(uint32 indexed requestId);
-    event HandledRemainderOfClaimedWithdrawRequests(uint256 eEthAmountToTreasury, uint256 eEthAmountBurnt);
+    event HandledRemainderOfClaimedWithdrawRequests(uint256 eEthAmountToBuyback, uint256 eEthAmountBurnt);
 
     event Paused();
     event Unpaused();
@@ -128,10 +128,10 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     error InvalidEEthShares();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _treasury, address _eETH, address _liquidityPool, address _membershipManager, address _roleRegistry, address _blacklister,  address _etherFiAdmin, uint256 _minAcceptableShareRate, uint256 _maxAcceptableShareRate) RolesLibrary(_roleRegistry) {
+    constructor(address _ethfiBuybackAddress, address _eETH, address _liquidityPool, address _membershipManager, address _roleRegistry, address _blacklister,  address _etherFiAdmin, uint256 _minAcceptableShareRate, uint256 _maxAcceptableShareRate) RolesLibrary(_roleRegistry) {
         if (_minAcceptableShareRate == 0) revert InvalidMinAcceptableShareRate();
         if (_maxAcceptableShareRate <= _minAcceptableShareRate) revert InvalidMinMaxAcceptableShareRate();
-        treasury = _treasury;
+        ethfiBuybackAddress = _ethfiBuybackAddress;
         eETH = IeETH(_eETH);
         liquidityPool = ILiquidityPool(_liquidityPool);
         membershipManager = IMembershipManager(_membershipManager);
@@ -338,9 +338,9 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         emit WithdrawRequestValidated(uint32(requestId));
     }
 
-    function updateShareRemainderSplitToTreasuryInBps(uint16 _shareRemainderSplitToTreasuryInBps) external onlyAdmin {
-        if (_shareRemainderSplitToTreasuryInBps > BASIS_POINT_SCALE) revert InvalidShareRemainderSplit();
-        shareRemainderSplitToTreasuryInBps = _shareRemainderSplitToTreasuryInBps;
+    function updateShareRemainderSplitToBuybackInBps(uint16 _shareRemainderSplitToBuybackInBps) external onlyAdmin {
+        if (_shareRemainderSplitToBuybackInBps > BASIS_POINT_SCALE) revert InvalidShareRemainderSplit();
+        shareRemainderSplitToBuybackInBps = _shareRemainderSplitToBuybackInBps;
     }
 
     function pauseContract() external onlyOperatingMultisig {
@@ -372,7 +372,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     /// @dev Handles the remainder of the eEth shares after the claim of the withdraw request
     /// the remainder eETH share for a request = request.shareOfEEth - request.amountOfEEth / (eETH amount to eETH shares rate)
     /// - Splits the remainder into two parts:
-    ///  - Treasury: treasury gets a split of the remainder
+    ///  - Buyback: ethfiBuybackAddress gets a split of the remainder
     ///   - Burn: the rest of the remainder is burned
     /// @param _eEthAmount: the remainder of the eEth amount
     function handleRemainder(uint256 _eEthAmount) external onlyHousekeepingOperations {
@@ -381,27 +381,27 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
         uint256 beforeEEthShares = eETH.shares(address(this));
 
-        uint256 eEthAmountToTreasury = _eEthAmount.mulDiv(shareRemainderSplitToTreasuryInBps, BASIS_POINT_SCALE);
-        uint256 eEthAmountToBurn = _eEthAmount - eEthAmountToTreasury;
+        uint256 eEthAmountToBuyback = _eEthAmount.mulDiv(shareRemainderSplitToBuybackInBps, BASIS_POINT_SCALE);
+        uint256 eEthAmountToBurn = _eEthAmount - eEthAmountToBuyback;
         uint256 eEthSharesToBurn = liquidityPool.sharesForAmount(eEthAmountToBurn);
-        uint256 eEthSharesToMoved = eEthSharesToBurn + liquidityPool.sharesForAmount(eEthAmountToTreasury);
+        uint256 eEthSharesToMoved = eEthSharesToBurn + liquidityPool.sharesForAmount(eEthAmountToBuyback);
 
         totalRemainderEEthShares -= eEthSharesToMoved;
 
-        if (eEthAmountToTreasury > 0) IERC20(address(eETH)).safeTransfer(treasury, eEthAmountToTreasury);
+        if (eEthAmountToBuyback > 0) IERC20(address(eETH)).safeTransfer(ethfiBuybackAddress, eEthAmountToBuyback);
         if (eEthSharesToBurn > 0) liquidityPool.burnEEthShares(eEthSharesToBurn);
 
         if (beforeEEthShares - eEthSharesToMoved != eETH.shares(address(this))) revert InvalidEEthShares();
 
-        emit HandledRemainderOfClaimedWithdrawRequests(eEthAmountToTreasury, eEthAmountToBurn);
+        emit HandledRemainderOfClaimedWithdrawRequests(eEthAmountToBuyback, eEthAmountToBurn);
 
-        // Sweep accumulated ETH back to treasury
+        // Sweep accumulated ETH back to ethfiBuybackAddress
         // In case of negative rebase, the ETH is stranded in the NFT contract
         uint256 strandedEth = address(this).balance > ethAmountLockedForWithdrawal
             ? address(this).balance - uint256(ethAmountLockedForWithdrawal)
             : 0;
         if (strandedEth > 0) {
-            (bool ok, ) = payable(address(treasury)).call{value: strandedEth}("");
+            (bool ok, ) = payable(address(ethfiBuybackAddress)).call{value: strandedEth}("");
             if (!ok) revert FeeReturnFailed();
             _checkEthAmountLockedForWithdrawal();
         }

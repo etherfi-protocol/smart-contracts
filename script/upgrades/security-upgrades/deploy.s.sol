@@ -53,7 +53,7 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
     uint256 public constant LIQUIFIER_MAX_PRICE_DEVIATION_BPS = 500;   // 5%
 
     // EtherFiRedemptionManager hardcoded ceilings (per spec §7.4.6 / §9)
-    uint256 public constant RM_MAX_EXIT_FEE_SPLIT_TO_TREASURY_BPS = 10_000;
+    uint256 public constant RM_MAX_EXIT_FEE_SPLIT_TO_BUYBACK_BPS = 10_000;
     uint256 public constant RM_MAX_EXIT_FEE_BPS = 500;                  // 5% hardcoded ceiling
     uint256 public constant RM_MAX_LOW_WATERMARK_BPS_OF_TVL = 2_000;    // 20% hardcoded ceiling
 
@@ -64,14 +64,18 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
     uint256 public constant ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY = 100_000 ether;
     uint256 public constant ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY = 1_000; 
 
+    // EtherFiOracle immutable params
+    uint256 public constant ORACLE_MIN_QUORUM_SIZE = 3; // enforces min 3/5 quorum for consensus
+
     // LiquidityPool dust guard (spec — minimum amount per share)
     uint256 public constant LP_MIN_AMOUNT_FOR_SHARE = 1 ether;
 
     // WithdrawRequestNFT share-rate acceptance band
     uint256 public constant WNFT_MIN_ACCEPTABLE_SHARE_RATE = 1;
     uint256 public constant WNFT_MAX_ACCEPTABLE_SHARE_RATE = 4 ether;
+    uint256 public constant ADMIN_MAX_REQUESTS_TO_FINALIZE_PER_REPORT = 2_000;
 
-    // WITHDRAW_REQUEST_NFT_BUYBACK_SAFE and TREASURY inherited from Deployed.
+    // WITHDRAW_REQUEST_NFT_BUYBACK_SAFE inherited from Deployed.
 
     // ----- Deployment outputs -----
     address public auctionManagerImpl;
@@ -153,7 +157,7 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
         {
             string memory name = "WithdrawRequestNFT";
             bytes memory args = abi.encode(
-                TREASURY, // NOTE: Making this address as Treasury and not WithdrawRequestNFT because we want to send funds there directly
+                WITHDRAW_REQUEST_NFT_BUYBACK_SAFE,
                 EETH,
                 LIQUIDITY_POOL,
                 MEMBERSHIP_MANAGER,
@@ -207,14 +211,15 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
                 ADMIN_MAX_VALIDATOR_TASK_BATCH_SIZE,
                 ADMIN_STALE_ORACLE_REPORT_BLOCK_WINDOW,
                 ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY,
-                ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY
+                ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY,
+                ADMIN_MAX_REQUESTS_TO_FINALIZE_PER_REPORT
             );
             bytes memory bc = abi.encodePacked(type(EtherFiAdmin).creationCode, args);
             etherFiAdminImpl = deploy(name, args, bc, commitHashSalt, true, factory);
         }
         {
             string memory name = "EtherFiOracle";
-            bytes memory args = abi.encode(ETHERFI_ADMIN, ROLE_REGISTRY);
+            bytes memory args = abi.encode(ORACLE_MIN_QUORUM_SIZE, ETHERFI_ADMIN, ROLE_REGISTRY);
             bytes memory bc = abi.encodePacked(type(EtherFiOracle).creationCode, args);
             etherFiOracleImpl = deploy(name, args, bc, commitHashSalt, true, factory);
         }
@@ -224,12 +229,12 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
                 LIQUIDITY_POOL,
                 EETH,
                 WEETH,
-                TREASURY,
+                WITHDRAW_REQUEST_NFT_BUYBACK_SAFE,
                 ROLE_REGISTRY,
                 ETHERFI_RESTAKER,
                 PRIORITY_WITHDRAWAL_QUEUE,
                 blacklisterProxy,
-                RM_MAX_EXIT_FEE_SPLIT_TO_TREASURY_BPS,
+                RM_MAX_EXIT_FEE_SPLIT_TO_BUYBACK_BPS,
                 RM_MAX_EXIT_FEE_BPS,
                 RM_MAX_LOW_WATERMARK_BPS_OF_TVL
             );
@@ -262,7 +267,7 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
             bytes memory args = abi.encode(
                 LIQUIDITY_POOL,
                 ETHERFI_NODES_MANAGER,
-                0x00000000219ab540356cBB839Cbe05303d7705Fa, // ETH2 deposit contract
+                ETH2_DEPOSIT_CONTRACT,
                 AUCTION_MANAGER,
                 ETHERFI_NODE_BEACON,
                 ROLE_REGISTRY
@@ -277,7 +282,8 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
                 blacklisterProxy,
                 NODE_OPERATOR_MANAGER,
                 STAKING_MANAGER,
-                MEMBERSHIP_MANAGER
+                MEMBERSHIP_MANAGER,
+                TREASURY
             );
             bytes memory bc = abi.encodePacked(type(AuctionManager).creationCode, args);
             auctionManagerImpl = deploy(name, args, bc, commitHashSalt, true, factory);
