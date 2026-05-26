@@ -309,29 +309,39 @@ contract TimelockTest is TestSetup {
         address avs_etherfi_oracle2 = address(0x2c7cB7d5dC4aF9caEE654553a144C76F10D4b320);
         address target = address(etherFiOracleInstance);
         
-        // Check and remove if they exist
+        // Check and remove if they exist. Pick a quorum that satisfies the
+        // _checkQuorum invariant for the resulting numActive after each mutation:
+        // strict majority -> quorum = numActive / 2 + 1 (with numActive >= 1).
         (bool registered1, , , ) = etherFiOracleInstance.committeeMemberStates(etherfi_oracle1);
         if (registered1) {
-            bytes memory data = abi.encodeWithSelector(EtherFiOracle.removeCommitteeMember.selector, etherfi_oracle1);
+            uint32 newActive = etherFiOracleInstance.numActiveCommitteeMembers() - 1;
+            uint32 newQuorum = newActive == 0 ? 1 : newActive / 2 + 1;
+            bytes memory data = abi.encodeWithSelector(EtherFiOracle.removeCommitteeMember.selector, etherfi_oracle1, newQuorum);
             _execute_timelock(target, data, true, true, true, true);
         }
-        
+
         (bool registered2, , , ) = etherFiOracleInstance.committeeMemberStates(etherfi_oracle2);
         if (registered2) {
-            bytes memory data = abi.encodeWithSelector(EtherFiOracle.removeCommitteeMember.selector, etherfi_oracle2);
+            uint32 newActive = etherFiOracleInstance.numActiveCommitteeMembers() - 1;
+            uint32 newQuorum = newActive == 0 ? 1 : newActive / 2 + 1;
+            bytes memory data = abi.encodeWithSelector(EtherFiOracle.removeCommitteeMember.selector, etherfi_oracle2, newQuorum);
             _execute_timelock(target, data, true, true, true, true);
         }
-        
+
         // Add new members if they don't exist
         (bool registered3, , , ) = etherFiOracleInstance.committeeMemberStates(avs_etherfi_oracle1);
         if (!registered3) {
-            bytes memory data = abi.encodeWithSelector(EtherFiOracle.addCommitteeMember.selector, avs_etherfi_oracle1);
+            uint32 newActive = etherFiOracleInstance.numActiveCommitteeMembers() + 1;
+            uint32 newQuorum = newActive / 2 + 1;
+            bytes memory data = abi.encodeWithSelector(EtherFiOracle.addCommitteeMember.selector, avs_etherfi_oracle1, newQuorum);
             _execute_timelock(target, data, true, true, true, true);
         }
-        
+
         (bool registered4, , , ) = etherFiOracleInstance.committeeMemberStates(avs_etherfi_oracle2);
         if (!registered4) {
-            bytes memory data = abi.encodeWithSelector(EtherFiOracle.addCommitteeMember.selector, avs_etherfi_oracle2);
+            uint32 newActive = etherFiOracleInstance.numActiveCommitteeMembers() + 1;
+            uint32 newQuorum = newActive / 2 + 1;
+            bytes memory data = abi.encodeWithSelector(EtherFiOracle.addCommitteeMember.selector, avs_etherfi_oracle2, newQuorum);
             _execute_timelock(target, data, true, true, true, true);
         }
     }
