@@ -395,11 +395,16 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     /// @notice send remaining eth to deposit contract to activate the provided validators
-    /// @dev step 3 of staking flow
+    /// @dev step 3 of staking flow. Callable directly by oracle ops, or by EtherFiAdmin
+    ///      when forwarding from `executeValidatorApprovalTask` (which gates oracle ops at
+    ///      its own entry point and tracks task completion on-chain). Both upstream paths
+    ///      enforce oracle-ops authorization, so accepting EtherFiAdmin here doesn't widen
+    ///      the auth surface.
     function confirmAndFundBeaconValidators(
         IStakingManager.DepositData[] calldata _depositData,
         uint256 _validatorSizeWei
-    ) external nonReentrant whenNotPaused onlyOracleOperations {
+    ) external nonReentrant whenNotPaused {
+        if (msg.sender != address(etherFiAdminContract)) roleRegistry.onlyOracleOperations(msg.sender);
         if (_validatorSizeWei < stakingManager.MIN_VALIDATOR_SIZE_WEI() || _validatorSizeWei > stakingManager.MAX_VALIDATOR_SIZE_WEI()) revert InvalidValidatorSize();
 
         // we have already deposited the initial amount to create the validator on the beacon chain
