@@ -130,8 +130,9 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // Now swap RoleRegistry in place so newly-added role getters defined in
         // RolesLibrary are reachable from the freshly-upgraded impls.
+        address newRoleRegistryImpl = address(new RoleRegistry(address(0)));
         vm.prank(roleRegistry.owner());
-        RoleRegistry(address(roleRegistry)).upgradeTo(address(new RoleRegistry(address(0))));
+        RoleRegistry(address(roleRegistry)).upgradeTo(newRoleRegistryImpl);
 
         // `upgradeEtherFiNode` checks UPGRADE_TIMELOCK_ROLE via
         // `onlyUpgradeTimelock`. Grant it to every proxy owner pranked below.

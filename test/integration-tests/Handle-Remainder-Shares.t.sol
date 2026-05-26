@@ -39,16 +39,17 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
         // Upgrade LP and NFT to the new escrow-aware implementations so that
         // finalizeRequests + claimWithdraw work with the new ETH-escrow flow.
         address lpOwner = liquidityPoolInstance.owner();
+        // Deploy the impl BEFORE pranking: `_newLpImpl()` performs a CREATE that
+        // would otherwise consume the single-shot vm.prank, leaving upgradeTo to
+        // run as the test contract (OnlyUpgradeTimelock after the RoleRegistry swap).
+        address newLpImpl = _newLpImpl();
         vm.prank(lpOwner);
-        liquidityPoolInstance.upgradeTo(
-            _newLpImpl()
-        );
+        liquidityPoolInstance.upgradeTo(newLpImpl);
 
         address wrnOwner = withdrawRequestNFTInstance.owner();
+        address newWrnImpl = _newWrnImpl();
         vm.prank(wrnOwner);
-        withdrawRequestNFTInstance.upgradeTo(
-            _newWrnImpl()
-        );
+        withdrawRequestNFTInstance.upgradeTo(newWrnImpl);
 
         // The production queue proxy on mainnet still runs the master impl which
         // has no receive(); initializeOnUpgradeV2 below sweeps queue-locked ETH

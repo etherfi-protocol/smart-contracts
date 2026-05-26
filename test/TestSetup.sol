@@ -696,8 +696,12 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // safe to upgrade RoleRegistry. After this point, `onlyProtocolUpgrader`
         // no longer exists; any further proxy upgrade must use UPGRADE_TIMELOCK_ROLE
         // via `onlyUpgradeTimelock`.
+        // Deploy the new impl BEFORE pranking: a `new` inside the upgradeTo
+        // argument is a CREATE that would consume the single-shot vm.prank,
+        // leaving upgradeTo to run as the test contract (Ownable revert).
+        address newRoleRegistryImpl = address(new RoleRegistry(address(0)));
         vm.prank(roleRegistryInstance.owner());
-        roleRegistryInstance.upgradeTo(address(new RoleRegistry(address(0))));
+        roleRegistryInstance.upgradeTo(newRoleRegistryImpl);
 
         // Resolve role identifiers before vm.prank — every interleaved external
         // call would otherwise consume the prank before grantRole executes.
@@ -785,8 +789,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // RoleRegistry impl no longer exposes. `liquifierInstance.owner()` matches
         // RoleRegistry.owner() on mainnet, so the OLD impl's owner check passes.
         if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
-            vm.prank(liquifierInstance.owner());
-            liquifierInstance.upgradeTo(address(new Liquifier(Liquifier.ConstructorAddresses({
+            // Deploy the new impl BEFORE pranking — see note above; the inlined
+            // `new` would otherwise consume the single-shot vm.prank.
+            address newLiquifierImpl = address(new Liquifier(Liquifier.ConstructorAddresses({
                 liquidityPool: address(liquidityPoolInstance),
                 lidoWithdrawalQueue: address(lidoWithdrawalQueue),
                 lido: address(stEth),
@@ -796,7 +801,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 blacklister: address(blacklisterInstance),
                 etherfiRestaker: address(etherFiRestakerInstance),
                 l1SyncPool: address(0xA6)
-            }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS)));
+            }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS));
+            vm.prank(liquifierInstance.owner());
+            liquifierInstance.upgradeTo(newLiquifierImpl);
         }
 
         // Now swap RoleRegistry and grant roles used by tests.

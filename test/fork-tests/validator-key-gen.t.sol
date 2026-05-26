@@ -92,8 +92,9 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
 
         // Now swap RoleRegistry so newly-added role getters (e.g. BLACKLISTED_USER)
         // are reachable from the freshly-upgraded contracts' modifiers.
+        address newRoleRegistryImpl = address(new RoleRegistry(address(0)));
         vm.prank(roleRegistry.owner());
-        roleRegistry.upgradeTo(address(new RoleRegistry(address(0))));
+        roleRegistry.upgradeTo(newRoleRegistryImpl);
 
         vm.startPrank(roleRegistry.owner());
         roleRegistry.grantRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), admin);
