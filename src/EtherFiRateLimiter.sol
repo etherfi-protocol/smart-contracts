@@ -31,6 +31,7 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     //-------------------------------------------------------------------------
     //-------------------------  Deployment  ----------------------------------
     //-------------------------------------------------------------------------
+    /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _roleRegistry, address _eETH, address _weETH) RolesLibrary(_roleRegistry) {
         eETH = _eETH;
         weETH = _weETH;
@@ -120,8 +121,15 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     ///      be created with any starting parameters because there's no looser prior state
     ///      to compare against (no bucket == unrestricted). `capacity = 0` on an existing
     ///      bucket is the tightest move and acts as a hard freeze (consume reverts).
-    ///      `BucketLimiter.setCapacity` / `setRefillRate` preserve `remaining`, capped to
-    ///      the new capacity — so tightening can't accidentally refill a half-drained bucket.
+    ///
+    ///      Remaining-balance behavior: `BucketLimiter.setCapacity` / `setRefillRate`
+    ///      apply any pending refill FIRST (against the previous cap/rate), then enforce
+    ///      the new lower bounds. So a long-drained bucket can effectively be refreshed
+    ///      to (refilled-previous-state) then capped down to `newCapacity`. Net effect:
+    ///      `remaining` is bounded above by both the refilled-previous-state and the new
+    ///      capacity. The user can never end up with MORE consumable than they could
+    ///      have spent in one consume against the previous cap, so tightening still only
+    ///      restricts the user's max burst — it cannot loosen them.
     function tightenAddressLimit(address user, uint64 capacity, uint64 refillRate) external onlyToken {
         BucketLimiter.Limit storage lim = addressLimits[msg.sender][user];
         if (lim.lastRefill == 0) {
@@ -182,8 +190,18 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     ///      limiter must not halt token transfers; operators pause the token contract itself
     ///      for a hard stop. Still enforces bucket existence and the consumer whitelist, so
     ///      this is not a backdoor: only consumers explicitly whitelisted by an admin (e.g.
-    ///      eETH, weETH for their respective buckets) can use it. Monitoring should watch the
-    ///      existing CapacityUpdated(id, 0) event to detect buckets entering disabled mode.
+    ///      eETH, weETH for their respective buckets) can use it.
+    ///
+    ///      CAPACITY == 0 SEMANTICS: on this global-bucket path, `capacity == 0` means
+    ///      "not configured / disabled" and the call passes through as a no-op. This is
+    ///      deliberate — admins set cap=0 to retire a bucket without breaking the live
+    ///      consumer's call path. Compare against `consumeForAddressIfConfigured` below,
+    ///      where `capacity == 0` on an existing per-address bucket means "frozen" and
+    ///      reverts. The split is intentional: the global bucket has only one creation
+    ///      lifecycle (admin opt-in), while per-address buckets have a freeze/delete
+    ///      distinction baked into the Guardian/Multisig access split. Monitoring should
+    ///      watch the existing `CapacityUpdated(id, 0)` event to detect buckets entering
+    ///      disabled mode.
     function consumeIfConfigured(bytes32 id, uint64 amount) external {
         if (!limitExists(id)) revert UnknownLimit();
         if (!consumers[id][msg.sender]) revert InvalidConsumer();
@@ -195,10 +213,19 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
 
     /// @notice Consume from a per-address bucket; no-op if the user has no bucket configured.
     /// @dev Callable only by eETH/weETH. `lastRefill == 0` uniquely identifies "never
-    ///      created" (unrestricted user). When a bucket exists, a `BucketLimiter.consume`
-    ///      failure reverts — this includes the frozen case (`capacity == 0`) since refill
-    ///      can't push `remaining` above zero capacity. Intentionally skips `whenNotPaused`:
-    ///      pausing the rate limiter must not halt token transfers.
+    ///      created" (unrestricted user) and short-circuits to a no-op.
+    ///
+    ///      CAPACITY == 0 SEMANTICS: differs from `consumeIfConfigured` above. Here a
+    ///      bucket with `lastRefill > 0` AND `capacity == 0` is treated as **frozen** —
+    ///      the underlying `BucketLimiter.consume` returns false (refill can't push
+    ///      `remaining` above a zero capacity) and we revert `LimitExceeded`. This is
+    ///      the freeze path the Guardian uses via `tightenAddressLimit(user, 0, 0)`;
+    ///      the Multisig clears it via `deleteAddressLimit` (returns to "never created")
+    ///      or `setAddressLimit` (creates fresh with non-zero cap). Two distinct sentinel
+    ///      states (deleted vs frozen) keep the Guardian/Multisig split meaningful.
+    ///
+    ///      Intentionally skips `whenNotPaused`: pausing the rate limiter must not halt
+    ///      token transfers.
     function consumeForAddressIfConfigured(address user, uint64 amount) external onlyToken {
         BucketLimiter.Limit storage lim = addressLimits[msg.sender][user];
         if (lim.lastRefill == 0) return;

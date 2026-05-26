@@ -251,10 +251,22 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     }
 
     // [INTERNAL FUNCTIONS]
-    function _transfer(address _sender, address _recipient, uint256 _amount) internal {
+    /// @dev Order mirrors `WeETH._beforeTokenTransfer`: pause + blacklist checks
+    ///      run BEFORE the rate-limit consume so a paused/blacklisted call doesn't
+    ///      bother the external rate limiter, and so blacklist / pause states
+    ///      cannot be silently observed via rate-limit state changes (atomic revert
+    ///      makes this safe either way, but consistent ordering removes the
+    ///      duplicate-check footprint that previously lived in `_transferShares`).
+    function _transfer(address _sender, address _recipient, uint256 _amount) internal whenNotPaused {
+        blacklister.nonBlacklisted(_sender);
+        blacklister.nonBlacklisted(_recipient);
+        blacklister.nonBlacklisted(msg.sender);
+        if (_sender == address(0) || _recipient == address(0)) revert AddressZero();
+
         uint64 amt = toBucketUnit(_amount);
         rateLimiter.consumeForAddressIfConfigured(_sender,    amt);
         rateLimiter.consumeForAddressIfConfigured(_recipient, amt);
+
         uint256 _sharesToTransfer = liquidityPool.sharesForAmount(_amount);
         _transferShares(_sender, _recipient, _sharesToTransfer);
         emit Transfer(_sender, _recipient, _amount);
@@ -267,11 +279,9 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         emit Approval(_owner, _spender, _amount);
     }
 
-    function _transferShares(address _sender, address _recipient, uint256 _sharesAmount) internal whenNotPaused{
-        blacklister.nonBlacklisted(_sender);
-        blacklister.nonBlacklisted(_recipient);
-        blacklister.nonBlacklisted(msg.sender);
-        if (_sender == address(0) || _recipient == address(0)) revert AddressZero();
+    /// @dev Pure share-accounting; pause / blacklist / address-zero gates live
+    ///      in the caller (`_transfer`). Internal-only; not callable elsewhere.
+    function _transferShares(address _sender, address _recipient, uint256 _sharesAmount) internal {
         if (_sharesAmount > shares[_sender]) revert TransferAmountExceedsBalance();
 
         shares[_sender] -= _sharesAmount;
