@@ -45,9 +45,9 @@ interface IEtherFiOracle {
     function generateReportHash(OracleReport calldata _report) external pure returns (bytes32);
     function computeSlotAtTimestamp(uint256 timestamp) external view returns (uint32);
 
-    function addCommitteeMember(address _address) external;
-    function removeCommitteeMember(address _address) external;
-    function manageCommitteeMember(address _address, bool _enabled) external;
+    function addCommitteeMember(address _address, uint32 _quorumSize) external;
+    function removeCommitteeMember(address _address, uint32 _quorumSize) external;
+    function manageCommitteeMember(address _address, bool _enabled, uint32 _quorumSize) external;
     function setQuorumSize(uint32 _quorumSize) external;
     function setOracleReportPeriod(uint32 _reportPeriodSlot) external;
     function setConsensusVersion(uint32 _consensusVersion) external;
