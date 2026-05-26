@@ -59,7 +59,7 @@ interface IPriorityWithdrawalQueue {
     function removeFromWhitelist(address user) external;
     function batchUpdateWhitelist(address[] calldata users, bool[] calldata statuses) external;
     function invalidateRequests(WithdrawRequest[] calldata requests) external returns(bytes32[] memory);
-    function updateShareRemainderSplitToTreasury(uint16 _shareRemainderSplitToTreasuryInBps) external;
+    function updateShareRemainderSplitToBuyback(uint16 _shareRemainderSplitToTreasuryInBps) external;
     function handleRemainder(uint256 eEthAmount) external;
     function pauseContract() external;
     function unPauseContract() external;
@@ -68,5 +68,5 @@ interface IPriorityWithdrawalQueue {
     function setPauseUntilDuration(uint256 _pauseUntilDuration) external;
 
     // Immutables
-    function treasury() external view returns (address);
+    function ethfiBuybackAddress() external view returns (address);
 }

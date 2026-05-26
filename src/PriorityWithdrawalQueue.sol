@@ -45,7 +45,7 @@ contract PriorityWithdrawalQueue is
     ILiquidityPool public immutable liquidityPool;
     IeETH public immutable eETH;
     IWeETH public immutable weETH;
-    address public immutable treasury;
+    address public immutable ethfiBuybackAddress;
     uint32 public immutable minDelay;
 
     //--------------------------------------------------------------------------------------
@@ -86,7 +86,7 @@ contract PriorityWithdrawalQueue is
     event WithdrawRequestClaimed(bytes32 indexed requestId, address indexed user, uint96 amountOfETHtoWithdraw, uint96 sharesBurned, uint32 nonce, uint32 timestamp);
     event WithdrawRequestInvalidated(bytes32 indexed requestId, uint96 amountOfEEth, uint96 sharesOfEEth, uint32 nonce, uint32 timestamp);
     event WhitelistUpdated(address indexed user, bool status);
-    event RemainderHandled(uint96 amountToTreasury, uint96 sharesOfEEthToBurn);
+    event RemainderHandled(uint96 amountToBuyback, uint96 sharesOfEEthToBurn);
     event ShareRemainderSplitUpdated(uint16 newSplitInBps);
 
     //--------------------------------------------------------------------------------------
@@ -141,15 +141,15 @@ contract PriorityWithdrawalQueue is
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _liquidityPool, address _eETH, address _weETH, address _roleRegistry, address _treasury, uint32 _minDelay) RolesLibrary(_roleRegistry) {
-        if (_liquidityPool == address(0) || _eETH == address(0) || _weETH == address(0) || _treasury == address(0)) {
+    constructor(address _liquidityPool, address _eETH, address _weETH, address _roleRegistry, address _ethfiBuybackAddress, uint32 _minDelay) RolesLibrary(_roleRegistry) {
+        if (_liquidityPool == address(0) || _eETH == address(0) || _weETH == address(0) || _ethfiBuybackAddress == address(0)) {
             revert AddressZero();
         }
         
         liquidityPool = ILiquidityPool(_liquidityPool);
         eETH = IeETH(_eETH);
         weETH = IWeETH(_weETH);
-        treasury = _treasury;
+        ethfiBuybackAddress = _ethfiBuybackAddress;
         minDelay = _minDelay;
 
         _disableInitializers();
@@ -385,7 +385,7 @@ contract PriorityWithdrawalQueue is
 
     /// @notice Handle remainder shares (from rounding differences)
     /// @dev Splits the remainder into two parts:
-    ///      - Treasury: gets a percentage of the remainder based on shareRemainderSplitToTreasuryInBps
+    ///      - Buyback: gets a percentage of the remainder based on shareRemainderSplitToTreasuryInBps
     ///      - Burn: the rest of the remainder is burned
     /// @param eEthAmount Amount of eETH remainder to handle
     function handleRemainder(uint256 eEthAmount) external onlyHousekeepingOperations {
@@ -394,26 +394,26 @@ contract PriorityWithdrawalQueue is
 
         uint256 beforeEEthShares = eETH.shares(address(this));
 
-        uint256 eEthAmountToTreasury = eEthAmount.mulDiv(
+        uint256 eEthAmountToBuyback = eEthAmount.mulDiv(
             shareRemainderSplitToTreasuryInBps,
             _BASIS_POINT_SCALE,
             Math.Rounding.Up
         );
-        uint256 eEthAmountToBurn = eEthAmount - eEthAmountToTreasury;
+        uint256 eEthAmountToBurn = eEthAmount - eEthAmountToBuyback;
         uint256 eEthSharesToBurn = liquidityPool.sharesForAmount(eEthAmountToBurn);
-        uint256 eEthSharesMoved = eEthSharesToBurn + liquidityPool.sharesForAmount(eEthAmountToTreasury);
+        uint256 eEthSharesMoved = eEthSharesToBurn + liquidityPool.sharesForAmount(eEthAmountToBuyback);
 
         totalRemainderShares -= uint96(eEthSharesMoved);
 
-        if (eEthAmountToTreasury > 0) IERC20(address(eETH)).safeTransfer(treasury, eEthAmountToTreasury);
+        if (eEthAmountToBuyback > 0) IERC20(address(eETH)).safeTransfer(ethfiBuybackAddress, eEthAmountToBuyback);
         if (eEthSharesToBurn > 0) liquidityPool.burnEEthShares(eEthSharesToBurn);
 
         if (beforeEEthShares - eEthSharesMoved != eETH.shares(address(this))) revert InvalidEEthSharesAfterRemainderHandling();
 
-        emit RemainderHandled(uint96(eEthAmountToTreasury), uint96(eEthSharesToBurn));
+        emit RemainderHandled(uint96(eEthAmountToBuyback), uint96(eEthSharesToBurn));
     }
 
-    function updateShareRemainderSplitToTreasury(uint16 _shareRemainderSplitToTreasuryInBps) external onlyAdmin {
+    function updateShareRemainderSplitToBuyback(uint16 _shareRemainderSplitToTreasuryInBps) external onlyAdmin {
         if (_shareRemainderSplitToTreasuryInBps > _BASIS_POINT_SCALE) revert BadInput();
         shareRemainderSplitToTreasuryInBps = _shareRemainderSplitToTreasuryInBps;
         emit ShareRemainderSplitUpdated(_shareRemainderSplitToTreasuryInBps);

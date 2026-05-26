@@ -92,7 +92,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     address constant STETH_PRICE_FEED = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812;
     address constant STETH_ETH_CURVE_POOL = 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022;
     uint256 constant LIQUIFIER_MIN_DISCOUNT_BPS = 100;
-    uint256 constant LIQUIFIER_STALE_PRICE_WINDOW = 24 hours;
+    uint256 constant LIQUIFIER_STALE_PRICE_WINDOW = 7 days;
     uint256 constant LIQUIFIER_MAX_PRICE_DEVIATION_BPS = 500;
 
     // EtherFiRedemptionManager
@@ -101,11 +101,15 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     uint256 constant RM_MAX_LOW_WATERMARK_BPS_OF_TVL       = 2_000;
 
     // EtherFiAdmin
-    int256  constant ADMIN_MAX_REBASE_APR_BPS                  = 1_000;
-    uint256 constant ADMIN_MAX_VALIDATOR_TASK_BATCH_SIZE        = 25;
-    uint256 constant ADMIN_STALE_ORACLE_REPORT_BLOCK_WINDOW     = 7200 * 7;
-    uint256 constant ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY = 100_000 ether;
-    uint256 constant ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY    = 2_000;
+    int256  constant ADMIN_MAX_REBASE_APR_BPS                       = 1_000;
+    uint256 constant ADMIN_MAX_VALIDATOR_TASK_BATCH_SIZE            = 100;
+    uint256 constant ADMIN_STALE_ORACLE_REPORT_BLOCK_WINDOW         = 7200 * 7;
+    uint256 constant ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY  = 100_000 ether;
+    uint256 constant ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY        = 1_000;
+    uint256 constant ADMIN_MAX_REQUESTS_TO_FINALIZE_PER_REPORT      = 2_000;
+
+    // EtherFiOracle
+    uint32  constant ORACLE_MIN_QUORUM_SIZE = 3;
 
     // LiquidityPool
     uint256 constant LP_MIN_AMOUNT_FOR_SHARE = 1 ether;
@@ -360,11 +364,12 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
             ADMIN_MAX_VALIDATOR_TASK_BATCH_SIZE,
             ADMIN_STALE_ORACLE_REPORT_BLOCK_WINDOW,
             ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY,
-            ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY
+            ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY,
+            ADMIN_MAX_REQUESTS_TO_FINALIZE_PER_REPORT
         );
         codeChecker.verifyContractByteCodeMatch(etherFiAdminImpl, address(fresh));
 
-        EtherFiOracle fresh2 = new EtherFiOracle(ETHERFI_ADMIN, ROLE_REGISTRY);
+        EtherFiOracle fresh2 = new EtherFiOracle(ORACLE_MIN_QUORUM_SIZE, ETHERFI_ADMIN, ROLE_REGISTRY);
         codeChecker.verifyContractByteCodeMatch(etherFiOracleImpl, address(fresh2));
 
         EtherFiRedemptionManager fresh3 = new EtherFiRedemptionManager(
@@ -392,7 +397,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         codeChecker.verifyContractByteCodeMatch(stakingManagerImpl, address(fresh3));
 
         AuctionManager fresh4 = new AuctionManager(
-            ROLE_REGISTRY, blacklisterProxy, NODE_OPERATOR_MANAGER, STAKING_MANAGER, MEMBERSHIP_MANAGER
+            ROLE_REGISTRY, blacklisterProxy, NODE_OPERATOR_MANAGER, STAKING_MANAGER, MEMBERSHIP_MANAGER, TREASURY
         );
         codeChecker.verifyContractByteCodeMatch(auctionManagerImpl, address(fresh4));
 
@@ -549,7 +554,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     }
     function _nftImmSels() internal pure returns (bytes4[] memory s) {
         s = new bytes4[](9);
-        s[0] = bytes4(keccak256("treasury()"));
+        s[0] = bytes4(keccak256("ethfiBuybackAddress()"));
         s[1] = bytes4(keccak256("liquidityPool()"));
         s[2] = bytes4(keccak256("eETH()"));
         s[3] = bytes4(keccak256("membershipManager()"));
@@ -575,7 +580,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         s[11] = bytes4(keccak256("maxPriceDeviationInBps()"));
     }
     function _adminImmSels() internal pure returns (bytes4[] memory s) {
-        s = new bytes4[](14);
+        s = new bytes4[](15);
         s[0]  = bytes4(keccak256("etherFiOracle()"));
         s[1]  = bytes4(keccak256("stakingManager()"));
         s[2]  = bytes4(keccak256("auctionManager()"));
@@ -590,11 +595,13 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         s[11] = bytes4(keccak256("maxAcceptableFinalizedWithdrawalAmountPerDay()"));
         s[12] = bytes4(keccak256("maxAcceptableNumValidatorsToApprovePerDay()"));
         s[13] = bytes4(keccak256("staleOracleReportBlockWindow()"));
+        s[14] = bytes4(keccak256("maxNumberOfRequestsToFinalizePerReport()"));
     }
     function _oracleImmSels() internal pure returns (bytes4[] memory s) {
-        s = new bytes4[](2);
+        s = new bytes4[](3);
         s[0] = bytes4(keccak256("etherFiAdmin()"));
         s[1] = bytes4(keccak256("roleRegistry()"));
+        s[2] = bytes4(keccak256("minQuorumSize()"));
     }
     function _redemptionImmSels() internal pure returns (bytes4[] memory s) {
         s = new bytes4[](12);
@@ -640,12 +647,13 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         s[5] = bytes4(keccak256("roleRegistry()"));
     }
     function _auctionImmSels() internal pure returns (bytes4[] memory s) {
-        s = new bytes4[](5);
+        s = new bytes4[](6);
         s[0] = bytes4(keccak256("roleRegistry()"));
         s[1] = bytes4(keccak256("blacklister()"));
         s[2] = bytes4(keccak256("nodeOperatorManager()"));
         s[3] = bytes4(keccak256("stakingManagerContractAddress()"));
         s[4] = bytes4(keccak256("membershipManagerContractAddress()"));
+        s[5] = bytes4(keccak256("treasury()"));
     }
     function _nodeOpImmSels() internal pure returns (bytes4[] memory s) {
         s = new bytes4[](2);
@@ -673,7 +681,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         s[0] = bytes4(keccak256("liquidityPool()"));
         s[1] = bytes4(keccak256("eETH()"));
         s[2] = bytes4(keccak256("weETH()"));
-        s[3] = bytes4(keccak256("treasury()"));
+        s[3] = bytes4(keccak256("ethfiBuybackAddress()"));
         s[4] = bytes4(keccak256("minDelay()"));
         s[5] = bytes4(keccak256("roleRegistry()"));
     }
@@ -934,7 +942,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
 
     function _verifyImmutablesNFT() internal view {
         WithdrawRequestNFT n = WithdrawRequestNFT(payable(WITHDRAW_REQUEST_NFT));
-        require(n.treasury()                  == WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, "NFT.treasury");
+        require(n.ethfiBuybackAddress()       == WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, "NFT.ethfiBuybackAddress");
         require(address(n.liquidityPool())    == LIQUIDITY_POOL,           "NFT.liquidityPool");
         require(address(n.eETH())             == EETH,                     "NFT.eETH");
         require(address(n.membershipManager())== MEMBERSHIP_MANAGER,       "NFT.membershipManager");
@@ -977,10 +985,12 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         require(a.staleOracleReportBlockWindow()      == ADMIN_STALE_ORACLE_REPORT_BLOCK_WINDOW, "EFAdmin.staleOracleReportBlockWindow");
         require(a.maxAcceptableFinalizedWithdrawalAmountPerDay() == ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY, "EFAdmin.maxAcceptableFinalizedWithdrawalAmountPerDay");
         require(a.maxAcceptableNumValidatorsToApprovePerDay()    == ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY,       "EFAdmin.maxAcceptableNumValidatorsToApprovePerDay");
+        require(a.maxNumberOfRequestsToFinalizePerReport()       == ADMIN_MAX_REQUESTS_TO_FINALIZE_PER_REPORT,    "EFAdmin.maxNumberOfRequestsToFinalizePerReport");
 
         EtherFiOracle o = EtherFiOracle(ETHERFI_ORACLE);
-        require(address(o.etherFiAdmin()) == ETHERFI_ADMIN, "EFOracle.etherFiAdmin");
-        require(address(o.roleRegistry()) == ROLE_REGISTRY, "EFOracle.roleRegistry");
+        require(address(o.etherFiAdmin()) == ETHERFI_ADMIN,        "EFOracle.etherFiAdmin");
+        require(address(o.roleRegistry()) == ROLE_REGISTRY,        "EFOracle.roleRegistry");
+        require(o.minQuorumSize()         == ORACLE_MIN_QUORUM_SIZE,"EFOracle.minQuorumSize");
     }
 
     function _verifyImmutablesRedemption() internal view {
@@ -1030,6 +1040,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         require(address(a.nodeOperatorManager())        == NODE_OPERATOR_MANAGER,"Auction.nodeOperatorManager");
         require(a.stakingManagerContractAddress()       == STAKING_MANAGER,      "Auction.stakingManagerContractAddress");
         require(a.membershipManagerContractAddress()    == MEMBERSHIP_MANAGER,   "Auction.membershipManagerContractAddress");
+        require(a.treasury()                            == TREASURY,             "Auction.treasury");
 
         NodeOperatorManager nm = NodeOperatorManager(NODE_OPERATOR_MANAGER);
         require(nm.auctionManagerContractAddress() == AUCTION_MANAGER, "NodeOp.auctionManagerContractAddress");
@@ -1057,7 +1068,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         require(address(pwq.liquidityPool()) == LIQUIDITY_POOL,                  "PWQ.liquidityPool");
         require(address(pwq.eETH())          == EETH,                            "PWQ.eETH");
         require(address(pwq.weETH())         == WEETH,                           "PWQ.weETH");
-        require(pwq.treasury()               == WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, "PWQ.treasury");
+        require(pwq.ethfiBuybackAddress()    == WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, "PWQ.ethfiBuybackAddress");
         require(pwq.minDelay()               == PWQ_MIN_DELAY,                   "PWQ.minDelay");
         require(address(pwq.roleRegistry())  == ROLE_REGISTRY,                   "PWQ.roleRegistry");
 

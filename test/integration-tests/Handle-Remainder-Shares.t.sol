@@ -71,7 +71,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
         liquidityPoolInstance.setMinWithdrawAmount(0.001 ether);
         vm.stopPrank();
 
-        // Admin-gated setters on WithdrawRequestNFT (e.g. updateShareRemainderSplitToTreasuryInBps)
+        // Admin-gated setters on WithdrawRequestNFT (e.g. updateShareRemainderSplitToBuybackInBps)
         // route through OPERATION_TIMELOCK_ROLE. Grant it to `admin` so the test can drive them.
         // Resolve every argument before vm.prank so unrelated view calls don't consume it.
         bytes32 opTimelockRole = roleRegistryInstance.OPERATION_TIMELOCK_ROLE();
@@ -261,7 +261,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
             // Update split ratio — onlyAdmin now resolves to OPERATION_TIMELOCK_ROLE,
             // which `admin` is granted in TestSetup.
             vm.prank(admin);
-            withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(splitRatios[i]);
+            withdrawRequestNFTInstance.updateShareRemainderSplitToBuybackInBps(splitRatios[i]);
 
             // Grant the IMPLICIT_FEE_CLAIMER_ROLE to alice
             vm.startPrank(address(roleRegistryInstance.owner()));

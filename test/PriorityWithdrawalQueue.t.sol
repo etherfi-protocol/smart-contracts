@@ -17,7 +17,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     address public requestManager;
     address public vipUser;
     address public regularUser;
-    address public treasury;
+    address public ethfiBuybackAddress;
 
     bytes32 public constant PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE = keccak256("PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE");
     bytes32 public constant PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE = keccak256("PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE");
@@ -32,7 +32,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         requestManager = makeAddr("requestManager");
         vipUser = makeAddr("vipUser");
         regularUser = makeAddr("regularUser");
-        treasury = makeAddr("treasury");
+        ethfiBuybackAddress = makeAddr("ethfiBuybackAddress");
 
         // Deploy PriorityWithdrawalQueue with constructor args
         vm.startPrank(owner);
@@ -41,7 +41,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             address(eETHInstance),
             address(weEthInstance),
             address(roleRegistryInstance),
-            treasury,
+            ethfiBuybackAddress,
             1 hours
         );
         UUPSProxy proxy = new UUPSProxy(
@@ -235,7 +235,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         assertEq(address(priorityQueue.eETH()), address(eETHInstance));
         assertEq(address(priorityQueue.weETH()), address(weEthInstance));
         assertEq(address(priorityQueue.roleRegistry()), address(roleRegistryInstance));
-        assertEq(priorityQueue.treasury(), treasury);
+        assertEq(priorityQueue.ethfiBuybackAddress(), ethfiBuybackAddress);
 
         // Verify initial state
         assertEq(priorityQueue.nonce(), 1);
@@ -1680,9 +1680,9 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         }
     }
 
-    function test_handleRemainder_roundsTreasurySplitUp() public {
+    function test_handleRemainder_roundsBuybackSplitUp() public {
         vm.prank(alice);
-        priorityQueue.updateShareRemainderSplitToTreasury(5000); // 50%
+        priorityQueue.updateShareRemainderSplitToBuyback(5000); // 50%
 
         // Create and complete a withdrawal to accumulate remainder
         uint96 withdrawAmount = 10 ether;
@@ -1703,21 +1703,21 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         // Force an odd amount so 50% split requires rounding.
         uint256 amountToHandle = remainderAmount % 2 == 0 ? remainderAmount - 1 : remainderAmount;
-        uint256 treasuryBalanceBefore = eETHInstance.balanceOf(treasury);
+        uint256 ethfiBuybackAddressBalanceBefore = eETHInstance.balanceOf(ethfiBuybackAddress);
 
         vm.prank(alice);
         priorityQueue.handleRemainder(amountToHandle);
 
-        uint256 treasuryReceived = eETHInstance.balanceOf(treasury) - treasuryBalanceBefore;
-        uint256 expectedTreasuryAmount = amountToHandle / 2;
+        uint256 ethfiBuybackAddressReceived = eETHInstance.balanceOf(ethfiBuybackAddress) - ethfiBuybackAddressBalanceBefore;
+        uint256 expectedBuybackAmount = amountToHandle / 2;
         assertEq(amountToHandle % 2, 1, "Test setup must use odd amount");
-        assertEq(treasuryReceived, expectedTreasuryAmount, "Treasury split round down");
+        assertEq(ethfiBuybackAddressReceived, expectedBuybackAmount, "Buyback split round down");
     }
 
-    // function test_handleRemainder_withTreasurySplit() public {
-    //     // Set 50% split to treasury (5000 bps)
+    // function test_handleRemainder_withBuybackSplit() public {
+    //     // Set 50% split to ethfiBuybackAddress (5000 bps)
     //     vm.prank(alice);
-    //     priorityQueue.updateShareRemainderSplitToTreasury(5000);
+    //     priorityQueue.updateShareRemainderSplitToBuyback(5000);
 
     //     // Create and complete a withdrawal to accumulate remainder
     //     uint96 withdrawAmount = 10 ether;
@@ -1737,29 +1737,29 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         
     //     // Only test if there are remainder shares
     //     if (remainderAmount > 0) {
-    //         uint256 treasuryBalanceBefore = eETHInstance.balanceOf(treasury);
+    //         uint256 ethfiBuybackAddressBalanceBefore = eETHInstance.balanceOf(ethfiBuybackAddress);
     //         uint256 remainderSharesBefore = priorityQueue.totalRemainderShares();
 
     //         vm.prank(alice);
     //         priorityQueue.handleRemainder(remainderAmount);
 
-    //         // Verify treasury received ~50% of remainder as eETH
-    //         uint256 treasuryBalanceAfter = eETHInstance.balanceOf(treasury);
-    //         assertGt(treasuryBalanceAfter, treasuryBalanceBefore, "Treasury should receive eETH");
+    //         // Verify ethfiBuybackAddress received ~50% of remainder as eETH
+    //         uint256 ethfiBuybackAddressBalanceAfter = eETHInstance.balanceOf(ethfiBuybackAddress);
+    //         assertGt(ethfiBuybackAddressBalanceAfter, ethfiBuybackAddressBalanceBefore, "Buyback should receive eETH");
             
-    //         // Approximately 50% should go to treasury (allowing for rounding)
-    //         uint256 expectedToTreasury = remainderAmount / 2;
-    //         assertApproxEqRel(treasuryBalanceAfter - treasuryBalanceBefore, expectedToTreasury, 0.01e18, "Treasury should receive ~50%");
+    //         // Approximately 50% should go to ethfiBuybackAddress (allowing for rounding)
+    //         uint256 expectedToBuyback = remainderAmount / 2;
+    //         assertApproxEqRel(ethfiBuybackAddressBalanceAfter - ethfiBuybackAddressBalanceBefore, expectedToBuyback, 0.01e18, "Buyback should receive ~50%");
 
     //         // Remainder should be cleared
     //         assertLt(priorityQueue.totalRemainderShares(), remainderSharesBefore, "Remainder shares should decrease");
     //     }
     // }
 
-    // function test_handleRemainder_fullTreasurySplit() public {
-    //     // Set 100% split to treasury (10000 bps)
+    // function test_handleRemainder_fullBuybackSplit() public {
+    //     // Set 100% split to ethfiBuybackAddress (10000 bps)
     //     vm.prank(alice);
-    //     priorityQueue.updateShareRemainderSplitToTreasury(10000);
+    //     priorityQueue.updateShareRemainderSplitToBuyback(10000);
 
     //     // Create and complete a withdrawal to accumulate remainder
     //     uint96 withdrawAmount = 10 ether;
@@ -1778,21 +1778,21 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     //     uint256 remainderAmount = priorityQueue.getRemainderAmount();
         
     //     if (remainderAmount > 0) {
-    //         uint256 treasuryBalanceBefore = eETHInstance.balanceOf(treasury);
+    //         uint256 ethfiBuybackAddressBalanceBefore = eETHInstance.balanceOf(ethfiBuybackAddress);
 
     //         vm.prank(alice);
     //         priorityQueue.handleRemainder(remainderAmount);
 
-    //         // Verify treasury received all remainder as eETH (nothing burned)
-    //         uint256 treasuryBalanceAfter = eETHInstance.balanceOf(treasury);
-    //         assertApproxEqRel(treasuryBalanceAfter - treasuryBalanceBefore, remainderAmount, 0.01e18, "Treasury should receive ~100%");
+    //         // Verify ethfiBuybackAddress received all remainder as eETH (nothing burned)
+    //         uint256 ethfiBuybackAddressBalanceAfter = eETHInstance.balanceOf(ethfiBuybackAddress);
+    //         assertApproxEqRel(ethfiBuybackAddressBalanceAfter - ethfiBuybackAddressBalanceBefore, remainderAmount, 0.01e18, "Buyback should receive ~100%");
     //     }
     // }
 
     // function test_handleRemainder_noBurn() public {
-    //     // Set 0% split to treasury (all burn)
+    //     // Set 0% split to ethfiBuybackAddress (all burn)
     //     vm.prank(alice);
-    //     priorityQueue.updateShareRemainderSplitToTreasury(0);
+    //     priorityQueue.updateShareRemainderSplitToBuyback(0);
 
     //     // Create and complete a withdrawal to accumulate remainder
     //     uint96 withdrawAmount = 10 ether;
@@ -1811,36 +1811,36 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     //     uint256 remainderAmount = priorityQueue.getRemainderAmount();
         
     //     if (remainderAmount > 0) {
-    //         uint256 treasuryBalanceBefore = eETHInstance.balanceOf(treasury);
+    //         uint256 ethfiBuybackAddressBalanceBefore = eETHInstance.balanceOf(ethfiBuybackAddress);
 
     //         vm.prank(alice);
     //         priorityQueue.handleRemainder(remainderAmount);
 
-    //         // Verify treasury received nothing
-    //         uint256 treasuryBalanceAfter = eETHInstance.balanceOf(treasury);
-    //         assertEq(treasuryBalanceAfter, treasuryBalanceBefore, "Treasury should receive nothing");
+    //         // Verify ethfiBuybackAddress received nothing
+    //         uint256 ethfiBuybackAddressBalanceAfter = eETHInstance.balanceOf(ethfiBuybackAddress);
+    //         assertEq(ethfiBuybackAddressBalanceAfter, ethfiBuybackAddressBalanceBefore, "Buyback should receive nothing");
     //     }
     // }
 
-    function test_updateShareRemainderSplitToTreasury() public {
+    function test_updateShareRemainderSplitToBuyback() public {
         assertEq(priorityQueue.shareRemainderSplitToTreasuryInBps(), 10000, "Initial split should be 100%");
 
         vm.prank(alice);
-        priorityQueue.updateShareRemainderSplitToTreasury(5000);
+        priorityQueue.updateShareRemainderSplitToBuyback(5000);
 
         assertEq(priorityQueue.shareRemainderSplitToTreasuryInBps(), 5000, "Split should be updated to 50%");
     }
 
-    function test_revert_updateShareRemainderSplitToTreasury_tooHigh() public {
+    function test_revert_updateShareRemainderSplitToBuyback_tooHigh() public {
         vm.prank(alice);
         vm.expectRevert(PriorityWithdrawalQueue.BadInput.selector);
-        priorityQueue.updateShareRemainderSplitToTreasury(10001); // > 100%
+        priorityQueue.updateShareRemainderSplitToBuyback(10001); // > 100%
     }
 
-    function test_revert_updateShareRemainderSplitToTreasury_notAdmin() public {
+    function test_revert_updateShareRemainderSplitToBuyback_notAdmin() public {
         vm.prank(regularUser);
         vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
-        priorityQueue.updateShareRemainderSplitToTreasury(5000);
+        priorityQueue.updateShareRemainderSplitToBuyback(5000);
     }
 
     function test_revert_handleRemainderTooMuch() public {

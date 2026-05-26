@@ -57,7 +57,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     uint32 public nextRequestId;
     uint32 public lastFinalizedRequestId;
-    uint16 public shareRemainderSplitToBuybackInBps;
+    uint16 public shareRemainderSplitToTreasuryInBps;
     uint16 private _unused_gap;
 
     // inclusive
@@ -338,9 +338,9 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         emit WithdrawRequestValidated(uint32(requestId));
     }
 
-    function updateShareRemainderSplitToBuybackInBps(uint16 _shareRemainderSplitToBuybackInBps) external onlyAdmin {
-        if (_shareRemainderSplitToBuybackInBps > BASIS_POINT_SCALE) revert InvalidShareRemainderSplit();
-        shareRemainderSplitToBuybackInBps = _shareRemainderSplitToBuybackInBps;
+    function updateShareRemainderSplitToBuybackInBps(uint16 _shareRemainderSplitToTreasuryInBps) external onlyAdmin {
+        if (_shareRemainderSplitToTreasuryInBps > BASIS_POINT_SCALE) revert InvalidShareRemainderSplit();
+        shareRemainderSplitToTreasuryInBps = _shareRemainderSplitToTreasuryInBps;
     }
 
     function pauseContract() external onlyOperatingMultisig {
@@ -381,7 +381,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
         uint256 beforeEEthShares = eETH.shares(address(this));
 
-        uint256 eEthAmountToBuyback = _eEthAmount.mulDiv(shareRemainderSplitToBuybackInBps, BASIS_POINT_SCALE);
+        uint256 eEthAmountToBuyback = _eEthAmount.mulDiv(shareRemainderSplitToTreasuryInBps, BASIS_POINT_SCALE);
         uint256 eEthAmountToBurn = _eEthAmount - eEthAmountToBuyback;
         uint256 eEthSharesToBurn = liquidityPool.sharesForAmount(eEthAmountToBurn);
         uint256 eEthSharesToMoved = eEthSharesToBurn + liquidityPool.sharesForAmount(eEthAmountToBuyback);
