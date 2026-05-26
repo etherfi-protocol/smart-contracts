@@ -4,7 +4,7 @@ pragma solidity ^0.8.27;
 import "forge-std/Script.sol";
 
 import {AuctionManager} from "../../../src/AuctionManager.sol";
-import {BucketRateLimiter} from "../../../src/BucketRateLimiter.sol";
+import {EtherFiRateLimiter} from "../../../src/EtherFiRateLimiter.sol";
 import {CumulativeMerkleRewardsDistributor} from "../../../src/CumulativeMerkleRewardsDistributor.sol";
 import {DepositAdapter} from "../../../src/DepositAdapter.sol";
 import {EETH as EETHToken} from "../../../src/EETH.sol";
@@ -86,7 +86,7 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
 
     // ----- Deployment outputs -----
     address public auctionManagerImpl;
-    address public bucketRateLimiterImpl;
+    address public etherFiRateLimiterImpl;
     address public eEthImpl;
     address public etherFiAdminImpl;
     address public etherFiNodesManagerImpl;
@@ -334,10 +334,10 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
             membershipNFTImpl = deploy(name, args, bc, commitHashSalt, true, factory);
         }
         {
-            string memory name = "BucketRateLimiter";
-            bytes memory args = abi.encode(ROLE_REGISTRY);
-            bytes memory bc = abi.encodePacked(type(BucketRateLimiter).creationCode, args);
-            bucketRateLimiterImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+            string memory name = "EtherFiRateLimiter";
+            bytes memory args = abi.encode(ROLE_REGISTRY, EETH, WEETH);
+            bytes memory bc = abi.encodePacked(type(EtherFiRateLimiter).creationCode, args);
+            etherFiRateLimiterImpl = deploy(name, args, bc, commitHashSalt, true, factory);
         }
 
         // 3. Peripheral UUPS proxies touched by PR #385.
@@ -429,7 +429,7 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
         console2.log("NodeOperatorManager impl:       ", nodeOperatorManagerImpl);
         console2.log("MembershipManager impl:         ", membershipManagerImpl);
         console2.log("MembershipNFT impl:             ", membershipNFTImpl);
-        console2.log("BucketRateLimiter impl:         ", bucketRateLimiterImpl);
+        console2.log("EtherFiRateLimiter impl:        ", etherFiRateLimiterImpl);
         console2.log("PriorityWithdrawalQueue impl:   ", priorityWithdrawalQueueImpl);
         console2.log("EtherFiRewardsRouter impl:      ", etherFiRewardsRouterImpl);
         console2.log("RestakingRewardsRouter impl:    ", restakingRewardsRouterImpl);

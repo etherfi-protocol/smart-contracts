@@ -7,7 +7,6 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {EtherFiTimelock} from "../../../src/EtherFiTimelock.sol";
 import {RoleRegistry} from "../../../src/RoleRegistry.sol";
 import {EtherFiRateLimiter} from "../../../src/EtherFiRateLimiter.sol";
-import {BucketRateLimiter} from "../../../src/BucketRateLimiter.sol";
 
 import {EETH as EETHToken} from "../../../src/EETH.sol";
 import {WeETH as WeETHToken} from "../../../src/WeETH.sol";
@@ -74,7 +73,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     address constant nodeOperatorManagerImpl      = address(0);
     address constant membershipManagerImpl        = address(0);
     address constant membershipNFTImpl            = address(0);
-    address constant bucketRateLimiterImpl        = address(0);
+    address constant etherFiRateLimiterImpl        = address(0);
 
     // Peripheral UUPS proxies touched by PR #385 — impls only, existing proxies are reused.
     address constant priorityWithdrawalQueueImpl            = address(0);
@@ -138,18 +137,32 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     // ─────────────────────────────────────────────────────────────────────
     // OPERATIONAL PARAMETERS
     // ─────────────────────────────────────────────────────────────────────
-    uint64 constant EETH_MINT_CAPACITY        = 0;
-    uint64 constant EETH_MINT_REFILL_RATE     = 0;
-    uint64 constant EETH_BURN_CAPACITY        = 0;
-    uint64 constant EETH_BURN_REFILL_RATE     = 0;
-    uint64 constant EETH_TRANSFER_CAPACITY    = 0;
-    uint64 constant EETH_TRANSFER_REFILL_RATE = 0;
-    uint64 constant WEETH_MINT_CAPACITY        = 0;
-    uint64 constant WEETH_MINT_REFILL_RATE     = 0;
-    uint64 constant WEETH_BURN_CAPACITY        = 0;
-    uint64 constant WEETH_BURN_REFILL_RATE     = 0;
-    uint64 constant WEETH_TRANSFER_CAPACITY    = 0;
-    uint64 constant WEETH_TRANSFER_REFILL_RATE = 0;
+    // Token-side global buckets (consumeToken on eETH/weETH paths).
+    // Transfer is now per-address (consumeForAddressIfConfigured); no global TRANSFER bucket.
+    uint64 constant EETH_MINT_CAPACITY    = 0;
+    uint64 constant EETH_MINT_REFILL_RATE = 0;
+    uint64 constant EETH_BURN_CAPACITY    = 0;
+    uint64 constant EETH_BURN_REFILL_RATE = 0;
+    uint64 constant WEETH_MINT_CAPACITY   = 0;
+    uint64 constant WEETH_MINT_REFILL_RATE = 0;
+    uint64 constant WEETH_BURN_CAPACITY   = 0;
+    uint64 constant WEETH_BURN_REFILL_RATE = 0;
+
+    // EtherFiNodesManager buckets (consume).
+    uint64 constant UNRESTAKING_CAPACITY            = 0;
+    uint64 constant UNRESTAKING_REFILL_RATE         = 0;
+    uint64 constant EXIT_REQUEST_CAPACITY           = 0;
+    uint64 constant EXIT_REQUEST_REFILL_RATE        = 0;
+    uint64 constant CONSOLIDATION_REQUEST_CAPACITY  = 0;
+    uint64 constant CONSOLIDATION_REQUEST_REFILL_RATE = 0;
+
+    // EtherFiRestaker buckets (consume).
+    uint64 constant STETH_REQUEST_WITHDRAWAL_CAPACITY    = 0;
+    uint64 constant STETH_REQUEST_WITHDRAWAL_REFILL_RATE = 0;
+    uint64 constant QUEUE_WITHDRAWALS_CAPACITY           = 0;
+    uint64 constant QUEUE_WITHDRAWALS_REFILL_RATE        = 0;
+    uint64 constant DEPOSIT_INTO_STRATEGY_CAPACITY       = 0;
+    uint64 constant DEPOSIT_INTO_STRATEGY_REFILL_RATE    = 0;
 
     // PAUSE_UNTIL_* targets are gated to contracts that mix in PausableUntil. The
     // four ex-targets (EtherFiAdmin, MembershipManager, MembershipNFT, NodeOperatorManager)
@@ -166,13 +179,19 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     uint256 constant PAUSE_UNTIL_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR = 0;
     uint256 constant PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER               = 0;
 
-    // Bucket IDs
-    bytes32 constant EETH_MINT_LIMIT_ID      = keccak256("EETH_MINT_LIMIT_ID");
-    bytes32 constant EETH_BURN_LIMIT_ID      = keccak256("EETH_BURN_LIMIT_ID");
-    bytes32 constant EETH_TRANSFER_LIMIT_ID  = keccak256("EETH_TRANSFER_LIMIT_ID");
-    bytes32 constant WEETH_MINT_LIMIT_ID     = keccak256("WEETH_MINT_LIMIT_ID");
-    bytes32 constant WEETH_BURN_LIMIT_ID     = keccak256("WEETH_BURN_LIMIT_ID");
-    bytes32 constant WEETH_TRANSFER_LIMIT_ID = keccak256("WEETH_TRANSFER_LIMIT_ID");
+    // Bucket IDs — must match the constants declared in the source contracts.
+    bytes32 constant EETH_MINT_LIMIT_ID                = keccak256("EETH_MINT_LIMIT_ID");
+    bytes32 constant EETH_BURN_LIMIT_ID                = keccak256("EETH_BURN_LIMIT_ID");
+    bytes32 constant WEETH_MINT_LIMIT_ID               = keccak256("WEETH_MINT_LIMIT_ID");
+    bytes32 constant WEETH_BURN_LIMIT_ID               = keccak256("WEETH_BURN_LIMIT_ID");
+
+    bytes32 constant UNRESTAKING_LIMIT_ID              = keccak256("UNRESTAKING_LIMIT_ID");
+    bytes32 constant EXIT_REQUEST_LIMIT_ID             = keccak256("EXIT_REQUEST_LIMIT_ID");
+    bytes32 constant CONSOLIDATION_REQUEST_LIMIT_ID    = keccak256("CONSOLIDATION_REQUEST_LIMIT_ID");
+
+    bytes32 constant STETH_REQUEST_WITHDRAWAL_LIMIT_ID = keccak256("STETH_REQUEST_WITHDRAWAL_LIMIT_ID");
+    bytes32 constant QUEUE_WITHDRAWALS_LIMIT_ID        = keccak256("QUEUE_WITHDRAWALS_LIMIT_ID");
+    bytes32 constant DEPOSIT_INTO_STRATEGY_LIMIT_ID    = keccak256("DEPOSIT_INTO_STRATEGY_LIMIT_ID");
 
     EtherFiTimelock constant upgradeTimelock   = EtherFiTimelock(payable(UPGRADE_TIMELOCK));
     EtherFiTimelock constant operatingTimelock = EtherFiTimelock(payable(OPERATING_TIMELOCK));
@@ -239,7 +258,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         require(nodeOperatorManagerImpl != address(0), "preflight: nodeOperatorManagerImpl unset");
         require(membershipManagerImpl != address(0), "preflight: membershipManagerImpl unset");
         require(membershipNFTImpl != address(0), "preflight: membershipNFTImpl unset");
-        require(bucketRateLimiterImpl != address(0), "preflight: bucketRateLimiterImpl unset");
+        require(etherFiRateLimiterImpl != address(0), "preflight: etherFiRateLimiterImpl unset");
 
         require(priorityWithdrawalQueueImpl            != address(0), "preflight: priorityWithdrawalQueueImpl unset");
         require(etherFiRewardsRouterImpl               != address(0), "preflight: etherFiRewardsRouterImpl unset");
@@ -248,18 +267,28 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         require(depositAdapterImpl                     != address(0), "preflight: depositAdapterImpl unset");
         require(weETHWithdrawAdapterImpl               != address(0), "preflight: weETHWithdrawAdapterImpl unset");
 
-        require(EETH_MINT_CAPACITY != 0,        "preflight: EETH_MINT_CAPACITY unset");
-        require(EETH_MINT_REFILL_RATE != 0,     "preflight: EETH_MINT_REFILL_RATE unset");
-        require(EETH_BURN_CAPACITY != 0,        "preflight: EETH_BURN_CAPACITY unset");
-        require(EETH_BURN_REFILL_RATE != 0,     "preflight: EETH_BURN_REFILL_RATE unset");
-        require(EETH_TRANSFER_CAPACITY != 0,    "preflight: EETH_TRANSFER_CAPACITY unset");
-        require(EETH_TRANSFER_REFILL_RATE != 0, "preflight: EETH_TRANSFER_REFILL_RATE unset");
-        require(WEETH_MINT_CAPACITY != 0,       "preflight: WEETH_MINT_CAPACITY unset");
-        require(WEETH_MINT_REFILL_RATE != 0,    "preflight: WEETH_MINT_REFILL_RATE unset");
-        require(WEETH_BURN_CAPACITY != 0,       "preflight: WEETH_BURN_CAPACITY unset");
-        require(WEETH_BURN_REFILL_RATE != 0,    "preflight: WEETH_BURN_REFILL_RATE unset");
-        require(WEETH_TRANSFER_CAPACITY != 0,   "preflight: WEETH_TRANSFER_CAPACITY unset");
-        require(WEETH_TRANSFER_REFILL_RATE != 0,"preflight: WEETH_TRANSFER_REFILL_RATE unset");
+        require(EETH_MINT_CAPACITY    != 0, "preflight: EETH_MINT_CAPACITY unset");
+        require(EETH_MINT_REFILL_RATE != 0, "preflight: EETH_MINT_REFILL_RATE unset");
+        require(EETH_BURN_CAPACITY    != 0, "preflight: EETH_BURN_CAPACITY unset");
+        require(EETH_BURN_REFILL_RATE != 0, "preflight: EETH_BURN_REFILL_RATE unset");
+        require(WEETH_MINT_CAPACITY   != 0, "preflight: WEETH_MINT_CAPACITY unset");
+        require(WEETH_MINT_REFILL_RATE!= 0, "preflight: WEETH_MINT_REFILL_RATE unset");
+        require(WEETH_BURN_CAPACITY   != 0, "preflight: WEETH_BURN_CAPACITY unset");
+        require(WEETH_BURN_REFILL_RATE!= 0, "preflight: WEETH_BURN_REFILL_RATE unset");
+
+        require(UNRESTAKING_CAPACITY              != 0, "preflight: UNRESTAKING_CAPACITY unset");
+        require(UNRESTAKING_REFILL_RATE           != 0, "preflight: UNRESTAKING_REFILL_RATE unset");
+        require(EXIT_REQUEST_CAPACITY             != 0, "preflight: EXIT_REQUEST_CAPACITY unset");
+        require(EXIT_REQUEST_REFILL_RATE          != 0, "preflight: EXIT_REQUEST_REFILL_RATE unset");
+        require(CONSOLIDATION_REQUEST_CAPACITY    != 0, "preflight: CONSOLIDATION_REQUEST_CAPACITY unset");
+        require(CONSOLIDATION_REQUEST_REFILL_RATE != 0, "preflight: CONSOLIDATION_REQUEST_REFILL_RATE unset");
+
+        require(STETH_REQUEST_WITHDRAWAL_CAPACITY    != 0, "preflight: STETH_REQUEST_WITHDRAWAL_CAPACITY unset");
+        require(STETH_REQUEST_WITHDRAWAL_REFILL_RATE != 0, "preflight: STETH_REQUEST_WITHDRAWAL_REFILL_RATE unset");
+        require(QUEUE_WITHDRAWALS_CAPACITY           != 0, "preflight: QUEUE_WITHDRAWALS_CAPACITY unset");
+        require(QUEUE_WITHDRAWALS_REFILL_RATE        != 0, "preflight: QUEUE_WITHDRAWALS_REFILL_RATE unset");
+        require(DEPOSIT_INTO_STRATEGY_CAPACITY       != 0, "preflight: DEPOSIT_INTO_STRATEGY_CAPACITY unset");
+        require(DEPOSIT_INTO_STRATEGY_REFILL_RATE    != 0, "preflight: DEPOSIT_INTO_STRATEGY_REFILL_RATE unset");
 
         require(PAUSE_UNTIL_EETH != 0,                   "preflight: PAUSE_UNTIL_EETH unset");
         require(PAUSE_UNTIL_WEETH != 0,                  "preflight: PAUSE_UNTIL_WEETH unset");
@@ -418,8 +447,8 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     }
 
     function _verifyRateLimiter() internal {
-        BucketRateLimiter fresh = new BucketRateLimiter(ROLE_REGISTRY);
-        codeChecker.verifyContractByteCodeMatch(bucketRateLimiterImpl, address(fresh));
+        EtherFiRateLimiter fresh2 = new EtherFiRateLimiter(ROLE_REGISTRY, EETH, WEETH);
+        codeChecker.verifyContractByteCodeMatch(etherFiRateLimiterImpl, address(fresh2));
     }
 
     function _verifyPeripherals() internal {
@@ -476,6 +505,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         preImm[NODE_OPERATOR_MANAGER]      = _safeSnapshot(NODE_OPERATOR_MANAGER,      _nodeOpImmSels());
         preImm[MEMBERSHIP_MANAGER]         = _safeSnapshot(MEMBERSHIP_MANAGER,         _mmImmSels());
         preImm[MEMBERSHIP_NFT]             = _safeSnapshot(MEMBERSHIP_NFT,             _mnftImmSels());
+        preImm[ETHERFI_RATE_LIMITER]       = _safeSnapshot(ETHERFI_RATE_LIMITER,       _rateLimiterImmSels());
 
         preImm[PRIORITY_WITHDRAWAL_QUEUE]              = _safeSnapshot(PRIORITY_WITHDRAWAL_QUEUE,              _pwqImmSels());
         preImm[ETHERFI_REWARDS_ROUTER]                 = _safeSnapshot(ETHERFI_REWARDS_ROUTER,                 _rewardsRouterImmSels());
@@ -676,6 +706,12 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         s[2] = bytes4(keccak256("roleRegistry()"));
         s[3] = bytes4(keccak256("blacklister()"));
     }
+    function _rateLimiterImmSels() internal pure returns (bytes4[] memory s) {
+        s = new bytes4[](3);
+        s[0] = bytes4(keccak256("eETH()"));
+        s[1] = bytes4(keccak256("weETH()"));
+        s[2] = bytes4(keccak256("roleRegistry()"));
+    }
     function _pwqImmSels() internal pure returns (bytes4[] memory s) {
         s = new bytes4[](6);
         s[0] = bytes4(keccak256("liquidityPool()"));
@@ -774,7 +810,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         (targets[i], data[i]) = (NODE_OPERATOR_MANAGER,      _upgradeTo(nodeOperatorManagerImpl));    i++;
         (targets[i], data[i]) = (MEMBERSHIP_MANAGER,         _upgradeTo(membershipManagerImpl));      i++;
         (targets[i], data[i]) = (MEMBERSHIP_NFT,             _upgradeTo(membershipNFTImpl));          i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER,       _upgradeTo(bucketRateLimiterImpl));      i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER,       _upgradeTo(etherFiRateLimiterImpl));     i++;
 
         (targets[i], data[i]) = (PRIORITY_WITHDRAWAL_QUEUE,             _upgradeTo(priorityWithdrawalQueueImpl));            i++;
         (targets[i], data[i]) = (ETHERFI_REWARDS_ROUTER,                _upgradeTo(etherFiRewardsRouterImpl));               i++;
@@ -826,7 +862,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         _assertImpl(NODE_OPERATOR_MANAGER,      nodeOperatorManagerImpl,      "NodeOperatorManager");
         _assertImpl(MEMBERSHIP_MANAGER,         membershipManagerImpl,        "MembershipManager");
         _assertImpl(MEMBERSHIP_NFT,             membershipNFTImpl,            "MembershipNFT");
-        _assertImpl(ETHERFI_RATE_LIMITER,       bucketRateLimiterImpl,        "EtherFiRateLimiter");
+        _assertImpl(ETHERFI_RATE_LIMITER,       etherFiRateLimiterImpl,        "EtherFiRateLimiter");
         _assertImpl(PRIORITY_WITHDRAWAL_QUEUE,             priorityWithdrawalQueueImpl,            "PriorityWithdrawalQueue");
         _assertImpl(ETHERFI_REWARDS_ROUTER,                etherFiRewardsRouterImpl,               "EtherFiRewardsRouter");
         _assertImpl(RESTAKING_REWARDS_ROUTER,              restakingRewardsRouterImpl,             "RestakingRewardsRouter");
@@ -878,6 +914,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         _diffPreserved(NODE_OPERATOR_MANAGER,      "NodeOperatorManager");
         _diffPreserved(MEMBERSHIP_MANAGER,         "MembershipManager");
         _diffPreserved(MEMBERSHIP_NFT,             "MembershipNFT");
+        _diffPreserved(ETHERFI_RATE_LIMITER,       "EtherFiRateLimiter");
         _diffPreserved(PRIORITY_WITHDRAWAL_QUEUE,             "PriorityWithdrawalQueue");
         _diffPreserved(ETHERFI_REWARDS_ROUTER,                "EtherFiRewardsRouter");
         _diffPreserved(RESTAKING_REWARDS_ROUTER,              "RestakingRewardsRouter");
@@ -895,6 +932,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         _verifyImmutablesRestaker();
         _verifyImmutablesValidatorStack();
         _verifyImmutablesMembership();
+        _verifyImmutablesRateLimiter();
         _verifyImmutablesPeripherals();
         console2.log("[OK] immutables: pre/post diff + post/expected checks passed");
         console2.log("");
@@ -1063,6 +1101,13 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         require(address(mn.blacklister())        == blacklisterProxy,  "MNFT.blacklister");
     }
 
+    function _verifyImmutablesRateLimiter() internal view {
+        EtherFiRateLimiter rl = EtherFiRateLimiter(payable(ETHERFI_RATE_LIMITER));
+        require(rl.eETH()                   == EETH,          "RateLimiter.eETH");
+        require(rl.weETH()                  == WEETH,         "RateLimiter.weETH");
+        require(address(rl.roleRegistry())  == ROLE_REGISTRY, "RateLimiter.roleRegistry");
+    }
+
     function _verifyImmutablesPeripherals() internal view {
         PriorityWithdrawalQueue pwq = PriorityWithdrawalQueue(payable(PRIORITY_WITHDRAWAL_QUEUE));
         require(address(pwq.liquidityPool()) == LIQUIDITY_POOL,                  "PWQ.liquidityPool");
@@ -1209,19 +1254,34 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         uint256[] memory values  = new uint256[](60);
         uint256 i;
 
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(EETH_MINT_LIMIT_ID,      EETH_MINT_CAPACITY,      EETH_MINT_REFILL_RATE));      i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(EETH_BURN_LIMIT_ID,      EETH_BURN_CAPACITY,      EETH_BURN_REFILL_RATE));      i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(EETH_TRANSFER_LIMIT_ID,  EETH_TRANSFER_CAPACITY,  EETH_TRANSFER_REFILL_RATE));  i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(WEETH_MINT_LIMIT_ID,     WEETH_MINT_CAPACITY,     WEETH_MINT_REFILL_RATE));     i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(WEETH_BURN_LIMIT_ID,     WEETH_BURN_CAPACITY,     WEETH_BURN_REFILL_RATE));     i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(WEETH_TRANSFER_LIMIT_ID, WEETH_TRANSFER_CAPACITY, WEETH_TRANSFER_REFILL_RATE)); i++;
+        // ───────── Token-side global buckets (consumeToken on eETH/weETH) ─────────
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(EETH_MINT_LIMIT_ID,  EETH_MINT_CAPACITY,  EETH_MINT_REFILL_RATE));  i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(EETH_BURN_LIMIT_ID,  EETH_BURN_CAPACITY,  EETH_BURN_REFILL_RATE));  i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(WEETH_MINT_LIMIT_ID, WEETH_MINT_CAPACITY, WEETH_MINT_REFILL_RATE)); i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(WEETH_BURN_LIMIT_ID, WEETH_BURN_CAPACITY, WEETH_BURN_REFILL_RATE)); i++;
 
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(EETH_MINT_LIMIT_ID,      EETH));  i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(EETH_BURN_LIMIT_ID,      EETH));  i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(EETH_TRANSFER_LIMIT_ID,  EETH));  i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(WEETH_MINT_LIMIT_ID,     WEETH)); i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(WEETH_BURN_LIMIT_ID,     WEETH)); i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(WEETH_TRANSFER_LIMIT_ID, WEETH)); i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(EETH_MINT_LIMIT_ID,  EETH));  i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(EETH_BURN_LIMIT_ID,  EETH));  i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(WEETH_MINT_LIMIT_ID, WEETH)); i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(WEETH_BURN_LIMIT_ID, WEETH)); i++;
+
+        // ───────── EtherFiNodesManager buckets (consume) ─────────
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(UNRESTAKING_LIMIT_ID,           UNRESTAKING_CAPACITY,           UNRESTAKING_REFILL_RATE));           i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(EXIT_REQUEST_LIMIT_ID,          EXIT_REQUEST_CAPACITY,          EXIT_REQUEST_REFILL_RATE));          i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(CONSOLIDATION_REQUEST_LIMIT_ID, CONSOLIDATION_REQUEST_CAPACITY, CONSOLIDATION_REQUEST_REFILL_RATE)); i++;
+
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(UNRESTAKING_LIMIT_ID,           ETHERFI_NODES_MANAGER)); i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(EXIT_REQUEST_LIMIT_ID,          ETHERFI_NODES_MANAGER)); i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(CONSOLIDATION_REQUEST_LIMIT_ID, ETHERFI_NODES_MANAGER)); i++;
+
+        // ───────── EtherFiRestaker buckets (consume) ─────────
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(STETH_REQUEST_WITHDRAWAL_LIMIT_ID, STETH_REQUEST_WITHDRAWAL_CAPACITY, STETH_REQUEST_WITHDRAWAL_REFILL_RATE)); i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(QUEUE_WITHDRAWALS_LIMIT_ID,        QUEUE_WITHDRAWALS_CAPACITY,        QUEUE_WITHDRAWALS_REFILL_RATE));        i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(DEPOSIT_INTO_STRATEGY_LIMIT_ID,    DEPOSIT_INTO_STRATEGY_CAPACITY,    DEPOSIT_INTO_STRATEGY_REFILL_RATE));    i++;
+
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(STETH_REQUEST_WITHDRAWAL_LIMIT_ID, ETHERFI_RESTAKER)); i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(QUEUE_WITHDRAWALS_LIMIT_ID,        ETHERFI_RESTAKER)); i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(DEPOSIT_INTO_STRATEGY_LIMIT_ID,    ETHERFI_RESTAKER)); i++;
 
         (targets[i], data[i]) = (EETH,                       _pauseDur(PAUSE_UNTIL_EETH));                   i++;
         (targets[i], data[i]) = (WEETH,                      _pauseDur(PAUSE_UNTIL_WEETH));                  i++;
@@ -1256,18 +1316,27 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     function verifyOperatingConfig() public view {
         console2.log("=== Step 9: Verifying Operating Config ===");
         EtherFiRateLimiter rl = EtherFiRateLimiter(payable(ETHERFI_RATE_LIMITER));
-        require(rl.limitExists(EETH_MINT_LIMIT_ID),      "EETH_MINT bucket missing");
-        require(rl.limitExists(EETH_BURN_LIMIT_ID),      "EETH_BURN bucket missing");
-        require(rl.limitExists(EETH_TRANSFER_LIMIT_ID),  "EETH_TRANSFER bucket missing");
-        require(rl.limitExists(WEETH_MINT_LIMIT_ID),     "WEETH_MINT bucket missing");
-        require(rl.limitExists(WEETH_BURN_LIMIT_ID),     "WEETH_BURN bucket missing");
-        require(rl.limitExists(WEETH_TRANSFER_LIMIT_ID), "WEETH_TRANSFER bucket missing");
-        require(rl.isConsumerAllowed(EETH_MINT_LIMIT_ID,      EETH),  "EETH not allowed consumer");
-        require(rl.isConsumerAllowed(EETH_BURN_LIMIT_ID,      EETH),  "EETH not allowed consumer (burn)");
-        require(rl.isConsumerAllowed(EETH_TRANSFER_LIMIT_ID,  EETH),  "EETH not allowed consumer (transfer)");
-        require(rl.isConsumerAllowed(WEETH_MINT_LIMIT_ID,     WEETH), "WeETH not allowed consumer");
-        require(rl.isConsumerAllowed(WEETH_BURN_LIMIT_ID,     WEETH), "WeETH not allowed consumer (burn)");
-        require(rl.isConsumerAllowed(WEETH_TRANSFER_LIMIT_ID, WEETH), "WeETH not allowed consumer (transfer)");
+        require(rl.limitExists(EETH_MINT_LIMIT_ID),                "EETH_MINT bucket missing");
+        require(rl.limitExists(EETH_BURN_LIMIT_ID),                "EETH_BURN bucket missing");
+        require(rl.limitExists(WEETH_MINT_LIMIT_ID),               "WEETH_MINT bucket missing");
+        require(rl.limitExists(WEETH_BURN_LIMIT_ID),               "WEETH_BURN bucket missing");
+        require(rl.limitExists(UNRESTAKING_LIMIT_ID),              "UNRESTAKING bucket missing");
+        require(rl.limitExists(EXIT_REQUEST_LIMIT_ID),             "EXIT_REQUEST bucket missing");
+        require(rl.limitExists(CONSOLIDATION_REQUEST_LIMIT_ID),    "CONSOLIDATION_REQUEST bucket missing");
+        require(rl.limitExists(STETH_REQUEST_WITHDRAWAL_LIMIT_ID), "STETH_REQUEST_WITHDRAWAL bucket missing");
+        require(rl.limitExists(QUEUE_WITHDRAWALS_LIMIT_ID),        "QUEUE_WITHDRAWALS bucket missing");
+        require(rl.limitExists(DEPOSIT_INTO_STRATEGY_LIMIT_ID),    "DEPOSIT_INTO_STRATEGY bucket missing");
+
+        require(rl.isConsumerAllowed(EETH_MINT_LIMIT_ID,                EETH),                  "EETH consumer (mint) not allowed");
+        require(rl.isConsumerAllowed(EETH_BURN_LIMIT_ID,                EETH),                  "EETH consumer (burn) not allowed");
+        require(rl.isConsumerAllowed(WEETH_MINT_LIMIT_ID,               WEETH),                 "WeETH consumer (mint) not allowed");
+        require(rl.isConsumerAllowed(WEETH_BURN_LIMIT_ID,               WEETH),                 "WeETH consumer (burn) not allowed");
+        require(rl.isConsumerAllowed(UNRESTAKING_LIMIT_ID,              ETHERFI_NODES_MANAGER), "EFNodesMgr consumer (unrestaking) not allowed");
+        require(rl.isConsumerAllowed(EXIT_REQUEST_LIMIT_ID,             ETHERFI_NODES_MANAGER), "EFNodesMgr consumer (exit) not allowed");
+        require(rl.isConsumerAllowed(CONSOLIDATION_REQUEST_LIMIT_ID,    ETHERFI_NODES_MANAGER), "EFNodesMgr consumer (consolidation) not allowed");
+        require(rl.isConsumerAllowed(STETH_REQUEST_WITHDRAWAL_LIMIT_ID, ETHERFI_RESTAKER),      "EFRestaker consumer (stEth) not allowed");
+        require(rl.isConsumerAllowed(QUEUE_WITHDRAWALS_LIMIT_ID,        ETHERFI_RESTAKER),      "EFRestaker consumer (queue) not allowed");
+        require(rl.isConsumerAllowed(DEPOSIT_INTO_STRATEGY_LIMIT_ID,    ETHERFI_RESTAKER),      "EFRestaker consumer (deposit) not allowed");
 
         require(EETHToken(EETH).pauseUntilDuration()                                  == PAUSE_UNTIL_EETH,                  "EETH pause duration mismatch");
         require(WeETHToken(WEETH).pauseUntilDuration()                                == PAUSE_UNTIL_WEETH,                 "WeETH pause duration mismatch");
