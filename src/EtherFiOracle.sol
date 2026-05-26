@@ -7,10 +7,10 @@ import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 
 import "./interfaces/IEtherFiOracle.sol";
 import "./interfaces/IEtherFiAdmin.sol";
-import "./interfaces/IRoleRegistry.sol";
+import "./utils/RolesLibrary.sol";
 
 
-contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable, IEtherFiOracle {
+contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable, IEtherFiOracle, RolesLibrary {
 
     mapping(address => IEtherFiOracle.CommitteeMemberState) public committeeMemberStates; // committee member wallet address to its State
     mapping(bytes32 => IEtherFiOracle.ConsensusState) public consensusStates; // report's hash -> Consensus State
@@ -37,7 +37,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
 
     // Immutables are not part of proxy storage; stored in implementation bytecode only.
     IEtherFiAdmin public immutable etherFiAdmin;
-    IRoleRegistry public immutable roleRegistry;
+    uint32 public immutable minQuorumSize;
 
     event CommitteeMemberAdded(address indexed member);
     event CommitteeMemberRemoved(address indexed member);
@@ -65,6 +65,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     error WrongBlockTo();
     error ReportBlockTooOld();
     error ConsensusNotReached();
+    error ReportExecuted();
     error AlreadyRegistered();
     error AlreadyInTargetState();
     error InvalidReportPeriod();
@@ -72,9 +73,9 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     error InvalidQuorum();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _etherFiAdmin, address _roleRegistry) {
+    constructor(uint32 _minQuorumSize, address _etherFiAdmin, address _roleRegistry) RolesLibrary(_roleRegistry) {
+        minQuorumSize = _minQuorumSize;
         etherFiAdmin = IEtherFiAdmin(_etherFiAdmin);
-        roleRegistry = IRoleRegistry(_roleRegistry);
         _disableInitializers();
     }
 
@@ -270,7 +271,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         emit CommitteeMemberRemoved(_address);
     }
 
-    function manageCommitteeMember(address _address, bool _enabled) public onlyOperations {
+    function manageCommitteeMember(address _address, bool _enabled) public onlyOperatingMultisig {
         if (!committeeMemberStates[_address].registered) revert NotRegistered();
         if (committeeMemberStates[_address].enabled == _enabled) revert AlreadyInTargetState();
         committeeMemberStates[_address].enabled = _enabled;
@@ -284,6 +285,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     }
 
     function setQuorumSize(uint32 _quorumSize) public onlyAdmin {
+        if (_quorumSize < minQuorumSize) revert InvalidQuorum();
         quorumSize = _quorumSize;
         _checkQuorum();
         emit QuorumUpdated(_quorumSize);
@@ -303,18 +305,22 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         emit ConsensusVersionUpdated(_consensusVersion);
     }
 
-    function unpublishReport(bytes32 _hash) external onlyOperations {
+    function unpublishReport(OracleReport calldata _report) public onlyOperatingMultisig {
+        bytes32 _hash = generateReportHash(_report);
         if (!consensusStates[_hash].consensusReached) revert ConsensusNotReached();
+        if (_report.refSlotTo <= etherFiAdmin.lastHandledReportRefSlot()) revert ReportExecuted();
         consensusStates[_hash].support = 0;
         consensusStates[_hash].consensusReached = false;
+        lastPublishedReportRefSlot = _report.refSlotFrom - 1;
+        lastPublishedReportRefBlock = _report.refBlockFrom - 1;
         emit ReportUnpublished(_hash);
     }
 
-    function pauseContract() external onlyOperations {
+    function pauseContract() external onlyOperatingMultisig {
         _pause();
     }
 
-    function unPauseContract() external onlyOperations {
+    function unPauseContract() external onlyOperatingMultisig {
         _unpause();
     }
 
@@ -326,17 +332,5 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         if (numActiveCommitteeMembers < quorumSize || numActiveCommitteeMembers > 2 * quorumSize) revert InvalidQuorum();
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
-    }
-
-    modifier onlyAdmin() {
-        roleRegistry.onlyOperatingTimelock(msg.sender);
-        _;
-    }
-
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
-        _;
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 }

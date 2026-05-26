@@ -383,7 +383,7 @@ contract LiquifierTest is TestSetup {
 
         // bob has no roles; sendToEtherFiRestaker now requires HOUSEKEEPING_OPERATIONS_ROLE
         vm.prank(bob);
-        vm.expectRevert(Liquifier.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
         liquifierInstance.sendToEtherFiRestaker(address(stEth), 1);
 
         // chad has only the consolidated admin role — sender path requires HOUSEKEEPING_OPERATIONS_ROLE
@@ -391,7 +391,7 @@ contract LiquifierTest is TestSetup {
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), chad);
         vm.stopPrank();
         vm.prank(chad);
-        vm.expectRevert(Liquifier.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
         liquifierInstance.sendToEtherFiRestaker(address(stEth), 1);
     }
 

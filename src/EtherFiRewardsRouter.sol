@@ -6,15 +6,14 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "./interfaces/IRoleRegistry.sol";
+import "./utils/RolesLibrary.sol";
 import "./interfaces/ILiquidityPool.sol";
 
-contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
+contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable, RolesLibrary {
     using SafeERC20 for IERC20;
 
     address public immutable treasury;
     address public immutable liquidityPool;
-    IRoleRegistry public immutable roleRegistry;
 
     event EthReceived(address indexed from, uint256 value);
     event EthSent(address indexed from, address indexed to, uint256 value);
@@ -25,11 +24,10 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
     error ContractBalanceIsZero();
     error EthTransferFailed();
 
-    constructor(address _liquidityPool, address _treasury, address _roleRegistry) {
+    constructor(address _liquidityPool, address _treasury, address _roleRegistry) RolesLibrary(_roleRegistry) {
         _disableInitializers();
         liquidityPool = _liquidityPool;
         treasury = _treasury;
-        roleRegistry = IRoleRegistry(_roleRegistry);
     }
 
     receive() external payable {
@@ -53,29 +51,22 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
         emit EthSent(address(this), liquidityPool, balance);
     }
 
-    function recoverERC20(address _token, uint256 _amount) external onlyOperations {
+    function recoverERC20(address _token, uint256 _amount) external onlyOperatingMultisig {
         IERC20(_token).safeTransfer(treasury, _amount);
 
         emit Erc20Sent(msg.sender, _token, _amount);
     }
 
-    function recoverERC721(address _token, uint256 _tokenId) external onlyOperations {
+    function recoverERC721(address _token, uint256 _tokenId) external onlyOperatingMultisig {
 
         IERC721(_token).transferFrom(address(this), treasury, _tokenId);
 
         emit Erc721Sent(msg.sender, _token, _tokenId);
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     function getImplementation() external view returns (address) {
         return _getImplementation();
-    }
-
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
-        _;
     }
 }

@@ -91,8 +91,7 @@ contract EtherFiNodesManagerTest is TestSetup {
             address(liquidityPoolInstance),
             address(managerInstance),
             address(eigenLayerEigenPodManager),
-            address(eigenLayerDelegationManager),
-            address(roleRegistryInstance)
+            address(eigenLayerDelegationManager)
         );
         vm.prank(stakingManagerInstance.owner());
         stakingManagerInstance.upgradeEtherFiNode(address(nodeImpl));
@@ -247,12 +246,12 @@ contract EtherFiNodesManagerTest is TestSetup {
     }
 
     function test_sweepFunds_unauthorized() public {
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
         vm.prank(bob);
         managerInstance.sweepFunds(testLegacyId);
 
         // ADMIN_ROLE alone is not enough — sweepFunds requires EIGENLAYER_ADMIN_ROLE.
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
         vm.prank(admin);
         managerInstance.sweepFunds(testLegacyId);
     }
@@ -323,7 +322,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     }
     
     function test_startCheckpoint_unauthorized() public {
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyEigenpodOperations.selector);
         vm.prank(bob);
         managerInstance.startCheckpoint(testNode);
     }
@@ -339,30 +338,30 @@ contract EtherFiNodesManagerTest is TestSetup {
     
     function test_setProofSubmitter_byAddress() public {
         address newSubmitter = address(0x123);
-        vm.prank(eigenlayerAdmin);
+        vm.prank(owner);
         managerInstance.setProofSubmitter(testNode, newSubmitter);
     }
     
     function test_setProofSubmitter_byId() public {
         address newSubmitter = address(0x123);
-        vm.prank(eigenlayerAdmin);
+        vm.prank(owner);
         managerInstance.setProofSubmitter(testLegacyId, newSubmitter);
     }
     
     function test_setProofSubmitter_unauthorized() public {
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         vm.prank(bob);
         managerInstance.setProofSubmitter(testNode, address(0x123));
     }
             
     function test_queueETHWithdrawal_unauthorized() public {
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyExecutorOperations.selector);
         vm.prank(bob);
         managerInstance.queueETHWithdrawal(testNode, 1 ether);
     }
-    
+
     function test_completeQueuedETHWithdrawals_unauthorized() public {
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
         vm.prank(bob);
         managerInstance.completeQueuedETHWithdrawals(testNode, true);
     }
@@ -380,7 +379,7 @@ contract EtherFiNodesManagerTest is TestSetup {
             __deprecated_withdrawer: testNode
         });
         
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         managerInstance.queueWithdrawals(testNode, params);
     }
     
@@ -397,7 +396,7 @@ contract EtherFiNodesManagerTest is TestSetup {
             __deprecated_withdrawer: testNode
         });
         
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         managerInstance.queueWithdrawals(testLegacyId, params);
     }
     
@@ -510,7 +509,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     }
     
     function test_forwardExternalCall_unauthorized() public {
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyEigenpodOperations.selector);
         vm.prank(bob);
         address[] memory nodes = new address[](1);
         bytes[] memory data = new bytes[](1);
@@ -629,7 +628,7 @@ contract EtherFiNodesManagerTest is TestSetup {
             amountGwei: 0
         });
         
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyExecutorOperations.selector);
         vm.prank(bob);
         managerInstance.requestExecutionLayerTriggeredWithdrawal(requests);
     }
@@ -710,7 +709,7 @@ contract EtherFiNodesManagerTest is TestSetup {
             targetPubkey: testPubkey
         });
         
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyExecutorOperations.selector);
         vm.prank(bob);
         managerInstance.requestConsolidation(requests);
     }
@@ -987,7 +986,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         _grantNmPauseUntilRoles();
         _pauseUntil();
         _expectPausedUntilRevert();
-        vm.prank(eigenlayerAdmin);
+        vm.prank(owner);
         managerInstance.setProofSubmitter(testNode, bob);
     }
 
@@ -995,7 +994,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         _grantNmPauseUntilRoles();
         _pauseUntil();
         _expectPausedUntilRevert();
-        vm.prank(eigenlayerAdmin);
+        vm.prank(owner);
         managerInstance.setProofSubmitter(testLegacyId, bob);
     }
 
@@ -1003,7 +1002,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         _grantNmPauseUntilRoles();
         _pauseUntil();
         _expectPausedUntilRevert();
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         managerInstance.queueETHWithdrawal(testNode, 1 ether);
     }
 
@@ -1011,7 +1010,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         _grantNmPauseUntilRoles();
         _pauseUntil();
         _expectPausedUntilRevert();
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         managerInstance.queueETHWithdrawal(testLegacyId, 1 ether);
     }
 
@@ -1037,7 +1036,7 @@ contract EtherFiNodesManagerTest is TestSetup {
 
         IDelegationManager.QueuedWithdrawalParams[] memory params;
         _expectPausedUntilRevert();
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         managerInstance.queueWithdrawals(testNode, params);
     }
 
@@ -1047,7 +1046,7 @@ contract EtherFiNodesManagerTest is TestSetup {
 
         IDelegationManager.QueuedWithdrawalParams[] memory params;
         _expectPausedUntilRevert();
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         managerInstance.queueWithdrawals(testLegacyId, params);
     }
 

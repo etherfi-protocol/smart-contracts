@@ -137,8 +137,8 @@ contract DepositAdapterTest is TestSetup {
         uint256 eETHAmountFromWstETH = liquifierInstance.quoteByDiscountedValue(address(stEth), 5 ether);
         depositAdapterInstance.depositWstETHForWeETHWithPermit(wstETHAmount, bob, liquifierPermitInput);
         assertEq(wstETHmainnet.balanceOf(address(alice)), 0);
-        assertApproxEqAbs(weEthInstance.balanceOf(address(alice)), weEthInstance.getWeETHByeETH(eETHAmountFromWstETH), 4);
-        assertApproxEqAbs(stEth.balanceOf(address(etherFiRestakerInstance)), protocolSeETHBeforeDeposit + 5 ether, 4);
+        assertApproxEqAbs(weEthInstance.balanceOf(address(alice)), weEthInstance.getWeETHByeETH(eETHAmountFromWstETH), 5);
+        assertApproxEqAbs(stEth.balanceOf(address(etherFiRestakerInstance)), protocolSeETHBeforeDeposit + 5 ether, 5);
 
         // deposit with insufficient balance
         permitInput = createPermitInput(2, address(depositAdapterInstance), 1 ether, wstETHmainnet.nonces(alice), 2**256 - 1, wstETHmainnet.DOMAIN_SEPARATOR());

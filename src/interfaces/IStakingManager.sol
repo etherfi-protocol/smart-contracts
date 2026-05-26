@@ -20,23 +20,22 @@ interface IStakingManager {
         INVALIDATED
     }
 
+    function INITIAL_DEPOSIT_AMOUNT() external view returns (uint256);
+    function MIN_VALIDATOR_SIZE_WEI() external view returns (uint256);
+    function MAX_VALIDATOR_SIZE_WEI() external view returns (uint256);
+
     // deposit flow
     function registerBeaconValidators(DepositData[] calldata depositData, uint256[] calldata bidIds, address etherFiNode) external;
     function createBeaconValidators(DepositData[] calldata depositData, uint256[] calldata bidIds, address etherFiNode) external payable;
     function invalidateRegisteredBeaconValidator(DepositData calldata depositData, uint256 bidId, address etherFiNode) external;
     function confirmAndFundBeaconValidators(DepositData[] calldata depositData, uint256 validatorSizeWei) external payable;
     function calculateValidatorPubkeyHash(bytes memory pubkey) external pure returns (bytes32);
-    function initialDepositAmount() external returns (uint256);
     function generateDepositDataRoot(bytes memory pubkey, bytes memory signature, bytes memory withdrawalCredentials, uint256 amount) external pure returns (bytes32);
 
     // EtherFiNode Beacon Proxy
     function upgradeEtherFiNode(address _newImplementation) external;
     function getEtherFiNodeBeacon() external view returns (address);
     function deployedEtherFiNodes(address etherFiNode) external view returns (bool);
-
-    // protocol
-    function pauseContract() external;
-    function unPauseContract() external;
 
     // prevent storage shift on upgrade
     struct LegacyStakingManagerState {
@@ -102,7 +101,6 @@ interface IStakingManager {
     error InactiveBid();
     error InvalidEtherFiNode();
     error InvalidValidatorSize();
-    error IncorrectRole();
     error InvalidUpgrade();
     error InvalidValidatorCreationStatus();
 

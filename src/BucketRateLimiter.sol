@@ -4,16 +4,20 @@ import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 
 import "src/interfaces/IRateLimiter.sol";
-import "src/interfaces/IRoleRegistry.sol";
 import "lib/BucketLimiter.sol";
+import "./utils/RolesLibrary.sol";
 
-contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, OwnableUpgradeable, UUPSUpgradeable {
+contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, OwnableUpgradeable, UUPSUpgradeable, RolesLibrary {
+    using Math for uint256;
 
     error IncorrectCaller();
     error RateLimitExceeded();
     error TokenRateLimitExceeded();
+
+    uint256 public constant RATE_PRECISION = 1e12;
 
     BucketLimiter.Limit public limit;
     address public consumer;
@@ -23,12 +27,8 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
 
     mapping(address => BucketLimiter.Limit) public limitsPerToken;
 
-    // Immutables are not part of proxy storage; stored in implementation bytecode only.
-    IRoleRegistry public immutable roleRegistry;
-
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _roleRegistry) {
-        roleRegistry = IRoleRegistry(_roleRegistry);
+    constructor(address _roleRegistry) RolesLibrary(_roleRegistry) {
         _disableInitializers();
     }
 
@@ -43,14 +43,14 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
     function updateRateLimit(address sender, address tokenIn, uint256 amountIn, uint256 amountOut) external whenNotPaused {
         if (msg.sender != consumer) revert IncorrectCaller();
         // Count both 'amountIn' and 'amountOut' as rate limit consumption
-        uint64 consumedAmount = SafeCast.toUint64((amountIn + amountOut + 1e12 - 1) / 1e12);
+        uint64 consumedAmount = SafeCast.toUint64((amountIn + amountOut).ceilDiv(RATE_PRECISION));
         if (!BucketLimiter.consume(limit, consumedAmount)) revert RateLimitExceeded();
         if (limitsPerToken[tokenIn].lastRefill != 0 && !BucketLimiter.consume(limitsPerToken[tokenIn], consumedAmount)) revert TokenRateLimitExceeded();
     }
 
     function canConsume(address tokenIn, uint256 amountIn, uint256 amountOut) external view returns (bool) {
         // Count both 'amountIn' and 'amountOut' as rate limit consumption
-        uint64 consumedAmount = SafeCast.toUint64((amountIn + amountOut + 1e12 - 1) / 1e12);
+        uint64 consumedAmount = SafeCast.toUint64((amountIn + amountOut).ceilDiv(RATE_PRECISION));
         bool globalConsumable = BucketLimiter.canConsume(limit, consumedAmount);
         bool perTokenConsumable = limitsPerToken[tokenIn].lastRefill == 0 || BucketLimiter.canConsume(limitsPerToken[tokenIn], consumedAmount);
         return globalConsumable && perTokenConsumable;
@@ -58,31 +58,31 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
 
     function setCapacity(uint256 capacity) external onlyAdmin {
         // max capacity = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether, which is practically enough
-        uint64 capacity64 = SafeCast.toUint64(capacity / 1e12);
+        uint64 capacity64 = SafeCast.toUint64(capacity / RATE_PRECISION);
         BucketLimiter.setCapacity(limit, capacity64);
     }
 
     function setRefillRatePerSecond(uint256 refillRate) external onlyAdmin {
         // max refillRate = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether per second, which is practically enough
-        uint64 refillRate64 = SafeCast.toUint64(refillRate / 1e12);
+        uint64 refillRate64 = SafeCast.toUint64(refillRate / RATE_PRECISION);
         BucketLimiter.setRefillRate(limit, refillRate64);
     }
 
     function registerToken(address token, uint256 capacity, uint256 refillRate) external onlyAdmin {
-        uint64 capacity64 = SafeCast.toUint64(capacity / 1e12);
-        uint64 refillRate64 = SafeCast.toUint64(refillRate / 1e12);
+        uint64 capacity64 = SafeCast.toUint64(capacity / RATE_PRECISION);
+        uint64 refillRate64 = SafeCast.toUint64(refillRate / RATE_PRECISION);
         limitsPerToken[token] = BucketLimiter.create(capacity64, refillRate64);
     }
 
     function setCapacityPerToken(address token, uint256 capacity) external onlyAdmin {
         // max capacity = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether, which is practically enough
-        uint64 capacity64 = SafeCast.toUint64(capacity / 1e12);
+        uint64 capacity64 = SafeCast.toUint64(capacity / RATE_PRECISION);
         BucketLimiter.setCapacity(limitsPerToken[token], capacity64);
     }
 
     function setRefillRatePerSecondPerToken(address token, uint256 refillRate) external onlyAdmin {
         // max refillRate = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether per second, which is practically enough
-        uint64 refillRate64 = SafeCast.toUint64(refillRate / 1e12);
+        uint64 refillRate64 = SafeCast.toUint64(refillRate / RATE_PRECISION);
         BucketLimiter.setRefillRate(limitsPerToken[token], refillRate64);
     }
 
@@ -90,11 +90,11 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
         consumer = _consumer;
     }
 
-    function pauseContract() external onlyOperations {
+    function pauseContract() external onlyOperatingMultisig {
         _pause();
     }
 
-    function unPauseContract() external onlyOperations {
+    function unPauseContract() external onlyOperatingMultisig {
         _unpause();
     }
 
@@ -102,17 +102,5 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
         return _getImplementation();
     }
 
-    modifier onlyAdmin() {
-        roleRegistry.onlyOperatingTimelock(msg.sender);
-        _;
-    }
-
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
-        _;
-    }
-
-    function _authorizeUpgrade(address newImplementation) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 }

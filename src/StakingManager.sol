@@ -1,14 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import "./interfaces/IRoleRegistry.sol";
-import "./interfaces/IAuctionManager.sol";
-import "./interfaces/IStakingManager.sol";
-import "./interfaces/IDepositContract.sol";
-import "./interfaces/IEtherFiNode.sol";
-import "./interfaces/IEtherFiNodesManager.sol";
-import "./libraries/DepositDataRootGenerator.sol";
-
 import "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 import "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/beacon/IBeaconUpgradeable.sol";
@@ -17,6 +9,14 @@ import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
+import "./interfaces/IAuctionManager.sol";
+import "./interfaces/IStakingManager.sol";
+import "./interfaces/IDepositContract.sol";
+import "./interfaces/IEtherFiNode.sol";
+import "./interfaces/IEtherFiNodesManager.sol";
+import "./libraries/DepositDataRootGenerator.sol";
+import "./utils/RolesLibrary.sol";
+
 contract StakingManager is
     Initializable,
     IStakingManager,
@@ -24,16 +24,19 @@ contract StakingManager is
     OwnableUpgradeable,
     PausableUpgradeable,
     ReentrancyGuardUpgradeable,
-    UUPSUpgradeable
+    UUPSUpgradeable,
+    RolesLibrary
 {
 
     address public immutable liquidityPool;
-    uint256 public constant initialDepositAmount = 1 ether;
+    uint256 public constant INITIAL_DEPOSIT_AMOUNT = 1 ether;
+    uint256 public constant MIN_VALIDATOR_SIZE_WEI = 32 ether;
+    uint256 public constant MAX_VALIDATOR_SIZE_WEI = 2048 ether;
+    uint256 public constant VALIDATOR_PUBKEY_LENGTH = 48;
     IEtherFiNodesManager public immutable etherFiNodesManager;
     IDepositContract public immutable depositContractEth2;
     IAuctionManager public immutable auctionManager;
     UpgradeableBeacon public immutable etherFiNodeBeacon;
-    IRoleRegistry public immutable roleRegistry;
 
     //---------------------------------------------------------------------------
     //-----------------------------  Storage  -----------------------------------
@@ -54,34 +57,23 @@ contract StakingManager is
         address _auctionManager,
         address _etherFiNodeBeacon,
         address _roleRegistry
-    ) {
+    ) RolesLibrary(_roleRegistry) {
         liquidityPool = _liquidityPool;
         etherFiNodesManager = IEtherFiNodesManager(_etherFiNodesManager);
         depositContractEth2 = IDepositContract(_ethDepositContract);
         auctionManager = IAuctionManager(_auctionManager);
         etherFiNodeBeacon = UpgradeableBeacon(_etherFiNodeBeacon);
-        roleRegistry = IRoleRegistry(_roleRegistry);
 
         _disableInitializers();
     }
 
-    function _authorizeUpgrade(address _newImplementation) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
-    }
-
-    function pauseContract() external onlyOperations {
-        _pause();
-    }
-    function unPauseContract() external onlyOperations {
-        _unpause();
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     //---------------------------------------------------------------------------
     //------------------------- Deposit Flow ------------------------------------
     //---------------------------------------------------------------------------
     
-    function invalidateRegisteredBeaconValidator(DepositData calldata depositData, uint256 bidId, address etherFiNode) external {
-        if (!roleRegistry.hasRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
+    function invalidateRegisteredBeaconValidator(DepositData calldata depositData, uint256 bidId, address etherFiNode) external onlyOracleOperations {
         bytes32 validatorCreationDataHash = keccak256(abi.encode(depositData.publicKey, depositData.signature, depositData.depositDataRoot, depositData.ipfsHashForEncryptedValidatorKey, bidId, etherFiNode));
         if (validatorCreationStatus[validatorCreationDataHash] != ValidatorCreationStatus.REGISTERED) revert InvalidValidatorCreationStatus();
         validatorCreationStatus[validatorCreationDataHash] = ValidatorCreationStatus.INVALIDATED;
@@ -100,7 +92,7 @@ contract StakingManager is
             if (validatorCreationStatus[validatorCreationDataHash] != ValidatorCreationStatus.REGISTERED) revert InvalidValidatorCreationStatus();
 
             bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(address(IEtherFiNode(etherFiNode).getEigenPod()));
-            bytes32 computedDataRoot = generateDepositDataRoot(d.publicKey, d.signature, withdrawalCredentials, initialDepositAmount);
+            bytes32 computedDataRoot = generateDepositDataRoot(d.publicKey, d.signature, withdrawalCredentials, INITIAL_DEPOSIT_AMOUNT);
             if (computedDataRoot != d.depositDataRoot) revert IncorrectBeaconRoot();
 
             validatorCreationStatus[validatorCreationDataHash] = ValidatorCreationStatus.CONFIRMED;
@@ -110,7 +102,7 @@ contract StakingManager is
             etherFiNodesManager.linkPubkeyToNode(d.publicKey, etherFiNode, bidIds[i]);
 
             // Deposit to the Beacon Chain
-            depositContractEth2.deposit{value: initialDepositAmount}(d.publicKey, withdrawalCredentials, d.signature, computedDataRoot);
+            depositContractEth2.deposit{value: INITIAL_DEPOSIT_AMOUNT}(d.publicKey, withdrawalCredentials, d.signature, computedDataRoot);
 
             bytes32 pubkeyHash = calculateValidatorPubkeyHash(d.publicKey);
             emit validatorCreated(pubkeyHash, etherFiNode, d.publicKey);
@@ -137,7 +129,7 @@ contract StakingManager is
 
             // verify deposit root
             bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(address(IEtherFiNode(etherFiNode).getEigenPod()));
-            bytes32 computedDataRoot = generateDepositDataRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, initialDepositAmount);
+            bytes32 computedDataRoot = generateDepositDataRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, INITIAL_DEPOSIT_AMOUNT);
             if (computedDataRoot != depositData[i].depositDataRoot) revert IncorrectBeaconRoot();
 
             bytes32 validatorCreationDataHash = keccak256(abi.encode(depositData[i].publicKey, depositData[i].signature, depositData[i].depositDataRoot, depositData[i].ipfsHashForEncryptedValidatorKey, bidIds[i], etherFiNode));
@@ -155,10 +147,10 @@ contract StakingManager is
     ///   The caller can use generateDepositDataRoot() to generate a valid root.
     function confirmAndFundBeaconValidators(DepositData[] calldata depositData, uint256 validatorSizeWei) external payable {
         if (msg.sender != liquidityPool) revert InvalidCaller();
-        if (validatorSizeWei < 32 ether || validatorSizeWei > 2048 ether) revert InvalidValidatorSize();
+        if (validatorSizeWei < MIN_VALIDATOR_SIZE_WEI || validatorSizeWei > MAX_VALIDATOR_SIZE_WEI) revert InvalidValidatorSize();
 
         // we already deposited the initial amount to create the validators in createBeaconValidators()
-        uint256 remainingDeposit = validatorSizeWei - initialDepositAmount;
+        uint256 remainingDeposit = validatorSizeWei - INITIAL_DEPOSIT_AMOUNT;
 
         for (uint256 i = 0; i < depositData.length; i++) {
 
@@ -182,7 +174,7 @@ contract StakingManager is
 
     /// @notice Calculates the pubkey hash of a validator's pubkey as per SSZ spec
     function calculateValidatorPubkeyHash(bytes memory pubkey) public pure returns (bytes32) {
-        if (pubkey.length != 48) revert InvalidPubKeyLength();
+        if (pubkey.length != VALIDATOR_PUBKEY_LENGTH) revert InvalidPubKeyLength();
         return sha256(abi.encodePacked(pubkey, bytes16(0)));
     }
 
@@ -200,8 +192,7 @@ contract StakingManager is
 
     /// @notice Upgrades the etherfi node
     /// @param _newImplementation The new address of the etherfi node
-    function upgradeEtherFiNode(address _newImplementation) external {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
+    function upgradeEtherFiNode(address _newImplementation) external onlyUpgradeTimelock {
         if (_newImplementation == address(0)) revert InvalidUpgrade();
 
         etherFiNodeBeacon.upgradeTo(_newImplementation);
@@ -220,9 +211,7 @@ contract StakingManager is
 
     /// @dev create a new proxy instance of the etherFiNode withdrawal safe contract.
     /// @param _createEigenPod whether or not to create an associated eigenPod contract.
-    function instantiateEtherFiNode(bool _createEigenPod) external returns (address) {
-        if (!roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
-
+    function instantiateEtherFiNode(bool _createEigenPod) external onlyExecutorOperations returns (address) {
         BeaconProxy proxy = new BeaconProxy(address(etherFiNodeBeacon), "");
         address node = address(proxy);
 
@@ -238,7 +227,7 @@ contract StakingManager is
 
     /// @dev this method is for backfilling the addresses of etherFiNodes the protocol has previously deployed
     ///    Once this data has been backfilled we can delete this method
-    function backfillExistingEtherFiNodes(address[] calldata nodes) external onlyOperations {
+    function backfillExistingEtherFiNodes(address[] calldata nodes) external onlyOperatingMultisig {
         for (uint256 i = 0; i < nodes.length; i++) {
             address node = nodes[i];
             if (deployedEtherFiNodes[node]) continue; // already linked
@@ -247,14 +236,4 @@ contract StakingManager is
             emit EtherFiNodeDeployed(node);
         }
     }
-
-    //--------------------------------------------------------------------------------------
-    //-----------------------------------  MODIFIERS  --------------------------------------
-    //--------------------------------------------------------------------------------------
-
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
-        _;
-    }
-
 }

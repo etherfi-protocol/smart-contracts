@@ -66,6 +66,11 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
             liquidityPoolInstance.initializeOnUpgradeV2();
         }
 
+        vm.startPrank(owner);
+        liquidityPoolInstance.setMaxWithdrawAmount(1000 ether);
+        liquidityPoolInstance.setMinWithdrawAmount(0.001 ether);
+        vm.stopPrank();
+
         // Admin-gated setters on WithdrawRequestNFT (e.g. updateShareRemainderSplitToTreasuryInBps)
         // route through OPERATION_TIMELOCK_ROLE. Grant it to `admin` so the test can drive them.
         // Resolve every argument before vm.prank so unrelated view calls don't consume it.

@@ -70,9 +70,6 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         uint32 nextId;
         uint32 lastFin;
         uint16 split;
-        uint32 scanFrom;
-        uint32 scanTo;
-        uint256 agg;
         uint256 remainder;
         bool paused;
     }
@@ -104,9 +101,6 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         s.nextId = wrn.nextRequestId();
         s.lastFin = wrn.lastFinalizedRequestId();
         s.split = wrn.shareRemainderSplitToTreasuryInBps();
-        s.scanFrom = wrn.currentRequestIdToScanFromForShareRemainder();
-        s.scanTo = wrn.lastRequestIdToScanUntilForShareRemainder();
-        s.agg = wrn.aggregateSumOfEEthShare();
         s.remainder = wrn.totalRemainderEEthShares();
         s.paused = wrn.paused();
     }
@@ -134,9 +128,6 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         assertEq(a.nextId,     b.nextId,     "WRN.nextRequestId");
         assertEq(a.lastFin,    b.lastFin,    "WRN.lastFinalizedRequestId");
         assertEq(a.split,      b.split,      "WRN.split");
-        assertEq(a.scanFrom,   b.scanFrom,   "WRN.scanFrom");
-        assertEq(a.scanTo,     b.scanTo,     "WRN.scanTo");
-        assertEq(a.agg,        b.agg,        "WRN.aggregateSum");
         assertEq(a.remainder,  b.remainder,  "WRN.remainder");
         assertEq(a.paused,     b.paused,     "WRN.paused");
     }
@@ -145,12 +136,13 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         // Latest-block fork; realistic mainnet state.
         vm.createSelectFork(vm.envString("MAINNET_RPC_URL"));
 
-        // Upgrade RoleRegistry in place so newly-added role getters are
-        // reachable from upgraded contracts that call into roleRegistry from
-        // within their modifiers.
-        address roleRegOwner = IOwnableRead(ROLE_REGISTRY).owner();
-        vm.prank(roleRegOwner);
-        IUUPSProxy(ROLE_REGISTRY).upgradeTo(address(new RoleRegistry(address(0))));
+        // NOTE: RoleRegistry is intentionally NOT upgraded here. The currently
+        // deployed LP/WRN/PQ impls authorize upgrades via the legacy
+        // `roleRegistry.onlyProtocolUpgrader` / `onlyOwner` paths; once we swap
+        // RoleRegistry to the new impl that selector no longer exists, so all
+        // proxy upgrades have to happen against the live RoleRegistry. The
+        // RoleRegistry upgrade itself is performed by `_upgradeRoleRegistry()`
+        // AFTER the other proxies have been upgraded.
 
         // Deploy a fresh Blacklister — newly-upgraded impls (LP, WRN, etc.)
         // now wire it as an immutable. Storage-integrity assertions don't care
@@ -158,6 +150,23 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         // input is well-formed.
         Blacklister bImpl = new Blacklister(ROLE_REGISTRY);
         blacklisterInstance = Blacklister(address(new UUPSProxy(address(bImpl), abi.encodeWithSelector(Blacklister.initialize.selector))));
+    }
+
+    /// @dev Upgrade RoleRegistry to the new impl (after LP/WRN/PQ have already
+    ///      been upgraded) and grant the new UPGRADE_TIMELOCK_ROLE to the
+    ///      mainnet UPGRADE_TIMELOCK address so subsequent calls gated by
+    ///      `onlyUpgradeTimelock` (e.g. `initializeOnUpgradeV2`) can pass.
+    function _upgradeRoleRegistry() internal {
+        address roleRegOwner = IOwnableRead(ROLE_REGISTRY).owner();
+        vm.prank(roleRegOwner);
+        IUUPSProxy(ROLE_REGISTRY).upgradeTo(address(new RoleRegistry(address(0))));
+
+        RoleRegistry rr = RoleRegistry(ROLE_REGISTRY);
+        // Cache the role bytes32 in a local first — calling `rr.UPGRADE_TIMELOCK_ROLE()`
+        // inline as a `grantRole` argument would consume the next `vm.prank` slot.
+        bytes32 upgradeRole = rr.UPGRADE_TIMELOCK_ROLE();
+        vm.prank(roleRegOwner);
+        rr.grantRole(upgradeRole, UPGRADE_TIMELOCK);
     }
 
     function _snap(address target, uint256 n) internal view returns (bytes32[] memory a) {
@@ -222,14 +231,17 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
 
         // ------------------------------------------------------------------
         // 3. Upgrade the proxies in place
-        //    LP:  _authorizeUpgrade -> roleRegistry.onlyProtocolUpgrader
-        //         The UPGRADE_TIMELOCK holds the protocol upgrader role.
-        //    WRN: _authorizeUpgrade -> onlyOwner (read at runtime).
+        //    LP:  legacy _authorizeUpgrade -> roleRegistry.onlyProtocolUpgrader
+        //         which on the deployed RoleRegistry checks `owner() == account`.
+        //         Use the live RoleRegistry owner.
+        //    WRN: legacy _authorizeUpgrade -> onlyOwner (read at runtime).
         // ------------------------------------------------------------------
-        vm.prank(UPGRADE_TIMELOCK);
+        address roleRegOwner = IOwnableRead(ROLE_REGISTRY).owner();
+        address wrnOwner = IOwnableRead(WITHDRAW_REQUEST_NFT).owner();
+
+        vm.prank(roleRegOwner);
         IUUPSProxy(LIQUIDITY_POOL).upgradeTo(newLP);
 
-        address wrnOwner = IOwnableRead(WITHDRAW_REQUEST_NFT).owner();
         vm.prank(wrnOwner);
         IUUPSProxy(WITHDRAW_REQUEST_NFT).upgradeTo(newWRN);
 
@@ -414,21 +426,32 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
             LIQUIDITY_POOL, EETH, WEETH, ROLE_REGISTRY, TREASURY, 1 hours
         ));
 
-        vm.prank(UPGRADE_TIMELOCK);
+        // Upgrade proxies against the LIVE (pre-upgrade) RoleRegistry, since
+        // the deployed LP/PQ impls still call `onlyProtocolUpgrader` and the
+        // deployed WRN impl uses `onlyOwner`.
+        address roleRegOwner = IOwnableRead(ROLE_REGISTRY).owner();
+        address wrnOwner = IOwnableRead(WITHDRAW_REQUEST_NFT).owner();
+
+        vm.prank(roleRegOwner);
         IUUPSProxy(LIQUIDITY_POOL).upgradeTo(newLP);
 
-        address wrnOwner = IOwnableRead(WITHDRAW_REQUEST_NFT).owner();
         vm.prank(wrnOwner);
         IUUPSProxy(WITHDRAW_REQUEST_NFT).upgradeTo(newWRN);
 
-        vm.prank(UPGRADE_TIMELOCK);
+        vm.prank(roleRegOwner);
         IUUPSProxy(PRIORITY_WITHDRAWAL_QUEUE).upgradeTo(newPQ);
+
+        // Now swap RoleRegistry so the freshly-upgraded impls' role getters
+        // (onlyUpgradeTimelock, onlyOperatingMultisig, ...) resolve.
+        _upgradeRoleRegistry();
 
         // Migrate pre-existing locked ETH from LP into the NFT escrow so that
         // pre-existing finalized requests can be claimed against the NFT balance.
+        // `initializeOnUpgradeV2` is `onlyUpgradeTimelock`; UPGRADE_TIMELOCK was
+        // granted UPGRADE_TIMELOCK_ROLE inside `_upgradeRoleRegistry`.
         LiquidityPool lp = LiquidityPool(payable(LIQUIDITY_POOL));
         if (!lp.escrowMigrationCompleted()) {
-            vm.prank(lp.owner());
+            vm.prank(UPGRADE_TIMELOCK);
             lp.initializeOnUpgradeV2();
         }
     }
@@ -453,7 +476,8 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
             }),
             0
         ));
-        vm.prank(UPGRADE_TIMELOCK);
+        address roleRegOwner = IOwnableRead(ROLE_REGISTRY).owner();
+        vm.prank(roleRegOwner);
         IUUPSProxy(LIQUIDITY_POOL).upgradeTo(newLP);
 
         // Plant ENTERED directly; the next guarded call must revert with the

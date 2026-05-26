@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./interfaces/IAuctionManager.sol";
-import "./interfaces/INodeOperatorManager.sol";
-import "./interfaces/IProtocolRevenueManager.sol";
-import "./interfaces/IRoleRegistry.sol";
-import "./interfaces/IBlacklister.sol";
-import "./utils/PausableUntil.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+
+import "./interfaces/IAuctionManager.sol";
+import "./interfaces/INodeOperatorManager.sol";
+import "./interfaces/IProtocolRevenueManager.sol";
+import "./interfaces/IBlacklister.sol";
+import "./utils/PausableUntil.sol";
+import "./utils/RolesLibrary.sol";
 
 contract AuctionManager is
     Initializable,
@@ -18,6 +19,7 @@ contract AuctionManager is
     PausableUpgradeable,
     OwnableUpgradeable,
     PausableUntil,
+    RolesLibrary,
     ReentrancyGuardUpgradeable,
     UUPSUpgradeable
 {
@@ -49,11 +51,11 @@ contract AuctionManager is
     mapping(address => bool) private DEPRECATED_admins;
 
     // Immutables are not part of proxy storage; stored in implementation bytecode only.
-    IRoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
     INodeOperatorManager public immutable nodeOperatorManager;
     address public immutable stakingManagerContractAddress;
     address public immutable membershipManagerContractAddress;
+    address public immutable treasury;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -81,12 +83,12 @@ contract AuctionManager is
     error IncorrectCaller();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _roleRegistry, address _blacklister, address _nodeOperatorManagerContract, address _stakingManagerContractAddress, address _membershipManagerContractAddress) {
-        roleRegistry = IRoleRegistry(_roleRegistry);
+    constructor(address _roleRegistry, address _blacklister, address _nodeOperatorManagerContract, address _stakingManagerContractAddress, address _membershipManagerContractAddress, address _treasury) RolesLibrary(_roleRegistry) {
         blacklister = IBlacklister(_blacklister);
         nodeOperatorManager = INodeOperatorManager(_nodeOperatorManagerContract);
         stakingManagerContractAddress = _stakingManagerContractAddress;
         membershipManagerContractAddress = _membershipManagerContractAddress;
+        treasury = _treasury;
         _disableInitializers();
     }
 
@@ -112,11 +114,6 @@ contract AuctionManager is
         __ReentrancyGuard_init();
     }
 
-    function initializeOnUpgrade(uint128 _accumulatedRevenueThreshold) external onlyOwner {
-        accumulatedRevenue = 0;
-        accumulatedRevenueThreshold = _accumulatedRevenueThreshold;
-    }
-
     /// @notice Creates bid(s) for the right to run a validator node when ETH is deposited
     /// @param _bidSize the number of bids that the node operator would like to create
     /// @param _bidAmountPerBid the ether value of each bid that is created
@@ -124,7 +121,7 @@ contract AuctionManager is
     function createBid(
         uint256 _bidSize,
         uint256 _bidAmountPerBid
-    ) external payable whenNotPaused nonReentrant nonBlacklisted returns (uint256[] memory) {
+    ) external payable nonReentrant whenNotPaused nonBlacklisted returns (uint256[] memory) {
         if (_bidSize == 0) revert InvalidBidSize();
         if (whitelistEnabled) {
             if (!nodeOperatorManager.isWhitelisted(msg.sender)) revert NotWhitelisted();
@@ -219,51 +216,34 @@ contract AuctionManager is
         emit BidReEnteredAuction(_bidId);
     }
 
-    /// @notice Transfer the auction fee received from the node operator to the membership NFT contract when above the threshold
-    /// @dev Called by registerValidator() in StakingManager.sol
-    /// @param _bidId the ID of the validator
-    function processAuctionFeeTransfer(
-        uint256 _bidId
-    ) external onlyStakingManagerContract {
-        uint256 amount = bids[_bidId].amount;
-        uint256 newAccumulatedRevenue = accumulatedRevenue + amount;
-        if (newAccumulatedRevenue >= accumulatedRevenueThreshold) {
-            accumulatedRevenue = 0;
-            (bool sent, ) = membershipManagerContractAddress.call{value: newAccumulatedRevenue}("");
-            if (!sent) revert EtherTransferFailed();
-        } else {
-            accumulatedRevenue = uint128(newAccumulatedRevenue);
-        }
-    }
-
-    function transferAccumulatedRevenue() external onlyOperations {
+    function transferAccumulatedRevenue() external onlyHousekeepingOperations {
         uint256 transferAmount = accumulatedRevenue;
         accumulatedRevenue = 0;
-        (bool sent, ) = membershipManagerContractAddress.call{value: transferAmount}("");
+        (bool sent, ) = treasury.call{value: transferAmount}("");
         if (!sent) revert EtherTransferFailed();
     }
 
     /// @notice Disables the whitelisting phase of the bidding
     /// @dev Allows both regular users and whitelisted users to bid
-    function disableWhitelist() public onlyOperations {
+    function disableWhitelist() public onlyOperatingMultisig {
         whitelistEnabled = false;
         emit WhitelistDisabled(whitelistEnabled);
     }
 
     /// @notice Enables the whitelisting phase of the bidding
     /// @dev Only users who are on a whitelist can bid
-    function enableWhitelist() public onlyOperations {
+    function enableWhitelist() public onlyOperatingMultisig {
         whitelistEnabled = true;
         emit WhitelistEnabled(whitelistEnabled);
     }
 
     //Pauses the contract
-    function pauseContract() external onlyOperations {
+    function pauseContract() external onlyOperatingMultisig {
         _pause();
     }
 
     //Unpauses the contract
-    function unPauseContract() external onlyOperations {
+    function unPauseContract() external onlyOperatingMultisig {
         _unpause();
     }
 
@@ -273,7 +253,7 @@ contract AuctionManager is
     }
 
     // Unpauses contract from pauseUntil
-    function unpauseContractUntil() external onlyOperations {
+    function unpauseContractUntil() external onlyOperatingMultisig {
         _unpauseUntil();
     }
 
@@ -307,9 +287,7 @@ contract AuctionManager is
         super._requireNotPaused();
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     //--------------------------------------------------------------------------------------
     //--------------------------------------  GETTER  --------------------------------------
@@ -341,7 +319,7 @@ contract AuctionManager is
 
     /// @notice Updates the minimum bid price for a non-whitelisted bidder
     /// @param _newMinBidAmount the new amount to set the minimum bid price as
-    function setMinBidPrice(uint64 _newMinBidAmount) external onlyOperations {
+    function setMinBidPrice(uint64 _newMinBidAmount) external onlyOperatingMultisig {
         if (_newMinBidAmount >= maxBidAmount) revert InvalidMinBid();
         if (_newMinBidAmount < whitelistBidAmount) revert InvalidMinBid();
         minBidAmount = _newMinBidAmount;
@@ -349,22 +327,16 @@ contract AuctionManager is
 
     /// @notice Updates the maximum bid price for both whitelisted and non-whitelisted bidders
     /// @param _newMaxBidAmount the new amount to set the maximum bid price as
-    function setMaxBidPrice(uint64 _newMaxBidAmount) external onlyOperations {
+    function setMaxBidPrice(uint64 _newMaxBidAmount) external onlyOperatingMultisig {
         if (_newMaxBidAmount <= minBidAmount) revert InvalidMaxBid();
         maxBidAmount = _newMaxBidAmount;
-    }
-
-    /// @notice Updates the accumulated revenue threshold that will trigger a transfer to MembershipNFT contract
-    /// @param _newThreshold the new threshold to set
-    function setAccumulatedRevenueThreshold(uint128 _newThreshold) external onlyOperations {
-        accumulatedRevenueThreshold = _newThreshold;
     }
 
     /// @notice Updates the minimum bid price for a whitelisted address
     /// @param _newAmount the new amount to set the minimum bid price as
     function updateWhitelistMinBidAmount(
         uint128 _newAmount
-    ) external onlyOperations {
+    ) external onlyOperatingMultisig {
         if (_newAmount >= minBidAmount || _newAmount == 0) revert InvalidWhitelistAmount();
         whitelistBidAmount = _newAmount;
     }
@@ -375,21 +347,6 @@ contract AuctionManager is
 
     modifier onlyStakingManagerContract() {
         if (msg.sender != stakingManagerContractAddress) revert IncorrectCaller();
-        _;
-    }
-
-    modifier onlyAdmin() {
-        roleRegistry.onlyOperatingTimelock(msg.sender);
-        _;
-    }
-
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
-        _;
-    }
-
-    modifier onlyGuardian() {
-        roleRegistry.onlyGuardian(msg.sender);
         _;
     }
 

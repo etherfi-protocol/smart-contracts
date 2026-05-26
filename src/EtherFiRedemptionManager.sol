@@ -16,12 +16,12 @@ import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IeETH.sol";
 import "./interfaces/IWeETH.sol";
 import "./interfaces/ILiquifier.sol";
+import "./interfaces/IEtherFiRestaker.sol";
 import "./utils/PausableUntil.sol";
-import "./EtherFiRestaker.sol";
+import "./utils/RolesLibrary.sol";
 
 import "lib/BucketLimiter.sol";
 
-import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IPriorityWithdrawalQueue.sol";
 import "./interfaces/IBlacklister.sol";
 
@@ -38,21 +38,24 @@ struct RedemptionInfo {
     uint16 lowWatermarkInBpsOfTvl;
 }
 
-contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, PausableUntil, ReentrancyGuardUpgradeable, UUPSUpgradeable {
+contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, PausableUntil, ReentrancyGuardUpgradeable, UUPSUpgradeable, RolesLibrary {
     using SafeERC20 for IERC20;
     using Math for uint256;
 
     uint256 private constant BUCKET_UNIT_SCALE = 1e12;
     uint256 private constant BASIS_POINT_SCALE = 1e4;
 
+    /// @dev Suggested gas stipend for contract receiving ETH to perform a few
+    /// storage reads and writes, but low enough to prevent griefing.
+    uint256 internal constant GAS_STIPEND_NO_GRIEF = 100_000;
+
     address public constant ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
     address public immutable treasury;
-    IRoleRegistry public immutable roleRegistry;
     IeETH public immutable eEth;
     IWeETH public immutable weEth;
     ILiquidityPool public immutable liquidityPool;
-    EtherFiRestaker public immutable etherFiRestaker;
+    IEtherFiRestaker public immutable etherFiRestaker;
     ILido public immutable lido;
     IPriorityWithdrawalQueue public immutable priorityWithdrawalQueue;
     IBlacklister public immutable blacklister;
@@ -68,7 +71,6 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
 
     error InvalidAmount();
     error InvalidOutputToken();
-    error BlacklistedUser();
     error InvalidBps();
     error ExceedsMaxExitFee();
     error ExceedsMaxLowWatermark();
@@ -98,17 +100,17 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         uint256 _maxExitFeeSplitToTreasuryInBps, 
         uint256 _maxExitFeeInBps, 
         uint256 _maxLowWatermarkInBpsOfTvl)
+        RolesLibrary(_roleRegistry)
     {
         if (_maxExitFeeSplitToTreasuryInBps > BASIS_POINT_SCALE || _maxExitFeeInBps > BASIS_POINT_SCALE || _maxLowWatermarkInBpsOfTvl > BASIS_POINT_SCALE) revert InvalidAmount();
         maxExitFeeSplitToTreasuryInBps = _maxExitFeeSplitToTreasuryInBps;
         maxExitFeeInBps = _maxExitFeeInBps;
         maxLowWatermarkInBpsOfTvl = _maxLowWatermarkInBpsOfTvl;
-        roleRegistry = IRoleRegistry(_roleRegistry);
         treasury = _treasury;
         liquidityPool = ILiquidityPool(payable(_liquidityPool));
         eEth = IeETH(_eEth);
         weEth = IWeETH(_weEth); 
-        etherFiRestaker = EtherFiRestaker(payable(_etherFiRestaker));
+        etherFiRestaker = IEtherFiRestaker(payable(_etherFiRestaker));
         lido = etherFiRestaker.lido();
         priorityWithdrawalQueue = IPriorityWithdrawalQueue(_priorityWithdrawalQueue);
         blacklister = IBlacklister(_blacklister);
@@ -144,7 +146,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param receiver The address to receive the redeemed outputToken.
      * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemEEth(uint256 eEthAmount, address receiver, address outputToken) public whenNotPaused nonReentrant nonBlacklisted(receiver) {
+    function redeemEEth(uint256 eEthAmount, address receiver, address outputToken) public nonReentrant whenNotPaused nonBlacklisted(receiver) {
         _redeemEEth(eEthAmount, receiver, outputToken);
     }
 
@@ -154,7 +156,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param receiver The address to receive the redeemed outputToken.
      * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemWeEth(uint256 weEthAmount, address receiver, address outputToken) public whenNotPaused nonReentrant nonBlacklisted(receiver) {
+    function redeemWeEth(uint256 weEthAmount, address receiver, address outputToken) public nonReentrant whenNotPaused nonBlacklisted(receiver) {
         _redeemWeEth(weEthAmount, receiver, outputToken);
     }
 
@@ -165,7 +167,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param permit The permit params.
      * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemEEthWithPermit(uint256 eEthAmount, address receiver, IeETH.PermitInput calldata permit, address outputToken) external whenNotPaused nonReentrant nonBlacklisted(receiver) {
+    function redeemEEthWithPermit(uint256 eEthAmount, address receiver, IeETH.PermitInput calldata permit, address outputToken) external nonReentrant whenNotPaused nonBlacklisted(receiver) {
         try eEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {}
         _redeemEEth(eEthAmount, receiver, outputToken);
     }
@@ -177,7 +179,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param permit The permit params.
      * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemWeEthWithPermit(uint256 weEthAmount, address receiver, IWeETH.PermitInput calldata permit, address outputToken) external whenNotPaused nonReentrant nonBlacklisted(receiver) {
+    function redeemWeEthWithPermit(uint256 weEthAmount, address receiver, IWeETH.PermitInput calldata permit, address outputToken) external nonReentrant whenNotPaused nonBlacklisted(receiver) {
         try weEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s)  {} catch {}
         _redeemWeEth(weEthAmount, receiver, outputToken);
     }
@@ -189,7 +191,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         uint256 feeShareToStakers
     ) internal {
         uint256 prevBalance = address(this).balance;
-        uint256 prevLpBalance = address(liquidityPool).balance;
+        uint256 prevLpBalance = liquidityPool.totalValueInLp();
         uint256 totalEEthShare = eEth.totalShares();
 
         // Withdraw ETH from the liquidity pool
@@ -201,11 +203,11 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         if (eEth.totalShares() < 1 gwei || eEth.totalShares() != totalEEthShare - (sharesToBurn + feeShareToStakers)) revert InvalidTotalShares();
 
         // To Receiver by transferring ETH, using gas 10k for additional safety
-        (bool success, ) = receiver.call{value: ethReceived, gas: 10_000}("");
+        (bool success, ) = receiver.call{value: ethReceived, gas: GAS_STIPEND_NO_GRIEF}("");
         if (!success) revert TransferFailed();
 
         // Make sure the liquidity pool balance is correct && total shares are correct
-        if (address(liquidityPool).balance != prevLpBalance - ethReceived) revert InvalidLpBalance();
+        if (liquidityPool.totalValueInLp() != prevLpBalance - ethReceived) revert InvalidLpBalance();
     }
 
     /**
@@ -254,10 +256,11 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         _updateRateLimit(ethAmount, outputToken);
         uint256 eEthShareFee = eEthShares - sharesToBurn;
         uint256 feeShareToStakers = eEthShareFee - feeShareToTreasury;
+        uint256 feeAmountToStakers = liquidityPool.amountForShare(feeShareToStakers);
 
         // Common fee handling: Transfer to Treasury
         IERC20(address(eEth)).safeTransfer(treasury, eEthFeeAmountToTreasury);
-        
+
         if(outputToken == ETH_ADDRESS) {
             _processETHRedemption(receiver, eEthAmountToReceiver, sharesToBurn, feeShareToStakers);
         } else if(outputToken == address(lido)) {
@@ -266,7 +269,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
             revert InvalidOutputToken();
         }
 
-        emit Redeemed(receiver, ethAmount, eEthFeeAmountToTreasury, eEthAmountToReceiver, outputToken);
+        emit Redeemed(receiver, ethAmount, eEthFeeAmountToTreasury, feeAmountToStakers, outputToken);
     }
 
     /**
@@ -280,7 +283,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         if(token == ETH_ADDRESS) {
             // Post-escrow-migration, locked ETH has physically left LP into the holder
             // contracts, so LP.balance already excludes it. No further subtraction needed.
-            return address(liquidityPool).balance;
+            return liquidityPool.totalValueInLp();
         } else if (token == address(lido)) {
             return lido.balanceOf(address(etherFiRestaker));
         }
@@ -364,11 +367,11 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         tokenToRedemptionInfo[token].exitFeeSplitToTreasuryInBps = _exitFeeSplitToTreasuryInBps;
     }
 
-    function pauseContract() external onlyOperations {
+    function pauseContract() external onlyOperatingMultisig {
         _pause();
     }
 
-    function unPauseContract() external onlyOperations {
+    function unPauseContract() external onlyOperatingMultisig {
         _unpause();
     }
 
@@ -376,7 +379,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         _pauseUntil();
     }
 
-    function unpauseContractUntil() external onlyOperations {
+    function unpauseContractUntil() external onlyOperatingMultisig {
         _unpauseUntil();
     }
 
@@ -447,27 +450,10 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         return assets.mulDiv(feeBasisPoints, BASIS_POINT_SCALE, Math.Rounding.Up);
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     function getImplementation() external view returns (address) {
         return _getImplementation();
-    }
-
-    modifier onlyAdmin() {
-        roleRegistry.onlyOperatingTimelock(msg.sender);
-        _;
-    }
-
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
-        _;
-    }
-
-    modifier onlyGuardian() {
-        roleRegistry.onlyGuardian(msg.sender);
-        _;
     }
 
     modifier nonBlacklisted(address receiver) {

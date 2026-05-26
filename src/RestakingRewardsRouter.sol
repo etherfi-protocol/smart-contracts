@@ -5,14 +5,13 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "./interfaces/IRoleRegistry.sol";
+import "./utils/RolesLibrary.sol";
 
-contract RestakingRewardsRouter is UUPSUpgradeable {
+contract RestakingRewardsRouter is UUPSUpgradeable, RolesLibrary {
     using SafeERC20 for IERC20;
 
     address public immutable liquidityPool;
     address public immutable rewardTokenAddress;
-    IRoleRegistry public immutable roleRegistry;
 
     address public recipientAddress;
 
@@ -27,20 +26,17 @@ contract RestakingRewardsRouter is UUPSUpgradeable {
     error InvalidAddress();
     error NoRecipientSet();
     error TransferFailed();
-    error IncorrectRole();
 
     constructor(
         address _roleRegistry,
         address _rewardTokenAddress,
         address _liquidityPool
-    ) {
+    ) RolesLibrary(_roleRegistry) {
         _disableInitializers();
         if (
             _rewardTokenAddress == address(0) ||
-            _liquidityPool == address(0) ||
-            _roleRegistry == address(0)
+            _liquidityPool == address(0)
         ) revert InvalidAddress();
-        roleRegistry = IRoleRegistry(_roleRegistry);
         rewardTokenAddress = _rewardTokenAddress;
         liquidityPool = _liquidityPool;
     }
@@ -62,13 +58,7 @@ contract RestakingRewardsRouter is UUPSUpgradeable {
     }
 
     /// @dev Manual transfer function to recover reward tokens that may have accumulated in the contract
-    function recoverERC20() external {
-        if (
-            !roleRegistry.hasRole(
-                roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(),
-                msg.sender
-            )
-        ) revert IncorrectRole();
+    function recoverERC20() external onlyHousekeepingOperations {
         if (recipientAddress == address(0)) revert NoRecipientSet();
 
         uint256 balance = IERC20(rewardTokenAddress).balanceOf(address(this));
@@ -82,18 +72,9 @@ contract RestakingRewardsRouter is UUPSUpgradeable {
         }
     }
 
-    function _authorizeUpgrade(
-        address /* newImplementation */
-    ) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     function getImplementation() external view returns (address) {
         return _getImplementation();
-    }
-
-    modifier onlyAdmin() {
-        roleRegistry.onlyOperatingTimelock(msg.sender);
-        _;
     }
 }

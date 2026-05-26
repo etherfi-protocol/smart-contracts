@@ -34,6 +34,15 @@ contract ELExitsTest is TestSetup {
 
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
+
+        // `requestExecutionLayerTriggeredWithdrawal` is gated by
+        // `onlyExecutorOperations`. On mainnet, `realElExiter` held the legacy
+        // STAKING_MANAGER_NODE_CREATOR_ROLE; in the consolidated model that
+        // maps to EXECUTOR_OPERATIONS_ROLE, which isn't auto-migrated.
+        bytes32 execRole = roleRegistryInstance.EXECUTOR_OPERATIONS_ROLE();
+        address rrOwner = roleRegistryInstance.owner();
+        vm.prank(rrOwner);
+        roleRegistryInstance.grantRole(execRole, realElExiter);
     }
 
     function _resolvePod(bytes memory pubkey) internal view returns (IEtherFiNode etherFiNode, IEigenPod pod) {

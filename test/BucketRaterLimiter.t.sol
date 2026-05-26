@@ -30,6 +30,8 @@ contract BucketRateLimiterTest is Test {
 
         roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), owner);
         roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), owner);
+        // `_authorizeUpgrade` now defers to `onlyUpgradeTimelock`.
+        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), owner);
 
         limiter.updateConsumer(owner);
         limiter.setCapacity(200 ether);
@@ -1167,7 +1169,7 @@ contract BucketRateLimiterTest is Test {
         BucketRateLimiter newImpl = new BucketRateLimiter(address(roleRegistry));
 
         vm.prank(nonOwner);
-        vm.expectRevert(RoleRegistry.OnlyProtocolUpgrader.selector);
+        vm.expectRevert(RoleRegistry.OnlyUpgradeTimelock.selector);
         limiter.upgradeTo(address(newImpl));
     }
 

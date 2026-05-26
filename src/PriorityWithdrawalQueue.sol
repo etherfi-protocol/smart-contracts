@@ -11,8 +11,8 @@ import "./interfaces/IPriorityWithdrawalQueue.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IeETH.sol";
 import "./interfaces/IWeETH.sol";
-import "./interfaces/IRoleRegistry.sol";
 import "./utils/PausableUntil.sol";
+import "./utils/RolesLibrary.sol";
 
 /// @title PriorityWithdrawalQueue
 /// @notice Manages priority withdrawals for whitelisted users
@@ -22,6 +22,7 @@ contract PriorityWithdrawalQueue is
     UUPSUpgradeable, 
     ReentrancyGuardUpgradeable,
     PausableUntil,
+    RolesLibrary,
     IPriorityWithdrawalQueue
 {
     using SafeERC20 for IERC20;
@@ -35,6 +36,7 @@ contract PriorityWithdrawalQueue is
     uint96 public constant MIN_AMOUNT = 0.01 ether;
     uint96 public constant MAX_AMOUNT = 1000 ether;
     uint256 private constant _BASIS_POINT_SCALE = 1e4;
+    uint256 private constant _TOLERANCE_BUFFER = 10; // in wei to account for rounding errors
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  IMMUTABLES  ---------------------------------------
@@ -43,7 +45,6 @@ contract PriorityWithdrawalQueue is
     ILiquidityPool public immutable liquidityPool;
     IeETH public immutable eETH;
     IWeETH public immutable weETH;
-    IRoleRegistry public immutable roleRegistry;
     address public immutable treasury;
     uint32 public immutable minDelay;
 
@@ -98,7 +99,6 @@ contract PriorityWithdrawalQueue is
     error RequestNotFinalized();
     error RequestAlreadyFinalized();
     error NotRequestOwner();
-    error IncorrectRole();
     error ContractPaused();
     error ContractNotPaused();
     error NotMatured();
@@ -109,12 +109,12 @@ contract PriorityWithdrawalQueue is
     error AddressZero();
     error BadInput();
     error IncorrectCaller();
-    error InvalidBurnedSharesAmount();
     error InvalidEEthSharesAfterRemainderHandling();
     error InvalidOutputAmount();
     error InsufficientLiquidity();
     error InsufficientEscrow();
     error EthTransferFailed();
+    error MigrationNotComplete();
 
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
@@ -131,26 +131,6 @@ contract PriorityWithdrawalQueue is
         _;
     }
 
-    modifier onlyAdmin() {
-        roleRegistry.onlyOperatingTimelock(msg.sender);
-        _;
-    }
-
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
-        _;
-    }
-
-    modifier onlyGuardian() {
-        roleRegistry.onlyGuardian(msg.sender);
-        _;
-    }
-
-    modifier onlyRequestManager() {
-        if (!roleRegistry.hasRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
-        _;
-    }
-
     modifier onlyRequestUser(address requestUser) {
         if (requestUser != msg.sender) revert NotRequestOwner();
         _;
@@ -161,15 +141,14 @@ contract PriorityWithdrawalQueue is
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _liquidityPool, address _eETH, address _weETH, address _roleRegistry, address _treasury, uint32 _minDelay) {
-        if (_liquidityPool == address(0) || _eETH == address(0) || _weETH == address(0) || _roleRegistry == address(0) || _treasury == address(0)) {
+    constructor(address _liquidityPool, address _eETH, address _weETH, address _roleRegistry, address _treasury, uint32 _minDelay) RolesLibrary(_roleRegistry) {
+        if (_liquidityPool == address(0) || _eETH == address(0) || _weETH == address(0) || _treasury == address(0)) {
             revert AddressZero();
         }
         
         liquidityPool = ILiquidityPool(_liquidityPool);
         eETH = IeETH(_eETH);
         weETH = IWeETH(_weETH);
-        roleRegistry = IRoleRegistry(_roleRegistry);
         treasury = _treasury;
         minDelay = _minDelay;
 
@@ -189,7 +168,7 @@ contract PriorityWithdrawalQueue is
         __ReentrancyGuard_init();
 
         nonce = 1;
-        shareRemainderSplitToTreasuryInBps = 10000; // 100%
+        shareRemainderSplitToTreasuryInBps = uint16(_BASIS_POINT_SCALE); // 100%
     }
 
     //--------------------------------------------------------------------------------------
@@ -203,7 +182,7 @@ contract PriorityWithdrawalQueue is
     function requestWithdraw(
         uint96 amountOfEEth,
         uint96 amountWithFee
-    ) external whenNotPaused onlyWhitelisted nonReentrant returns (bytes32 requestId) {
+    ) external nonReentrant whenNotPaused onlyWhitelisted returns (bytes32 requestId) {
         if (amountOfEEth < MIN_AMOUNT || amountOfEEth > MAX_AMOUNT) revert InvalidAmount();
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore,) = _snapshotBalances();
 
@@ -217,7 +196,7 @@ contract PriorityWithdrawalQueue is
         uint96 amountOfEEth,
         uint96 amountWithFee,
         PermitInput calldata permit
-    ) external whenNotPaused onlyWhitelisted nonReentrant returns (bytes32 requestId) {
+    ) external nonReentrant whenNotPaused onlyWhitelisted returns (bytes32 requestId) {
         if (amountOfEEth < MIN_AMOUNT || amountOfEEth > MAX_AMOUNT) revert InvalidAmount();
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore,) = _snapshotBalances();
 
@@ -241,7 +220,7 @@ contract PriorityWithdrawalQueue is
     function requestWithdrawWithWeETH(
         uint96 weEthAmount,
         uint96 amountWithFee
-    ) external whenNotPaused onlyWhitelisted nonReentrant returns (bytes32 requestId) {
+    ) external nonReentrant whenNotPaused onlyWhitelisted returns (bytes32 requestId) {
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore,) = _snapshotBalances();
 
         IERC20(address(weETH)).safeTransferFrom(msg.sender, address(this), weEthAmount);
@@ -262,7 +241,7 @@ contract PriorityWithdrawalQueue is
         uint96 weEthAmount,
         uint96 amountWithFee,
         PermitInput calldata permit
-    ) external whenNotPaused onlyWhitelisted nonReentrant returns (bytes32 requestId) {
+    ) external nonReentrant whenNotPaused onlyWhitelisted returns (bytes32 requestId) {
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore,) = _snapshotBalances();
 
         try weETH.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {
@@ -285,7 +264,7 @@ contract PriorityWithdrawalQueue is
     /// @return requestId The cancelled request ID
     function cancelWithdraw(
         WithdrawRequest calldata request
-    ) external whenNotPaused onlyRequestUser(request.user) nonReentrant returns (bytes32 requestId) {
+    ) external nonReentrant whenNotPaused onlyRequestUser(request.user) returns (bytes32 requestId) {
         if (request.creationTime + minDelay > block.timestamp) revert NotMatured();
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore,) = _snapshotBalances();
         uint256 userEEthSharesBefore = eETH.shares(request.user);
@@ -334,7 +313,10 @@ contract PriorityWithdrawalQueue is
 
     /// @notice Request manager finalizes withdrawal requests after maturity.
     /// @dev Locks ETH per request by calling LP.transferLockedEthForPriority — escrowed in this contract until claim or cancel.
-    function fulfillRequests(WithdrawRequest[] calldata requests) external onlyRequestManager whenNotPaused {
+    ///      Gated on escrowMigrationCompleted: receive() only bumps ethAmountLockedForPriorityWithdrawal post-migration,
+    ///      so finalizing before that would leave the lock counter at zero and brick the resulting requests.
+    function fulfillRequests(WithdrawRequest[] calldata requests) external onlyOracleOperations whenNotPaused {
+        if (!liquidityPool.escrowMigrationCompleted()) revert MigrationNotComplete();
         uint256 totalAmountToLock = 0;
 
         for (uint256 i = 0; i < requests.length; ++i) {
@@ -369,7 +351,7 @@ contract PriorityWithdrawalQueue is
         emit WhitelistUpdated(user, true);
     }
 
-    function removeFromWhitelist(address user) external onlyOperations {
+    function removeFromWhitelist(address user) external onlyOperatingMultisig {
         isWhitelisted[user] = false;
         emit WhitelistUpdated(user, false);
     }
@@ -388,7 +370,7 @@ contract PriorityWithdrawalQueue is
     ///      For finalized requests, this also prevents subsequent claims.
     /// @param requests Array of requests to invalidate
     /// @return invalidatedRequestIds Array of request IDs that were invalidated
-    function invalidateRequests(WithdrawRequest[] calldata requests) external onlyRequestManager returns (bytes32[] memory invalidatedRequestIds) {
+    function invalidateRequests(WithdrawRequest[] calldata requests) external onlyOracleOperations returns (bytes32[] memory invalidatedRequestIds) {
         invalidatedRequestIds = new bytes32[](requests.length);
         for (uint256 i = 0; i < requests.length; ++i) {
             bytes32 requestId = keccak256(abi.encode(requests[i]));
@@ -406,8 +388,7 @@ contract PriorityWithdrawalQueue is
     ///      - Treasury: gets a percentage of the remainder based on shareRemainderSplitToTreasuryInBps
     ///      - Burn: the rest of the remainder is burned
     /// @param eEthAmount Amount of eETH remainder to handle
-    function handleRemainder(uint256 eEthAmount) external {
-        if (!roleRegistry.hasRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
+    function handleRemainder(uint256 eEthAmount) external onlyHousekeepingOperations {
         if (eEthAmount == 0) revert BadInput();
         if (eEthAmount > liquidityPool.amountForShare(totalRemainderShares)) revert BadInput();
 
@@ -438,13 +419,13 @@ contract PriorityWithdrawalQueue is
         emit ShareRemainderSplitUpdated(_shareRemainderSplitToTreasuryInBps);
     }
 
-    function pauseContract() external onlyOperations {
+    function pauseContract() external onlyOperatingMultisig {
         if (paused) revert ContractPaused();
         paused = true;
         emit Paused(msg.sender);
     }
 
-    function unPauseContract() external onlyOperations {
+    function unPauseContract() external onlyOperatingMultisig {
         if (!paused) revert ContractNotPaused();
         paused = false;
         emit Unpaused(msg.sender);
@@ -454,7 +435,7 @@ contract PriorityWithdrawalQueue is
         _pauseUntil();
     }
 
-    function unpauseContractUntil() external onlyOperations {
+    function unpauseContractUntil() external onlyOperatingMultisig {
         _unpauseUntil();
     }
 
@@ -471,7 +452,7 @@ contract PriorityWithdrawalQueue is
     /// @return queueEEthSharesBefore eETH shares held by this contract
     /// @return queueEthBefore ETH balance of this contract (used for claim verification)
     function _snapshotBalances() internal view returns (uint256 lpEthBefore, uint256 queueEEthSharesBefore, uint256 queueEthBefore) {
-        lpEthBefore = address(liquidityPool).balance;
+        lpEthBefore = liquidityPool.totalValueInLp();
         queueEEthSharesBefore = eETH.shares(address(this));
         queueEthBefore = address(this).balance;
     }
@@ -487,7 +468,7 @@ contract PriorityWithdrawalQueue is
     ) internal view {
         uint256 expectedSharesReceived = liquidityPool.sharesForAmount(amountOfEEth);
         if (eETH.shares(address(this)) != queueEEthSharesBefore + expectedSharesReceived) revert UnexpectedBalanceChange();
-        if (address(liquidityPool).balance != lpEthBefore) revert UnexpectedBalanceChange();
+        if (liquidityPool.totalValueInLp() != lpEthBefore) revert UnexpectedBalanceChange();
     }
 
     /// @dev Verify post-conditions after a cancel operation
@@ -503,7 +484,7 @@ contract PriorityWithdrawalQueue is
         address user,
         uint256 expectedLpEthDelta
     ) internal view {
-        if (address(liquidityPool).balance != lpEthBefore + expectedLpEthDelta) revert UnexpectedBalanceChange();
+        if (liquidityPool.totalValueInLp() != lpEthBefore + expectedLpEthDelta) revert UnexpectedBalanceChange();
         if (eETH.shares(address(this)) >= queueEEthSharesBefore) revert UnexpectedBalanceChange();
         if (eETH.shares(user) <= userEEthSharesBefore) revert UnexpectedBalanceChange();
     }
@@ -522,7 +503,7 @@ contract PriorityWithdrawalQueue is
         address user
     ) internal view {
         // LP ETH balance may increase by feeEth (returned from queue to LP via returnLockedEth).
-        if (address(liquidityPool).balance < lpEthBefore) revert UnexpectedBalanceChange();
+        if (liquidityPool.totalValueInLp() < lpEthBefore) revert UnexpectedBalanceChange();
         if (eETH.shares(address(this)) >= queueEEthSharesBefore) revert UnexpectedBalanceChange();
         // Queue paid ETH to the user (and optionally fee back to LP) from its own escrow balance.
         if (address(this).balance >= queueEthBefore) revert UnexpectedBalanceChange();
@@ -605,7 +586,7 @@ contract PriorityWithdrawalQueue is
         if (!_finalizedRequests.contains(requestId)) revert RequestNotFinalized();
 
         uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
-        if (amountForShares < request.amountWithFee) revert InvalidOutputAmount();
+        if (amountForShares + _TOLERANCE_BUFFER < request.amountWithFee) revert InvalidOutputAmount();
 
         uint128 amountToWithdraw = request.amountWithFee;
 
@@ -640,9 +621,7 @@ contract PriorityWithdrawalQueue is
         if (ethAmountLockedForPriorityWithdrawal > address(this).balance) revert InsufficientLiquidity();
     }
 
-    function _authorizeUpgrade(address) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     //--------------------------------------------------------------------------------------
     //------------------------------------  GETTERS  ---------------------------------------

@@ -731,7 +731,7 @@ contract EtherFiRateLimiterTest is TestSetup {
     function test_upgradeability() public {
         // Verify upgrade authorization
         vm.prank(unauthorizedUser);
-        vm.expectRevert(RoleRegistry.OnlyProtocolUpgrader.selector);
+        vm.expectRevert(RoleRegistry.OnlyUpgradeTimelock.selector);
         rateLimiter.upgradeTo(address(0x1));
 
         // Owner is the protocol upgrader; passes role check but reverts for other reasons
@@ -822,7 +822,10 @@ contract EtherFiRateLimiterTest is TestSetup {
         bytes32 limitId
     ) public {
         vm.assume(limitId != bytes32(0)); // Avoid zero limit ID
-        
+        // TestSetup pre-creates eETH/weETH mint/burn/transfer limiters; skip any
+        // fuzzer pick that collides with an already-registered ID.
+        vm.assume(!rateLimiter.limitExists(limitId));
+
         vm.prank(admin);
         rateLimiter.createNewLimiter(limitId, capacity, refillRate);
         

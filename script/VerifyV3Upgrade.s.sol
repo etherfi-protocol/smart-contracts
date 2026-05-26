@@ -123,18 +123,8 @@ contract VerifyV3Upgrade is Script {
             "EtherFiNodesManager has correct RoleRegistry"
         );
 
-        // Check a sample EtherFiNode implementation has correct RoleRegistry
-        console2.log("Checking EtherFiNode implementation RoleRegistry...");
-        address beacon = stakingManager.getEtherFiNodeBeacon();
-        address etherFiNodeImpl = getImplementation(beacon);
-        if (etherFiNodeImpl != address(0)) {
-            // Create a temporary instance to check the roleRegistry
-            EtherFiNode nodeImpl = EtherFiNode(payable(etherFiNodeImpl));
-            checkCondition(
-                address(nodeImpl.roleRegistry()) == address(roleRegistry),
-                "EtherFiNode implementation has correct RoleRegistry"
-            );
-        }
+        // EtherFiNode no longer holds a direct roleRegistry reference after the roles refactor;
+        // role checks now live on EtherFiNodesManager via the shared RolesLibrary.
 
         // Check LiquidityPool has correct RoleRegistry
         console2.log("Checking LiquidityPool RoleRegistry...");
@@ -192,7 +182,7 @@ contract VerifyV3Upgrade is Script {
             protocolUpgrader != address(0),
             "Protocol upgrader (RoleRegistry owner) is set"
         );
-        try roleRegistry.onlyProtocolUpgrader(protocolUpgrader) {
+        try roleRegistry.onlyUpgradeTimelock(protocolUpgrader) {
             checkCondition(true, "Protocol upgrader is owner");
         } catch {
             checkCondition(false, "Protocol upgrader is not owner");

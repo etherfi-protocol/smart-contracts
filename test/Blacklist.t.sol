@@ -233,32 +233,10 @@ contract BlacklistTest is TestSetup {
     // MembershipManager (V1)
     // -------------------------------------------------------------------------
 
-    function test_blacklist_MembershipManager_wrapEthForEap_reverts() public {
-        vm.deal(blacklisted, 1 ether);
-        bytes32[] memory proof;
-        vm.prank(blacklisted);
-        _expectBlacklistedRevert(blacklisted);
-        membershipManagerV1Instance.wrapEthForEap{value: 1 ether}(0.5 ether, 0.5 ether, 0, 1 ether, 1, proof);
-    }
-
-    function test_blacklist_MembershipManager_wrapEth_reverts() public {
-        vm.deal(blacklisted, 1 ether);
-        vm.prank(blacklisted);
-        _expectBlacklistedRevert(blacklisted);
-        membershipManagerV1Instance.wrapEth{value: 1 ether}(0.5 ether, 0.5 ether, address(0));
-    }
-
     function test_blacklist_MembershipManager_unwrapForEEthAndBurn_reverts() public {
         vm.prank(blacklisted);
         _expectBlacklistedRevert(blacklisted);
         membershipManagerV1Instance.unwrapForEEthAndBurn(1);
-    }
-
-    function test_blacklist_MembershipManager_topUpDepositWithEth_reverts() public {
-        vm.deal(blacklisted, 1 ether);
-        vm.prank(blacklisted);
-        _expectBlacklistedRevert(blacklisted);
-        membershipManagerV1Instance.topUpDepositWithEth{value: 1 ether}(1, 0.5 ether, 0.5 ether);
     }
 
     function test_blacklist_MembershipManager_requestWithdraw_reverts() public {
@@ -332,30 +310,30 @@ contract BlacklistTest is TestSetup {
         roleRegistryInstance.grantRole(role, who);
     }
 
-    function test_blacklistUserUntil_default_sets_one_day_window() public {
+    function test_blacklistUserUntil_default_sets_three_days_window() public {
         _grantBlacklistUntilRoleTo(owner);
 
         uint256 t0 = block.timestamp;
         vm.prank(owner);
         blacklisterInstance.blacklistUserUntil(tempBlacklisted);
 
-        assertEq(blacklisterInstance.blacklistedUntil(tempBlacklisted), t0 + 1 days);
+        assertEq(blacklisterInstance.blacklistedUntil(tempBlacklisted), t0 + 3 days);
 
         // Inside the window: gate closed.
         _expectBlacklistedRevert(tempBlacklisted);
         blacklisterInstance.nonBlacklisted(tempBlacklisted);
 
         // One second before expiry: still closed.
-        vm.warp(t0 + 1 days - 1);
+        vm.warp(t0 + 3 days - 1);
         _expectBlacklistedRevert(tempBlacklisted);
         blacklisterInstance.nonBlacklisted(tempBlacklisted);
 
         // At expiry (strict `>` check): gate opens.
-        vm.warp(t0 + 1 days);
+        vm.warp(t0 + 3 days);
         blacklisterInstance.nonBlacklisted(tempBlacklisted);
 
         // After expiry: still open.
-        vm.warp(t0 + 1 days + 1);
+        vm.warp(t0 + 3 days + 1);
         blacklisterInstance.nonBlacklisted(tempBlacklisted);
     }
 
@@ -371,7 +349,7 @@ contract BlacklistTest is TestSetup {
         _grantBlacklistUntilRoleTo(owner);
 
         vm.expectEmit(false, false, false, true, address(blacklisterInstance));
-        emit Blacklister.UserBlacklistedUntil(tempBlacklisted, block.timestamp + 1 days);
+        emit Blacklister.UserBlacklistedUntil(tempBlacklisted, block.timestamp + 3 days);
 
         vm.prank(owner);
         blacklisterInstance.blacklistUserUntil(tempBlacklisted);

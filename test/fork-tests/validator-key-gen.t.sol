@@ -45,17 +45,15 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
         vm.deal(tom, 100 ether);
 
-        // Upgrade RoleRegistry in place so newly-added role getters (e.g.
-        // BLACKLISTED_USER) are reachable from upgraded contracts that call
-        // into roleRegistry from within their modifiers.
-        vm.prank(roleRegistry.owner());
-        roleRegistry.upgradeTo(address(new RoleRegistry(address(0))));
-
         // Deploy a Blacklister so impls that wire it as an immutable have a
         // non-zero target.
         Blacklister bImpl = new Blacklister(address(roleRegistry));
         Blacklister blacklister = Blacklister(address(new UUPSProxy(address(bImpl), abi.encodeWithSelector(Blacklister.initialize.selector))));
 
+        // Upgrade StakingManager / LP FIRST, against the LIVE RoleRegistry — the
+        // deployed impls' `_authorizeUpgrade` still calls `onlyProtocolUpgrader`,
+        // a selector the new RoleRegistry impl no longer exposes. Swap
+        // RoleRegistry only after these have been upgraded.
         StakingManager stakingManagerImpl = new StakingManager(
             address(liquidityPool),
             address(etherFiNodesManager),
@@ -88,9 +86,14 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         vm.prank(liquidityPool.owner());
         liquidityPool.upgradeTo(address(liquidityPoolImpl));
 
-        AuctionManager auctionManagerImpl = new AuctionManager(address(roleRegistry), address(blacklister), address(nodeOperatorManager), address(stakingManager), 0x3d320286E014C3e1ce99Af6d6B00f0C1D63E3000);
+        AuctionManager auctionManagerImpl = new AuctionManager(address(roleRegistry), address(blacklister), address(nodeOperatorManager), address(stakingManager), 0x3d320286E014C3e1ce99Af6d6B00f0C1D63E3000, 0x0c83EAe1FE72c390A02E426572854931EefF93BA);
         vm.prank(auctionManager.owner());
         auctionManager.upgradeTo(address(auctionManagerImpl));
+
+        // Now swap RoleRegistry so newly-added role getters (e.g. BLACKLISTED_USER)
+        // are reachable from the freshly-upgraded contracts' modifiers.
+        vm.prank(roleRegistry.owner());
+        roleRegistry.upgradeTo(address(new RoleRegistry(address(0))));
 
         vm.startPrank(roleRegistry.owner());
         roleRegistry.grantRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), admin);
@@ -501,7 +504,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         bidIds[0] = 1; 
 
         vm.prank(unauthorizedUser);
-        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOracleOperations.selector);
         liquidityPool.batchCreateBeaconValidators(depositDataArray, bidIds, etherFiNode);
     }
 
@@ -684,7 +687,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
                 pubkey,
                 signature,
                 withdrawalCreds,
-                stakingManager.initialDepositAmount()
+                stakingManager.INITIAL_DEPOSIT_AMOUNT()
             );
 
             depositData[i] = IStakingManager.DepositData({
@@ -751,7 +754,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
 
         // Try to invalidate without the role
         vm.prank(unauthorizedUser);
-        vm.expectRevert(IStakingManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOracleOperations.selector);
         stakingManager.invalidateRegisteredBeaconValidator(depositData, createdBids[0], etherFiNode);
     }
 

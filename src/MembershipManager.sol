@@ -4,20 +4,23 @@ pragma solidity ^0.8.13;
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "./interfaces/IeETH.sol";
 import "./interfaces/IMembershipManager.sol";
 import "./interfaces/IMembershipNFT.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IEtherFiAdmin.sol";
-import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IBlacklister.sol";
+import "./utils/RolesLibrary.sol";
 
 import "./libraries/GlobalIndexLibrary.sol";
 
 import "forge-std/console.sol";
 
-contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable, IMembershipManager {
+contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable, IMembershipManager, RolesLibrary {
+    using SafeERC20 for IERC20;
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
@@ -70,10 +73,10 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     ILiquidityPool public immutable liquidityPool;
     IMembershipNFT public immutable membershipNFT;
     IEtherFiAdmin public immutable etherFiAdmin;
-    IRoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
 
-    bytes32 public constant MEMBERSHIP_MANAGER_OPERATIONS_ROLE = keccak256("MEMBERSHIP_MANAGER_OPERATIONS_ROLE");
+    uint256 public constant BASIS_POINTS_DENOMINATOR = 10000;
+    uint256 public constant FEE_UNIT = 0.001 ether;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -84,12 +87,11 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     event NftUnwrappedForEEth(address indexed _user, uint256 indexed _tokenId, uint256 _amountOfEEth, uint40 _loyaltyPoints, uint256 _feeAmount);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _eETH, address _liquidityPool, address _membershipNFT, address _etherFiAdmin, address _roleRegistry, address _blacklister) {
+    constructor(address _eETH, address _liquidityPool, address _membershipNFT, address _etherFiAdmin, address _roleRegistry, address _blacklister) RolesLibrary(_roleRegistry) {
         eETH = IeETH(_eETH);
         liquidityPool = ILiquidityPool(_liquidityPool);
         membershipNFT = IMembershipNFT(_membershipNFT);
         etherFiAdmin = IEtherFiAdmin(_etherFiAdmin);
-        roleRegistry = IRoleRegistry(_roleRegistry);
         blacklister = IBlacklister(_blacklister);
         _disableInitializers();
     }
@@ -101,78 +103,20 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     //--------------------------------------------------------------------------------------
 
     error Deprecated();
-    error DisallowZeroAddress();
     error WrongVersion();
-    error BlacklistedUser();
     error InvalidEAPRollover();
 
-    /// @notice EarlyAdopterPool users can re-deposit and mint a membership NFT claiming their points & tiers
-    /// @dev The deposit amount must be greater than or equal to what they deposited into the EAP
-    /// @param _amount amount of ETH to earn staking rewards.
-    /// @param _amountForPoints amount of ETH to boost earnings of {loyalty, tier} points
-    /// @param _eapDepositBlockNumber the block number at which the user deposited into the EAP
-    /// @param _snapshotEthAmount exact balance that the user has in the merkle snapshot
-    /// @param _points EAP points that the user has in the merkle snapshot
-    /// @param _merkleProof array of hashes forming the merkle proof for the user
-    function wrapEthForEap(
-        uint256 _amount,
-        uint256 _amountForPoints,
-        uint32  _eapDepositBlockNumber,
-        uint256 _snapshotEthAmount,
-        uint256 _points,
-        bytes32[] calldata _merkleProof
-    ) external payable whenNotPaused nonBlacklisted returns (uint256) {
-        if (_points == 0 || msg.value < _snapshotEthAmount || msg.value > _snapshotEthAmount * 2 || msg.value != _amount + _amountForPoints) revert InvalidEAPRollover();
-
-        membershipNFT.processDepositFromEapUser(msg.sender, _eapDepositBlockNumber, _snapshotEthAmount, _points, _merkleProof);
-        uint40 loyaltyPoints = uint40(_min(_points, type(uint40).max));
-        uint40 tierPoints = membershipNFT.computeTierPointsForEap(_eapDepositBlockNumber);
-
-        liquidityPool.deposit{value: msg.value}(msg.sender, address(0));
-
-        uint256 tokenId = _mintMembershipNFT(msg.sender, msg.value - _amountForPoints, _amountForPoints, loyaltyPoints, tierPoints);
-
-        _emitNftUpdateEvent(tokenId);
-        emit FundsMigrated(msg.sender, tokenId, msg.value, _points, loyaltyPoints, tierPoints);
-        return tokenId;
-    }
-
-    error InvalidDeposit();
-    error InvalidAllocation();
     error InvalidAmount();
     error InsufficientBalance();
 
-    /// @notice Wraps ETH into a membership NFT.
-    /// @dev This function allows users to wrap their ETH into membership NFT.
-    /// @param _amount amount of ETH to earn staking rewards.
-    /// @param _amountForPoints amount of ETH to boost earnings of {loyalty, tier} points
-    /// @return tokenId The ID of the minted membership NFT.
-    function wrapEth(uint256 _amount, uint256 _amountForPoints, address _referral) public payable whenNotPaused nonBlacklisted returns (uint256) {
-        uint256 feeAmount = uint256(mintFee) * 0.001 ether;
-        uint256 depositPerNFT = _amount + _amountForPoints;
-        uint256 ethNeededPerNFT = depositPerNFT + feeAmount;
-
-        if (depositPerNFT / 1 gwei < minDepositGwei || msg.value != ethNeededPerNFT) revert InvalidDeposit();
-
-        return _wrapEth(_amount, _amountForPoints, _referral);
-    }
-
-    function wrapEth(uint256 _amount, uint256 _amountForPoints) external payable whenNotPaused returns (uint256) {
-        return wrapEth(_amount, _amountForPoints, address(0));
-    }
-
     function unwrapForEEthAndBurn(uint256 _tokenId) external whenNotPaused nonBlacklisted {
         _requireTokenOwner(_tokenId);
-
-        // Claim all staking rewards before burn
-        _claimStakingRewards(_tokenId);
-        _migrateFromV0ToV1(_tokenId);
 
         uint40 loyaltyPoints = membershipNFT.loyaltyPointsOf(_tokenId);
         (uint256 totalBalance, uint256 feeAmount) = _withdrawAndBurn(_tokenId);
 
         // transfer 'eEthShares' of eETH to the owner
-        eETH.transfer(msg.sender, totalBalance - feeAmount);
+        IERC20(address(eETH)).safeTransfer(msg.sender, totalBalance - feeAmount);
 
         if (feeAmount > 0) {
             liquidityPool.withdraw(address(this), feeAmount);
@@ -181,34 +125,13 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         emit NftUnwrappedForEEth(msg.sender, _tokenId, totalBalance - feeAmount, loyaltyPoints, feeAmount);
     }
 
-    /// @notice Increase your deposit tied to this NFT within the configured percentage limit.
-    /// @dev Can only be done once per month
-    /// @param _tokenId ID of NFT token
-    /// @param _amount amount of ETH to earn staking rewards.
-    /// @param _amountForPoints amount of ETH to boost earnings of {loyalty, tier} points
-    function topUpDepositWithEth(uint256 _tokenId, uint128 _amount, uint128 _amountForPoints) public payable whenNotPaused nonBlacklisted {
-        _requireTokenOwner(_tokenId);
-
-        claim(_tokenId);
-
-        uint256 additionalDeposit = _topUpDeposit(_tokenId, _amount, _amountForPoints);
-        liquidityPool.deposit{value: additionalDeposit}(msg.sender, address(0));
-        _emitNftUpdateEvent(_tokenId);
-    }
-
     error ExceededMaxWithdrawal();
-    error InsufficientLiquidity();
-    error RequireTokenUnlocked();
     error InvalidCaller();
     error TierLimitExceeded();
     error OutOfBound();
     error WrongTokenMinted();
     error UnexpectedTier();
-    error NotEnoughReservedRewards();
-    error NotInV0();
     error OnlyTokenOwner();
-    error IntegerOverflow();
-    error IncorrectRole();
 
     /// @notice Requests exchange of membership points tokens for ETH.
     /// @dev decrements the amount of eETH backing the membership NFT and calls requestWithdraw on the liquidity pool
@@ -230,7 +153,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         _applyUnwrapPenalty(_tokenId, prevAmount, _amount);
 
         // send EETH to recipient before requesting withdraw?
-        eETH.approve(address(liquidityPool), _amount);
+        IERC20(address(eETH)).safeIncreaseAllowance(address(liquidityPool), _amount);
         uint256 withdrawTokenId = liquidityPool.requestMembershipNFTWithdraw(address(msg.sender), _amount, uint64(0));
 
         _emitNftUpdateEvent(_tokenId);
@@ -244,13 +167,9 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     function requestWithdrawAndBurn(uint256 _tokenId) external whenNotPaused nonBlacklisted returns (uint256) {
         _requireTokenOwner(_tokenId);
 
-        // Claim all staking rewards before burn
-        _claimStakingRewards(_tokenId);
-        _migrateFromV0ToV1(_tokenId);
-
         (uint256 totalBalance, uint256 feeAmount) = _withdrawAndBurn(_tokenId);
 
-        eETH.approve(address(liquidityPool), totalBalance);
+        IERC20(address(eETH)).safeIncreaseAllowance(address(liquidityPool), totalBalance);
         uint256 withdrawTokenId = liquidityPool.requestMembershipNFTWithdraw(msg.sender, totalBalance, feeAmount);
         
         return withdrawTokenId;
@@ -261,8 +180,6 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     /// @dev This function allows users to claim the rewards + a new tier, if eligible.
     function claim(uint256 _tokenId) public whenNotPaused nonBlacklisted {
         _claimPoints(_tokenId);
-        _claimStakingRewards(_tokenId);
-        _migrateFromV0ToV1(_tokenId);
 
         uint8 oldTier = tokenData[_tokenId].tier;
         uint8 newTier = membershipNFT.claimableTier(_tokenId);
@@ -281,29 +198,19 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         // The balance of MembershipManager contract is used to reward ether.fan stakers (not eETH stakers)
         // Eth Rewards Amount per NFT = (eETH share amount of the NFT) * (total rewards ETH amount) / (total eETH share amount in ether.fan)
         uint256 etherFanEEthShares = eETH.shares(address(this));
+        if (etherFanEEthShares == 0) return;
         uint256 thresholdAmount = fanBoostThresholdEthAmount();
         if (address(this).balance >= thresholdAmount) {
             uint256 mintedShare = liquidityPool.deposit{value: thresholdAmount}(address(this), address(0));
             ethRewardsPerEEthShareAfterRebase += 1 ether * thresholdAmount / etherFanEEthShares;
         }
 
-        _distributeStakingRewardsV0(ethRewardsPerEEthShareBeforeRebase, ethRewardsPerEEthShareAfterRebase);
         _distributeStakingRewardsV1(ethRewardsPerEEthShareBeforeRebase, ethRewardsPerEEthShareAfterRebase);
     }
 
     function claimBatch(uint256[] calldata _tokenIds) public whenNotPaused {
         for (uint256 i = 0; i < _tokenIds.length; i++) {
             claim(_tokenIds[i]);
-        }
-    }
-
-    /// @notice Distributes staking rewards to eligible stakers.
-    /// @dev This function distributes staking rewards to eligible NFTs based on their staked tokens and membership tiers.
-    function _distributeStakingRewardsV0(uint256 _ethRewardsPerEEthShareBeforeRebase, uint256 _ethRewardsPerEEthShareAfterRebase) internal {
-        uint96[] memory globalIndex = globalIndexLibrary.calculateGlobalIndex(address(this), address(liquidityPool), _ethRewardsPerEEthShareBeforeRebase, _ethRewardsPerEEthShareAfterRebase);
-        for (uint256 i = 0; i < tierDeposits.length; i++) {
-            tierDeposits[i].shares = uint128(liquidityPool.sharesForAmount(tierDeposits[i].amounts));
-            tierData[i].rewardsGlobalIndex = globalIndex[i];
         }
     }
 
@@ -314,154 +221,31 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         }
     }
 
-    function addNewTier(uint40 _requiredTierPoints, uint24 _weight) external onlyOperations {
-        if (tierData.length >= type(uint8).max) revert TierLimitExceeded();
-        tierData.push(TierData(0, _requiredTierPoints, _weight, 0));
-        tierVaults.push(TierVault(0, 0));
-    }
-
-    function updateTier(uint8 _tier, uint40 _requiredTierPoints, uint24 _weight) external onlyOperations {
-        if (_tier >= tierData.length) revert OutOfBound();
-        tierData[_tier].requiredTierPoints = _requiredTierPoints;
-        tierData[_tier].weight = _weight;
-    }
-
-    /// @notice Sets the points for a given Ethereum address.
-    /// @dev This function allows the contract owner to set the points for a specific Ethereum address.
-    /// @param _tokenId The ID of the membership NFT.
-    /// @param _loyaltyPoints The number of loyalty points to set for the specified NFT.
-    /// @param _tierPoints The number of tier points to set for the specified NFT.
-    function setPoints(uint256 _tokenId, uint40 _loyaltyPoints, uint40 _tierPoints) public onlyOperations {
-        _claimStakingRewards(_tokenId);
-        _setPoints(_tokenId, _loyaltyPoints, _tierPoints);
-        _claimTier(_tokenId);
-        _emitNftUpdateEvent(_tokenId);
-    }
-
-    function updatePointsParams(uint16 _newPointsBoostFactor, uint16 _newPointsGrowthRate) external onlyOperations {
-        pointsBoostFactor = _newPointsBoostFactor;
-        pointsGrowthRate = _newPointsGrowthRate;
-    }
-
     /// @dev set how many blocks a token is locked from trading for after withdrawing
-    function setWithdrawalLockBlocks(uint32 _blocks) external onlyOperations {
+    function setWithdrawalLockBlocks(uint32 _blocks) external onlyOperatingMultisig {
         withdrawalLockBlocks = _blocks;
     }
 
-    /// @notice Updates minimum valid deposit
-    /// @param _minDepositGwei minimum deposit in wei
-    /// @param _maxDepositTopUpPercent integer percentage value
-    function setDepositAmountParams(uint56 _minDepositGwei, uint8 _maxDepositTopUpPercent) external onlyOperations {
-        minDepositGwei = _minDepositGwei;
-        maxDepositTopUpPercent = _maxDepositTopUpPercent;
-    }
-
-    /// @notice Updates the time a user must wait between top ups
-    /// @param _newWaitTime the new time to wait between top ups
-    function setTopUpCooltimePeriod(uint32 _newWaitTime) external onlyOperations {
-        topUpCooltimePeriod = _newWaitTime;
-    }
-
-    function setFeeAmounts(uint256 _mintFeeAmount, uint256 _burnFeeAmount, uint256 _upgradeFeeAmount, uint16 _burnFeeWaiverPeriodInDays) external onlyOperations {
-        _feeAmountSanityCheck(_mintFeeAmount);
-        _feeAmountSanityCheck(_burnFeeAmount);
-        _feeAmountSanityCheck(_upgradeFeeAmount);
-        mintFee = uint16(_mintFeeAmount / 0.001 ether);
-        burnFee = uint16(_burnFeeAmount / 0.001 ether);
-        upgradeFee = uint16(_upgradeFeeAmount / 0.001 ether);
-        burnFeeWaiverPeriodInDays = _burnFeeWaiverPeriodInDays;
-    }
-
-    function setFanBoostThresholdEthAmount(uint256 _fanBoostThresholdEthAmount) external onlyOperations {
-        fanBoostThreshold = uint16(_fanBoostThresholdEthAmount / 0.001 ether);
-    }
-
     //Pauses the contract
-    function pauseContract() external onlyOperations {
+    function pauseContract() external onlyOperatingMultisig {
         _pause();
     }
 
     //Unpauses the contract
-    function unPauseContract() external onlyOperations {
+    function unPauseContract() external onlyOperatingMultisig {
         _unpause();
     }
 
     //--------------------------------------------------------------------------------------
     //-------------------------------  INTERNAL FUNCTIONS   --------------------------------
     //--------------------------------------------------------------------------------------
-    /**
-    * @dev Internal function to mint a new membership NFT.
-    * @param _to The address of the recipient of the NFT.
-    * @param _amount The amount of ETH to earn the staking rewards.
-    * @param _amountForPoints The amount of ETH to boost the points earnings.
-    * @param _loyaltyPoints The initial loyalty points for the NFT.
-    * @param _tierPoints The initial tier points for the NFT.
-    * @return tokenId The unique ID of the newly minted NFT.
-    */
-    function _mintMembershipNFT(address _to, uint256 _amount, uint256 _amountForPoints, uint40 _loyaltyPoints, uint40 _tierPoints) internal returns (uint256) {
-        uint256 tokenId = membershipNFT.nextMintTokenId();
-        uint8 tier = tierForPoints(_tierPoints);
-
-        uint8 version = 1;
-        tokenData[tokenId] = TokenData(0, _loyaltyPoints, _tierPoints, uint32(block.timestamp), 0, tier, version);
-
-        _deposit(tokenId, _amount, _amountForPoints);
-
-        // Finally, we mint the token!
-        if (tokenId != membershipNFT.mint(_to, 1)) revert WrongTokenMinted();
-
-        return tokenId;
-    }
-
-    function _deposit(uint256 _tokenId, uint256 _amount, uint256 _amountForPoints) internal {
-        if (_amountForPoints != 0) revert Deprecated();
-        uint8 tier = tokenData[_tokenId].tier;
-        uint256 eEthShare = liquidityPool.sharesForAmount(_amount + _amountForPoints);
-        uint96 vaultShare = uint96(vaultShareForEEthShare(tier, eEthShare));
-
-        _incrementTokenVaultShareV1(_tokenId, vaultShare);
-        _incrementTierVaultV1(tier, eEthShare, vaultShare);
-    }
-
-    function _topUpDeposit(uint256 _tokenId, uint128 _amount, uint128 _amountForPoints) internal returns (uint256) {
-        if (tokenData[_tokenId].version != 1) revert WrongVersion();
-
-        // subtract fee from provided ether. Will revert if not enough eth provided
-        uint256 upgradeFeeAmount = uint256(upgradeFee) * 0.001 ether;
-        uint256 additionalDeposit = msg.value - upgradeFeeAmount;
-        if (!canTopUp(_tokenId, additionalDeposit, _amount, _amountForPoints)) revert InvalidDeposit();
-
-        TokenData storage token = tokenData[_tokenId];
-        uint256 totalDeposit = ethAmountForVaultShare(token.tier, token.vaultShare);
-        uint256 maxDepositWithoutPenalty = (totalDeposit * maxDepositTopUpPercent) / 100;
-
-        _deposit(_tokenId, _amount, _amountForPoints);
-        token.prevTopUpTimestamp = uint32(block.timestamp);
-
-        // proportionally dilute tier points if over deposit threshold & update the tier
-        if (additionalDeposit > maxDepositWithoutPenalty) {
-            uint256 dilutedPoints = (totalDeposit * token.baseTierPoints) / (additionalDeposit + totalDeposit);
-            token.baseTierPoints = uint40(dilutedPoints);
-            _claimTier(_tokenId);
-        }
-
-        return additionalDeposit;
-    }
-
-    function _wrapEth(uint256 _amount, uint256 _amountForPoints, address _referral) internal returns (uint256) {
-        liquidityPool.deposit{value: _amount + _amountForPoints}(msg.sender, _referral);
-        uint256 tokenId = _mintMembershipNFT(msg.sender, _amount, _amountForPoints, 0, 0);
-        _emitNftUpdateEvent(tokenId);
-        return tokenId;
-    }
-
     function _withdrawAndBurn(uint256 _tokenId) internal returns (uint256, uint256) {
         if (tokenData[_tokenId].version != 1) revert WrongVersion();
 
         uint8 tier = tokenData[_tokenId].tier;
         uint256 vaultShare = tokenData[_tokenId].vaultShare;
         uint256 ethAmount = ethAmountForVaultShare(tier, vaultShare);
-        uint256 feeAmount = hasMetBurnFeeWaiverPeriod(_tokenId) ? 0 : uint256(burnFee) * 0.001 ether;
+        uint256 feeAmount = hasMetBurnFeeWaiverPeriod(_tokenId) ? 0 : uint256(burnFee) * FEE_UNIT;
         if (ethAmount < feeAmount) revert InsufficientBalance();
 
         _withdraw(_tokenId, ethAmount);
@@ -486,52 +270,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         _decrementTokenVaultShareV1(_tokenId, vaultShare);        
     }
 
-    // V0
-    function _incrementTokenDeposit(uint256 _tokenId, uint256 _amount) internal {
-        TokenDeposit memory deposit = tokenDeposits[_tokenId];
-        uint128 newAmount = deposit.amounts + uint128(_amount);
-        uint128 newShare = uint128(liquidityPool.sharesForAmount(newAmount));
-        tokenDeposits[_tokenId] = TokenDeposit(
-            newAmount,
-            newShare
-        );
-    }
-
-    function _decrementTokenDeposit(uint256 _tokenId, uint256 _amount) internal {
-        TokenDeposit memory deposit = tokenDeposits[_tokenId];
-        uint128 newAmount = deposit.amounts - uint128(_amount);
-        uint128 newShare = uint128(liquidityPool.sharesForAmount(newAmount));
-        tokenDeposits[_tokenId] = TokenDeposit(
-            newAmount,
-            newShare
-        );
-    }
-
-    function _incrementTierDeposit(uint256 _tier, uint256 _amount) internal {
-        TierDeposit memory deposit = tierDeposits[_tier];
-        uint128 newAmount = deposit.amounts + uint128(_amount);
-        uint128 newShare = uint128(liquidityPool.sharesForAmount(newAmount));
-        tierDeposits[_tier] = TierDeposit(
-            newAmount,
-            newShare
-        );
-    }
-
-    function _decrementTierDeposit(uint256 _tier, uint256 _amount) internal {
-        TierDeposit memory deposit = tierDeposits[_tier];
-        uint128 newAmount = deposit.amounts - uint128(_amount);
-        uint128 newShare = uint128(liquidityPool.sharesForAmount(newAmount));
-        tierDeposits[_tier] = TierDeposit(
-            newAmount,
-            newShare
-        );
-    }
-
     // V1
-    function _incrementTokenVaultShareV1(uint256 _tokenId, uint256 _share) internal {
-        tokenData[_tokenId].vaultShare += uint96(_share);
-    }
-
     function _decrementTokenVaultShareV1(uint256 _tokenId, uint256 _share) internal {
         tokenData[_tokenId].vaultShare -= uint96(_share);
     }
@@ -577,46 +316,6 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         token.prevPointsAccrualTimestamp = uint32(block.timestamp);
     }
 
-    /// @notice Claims the staking rewards for a specific membership NFT.
-    /// @dev This function allows users to claim the staking rewards earned by a specific membership NFT.
-    /// @param _tokenId The ID of the membership NFT.
-    function _claimStakingRewards(uint256 _tokenId) internal {
-        if (tokenData[_tokenId].version != 0) return;
-
-        TokenData storage token = tokenData[_tokenId];
-        uint256 tier = token.tier;
-        uint256 amount = membershipNFT.accruedStakingRewardsOf(_tokenId);
-        _incrementTokenDeposit(_tokenId, amount);
-        _incrementTierDeposit(tier, amount);
-        
-        token.vaultShare = tierData[tier].rewardsGlobalIndex;
-    }
-
-    function migrateFromV0ToV1(uint256 _tokenId) public {
-        claim(_tokenId);
-        _migrateFromV0ToV1(_tokenId);
-    }
-
-    function _migrateFromV0ToV1(uint256 _tokenId) internal {
-        if (tokenData[_tokenId].version != 0) return;
-        uint8 tier = tokenData[_tokenId].tier;
-        uint128 amount = tokenDeposits[_tokenId].amounts;
-
-        // Remove from V0
-        _decrementTokenDeposit(_tokenId, amount);
-        _decrementTierDeposit(tier, amount);
-
-        // Insert Into the Vault
-        uint256 eEthShare = liquidityPool.sharesForAmount(amount);
-        uint96 vaultShare = uint96(vaultShareForEEthShare(tier, eEthShare));
-        _incrementTierVaultV1(tier, eEthShare, vaultShare);
-
-        tokenData[_tokenId].vaultShare = vaultShare;
-        tokenData[_tokenId].version = 1;
-
-        delete tokenDeposits[_tokenId];
-    }
-
     function eEthShareForVaultShare(uint8 _tier, uint256 _vaultShare) public view returns (uint256) {
         uint256 amount;
         if (tierVaults[_tier].totalVaultShares == 0) {
@@ -648,7 +347,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     }
 
     function fanBoostThresholdEthAmount() public view returns (uint256) {
-        return uint256(fanBoostThreshold) * 0.001 ether;
+        return uint256(fanBoostThreshold) * FEE_UNIT;
     }
 
     function hasMetBurnFeeWaiverPeriod(uint256 _tokenId) public view returns (bool) {
@@ -662,10 +361,6 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
 
     function _requireTokenOwner(uint256 _tokenId) internal view {
         if (membershipNFT.balanceOfUser(msg.sender, _tokenId) != 1) revert OnlyTokenOwner();
-    }
-
-    function _feeAmountSanityCheck(uint256 _feeAmount) internal pure {
-        if (_feeAmount % 0.001 ether != 0 || _feeAmount / 0.001 ether > type(uint16).max) revert InvalidAmount();
     }
 
     function _min(uint256 _a, uint256 _b) internal pure returns (uint256) {
@@ -690,20 +385,13 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         uint40 degradeTierPenalty = curTierPoints - tierData[prevTier].requiredTierPoints;
 
         // point deduction if scaled proportional to withdrawal amount
-        uint256 ratio = (10000 * _withdrawalAmount) / _prevAmount;
-        uint40 scaledTierPointsPenalty = uint40((ratio * curTierPoints) / 10000);
+        uint256 ratio = (BASIS_POINTS_DENOMINATOR * _withdrawalAmount) / _prevAmount;
+        uint40 scaledTierPointsPenalty = uint40((ratio * curTierPoints) / BASIS_POINTS_DENOMINATOR);
 
         uint40 penalty = uint40(_max(degradeTierPenalty, scaledTierPointsPenalty));
 
         token.baseTierPoints -= penalty;
         _claimTier(_tokenId);
-    }
-
-    function _setPoints(uint256 _tokenId, uint40 _loyaltyPoints, uint40 _tierPoints) internal {
-        TokenData storage token = tokenData[_tokenId];
-        token.baseLoyaltyPoints = _loyaltyPoints;
-        token.baseTierPoints = _tierPoints;
-        token.prevPointsAccrualTimestamp = uint32(block.timestamp);
     }
 
     function _emitNftUpdateEvent(uint256 _tokenId) internal {
@@ -740,9 +428,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         return uint256(1 gwei) * minDepositGwei;
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     //--------------------------------------------------------------------------------------
     //--------------------------------------  GETTER  --------------------------------------
@@ -750,7 +436,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
 
     // returns (mintFeeAmount, burnFeeAmount, upgradeFeeAmount)
     function getFees() external view returns (uint256 mintFeeAmount, uint256 burnFeeAmount, uint256 upgradeFeeAmount) {
-        return (uint256(mintFee) * 0.001 ether, uint256(burnFee) * 0.001 ether, uint256(upgradeFee) * 0.001 ether);
+        return (uint256(mintFee) * FEE_UNIT, uint256(burnFee) * FEE_UNIT, uint256(upgradeFee) * FEE_UNIT);
     }
 
     function rewardsGlobalIndex(uint8 _tier) external view returns (uint256) {
@@ -767,11 +453,6 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
 
     modifier nonBlacklisted() {
         blacklister.nonBlacklisted(msg.sender);
-        _;
-    }
-
-    modifier onlyOperations() {
-        if (!roleRegistry.hasRole(MEMBERSHIP_MANAGER_OPERATIONS_ROLE, msg.sender)) revert IncorrectRole();
         _;
     }
 }

@@ -16,6 +16,7 @@ contract RoleRegistryTest is Test {
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+    bytes32 public constant UPGRADE_TIMELOCK_ROLE = keccak256("UPGRADE_TIMELOCK_ROLE");
 
    event RoleSet(address indexed holder, uint256 indexed role, bool indexed active);
 
@@ -40,6 +41,9 @@ contract RoleRegistryTest is Test {
         );
 
         registry = RoleRegistry(address(proxy));
+
+        vm.prank(owner);
+        registry.grantRole(UPGRADE_TIMELOCK_ROLE, owner);
     }
     
     function test_Initialization() public {
@@ -132,7 +136,7 @@ contract RoleRegistryTest is Test {
         
         // Only owner can upgrade
         vm.prank(user1);
-        vm.expectRevert(RoleRegistry.OnlyProtocolUpgrader.selector);
+        vm.expectRevert(RoleRegistry.OnlyUpgradeTimelock.selector);
         registry.upgradeTo(address(newImplementation));
         
         // Owner can upgrade

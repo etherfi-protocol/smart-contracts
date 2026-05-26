@@ -13,9 +13,9 @@ import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/IProtocolRevenueManager.sol";
 import "./interfaces/IStakingManager.sol";
-import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IEtherFiRateLimiter.sol";
 import "./utils/PausableUntil.sol";
+import "./utils/RolesLibrary.sol";
 
 contract EtherFiNodesManager is
     Initializable,
@@ -24,11 +24,11 @@ contract EtherFiNodesManager is
     PausableUpgradeable,
     PausableUntil,
     ReentrancyGuardUpgradeable,
-    UUPSUpgradeable
+    UUPSUpgradeable,
+    RolesLibrary
 {
 
     IStakingManager public immutable stakingManager;
-    IRoleRegistry public immutable roleRegistry;
     IEtherFiRateLimiter public immutable rateLimiter;
     address public constant BEACON_ETH_STRATEGY_ADDRESS = address(0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0);
 
@@ -48,29 +48,27 @@ contract EtherFiNodesManager is
     bytes32 public constant CONSOLIDATION_REQUEST_LIMIT_ID = keccak256("CONSOLIDATION_REQUEST_LIMIT_ID");
     // maximum exitable balance in gwei
     uint256 public constant FULL_EXIT_GWEI = 2_048_000_000_000;
+    uint256 public constant VALIDATOR_PUBKEY_LENGTH = 48;
 
     //-------------------------------------------------------------------------
     //-----------------------------  Admin  -----------------------------------
     //-------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _stakingManager, address _roleRegistry, address _rateLimiter) {
+    constructor(address _stakingManager, address _roleRegistry, address _rateLimiter) RolesLibrary(_roleRegistry) {
         stakingManager = IStakingManager(_stakingManager);
-        roleRegistry = IRoleRegistry(_roleRegistry);
         rateLimiter = IEtherFiRateLimiter(_rateLimiter);
 
         _disableInitializers();
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override {
-        roleRegistry.onlyProtocolUpgrader(msg.sender);
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
-    function pauseContract() external onlyOperations {
+    function pauseContract() external onlyOperatingMultisig {
         _pause();
     }
 
-    function unPauseContract() external onlyOperations {
+    function unPauseContract() external onlyOperatingMultisig {
         _unpause();
     }
 
@@ -78,7 +76,7 @@ contract EtherFiNodesManager is
         _pauseUntil();
     }
 
-    function unpauseContractUntil() external onlyOperations {
+    function unpauseContractUntil() external onlyOperatingMultisig {
         _unpauseUntil();
     }
 
@@ -88,7 +86,7 @@ contract EtherFiNodesManager is
 
     /// @dev under normal conditions ETH should not accumulate in the EtherFiNode. This will forward
     ///   the eth to the liquidity pool in the event of ETH being accidentally sent there
-    function sweepFunds(uint256 id) external onlyEigenlayerAdmin whenNotPaused {
+    function sweepFunds(uint256 id) external onlyHousekeepingOperations whenNotPaused {
         address nodeAddr = etherfiNodeAddress(id);
         uint256 balance = IEtherFiNode(nodeAddr).sweepFunds();
         if(balance > 0) {
@@ -120,44 +118,44 @@ contract EtherFiNodesManager is
         return getEigenPod(etherfiNodeAddress(id));
     }
 
-    function startCheckpoint(address node) public onlyPodProver whenNotPaused {
+    function startCheckpoint(address node) public onlyEigenpodOperations whenNotPaused {
         _validateNode(node);
         IEtherFiNode(node).startCheckpoint();
     }
     
-    function startCheckpoint(uint256 id) external onlyPodProver whenNotPaused {
+    function startCheckpoint(uint256 id) external onlyEigenpodOperations whenNotPaused {
         startCheckpoint(etherfiNodeAddress(id));
     }
 
-    function verifyCheckpointProofs(address node, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) public onlyPodProver whenNotPaused {
+    function verifyCheckpointProofs(address node, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) public onlyEigenpodOperations whenNotPaused {
         _validateNode(node);
         IEtherFiNode(node).verifyCheckpointProofs(balanceContainerProof, proofs);
     }
     
-    function verifyCheckpointProofs(uint256 id, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external onlyPodProver whenNotPaused {
+    function verifyCheckpointProofs(uint256 id, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external onlyEigenpodOperations whenNotPaused {
         verifyCheckpointProofs(etherfiNodeAddress(id), balanceContainerProof, proofs);
     }
 
-    function setProofSubmitter(address node, address proofSubmitter) public onlyEigenlayerAdmin whenNotPaused {
+    function setProofSubmitter(address node, address proofSubmitter) public onlyOperatingMultisig whenNotPaused {
         _validateNode(node);
         IEtherFiNode(node).setProofSubmitter(proofSubmitter);
     }
     
-    function setProofSubmitter(uint256 id, address proofSubmitter) external onlyEigenlayerAdmin whenNotPaused {
+    function setProofSubmitter(uint256 id, address proofSubmitter) external onlyOperatingMultisig whenNotPaused {
         setProofSubmitter(etherfiNodeAddress(id), proofSubmitter);
     }
 
-    function queueETHWithdrawal(address node, uint256 amount) public onlyEigenlayerAdmin whenNotPaused returns (bytes32 withdrawalRoot) {
+    function queueETHWithdrawal(address node, uint256 amount) public onlyExecutorOperations whenNotPaused returns (bytes32 withdrawalRoot) {
         _validateNode(node);
         rateLimiter.consume(UNRESTAKING_LIMIT_ID, SafeCast.toUint64(amount / 1 gwei));
         return IEtherFiNode(node).queueETHWithdrawal(amount);
     }
     
-    function queueETHWithdrawal(uint256 id, uint256 amount) external onlyEigenlayerAdmin whenNotPaused returns (bytes32 withdrawalRoot) {
+    function queueETHWithdrawal(uint256 id, uint256 amount) external onlyExecutorOperations whenNotPaused returns (bytes32 withdrawalRoot) {
         return queueETHWithdrawal(etherfiNodeAddress(id), amount);
     }
 
-    function completeQueuedETHWithdrawals(address node, bool receiveAsTokens) public onlyEigenlayerAdmin whenNotPaused {
+    function completeQueuedETHWithdrawals(address node, bool receiveAsTokens) public onlyHousekeepingOperations whenNotPaused {
         _validateNode(node);
         uint256 balance = IEtherFiNode(node).completeQueuedETHWithdrawals(receiveAsTokens);
         if(balance > 0) {
@@ -165,22 +163,22 @@ contract EtherFiNodesManager is
         }
     }
     
-    function completeQueuedETHWithdrawals(uint256 id, bool receiveAsTokens) external onlyEigenlayerAdmin whenNotPaused {
+    function completeQueuedETHWithdrawals(uint256 id, bool receiveAsTokens) external onlyHousekeepingOperations whenNotPaused {
         completeQueuedETHWithdrawals(etherfiNodeAddress(id), receiveAsTokens);
     }
 
-    function queueWithdrawals(address node, IDelegationManager.QueuedWithdrawalParams[] calldata params) public onlyEigenlayerAdmin whenNotPaused {
+    function queueWithdrawals(address node, IDelegationManager.QueuedWithdrawalParams[] calldata params) public onlyExecutorOperations whenNotPaused {
         _validateNode(node);
         // need to rate limit any beacon eth being withdrawn
         rateLimiter.consume(UNRESTAKING_LIMIT_ID, SafeCast.toUint64(sumRestakingETHWithdrawals(params) / 1 gwei));
         IEtherFiNode(node).queueWithdrawals(params);
     }
     
-    function queueWithdrawals(uint256 id, IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyEigenlayerAdmin whenNotPaused {
+    function queueWithdrawals(uint256 id, IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyExecutorOperations whenNotPaused {
         queueWithdrawals(etherfiNodeAddress(id), params);
     }
 
-    function completeQueuedWithdrawals(address node, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) public onlyEigenlayerAdmin whenNotPaused {
+    function completeQueuedWithdrawals(address node, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) public onlyHousekeepingOperations whenNotPaused {
         _validateNode(node);
         uint256 balance = IEtherFiNode(node).completeQueuedWithdrawals(withdrawals, tokens, receiveAsTokens);
         if (balance > 0) {
@@ -188,7 +186,7 @@ contract EtherFiNodesManager is
         }
     }
     
-    function completeQueuedWithdrawals(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external onlyEigenlayerAdmin whenNotPaused {
+    function completeQueuedWithdrawals(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external onlyHousekeepingOperations whenNotPaused {
         completeQueuedWithdrawals(etherfiNodeAddress(id), withdrawals, tokens, receiveAsTokens);
     }
 
@@ -218,7 +216,7 @@ contract EtherFiNodesManager is
      *        - amountGwei: 0 for full exit, >0 for partial to pod
      * @custom:fee Send EXACT ETH to cover sum of (feePerPod * requestsForPod).
      */
-    function requestExecutionLayerTriggeredWithdrawal(IEigenPod.WithdrawalRequest[] calldata requests) external payable onlyConsolidationExecutor whenNotPaused nonReentrant {
+    function requestExecutionLayerTriggeredWithdrawal(IEigenPod.WithdrawalRequest[] calldata requests) external payable nonReentrant onlyExecutorOperations whenNotPaused {
         if (requests.length == 0) revert EmptyWithdrawalsRequest();
 
         // rate limit the amount of the that can be withdrawn from beacon chain
@@ -262,7 +260,7 @@ contract EtherFiNodesManager is
      * @dev EigenLayer validates that validators belong to the pod automatically.
      * @custom:fee Send EXACT ETH to cover consolidation fees.
      */
-    function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable onlyConsolidationExecutor whenNotPaused nonReentrant {
+    function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable nonReentrant onlyExecutorOperations whenNotPaused {
         if (requests.length == 0) revert EmptyConsolidationRequest();
 
         // rate limit consolidation requests - each request could affect up to FULL_EXIT_GWEI
@@ -324,7 +322,7 @@ contract EtherFiNodesManager is
 
     ///@notice Calculates the pubkey hash of a validator's pubkey as per SSZ spec
     function calculateValidatorPubkeyHash(bytes memory pubkey) public pure returns (bytes32) {
-        if (pubkey.length != 48) revert InvalidPubKeyLength();
+        if (pubkey.length != VALIDATOR_PUBKEY_LENGTH) revert InvalidPubKeyLength();
         return sha256(abi.encodePacked(pubkey, bytes16(0)));
     }
 
@@ -373,7 +371,7 @@ contract EtherFiNodesManager is
 
     /// @dev this method is for linking our old legacy validator ids that were created before
     ///    we started tracking the pubkeys onchain. We can delete this method once we have linked all of our legacy validators
-    function linkLegacyValidatorIds(uint256[] calldata validatorIds, bytes[] calldata pubkeys) external onlyConsolidationExecutor {
+    function linkLegacyValidatorIds(uint256[] calldata validatorIds, bytes[] calldata pubkeys) external onlyExecutorOperations {
         if (validatorIds.length != pubkeys.length) revert LengthMismatch();
         for (uint256 i = 0; i < validatorIds.length; i++) {
 
@@ -415,7 +413,7 @@ contract EtherFiNodesManager is
     }
 
     /// @notice forward a whitelisted call to a whitelisted external contract with the EtherFiNode as the caller
-    function forwardExternalCall(address[] calldata nodes, bytes[] calldata data, address target) external onlyPodProver whenNotPaused returns (bytes[] memory returnData) {
+    function forwardExternalCall(address[] calldata nodes, bytes[] calldata data, address target) external onlyEigenpodOperations whenNotPaused returns (bytes[] memory returnData) {
         if (nodes.length != data.length) revert InvalidForwardedCall();
 
         returnData = new bytes[](nodes.length);
@@ -435,7 +433,7 @@ contract EtherFiNodesManager is
 
     /// @notice forward a whitelisted call to the associated eigenPod of the EtherFiNode with the EtherFiNode as the caller.
     ///   This serves to allow us to support minor eigenlayer upgrades without needing to immediately upgrade our contracts.
-    function forwardEigenPodCall(address[] calldata nodes, bytes[] calldata data) external onlyPodProver whenNotPaused returns (bytes[] memory returnData) {
+    function forwardEigenPodCall(address[] calldata nodes, bytes[] calldata data) external onlyEigenpodOperations whenNotPaused returns (bytes[] memory returnData) {
         if (nodes.length != data.length) revert InvalidForwardedCall();
 
         returnData = new bytes[](nodes.length);
@@ -464,36 +462,6 @@ contract EtherFiNodesManager is
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
     //--------------------------------------------------------------------------------------
-
-    modifier onlyAdmin() {
-        roleRegistry.onlyOperatingTimelock(msg.sender);
-        _;
-    }
-
-    modifier onlyOperations() {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
-        _;
-    }
-
-    modifier onlyGuardian() {
-        roleRegistry.onlyGuardian(msg.sender);
-        _;
-    }
-
-    modifier onlyEigenlayerAdmin() {
-        if (!roleRegistry.hasRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
-        _;
-    }
-
-    modifier onlyConsolidationExecutor() {
-        if (!roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
-        _;
-    }
-
-    modifier onlyPodProver() {
-        if (!roleRegistry.hasRole(roleRegistry.EIGENPOD_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
-        _;
-    }
 
     /// @dev Route OZ's whenNotPaused through the pause-until check as well, so any function
     ///      gated by whenNotPaused is automatically blocked during a timed pause too.
