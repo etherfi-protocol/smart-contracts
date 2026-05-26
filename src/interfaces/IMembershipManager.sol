@@ -52,7 +52,6 @@ interface IMembershipManager {
     function rewardsGlobalIndex(uint8 _tier) external view returns (uint256);
     function allTimeHighDepositAmount(uint256 _tokenId) external view returns (uint256);
     function tierForPoints(uint40 _tierPoints) external view returns (uint8);
-    function canTopUp(uint256 _tokenId, uint256 _totalAmount, uint128 _amount, uint128 _amountForPoints) external view returns (bool);
     function pointsBoostFactor() external view returns (uint16);
     function pointsGrowthRate() external view returns (uint16);
     function maxDepositTopUpPercent() external view returns (uint8);
