@@ -52,7 +52,9 @@ contract ConsolidationThroughEOATest is Test {
         vm.prank(roleRegistry.owner());
         etherFiNodesManager.upgradeTo(address(newEtherFiNodesManagerImpl));
 
-        address newRateLimiterImpl = address(new EtherFiRateLimiter(address(roleRegistry)));
+        // Upgrade the on-chain rate limiter so it uses the consolidated role model
+        // and the new per-address bucket API (3-arg constructor takes eETH/weETH).
+        address newRateLimiterImpl = address(new EtherFiRateLimiter(address(roleRegistry), 0x35fA164735182de50811E8e2E824cFb9B6118ac2, 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee));
         vm.prank(roleRegistry.owner());
         EtherFiRateLimiter(address(rateLimiter)).upgradeTo(newRateLimiterImpl);
 

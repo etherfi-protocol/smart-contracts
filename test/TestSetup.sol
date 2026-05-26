@@ -558,8 +558,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         // Upgrade EtherFiRateLimiter on the fork — the on-chain impl still checks
         // ETHERFI_RATE_LIMITER_ADMIN_ROLE, which the consolidated role model no
-        // longer uses.
-        address newRateLimiterImpl = address(new EtherFiRateLimiter(address(roleRegistryInstance)));
+        // longer uses, and predates the per-address bucket immutables.
+        address newRateLimiterImpl = address(new EtherFiRateLimiter(address(roleRegistryInstance), address(eETHInstance), address(weEthInstance)));
         vm.prank(roleRegistryInstance.owner());
         rateLimiterInstance.upgradeTo(newRateLimiterImpl);
 
@@ -759,24 +759,13 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             liquidityPoolInstance.initializeOnUpgradeV2();
         }
 
-        // The just-upgraded WeETH calls the rate limiter on mint/burn/transfer.
-        // Create its buckets with effectively unbounded capacity so generic fork
-        // tests that don't care about rate-limit behaviour don't revert on
-        // UnknownLimit. Done AFTER role grants because `createNewLimiter` is
-        // OPERATION_TIMELOCK-gated.
-        bytes32[3] memory weethRateIds = [
-            weEthInstance.WEETH_MINT_LIMIT_ID(),
-            weEthInstance.WEETH_BURN_LIMIT_ID(),
-            weEthInstance.WEETH_TRANSFER_LIMIT_ID()
-        ];
-        uint64 _rateMax = type(uint64).max;
+        // The upgraded WeETH/EETH still have global MINT/BURN circuit-breaker
+        // buckets (plus the new opt-in per-address buckets for transfers).
+        // Bootstrap MINT/BURN at unbounded capacity on the fork so generic
+        // tests don't revert UnknownLimit. Pranked as `owner` which holds
+        // OPERATION_TIMELOCK_ROLE in the upgraded role model.
         vm.startPrank(owner);
-        for (uint256 i = 0; i < weethRateIds.length; i++) {
-            if (!rateLimiterInstance.limitExists(weethRateIds[i])) {
-                rateLimiterInstance.createNewLimiter(weethRateIds[i], _rateMax, _rateMax);
-            }
-            rateLimiterInstance.updateConsumers(weethRateIds[i], address(weEthInstance), true);
-        }
+        _setupGlobalMintBurnBuckets();
         vm.stopPrank();
     }
 
@@ -897,13 +886,10 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // Grant UPGRADE_TIMELOCK_ROLE to `owner` up-front so every later upgradeTo
         // pranked as `owner` (and the proxy-owner pranks below, which also resolve
         // to `owner` here) passes the new `onlyUpgradeTimelock` check on
-        // `_authorizeUpgrade`.
+        // `_authorizeUpgrade`. The rate limiter itself is constructed in Phase 2
+        // below, after the eETH/weETH proxies are predeployed — its constructor
+        // takes them as immutables.
         roleRegistryInstance.grantRole(roleRegistryInstance.UPGRADE_TIMELOCK_ROLE(), owner);
-
-        rateLimiterImplementation = new EtherFiRateLimiter(address(roleRegistryInstance));
-        rateLimiterProxy = new UUPSProxy(address(rateLimiterImplementation), "");
-        rateLimiterInstance = EtherFiRateLimiter(address(rateLimiterProxy));
-        rateLimiterInstance.initialize();
 
         blacklisterImplementation = new Blacklister(address(roleRegistryInstance));
         blacklisterInstance = Blacklister(address(new UUPSProxy(address(blacklisterImplementation), abi.encodeWithSelector(Blacklister.initialize.selector))));
@@ -956,6 +942,15 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         weETHProxy = new UUPSProxy(address(placeholderImpl), "");
         weEthInstance = WeETH(address(weETHProxy));
+
+        // EtherFiRateLimiter takes eETH/weETH as immutables now — it must be
+        // constructed AFTER those proxies are predeployed but BEFORE any contract
+        // that takes the rate limiter as a constructor immutable (eETH, weETH, LP,
+        // EtherFiNodesManager, ...).
+        rateLimiterImplementation = new EtherFiRateLimiter(address(roleRegistryInstance), address(eETHProxy), address(weETHProxy));
+        rateLimiterProxy = new UUPSProxy(address(rateLimiterImplementation), "");
+        rateLimiterInstance = EtherFiRateLimiter(address(rateLimiterProxy));
+        rateLimiterInstance.initialize();
 
         membershipNftProxy = new UUPSProxy(address(placeholderImpl), "");
         membershipNftInstance = MembershipNFT(payable(membershipNftProxy));
@@ -1172,8 +1167,12 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // EETH/WEETH operating admin consolidated into OPERATION_MULTISIG_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), admin);
 
-        // Bootstrap EETH/WeETH rate-limit buckets and consumer whitelists for tests.
-        _setupTokenRateLimits();
+        // Per-address rate-limit buckets are opt-in (Guardian creates them on demand).
+        // The global MINT/BURN buckets ARE required — eETH/weETH call consumeToken
+        // on every supply change and that reverts UnknownLimit if the bucket is missing.
+        // Bootstrap at unbounded capacity here so generic tests aren't rate-limited;
+        // rate-limit-specific tests override capacity/refill via the admin path.
+        _setupGlobalMintBurnBuckets();
 
         vm.stopPrank();
         vm.prank(alice);
@@ -1478,41 +1477,30 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         address newWeETHImpl = address(new WeETH(address(eETHInstance), address(liquidityPoolInstance), address(roleRegistryInstance), address(blacklisterInstance), address(rateLimiterInstance)));
         vm.prank(owner);
         weEthInstance.upgradeTo(newWeETHImpl);
-
-        // The upgraded weETH calls the rate limiter on mint/burn/transfer; create the
-        // buckets and whitelist the token so fork tests don't revert on UnknownLimit.
-        uint64 maxUint64 = type(uint64).max;
-        bytes32[3] memory weethIds = [
-            weEthInstance.WEETH_MINT_LIMIT_ID(),
-            weEthInstance.WEETH_BURN_LIMIT_ID(),
-            weEthInstance.WEETH_TRANSFER_LIMIT_ID()
-        ];
+        // The upgraded weETH calls consumeToken(WEETH_{MINT,BURN}_LIMIT_ID, ...)
+        // on every mint/burn; bootstrap those at unbounded capacity for fork tests.
+        // Caller has no active prank here, so prank as `owner` (granted OPERATION_TIMELOCK_ROLE upstream).
         vm.startPrank(owner);
-        for (uint256 i = 0; i < weethIds.length; i++) {
-            if (!rateLimiterInstance.limitExists(weethIds[i])) {
-                rateLimiterInstance.createNewLimiter(weethIds[i], maxUint64, maxUint64);
-            }
-            rateLimiterInstance.updateConsumers(weethIds[i], address(weEthInstance), true);
-        }
+        _setupGlobalMintBurnBuckets();
         vm.stopPrank();
     }
 
-    /// @dev Idempotently creates the 6 EETH/WeETH rate-limit buckets with effectively
-    /// unbounded capacity and whitelists the token contracts as consumers. Tests that
-    /// want to exercise rate-limit behavior should override capacity/refill via the
-    /// rate limiter's admin functions before calling the rate-limited path.
-    function _setupTokenRateLimits() internal {
+    /// @dev Idempotently creates the 4 global MINT/BURN buckets at unbounded capacity
+    ///      and whitelists eETH/weETH as consumers of their respective IDs. IDs are
+    ///      computed via keccak256 directly so this works even on the realistic-fork
+    ///      path where eETH isn't upgraded yet (calling `eETHInstance.EETH_MINT_LIMIT_ID()`
+    ///      on the deployed impl would revert with "unrecognized selector").
+    ///      Caller must already be pranked as a holder of OPERATION_TIMELOCK_ROLE.
+    function _setupGlobalMintBurnBuckets() internal {
         uint64 maxUint64 = type(uint64).max;
-        bytes32[3] memory eethIds = [
-            eETHInstance.EETH_MINT_LIMIT_ID(),
-            eETHInstance.EETH_BURN_LIMIT_ID(),
-            eETHInstance.EETH_TRANSFER_LIMIT_ID()
-        ];
-        bytes32[3] memory weethIds = [
-            weEthInstance.WEETH_MINT_LIMIT_ID(),
-            weEthInstance.WEETH_BURN_LIMIT_ID(),
-            weEthInstance.WEETH_TRANSFER_LIMIT_ID()
-        ];
+        bytes32 eethMintId   = keccak256("EETH_MINT_LIMIT_ID");
+        bytes32 eethBurnId   = keccak256("EETH_BURN_LIMIT_ID");
+        bytes32 weethMintId  = keccak256("WEETH_MINT_LIMIT_ID");
+        bytes32 weethBurnId  = keccak256("WEETH_BURN_LIMIT_ID");
+
+        bytes32[2] memory eethIds  = [eethMintId,  eethBurnId];
+        bytes32[2] memory weethIds = [weethMintId, weethBurnId];
+
         for (uint256 i = 0; i < eethIds.length; i++) {
             if (!rateLimiterInstance.limitExists(eethIds[i])) {
                 rateLimiterInstance.createNewLimiter(eethIds[i], maxUint64, maxUint64);

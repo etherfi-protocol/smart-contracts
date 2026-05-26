@@ -110,7 +110,7 @@ contract ELExitsForkTestingDeploymentTest is Test {
     function _deployRateLimiter() internal {
         console2.log("--- Step 1: Deploying EtherFiRateLimiter (New Contract) ---");
 
-        EtherFiRateLimiter rateLimiterImpl = new EtherFiRateLimiter(address(roleRegistry));
+        EtherFiRateLimiter rateLimiterImpl = new EtherFiRateLimiter(address(roleRegistry), 0x35fA164735182de50811E8e2E824cFb9B6118ac2, 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee);
         console2.log("Rate limiter implementation:", address(rateLimiterImpl));
 
         UUPSProxy rateLimiterProxy = new UUPSProxy(address(rateLimiterImpl), "");

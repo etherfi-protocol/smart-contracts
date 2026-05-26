@@ -58,7 +58,7 @@ contract PectraUpgradeBytecode is Script {
         EtherFiNode etherFiNodeImplementation = new EtherFiNode(address(liquidityPoolProxy), address(etherFiNodesManagerProxy), address(eigenPodManager), address(delegationManager));
         EtherFiNodesManager etherFiNodesManagerImplementation = new EtherFiNodesManager(address(stakingManagerProxy), address(roleRegistryProxy), address(rateLimiterProxy));
         StakingManager stakingManagerImplementation = new StakingManager(address(liquidityPoolProxy), address(etherFiNodesManagerProxy), address(stakingDepositContract), address(auctionManager), address(etherFiNodeBeacon), address(roleRegistryProxy));
-        EtherFiRateLimiter rateLimiterImplementation = new EtherFiRateLimiter(address(roleRegistryProxy));
+        EtherFiRateLimiter rateLimiterImplementation = new EtherFiRateLimiter(address(roleRegistryProxy), 0x35fA164735182de50811E8e2E824cFb9B6118ac2, 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee);
 
         console.log("Rate limiter implementation:", address(rateLimiterImplementation));
         console.log("Etherfi node implementation:", address(etherFiNodeImplementation));
