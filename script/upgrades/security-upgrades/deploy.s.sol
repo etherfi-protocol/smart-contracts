@@ -24,8 +24,10 @@ import {RestakingRewardsRouter} from "../../../src/RestakingRewardsRouter.sol";
 import {StakingManager} from "../../../src/StakingManager.sol";
 import {WeETH as WeETHToken} from "../../../src/WeETH.sol";
 import {WithdrawRequestNFT} from "../../../src/WithdrawRequestNFT.sol";
+import {RoleRegistry} from "../../../src/RoleRegistry.sol";
 
 import {Blacklister} from "../../../src/helpers/Blacklister.sol";
+import {RevokeAdmin} from "../../../src/helpers/RevokeAdmin.sol";
 import {WeETHWithdrawAdapter} from "../../../src/helpers/WeETHWithdrawAdapter.sol";
 import {UUPSProxy} from "../../../src/UUPSProxy.sol";
 
@@ -35,7 +37,8 @@ import {Utils, ICreate2Factory} from "../../utils/utils.sol";
 /**
  * 26Q2 Security Upgrades — Deployment
  *
- * Deploys all new implementations for PR #385 plus the Blacklister proxy.
+ * Deploys all new implementations for PR #385 plus the Blacklister and RevokeAdmin proxies
+ * and a new RoleRegistry impl (wired to the RevokeAdmin proxy via its `revokeAdmin` immutable).
  * Configuration / upgrades are handled by transactions.s.sol.
  *
  * Usage:
@@ -105,6 +108,11 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
     address public blacklisterImpl;
     address public blacklisterProxy;
 
+    address public revokeAdminImpl;
+    address public revokeAdminProxy;
+
+    address public roleRegistryImpl;
+
     // Peripheral UUPS proxies modified by PR #385 — new impls only, existing proxies are reused.
     address public priorityWithdrawalQueueImpl;
     address public etherFiRewardsRouterImpl;
@@ -136,6 +144,34 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
             blacklisterProxy = deploy(name, args, bc, commitHashSalt, true, factory);
         }
         console2.log("Blacklister proxy:", blacklisterProxy);
+
+        // 1b. RevokeAdmin proxy — RoleRegistry.revokeAdmin (immutable) is wired to this
+        //     address when the registry impl is (re)deployed, enabling revokeFast().
+        {
+            string memory name = "RevokeAdmin";
+            bytes memory args = abi.encode(ROLE_REGISTRY);
+            bytes memory bc = abi.encodePacked(type(RevokeAdmin).creationCode, args);
+            revokeAdminImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+        }
+        {
+            string memory name = "UUPSProxy";
+            bytes memory initData = abi.encodeWithSelector(RevokeAdmin.initialize.selector);
+            bytes memory args = abi.encode(revokeAdminImpl, initData);
+            bytes memory bc = abi.encodePacked(type(UUPSProxy).creationCode, args);
+            revokeAdminProxy = deploy(name, args, bc, commitHashSalt, true, factory);
+        }
+        console2.log("RevokeAdmin proxy:", revokeAdminProxy);
+
+        // 1c. New RoleRegistry impl — bakes the RevokeAdmin proxy into the `revokeAdmin`
+        //     immutable (set in the constructor). transactions.s.sol upgrades the
+        //     ROLE_REGISTRY proxy to this impl BEFORE every other proxy.
+        {
+            string memory name = "RoleRegistry";
+            bytes memory args = abi.encode(revokeAdminProxy);
+            bytes memory bc = abi.encodePacked(type(RoleRegistry).creationCode, args);
+            roleRegistryImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+        }
+        console2.log("RoleRegistry impl:", roleRegistryImpl);
 
         // 2. Implementations
         {
@@ -414,6 +450,9 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
         console2.log("================================================");
         console2.log("Blacklister impl:               ", blacklisterImpl);
         console2.log("Blacklister proxy:              ", blacklisterProxy);
+        console2.log("RevokeAdmin impl:               ", revokeAdminImpl);
+        console2.log("RevokeAdmin proxy:              ", revokeAdminProxy);
+        console2.log("RoleRegistry impl:              ", roleRegistryImpl);
         console2.log("EETH impl:                      ", eEthImpl);
         console2.log("WeETH impl:                     ", weEthImpl);
         console2.log("LiquidityPool impl:             ", liquidityPoolImpl);

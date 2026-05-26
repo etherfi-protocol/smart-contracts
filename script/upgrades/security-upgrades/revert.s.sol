@@ -18,8 +18,9 @@ import {Utils} from "../../utils/utils.sol";
  * Limits of what this script reverts:
  *
  *   IT REVERTS:
- *     - The ERC1967 implementation slot on each of the 22 proxies. After
- *       execution, each proxy delegates to the original impl address again.
+ *     - The ERC1967 implementation slot on each of the 22 proxies plus the
+ *       RoleRegistry. After execution, each proxy delegates to the original
+ *       impl address again. RoleRegistry is reverted last (see executeRevert).
  *
  *   IT DOES NOT REVERT:
  *     - The one-shot post-upgrade migration calls
@@ -35,8 +36,8 @@ import {Utils} from "../../utils/utils.sol";
  *     - LP min/max withdraw bounds seeded by executeLpWithdrawBounds().
  *
  * If you need any of the above undone, write a separate operation. This
- * script intentionally has the smallest possible blast radius: 22
- * `upgradeTo(oldImpl)` calls.
+ * script intentionally has the smallest possible blast radius: 23
+ * `upgradeTo(oldImpl)` calls (22 proxies + RoleRegistry).
  *
  * Every PRE_* constant below must be refreshed from the current mainnet
  * ERC1967 implementation slot before broadcasting. _preflight() reverts if
@@ -76,6 +77,7 @@ contract SecurityUpgradesRevertScript is Script, Deployed, Utils {
     address constant PRE_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR = address(0);
     address constant PRE_DEPOSIT_ADAPTER                     = address(0);
     address constant PRE_WEETH_WITHDRAW_ADAPTER              = address(0);
+    address constant PRE_ROLE_REGISTRY                       = address(0);
 
     EtherFiTimelock constant upgradeTimelock = EtherFiTimelock(payable(UPGRADE_TIMELOCK));
     uint256 constant UPGRADE_TIMELOCK_DELAY = 10 days;
@@ -120,6 +122,7 @@ contract SecurityUpgradesRevertScript is Script, Deployed, Utils {
         require(PRE_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR != address(0), "preflight: PRE_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR unset");
         require(PRE_DEPOSIT_ADAPTER                     != address(0), "preflight: PRE_DEPOSIT_ADAPTER unset");
         require(PRE_WEETH_WITHDRAW_ADAPTER              != address(0), "preflight: PRE_WEETH_WITHDRAW_ADAPTER unset");
+        require(PRE_ROLE_REGISTRY                       != address(0), "preflight: PRE_ROLE_REGISTRY unset");
     }
 
     /// @notice Sanity check: every proxy is currently NOT on the pre-upgrade
@@ -149,7 +152,8 @@ contract SecurityUpgradesRevertScript is Script, Deployed, Utils {
         _assertNotAlreadyOnPre(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR, PRE_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR, "CumulativeMerkleRewardsDistributor");
         _assertNotAlreadyOnPre(DEPOSIT_ADAPTER,                     PRE_DEPOSIT_ADAPTER,                     "DepositAdapter");
         _assertNotAlreadyOnPre(WEETH_WITHDRAW_ADAPTER,              PRE_WEETH_WITHDRAW_ADAPTER,              "WeETHWithdrawAdapter");
-        console2.log("[OK] all 22 proxies are on post-upgrade impls; revert is meaningful");
+        _assertNotAlreadyOnPre(ROLE_REGISTRY,                       PRE_ROLE_REGISTRY,                       "RoleRegistry");
+        console2.log("[OK] RoleRegistry + all 22 proxies are on post-upgrade impls; revert is meaningful");
         console2.log("");
     }
 
@@ -161,20 +165,20 @@ contract SecurityUpgradesRevertScript is Script, Deployed, Utils {
 
     function takePreRevertSnapshots() public {
         console2.log("=== Step 1: Snapshotting owner+paused before revert ===");
-        address[22] memory p = _proxies();
+        address[23] memory p = _proxies();
         for (uint256 i = 0; i < p.length; i++) {
             preRevertSnap[p[i]] = Snap({ owner: _getOwner(p[i]), paused: _getPaused(p[i]) });
         }
-        console2.log("[OK] snapshot taken for 22 proxies");
+        console2.log("[OK] snapshot taken for 23 proxies");
         console2.log("");
     }
 
     function executeRevert() public {
         console2.log("=== Step 2: Executing revert (UPGRADE_TIMELOCK, 10d) ===");
 
-        address[] memory targets = new address[](22);
-        bytes[]   memory data    = new bytes[](22);
-        uint256[] memory values  = new uint256[](22);
+        address[] memory targets = new address[](23);
+        bytes[]   memory data    = new bytes[](23);
+        uint256[] memory values  = new uint256[](23);
 
         targets[0]  = EETH;                                data[0]  = _upgradeTo(PRE_EETH);
         targets[1]  = WEETH;                               data[1]  = _upgradeTo(PRE_WEETH);
@@ -198,6 +202,10 @@ contract SecurityUpgradesRevertScript is Script, Deployed, Utils {
         targets[19] = CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR; data[19] = _upgradeTo(PRE_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR);
         targets[20] = DEPOSIT_ADAPTER;                     data[20] = _upgradeTo(PRE_DEPOSIT_ADAPTER);
         targets[21] = WEETH_WITHDRAW_ADAPTER;              data[21] = _upgradeTo(PRE_WEETH_WITHDRAW_ADAPTER);
+        // RoleRegistry reverts LAST: while it is still on the new impl it provides the
+        // onlyUpgradeTimelock gate authorizing the 22 reverts above. Reverting it first
+        // would strip that gate and the remaining reverts would lose their authorizer.
+        targets[22] = ROLE_REGISTRY;                       data[22] = _upgradeTo(PRE_ROLE_REGISTRY);
 
         bytes32 salt = keccak256(abi.encode("security-upgrades-v1-REVERT", block.number));
 
@@ -247,6 +255,7 @@ contract SecurityUpgradesRevertScript is Script, Deployed, Utils {
         _assertImpl(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR, PRE_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR, "CumulativeMerkleRewardsDistributor");
         _assertImpl(DEPOSIT_ADAPTER,                     PRE_DEPOSIT_ADAPTER,                     "DepositAdapter");
         _assertImpl(WEETH_WITHDRAW_ADAPTER,              PRE_WEETH_WITHDRAW_ADAPTER,              "WeETHWithdrawAdapter");
+        _assertImpl(ROLE_REGISTRY,                       PRE_ROLE_REGISTRY,                       "RoleRegistry");
         console2.log("");
     }
 
@@ -258,17 +267,17 @@ contract SecurityUpgradesRevertScript is Script, Deployed, Utils {
 
     function verifyAccessControlPreservation() public view {
         console2.log("=== Step 4: Verifying owner + paused unchanged ===");
-        address[22] memory p = _proxies();
+        address[23] memory p = _proxies();
         for (uint256 i = 0; i < p.length; i++) {
             Snap memory pre = preRevertSnap[p[i]];
             require(_getOwner(p[i])  == pre.owner,  string.concat("owner changed across revert: ", vm.toString(p[i])));
             require(_getPaused(p[i]) == pre.paused, string.concat("paused changed across revert: ", vm.toString(p[i])));
         }
-        console2.log("[OK] owner + paused unchanged on all 22 proxies");
+        console2.log("[OK] owner + paused unchanged on all 23 proxies");
         console2.log("");
     }
 
-    function _proxies() internal pure returns (address[22] memory list) {
+    function _proxies() internal pure returns (address[23] memory list) {
         list[0]  = EETH;
         list[1]  = WEETH;
         list[2]  = LIQUIDITY_POOL;
@@ -291,6 +300,7 @@ contract SecurityUpgradesRevertScript is Script, Deployed, Utils {
         list[19] = CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR;
         list[20] = DEPOSIT_ADAPTER;
         list[21] = WEETH_WITHDRAW_ADAPTER;
+        list[22] = ROLE_REGISTRY;
     }
 
     function _upgradeTo(address impl) internal pure returns (bytes memory) {

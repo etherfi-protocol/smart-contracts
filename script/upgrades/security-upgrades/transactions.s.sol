@@ -59,6 +59,8 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     // DEPLOYED IMPLEMENTATIONS - populate from deploy.s.sol output
     // ─────────────────────────────────────────────────────────────────────
     address constant blacklisterProxy             = address(0);
+    address constant revokeAdminProxy             = address(0);
+    address constant roleRegistryImpl             = address(0);
     address constant eEthImpl                     = address(0);
     address constant weEthImpl                    = address(0);
     address constant liquidityPoolImpl            = address(0);
@@ -250,6 +252,8 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     /// @dev Fail loudly the moment a required constant is unset.
     function _preflight() internal pure {
         require(blacklisterProxy != address(0), "preflight: blacklisterProxy unset");
+        require(revokeAdminProxy != address(0), "preflight: revokeAdminProxy unset");
+        require(roleRegistryImpl != address(0), "preflight: roleRegistryImpl unset");
         require(eEthImpl != address(0), "preflight: eEthImpl unset");
         require(weEthImpl != address(0), "preflight: weEthImpl unset");
         require(liquidityPoolImpl != address(0), "preflight: liquidityPoolImpl unset");
@@ -322,6 +326,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     //--------------------------------------------------------------------------------------
     function verifyDeployedBytecode() public {
         console2.log("=== Step 1: Verifying Deployed Bytecode ===");
+        _verifyRoleRegistry();
         _verifyTokens();
         _verifyCore();
         _verifyAdminAndOracle();
@@ -329,8 +334,13 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         _verifyMembership();
         _verifyRateLimiter();
         _verifyPeripherals();
-        console2.log("[OK] all 22 implementations matched local bytecode");
+        console2.log("[OK] RoleRegistry + all 22 implementations matched local bytecode");
         console2.log("");
+    }
+
+    function _verifyRoleRegistry() internal {
+        RoleRegistry fresh = new RoleRegistry(revokeAdminProxy);
+        codeChecker.verifyContractByteCodeMatch(roleRegistryImpl, address(fresh));
     }
 
     function _verifyTokens() internal {
@@ -802,6 +812,12 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         uint256[] memory values  = new uint256[](50);
         uint256 i;
 
+        // RoleRegistry MUST upgrade before every other proxy. Its owner is the
+        // UPGRADE_TIMELOCK (this batch's executor), so the current impl's onlyOwner
+        // gate authorizes the swap; the new impl then gates upgrades on
+        // UPGRADE_TIMELOCK_ROLE (granted to the same owner in executeRoleGrants).
+        (targets[i], data[i]) = (ROLE_REGISTRY,              _upgradeTo(roleRegistryImpl));           i++;
+
         (targets[i], data[i]) = (EETH,                       _upgradeTo(eEthImpl));                   i++;
         (targets[i], data[i]) = (WEETH,                      _upgradeTo(weEthImpl));                  i++;
         (targets[i], data[i]) = (LIQUIDITY_POOL,             _upgradeTo(liquidityPoolImpl));          i++;
@@ -854,6 +870,8 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     //--------------------------------------------------------------------------------------
     function verifyUpgrades() public view {
         console2.log("=== Step 4: Verifying Upgrades ===");
+        _assertImpl(ROLE_REGISTRY,              roleRegistryImpl,             "RoleRegistry");
+        require(roleRegistry.revokeAdmin() == revokeAdminProxy, "RoleRegistry.revokeAdmin != revokeAdminProxy");
         _assertImpl(EETH,                       eEthImpl,                     "EETH");
         _assertImpl(WEETH,                      weEthImpl,                    "WeETH");
         _assertImpl(LIQUIDITY_POOL,             liquidityPoolImpl,            "LiquidityPool");
