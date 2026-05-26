@@ -14,6 +14,16 @@ import "../interfaces/ILiquidityPool.sol";
 import "../libraries/GlobalIndexLibrary.sol";
 
 
+// Legacy view of MembershipNFT used only by this archived V0 manager. The
+// current IMembershipNFT no longer exposes these deposit-side functions
+// (deprecation trim). This file is archive-only and is not deployed.
+interface IMembershipNFTV0Legacy {
+    function processDepositFromEapUser(address _user, uint32 _eapDepositBlockNumber, uint256 _snapshotEthAmount, uint256 _points, bytes32[] calldata _merkleProof) external;
+    function computeTierPointsForEap(uint32 _eapDepositBlockNumber) external view returns (uint40);
+    function mint(address _to, uint256 _amount) external returns (uint256);
+}
+
+
 contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable, IMembershipManagerV0 {
 
     //--------------------------------------------------------------------------------------
@@ -120,9 +130,9 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     ) external payable whenNotPaused returns (uint256) {
         if (_points == 0 || msg.value < _snapshotEthAmount || msg.value > _snapshotEthAmount * 2 || msg.value != _amount + _amountForPoints) revert InvalidEAPRollover();
 
-        membershipNFT.processDepositFromEapUser(msg.sender, _eapDepositBlockNumber, _snapshotEthAmount, _points, _merkleProof);
+        IMembershipNFTV0Legacy(address(membershipNFT)).processDepositFromEapUser(msg.sender, _eapDepositBlockNumber, _snapshotEthAmount, _points, _merkleProof);
         uint40 loyaltyPoints = uint40(_min(_points, type(uint40).max));
-        uint40 tierPoints = membershipNFT.computeTierPointsForEap(_eapDepositBlockNumber);
+        uint40 tierPoints = IMembershipNFTV0Legacy(address(membershipNFT)).computeTierPointsForEap(_eapDepositBlockNumber);
 
         liquidityPool.deposit{value: msg.value}(msg.sender);
 
@@ -346,7 +356,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
         _claimPoints(_tokenId);
         _claimStakingRewards(_tokenId);
 
-        uint40 newTierPoints = membershipNFT.computeTierPointsForEap(_eapDepositBlockNumber);
+        uint40 newTierPoints = IMembershipNFTV0Legacy(address(membershipNFT)).computeTierPointsForEap(_eapDepositBlockNumber);
         _setPoints(_tokenId, tokenData[_tokenId].baseLoyaltyPoints, newTierPoints);
 
         _claimTier(_tokenId);
@@ -447,7 +457,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
         _deposit(tokenId, _amount, _amountForPoints);
 
         // Finally, we mint the token!
-        if (tokenId != membershipNFT.mint(_to, 1)) revert WrongTokenMinted();
+        if (tokenId != IMembershipNFTV0Legacy(address(membershipNFT)).mint(_to, 1)) revert WrongTokenMinted();
 
         return tokenId;
     }

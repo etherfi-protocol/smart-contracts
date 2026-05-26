@@ -413,13 +413,6 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         return tierId - 1;
     }
 
-    function canTopUp(uint256 _tokenId, uint256 _totalAmount, uint128 _amount, uint128 _amountForPoints) public view returns (bool) {
-        uint32 prevTopUpTimestamp = tokenData[_tokenId].prevTopUpTimestamp;
-        if (block.timestamp - uint256(prevTopUpTimestamp) < topUpCooltimePeriod) return false;
-        if (_totalAmount != _amount + _amountForPoints) return false;
-        return true;
-    }
-
     function numberOfTiers() external view returns (uint8) {
         return uint8(tierData.length);
     }
