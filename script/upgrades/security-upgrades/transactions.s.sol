@@ -24,6 +24,12 @@ import {AuctionManager} from "../../../src/AuctionManager.sol";
 import {NodeOperatorManager} from "../../../src/NodeOperatorManager.sol";
 import {MembershipManager} from "../../../src/MembershipManager.sol";
 import {MembershipNFT} from "../../../src/MembershipNFT.sol";
+import {PriorityWithdrawalQueue} from "../../../src/PriorityWithdrawalQueue.sol";
+import {EtherFiRewardsRouter} from "../../../src/EtherFiRewardsRouter.sol";
+import {RestakingRewardsRouter} from "../../../src/RestakingRewardsRouter.sol";
+import {CumulativeMerkleRewardsDistributor} from "../../../src/CumulativeMerkleRewardsDistributor.sol";
+import {DepositAdapter} from "../../../src/DepositAdapter.sol";
+import {WeETHWithdrawAdapter} from "../../../src/helpers/WeETHWithdrawAdapter.sol";
 
 import {ContractCodeChecker} from "../../ContractCodeChecker.sol";
 import {Deployed} from "../../deploys/Deployed.s.sol";
@@ -69,13 +75,20 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     address constant membershipNFTImpl            = address(0);
     address constant bucketRateLimiterImpl        = address(0);
 
+    // Peripheral UUPS proxies touched by PR #385 — impls only, existing proxies are reused.
+    address constant priorityWithdrawalQueueImpl            = address(0);
+    address constant etherFiRewardsRouterImpl               = address(0);
+    address constant restakingRewardsRouterImpl             = address(0);
+    address constant cumulativeMerkleRewardsDistributorImpl = address(0);
+    address constant depositAdapterImpl                     = address(0);
+    address constant weETHWithdrawAdapterImpl               = address(0);
+
     // ─────────────────────────────────────────────────────────────────────
     // CONSTRUCTOR PARAMS - MUST MATCH deploy.s.sol exactly.
     // Re-stated here so verifyDeployedBytecode can rebuild each impl locally.
     // ─────────────────────────────────────────────────────────────────────
     // Liquifier
     address constant STETH_PRICE_FEED = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812;
-    address constant LIDO             = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
     address constant STETH_ETH_CURVE_POOL = 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022;
     uint256 constant LIQUIFIER_MIN_DISCOUNT_BPS = 100;
     uint256 constant LIQUIFIER_STALE_PRICE_WINDOW = 24 hours;
@@ -100,7 +113,8 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     uint256 constant WNFT_MIN_ACCEPTABLE_SHARE_RATE = 1;
     uint256 constant WNFT_MAX_ACCEPTABLE_SHARE_RATE = 4 ether;
 
-    address constant ETH2_DEPOSIT_CONTRACT = 0x00000000219ab540356cBB839Cbe05303d7705Fa;
+    // PriorityWithdrawalQueue — must match the value baked into the proxy at genesis.
+    uint32  constant PWQ_MIN_DELAY = 1 hours;
 
     // ─────────────────────────────────────────────────────────────────────
     // ROLE HOLDERS - 3 fixed + 6 user-set.
@@ -218,6 +232,13 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         require(membershipNFTImpl != address(0), "preflight: membershipNFTImpl unset");
         require(bucketRateLimiterImpl != address(0), "preflight: bucketRateLimiterImpl unset");
 
+        require(priorityWithdrawalQueueImpl            != address(0), "preflight: priorityWithdrawalQueueImpl unset");
+        require(etherFiRewardsRouterImpl               != address(0), "preflight: etherFiRewardsRouterImpl unset");
+        require(restakingRewardsRouterImpl             != address(0), "preflight: restakingRewardsRouterImpl unset");
+        require(cumulativeMerkleRewardsDistributorImpl != address(0), "preflight: cumulativeMerkleRewardsDistributorImpl unset");
+        require(depositAdapterImpl                     != address(0), "preflight: depositAdapterImpl unset");
+        require(weETHWithdrawAdapterImpl               != address(0), "preflight: weETHWithdrawAdapterImpl unset");
+
         require(EETH_MINT_CAPACITY != 0,        "preflight: EETH_MINT_CAPACITY unset");
         require(EETH_MINT_REFILL_RATE != 0,     "preflight: EETH_MINT_REFILL_RATE unset");
         require(EETH_BURN_CAPACITY != 0,        "preflight: EETH_BURN_CAPACITY unset");
@@ -263,7 +284,8 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         _verifyValidatorStack();
         _verifyMembership();
         _verifyRateLimiter();
-        console2.log("[OK] all 16 implementations matched local bytecode");
+        _verifyPeripherals();
+        console2.log("[OK] all 22 implementations matched local bytecode");
         console2.log("");
     }
 
@@ -304,7 +326,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
             Liquifier.ConstructorAddresses({
                 liquidityPool: LIQUIDITY_POOL,
                 lidoWithdrawalQueue: LIDO_WITHDRAWAL_QUEUE,
-                lido: LIDO,
+                lido: STETH,
                 stEth_Eth_Pool: STETH_ETH_CURVE_POOL,
                 roleRegistry: ROLE_REGISTRY,
                 stEthPriceFeed: STETH_PRICE_FEED,
@@ -391,12 +413,40 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         codeChecker.verifyContractByteCodeMatch(bucketRateLimiterImpl, address(fresh));
     }
 
+    function _verifyPeripherals() internal {
+        PriorityWithdrawalQueue fresh = new PriorityWithdrawalQueue(
+            LIQUIDITY_POOL, EETH, WEETH, ROLE_REGISTRY, WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, PWQ_MIN_DELAY
+        );
+        codeChecker.verifyContractByteCodeMatch(priorityWithdrawalQueueImpl, address(fresh));
+
+        EtherFiRewardsRouter fresh2 = new EtherFiRewardsRouter(LIQUIDITY_POOL, TREASURY, ROLE_REGISTRY);
+        codeChecker.verifyContractByteCodeMatch(etherFiRewardsRouterImpl, address(fresh2));
+
+        RestakingRewardsRouter fresh3 = new RestakingRewardsRouter(
+            ROLE_REGISTRY, EIGEN, LIQUIDITY_POOL
+        );
+        codeChecker.verifyContractByteCodeMatch(restakingRewardsRouterImpl, address(fresh3));
+
+        CumulativeMerkleRewardsDistributor fresh4 = new CumulativeMerkleRewardsDistributor(ROLE_REGISTRY);
+        codeChecker.verifyContractByteCodeMatch(cumulativeMerkleRewardsDistributorImpl, address(fresh4));
+
+        DepositAdapter fresh5 = new DepositAdapter(
+            LIQUIDITY_POOL, LIQUIFIER, WEETH, EETH, WETH, STETH, WSTETH, ROLE_REGISTRY, blacklisterProxy
+        );
+        codeChecker.verifyContractByteCodeMatch(depositAdapterImpl, address(fresh5));
+
+        WeETHWithdrawAdapter fresh6 = new WeETHWithdrawAdapter(
+            WEETH, EETH, LIQUIDITY_POOL, WITHDRAW_REQUEST_NFT, ROLE_REGISTRY, blacklisterProxy
+        );
+        codeChecker.verifyContractByteCodeMatch(weETHWithdrawAdapterImpl, address(fresh6));
+    }
+
     //--------------------------------------------------------------------------------------
     // STEP 2: takePreUpgradeSnapshots
     //--------------------------------------------------------------------------------------
     function takePreUpgradeSnapshots() public {
         console2.log("=== Step 2: Taking Pre-Upgrade Snapshots ===");
-        address[17] memory proxies = _upgradedProxies();
+        address[22] memory proxies = _upgradedProxies();
         for (uint256 k = 0; k < proxies.length; k++) {
             preSnap[proxies[k]] = Snap({ owner: _getOwner(proxies[k]), paused: _getPaused(proxies[k]) });
         }
@@ -417,6 +467,13 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         preImm[NODE_OPERATOR_MANAGER]      = _safeSnapshot(NODE_OPERATOR_MANAGER,      _nodeOpImmSels());
         preImm[MEMBERSHIP_MANAGER]         = _safeSnapshot(MEMBERSHIP_MANAGER,         _mmImmSels());
         preImm[MEMBERSHIP_NFT]             = _safeSnapshot(MEMBERSHIP_NFT,             _mnftImmSels());
+
+        preImm[PRIORITY_WITHDRAWAL_QUEUE]              = _safeSnapshot(PRIORITY_WITHDRAWAL_QUEUE,              _pwqImmSels());
+        preImm[ETHERFI_REWARDS_ROUTER]                 = _safeSnapshot(ETHERFI_REWARDS_ROUTER,                 _rewardsRouterImmSels());
+        preImm[RESTAKING_REWARDS_ROUTER]               = _safeSnapshot(RESTAKING_REWARDS_ROUTER,               _restakingRewardsRouterImmSels());
+        preImm[CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR]  = _safeSnapshot(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR,  _cmrdImmSels());
+        preImm[DEPOSIT_ADAPTER]                        = _safeSnapshot(DEPOSIT_ADAPTER,                        _depositAdapterImmSels());
+        preImm[WEETH_WITHDRAW_ADAPTER]                 = _safeSnapshot(WEETH_WITHDRAW_ADAPTER,                 _weethWithdrawAdapterImmSels());
 
         console2.log("[OK] snapshotted owner + paused + immutable getters for", proxies.length, "proxies");
         console2.log("");
@@ -607,8 +664,54 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         s[2] = bytes4(keccak256("roleRegistry()"));
         s[3] = bytes4(keccak256("blacklister()"));
     }
+    function _pwqImmSels() internal pure returns (bytes4[] memory s) {
+        s = new bytes4[](6);
+        s[0] = bytes4(keccak256("liquidityPool()"));
+        s[1] = bytes4(keccak256("eETH()"));
+        s[2] = bytes4(keccak256("weETH()"));
+        s[3] = bytes4(keccak256("treasury()"));
+        s[4] = bytes4(keccak256("minDelay()"));
+        s[5] = bytes4(keccak256("roleRegistry()"));
+    }
+    function _rewardsRouterImmSels() internal pure returns (bytes4[] memory s) {
+        s = new bytes4[](3);
+        s[0] = bytes4(keccak256("treasury()"));
+        s[1] = bytes4(keccak256("liquidityPool()"));
+        s[2] = bytes4(keccak256("roleRegistry()"));
+    }
+    function _restakingRewardsRouterImmSels() internal pure returns (bytes4[] memory s) {
+        s = new bytes4[](3);
+        s[0] = bytes4(keccak256("liquidityPool()"));
+        s[1] = bytes4(keccak256("rewardTokenAddress()"));
+        s[2] = bytes4(keccak256("roleRegistry()"));
+    }
+    function _cmrdImmSels() internal pure returns (bytes4[] memory s) {
+        s = new bytes4[](1);
+        s[0] = bytes4(keccak256("roleRegistry()"));
+    }
+    function _depositAdapterImmSels() internal pure returns (bytes4[] memory s) {
+        s = new bytes4[](9);
+        s[0] = bytes4(keccak256("liquidityPool()"));
+        s[1] = bytes4(keccak256("liquifier()"));
+        s[2] = bytes4(keccak256("eETH()"));
+        s[3] = bytes4(keccak256("weETH()"));
+        s[4] = bytes4(keccak256("wETH()"));
+        s[5] = bytes4(keccak256("stETH()"));
+        s[6] = bytes4(keccak256("wstETH()"));
+        s[7] = bytes4(keccak256("blacklister()"));
+        s[8] = bytes4(keccak256("roleRegistry()"));
+    }
+    function _weethWithdrawAdapterImmSels() internal pure returns (bytes4[] memory s) {
+        s = new bytes4[](6);
+        s[0] = bytes4(keccak256("weETH()"));
+        s[1] = bytes4(keccak256("eETH()"));
+        s[2] = bytes4(keccak256("liquidityPool()"));
+        s[3] = bytes4(keccak256("withdrawRequestNFT()"));
+        s[4] = bytes4(keccak256("blacklister()"));
+        s[5] = bytes4(keccak256("roleRegistry()"));
+    }
 
-    function _upgradedProxies() internal pure returns (address[17] memory list) {
+    function _upgradedProxies() internal pure returns (address[22] memory list) {
         list[0]  = EETH;
         list[1]  = WEETH;
         list[2]  = LIQUIDITY_POOL;
@@ -625,7 +728,12 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         list[13] = MEMBERSHIP_MANAGER;
         list[14] = MEMBERSHIP_NFT;
         list[15] = ETHERFI_RATE_LIMITER;
-        list[16] = PRIORITY_WITHDRAWAL_QUEUE; // snapshot only; not upgraded here
+        list[16] = PRIORITY_WITHDRAWAL_QUEUE;
+        list[17] = ETHERFI_REWARDS_ROUTER;
+        list[18] = RESTAKING_REWARDS_ROUTER;
+        list[19] = CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR;
+        list[20] = DEPOSIT_ADAPTER;
+        list[21] = WEETH_WITHDRAW_ADAPTER;
     }
 
     //--------------------------------------------------------------------------------------
@@ -634,9 +742,9 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     function executeUpgrade() public {
         console2.log("=== Step 3: Executing Upgrade (Batch A, UPGRADE_TIMELOCK, 10d) ===");
 
-        address[] memory targets = new address[](40);
-        bytes[]   memory data    = new bytes[](40);
-        uint256[] memory values  = new uint256[](40);
+        address[] memory targets = new address[](50);
+        bytes[]   memory data    = new bytes[](50);
+        uint256[] memory values  = new uint256[](50);
         uint256 i;
 
         (targets[i], data[i]) = (EETH,                       _upgradeTo(eEthImpl));                   i++;
@@ -655,6 +763,13 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         (targets[i], data[i]) = (MEMBERSHIP_MANAGER,         _upgradeTo(membershipManagerImpl));      i++;
         (targets[i], data[i]) = (MEMBERSHIP_NFT,             _upgradeTo(membershipNFTImpl));          i++;
         (targets[i], data[i]) = (ETHERFI_RATE_LIMITER,       _upgradeTo(bucketRateLimiterImpl));      i++;
+
+        (targets[i], data[i]) = (PRIORITY_WITHDRAWAL_QUEUE,             _upgradeTo(priorityWithdrawalQueueImpl));            i++;
+        (targets[i], data[i]) = (ETHERFI_REWARDS_ROUTER,                _upgradeTo(etherFiRewardsRouterImpl));               i++;
+        (targets[i], data[i]) = (RESTAKING_REWARDS_ROUTER,              _upgradeTo(restakingRewardsRouterImpl));             i++;
+        (targets[i], data[i]) = (CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR, _upgradeTo(cumulativeMerkleRewardsDistributorImpl)); i++;
+        (targets[i], data[i]) = (DEPOSIT_ADAPTER,                       _upgradeTo(depositAdapterImpl));                     i++;
+        (targets[i], data[i]) = (WEETH_WITHDRAW_ADAPTER,                _upgradeTo(weETHWithdrawAdapterImpl));               i++;
 
         (targets[i], data[i]) = (LIQUIDITY_POOL,
             abi.encodeWithSelector(LiquidityPool.initializeOnUpgradeV2.selector));                    i++;
@@ -701,6 +816,12 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         _assertImpl(MEMBERSHIP_MANAGER,         membershipManagerImpl,        "MembershipManager");
         _assertImpl(MEMBERSHIP_NFT,             membershipNFTImpl,            "MembershipNFT");
         _assertImpl(ETHERFI_RATE_LIMITER,       bucketRateLimiterImpl,        "EtherFiRateLimiter");
+        _assertImpl(PRIORITY_WITHDRAWAL_QUEUE,             priorityWithdrawalQueueImpl,            "PriorityWithdrawalQueue");
+        _assertImpl(ETHERFI_REWARDS_ROUTER,                etherFiRewardsRouterImpl,               "EtherFiRewardsRouter");
+        _assertImpl(RESTAKING_REWARDS_ROUTER,              restakingRewardsRouterImpl,             "RestakingRewardsRouter");
+        _assertImpl(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR, cumulativeMerkleRewardsDistributorImpl, "CumulativeMerkleRewardsDistributor");
+        _assertImpl(DEPOSIT_ADAPTER,                       depositAdapterImpl,                     "DepositAdapter");
+        _assertImpl(WEETH_WITHDRAW_ADAPTER,                weETHWithdrawAdapterImpl,               "WeETHWithdrawAdapter");
         console2.log("");
     }
 
@@ -746,6 +867,12 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         _diffPreserved(NODE_OPERATOR_MANAGER,      "NodeOperatorManager");
         _diffPreserved(MEMBERSHIP_MANAGER,         "MembershipManager");
         _diffPreserved(MEMBERSHIP_NFT,             "MembershipNFT");
+        _diffPreserved(PRIORITY_WITHDRAWAL_QUEUE,             "PriorityWithdrawalQueue");
+        _diffPreserved(ETHERFI_REWARDS_ROUTER,                "EtherFiRewardsRouter");
+        _diffPreserved(RESTAKING_REWARDS_ROUTER,              "RestakingRewardsRouter");
+        _diffPreserved(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR, "CumulativeMerkleRewardsDistributor");
+        _diffPreserved(DEPOSIT_ADAPTER,                       "DepositAdapter");
+        _diffPreserved(WEETH_WITHDRAW_ADAPTER,                "WeETHWithdrawAdapter");
 
         // (b) post vs deployment-time expected
         _verifyImmutablesTokens();
@@ -757,6 +884,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         _verifyImmutablesRestaker();
         _verifyImmutablesValidatorStack();
         _verifyImmutablesMembership();
+        _verifyImmutablesPeripherals();
         console2.log("[OK] immutables: pre/post diff + post/expected checks passed");
         console2.log("");
     }
@@ -818,7 +946,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         Liquifier l = Liquifier(payable(LIQUIFIER));
         require(address(l.liquidityPool())       == LIQUIDITY_POOL,        "Liquifier.liquidityPool");
         require(address(l.lidoWithdrawalQueue()) == LIDO_WITHDRAWAL_QUEUE, "Liquifier.lidoWithdrawalQueue");
-        require(address(l.lido())                == LIDO,                  "Liquifier.lido");
+        require(address(l.lido())                == STETH,                 "Liquifier.lido");
         require(address(l.stEth_Eth_Pool())      == STETH_ETH_CURVE_POOL,  "Liquifier.stEth_Eth_Pool");
         require(address(l.roleRegistry())        == ROLE_REGISTRY,         "Liquifier.roleRegistry");
         require(address(l.stEthPriceFeed())      == STETH_PRICE_FEED,      "Liquifier.stEthPriceFeed");
@@ -921,12 +1049,54 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         require(address(mn.blacklister())        == blacklisterProxy,  "MNFT.blacklister");
     }
 
+    function _verifyImmutablesPeripherals() internal view {
+        PriorityWithdrawalQueue pwq = PriorityWithdrawalQueue(payable(PRIORITY_WITHDRAWAL_QUEUE));
+        require(address(pwq.liquidityPool()) == LIQUIDITY_POOL,                  "PWQ.liquidityPool");
+        require(address(pwq.eETH())          == EETH,                            "PWQ.eETH");
+        require(address(pwq.weETH())         == WEETH,                           "PWQ.weETH");
+        require(pwq.treasury()               == WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, "PWQ.treasury");
+        require(pwq.minDelay()               == PWQ_MIN_DELAY,                   "PWQ.minDelay");
+        require(address(pwq.roleRegistry())  == ROLE_REGISTRY,                   "PWQ.roleRegistry");
+
+        EtherFiRewardsRouter rr = EtherFiRewardsRouter(payable(ETHERFI_REWARDS_ROUTER));
+        require(rr.treasury()                == TREASURY,        "RewardsRouter.treasury");
+        require(rr.liquidityPool()           == LIQUIDITY_POOL,  "RewardsRouter.liquidityPool");
+        require(address(rr.roleRegistry())   == ROLE_REGISTRY,   "RewardsRouter.roleRegistry");
+
+        RestakingRewardsRouter rrr = RestakingRewardsRouter(payable(RESTAKING_REWARDS_ROUTER));
+        require(rrr.liquidityPool()          == LIQUIDITY_POOL,        "RestakingRR.liquidityPool");
+        require(rrr.rewardTokenAddress()     == EIGEN,                "RestakingRR.rewardTokenAddress");
+        require(address(rrr.roleRegistry())  == ROLE_REGISTRY,         "RestakingRR.roleRegistry");
+
+        CumulativeMerkleRewardsDistributor cmrd = CumulativeMerkleRewardsDistributor(payable(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR));
+        require(address(cmrd.roleRegistry()) == ROLE_REGISTRY, "CMRD.roleRegistry");
+
+        DepositAdapter da = DepositAdapter(payable(DEPOSIT_ADAPTER));
+        require(address(da.liquidityPool())  == LIQUIDITY_POOL,     "DepositAdapter.liquidityPool");
+        require(address(da.liquifier())      == LIQUIFIER,          "DepositAdapter.liquifier");
+        require(address(da.eETH())           == EETH,               "DepositAdapter.eETH");
+        require(address(da.weETH())          == WEETH,              "DepositAdapter.weETH");
+        require(address(da.wETH())           == WETH,               "DepositAdapter.wETH");
+        require(address(da.stETH())          == STETH,              "DepositAdapter.stETH");
+        require(address(da.wstETH())         == WSTETH,             "DepositAdapter.wstETH");
+        require(address(da.blacklister())    == blacklisterProxy,   "DepositAdapter.blacklister");
+        require(address(da.roleRegistry())   == ROLE_REGISTRY,      "DepositAdapter.roleRegistry");
+
+        WeETHWithdrawAdapter wwa = WeETHWithdrawAdapter(payable(WEETH_WITHDRAW_ADAPTER));
+        require(address(wwa.weETH())              == WEETH,                "WeETHWA.weETH");
+        require(address(wwa.eETH())               == EETH,                 "WeETHWA.eETH");
+        require(address(wwa.liquidityPool())      == LIQUIDITY_POOL,       "WeETHWA.liquidityPool");
+        require(address(wwa.withdrawRequestNFT()) == WITHDRAW_REQUEST_NFT, "WeETHWA.withdrawRequestNFT");
+        require(address(wwa.blacklister())        == blacklisterProxy,     "WeETHWA.blacklister");
+        require(address(wwa.roleRegistry())       == ROLE_REGISTRY,        "WeETHWA.roleRegistry");
+    }
+
     //--------------------------------------------------------------------------------------
     // STEP 6: verifyAccessControlPreservation
     //--------------------------------------------------------------------------------------
     function verifyAccessControlPreservation() public view {
         console2.log("=== Step 6: Verifying Access Control Preservation ===");
-        address[17] memory proxies = _upgradedProxies();
+        address[22] memory proxies = _upgradedProxies();
         for (uint256 k = 0; k < proxies.length; k++) {
             address p = proxies[k];
             Snap memory pre = preSnap[p];
@@ -950,6 +1120,12 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         verifyNotReinitializable(MEMBERSHIP_MANAGER,         "MembershipManager");
         verifyNotReinitializable(MEMBERSHIP_NFT,             "MembershipNFT");
         verifyNotReinitializable(ETHERFI_RATE_LIMITER,       "EtherFiRateLimiter");
+        verifyNotReinitializable(PRIORITY_WITHDRAWAL_QUEUE,             "PriorityWithdrawalQueue");
+        verifyNotReinitializable(ETHERFI_REWARDS_ROUTER,                "EtherFiRewardsRouter");
+        verifyNotReinitializable(RESTAKING_REWARDS_ROUTER,              "RestakingRewardsRouter");
+        verifyNotReinitializable(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR, "CumulativeMerkleRewardsDistributor");
+        verifyNotReinitializable(DEPOSIT_ADAPTER,                       "DepositAdapter");
+        verifyNotReinitializable(WEETH_WITHDRAW_ADAPTER,                "WeETHWithdrawAdapter");
         console2.log("[OK] owner + paused + init state preserved");
         console2.log("");
     }
