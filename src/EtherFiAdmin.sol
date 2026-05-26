@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/utils/math/Math.sol";
 import "./interfaces/IEtherFiOracle.sol";
 import "./interfaces/IStakingManager.sol";
 import "./interfaces/IAuctionManager.sol";
+import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IMembershipManager.sol";
@@ -114,6 +115,8 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
     error TaskDoesNotExist();
     error TaskAlreadyCompleted();
     error TaskAlreadyExists();
+    error InvalidValidatorSize();
+    error InvalidArrayLengths();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(
@@ -202,8 +205,36 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
         if (validatorApprovalTaskStatus[taskHash].completed) revert TaskAlreadyCompleted();
 
         validatorApprovalTaskStatus[taskHash].completed = true;
-        liquidityPool.batchApproveRegistration(_validators, _pubKeys, _signatures);
+        _approveValidators(_validators, _pubKeys, _signatures);
         emit ValidatorApprovalTaskCompleted(taskHash, _reportHash, _validators);
+    }
+
+    /// @dev Builds DepositData[] from (validatorIds, pubKeys, signatures) and forwards to
+    ///      LiquidityPool.confirmAndFundBeaconValidators. Previously this construction lived
+    ///      in LiquidityPool.batchApproveRegistration; moved here so LP stays under the
+    ///      EIP-170 24,576-byte cap.
+    function _approveValidators(uint256[] calldata _validatorIds, bytes[] calldata _pubKeys, bytes[] calldata _signatures) internal {
+        uint256 validatorSizeWei = liquidityPool.validatorSizeWei();
+        if (validatorSizeWei < stakingManager.MIN_VALIDATOR_SIZE_WEI() || validatorSizeWei > stakingManager.MAX_VALIDATOR_SIZE_WEI()) revert InvalidValidatorSize();
+        if (_validatorIds.length == 0 || _validatorIds.length != _pubKeys.length || _validatorIds.length != _signatures.length) revert InvalidArrayLengths();
+
+        uint256 remainingEthPerValidator = validatorSizeWei - stakingManager.INITIAL_DEPOSIT_AMOUNT();
+        IStakingManager.DepositData[] memory depositData = new IStakingManager.DepositData[](_validatorIds.length);
+
+        for (uint256 i = 0; i < _validatorIds.length; i++) {
+            address eigenPod = address(IEtherFiNode(etherFiNodesManager.etherfiNodeAddress(_validatorIds[i])).getEigenPod());
+            bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod);
+            bytes32 depositDataRoot = stakingManager.generateDepositDataRoot(_pubKeys[i], _signatures[i], withdrawalCredentials, remainingEthPerValidator);
+
+            depositData[i] = IStakingManager.DepositData({
+                publicKey: _pubKeys[i],
+                signature: _signatures[i],
+                depositDataRoot: depositDataRoot,
+                ipfsHashForEncryptedValidatorKey: ""
+            });
+        }
+
+        liquidityPool.confirmAndFundBeaconValidators(depositData, validatorSizeWei);
     }
 
     function invalidateValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators) external onlyOperatingMultisig {
