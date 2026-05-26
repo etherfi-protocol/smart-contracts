@@ -146,18 +146,20 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     uint64 constant WEETH_TRANSFER_CAPACITY    = 0;
     uint64 constant WEETH_TRANSFER_REFILL_RATE = 0;
 
-    uint256 constant PAUSE_UNTIL_EETH                     = 0;
-    uint256 constant PAUSE_UNTIL_WEETH                    = 0;
-    uint256 constant PAUSE_UNTIL_LIQUIDITY_POOL           = 0;
-    uint256 constant PAUSE_UNTIL_WITHDRAW_REQUEST_NFT     = 0;
-    uint256 constant PAUSE_UNTIL_LIQUIFIER                = 0;
-    uint256 constant PAUSE_UNTIL_ETHERFI_NODES_MANAGER    = 0;
-    uint256 constant PAUSE_UNTIL_ETHERFI_ADMIN            = 0;
-    uint256 constant PAUSE_UNTIL_ETHERFI_REDEMPTION_MGR   = 0;
-    uint256 constant PAUSE_UNTIL_MEMBERSHIP_MANAGER       = 0;
-    uint256 constant PAUSE_UNTIL_MEMBERSHIP_NFT           = 0;
-    uint256 constant PAUSE_UNTIL_AUCTION_MANAGER          = 0;
-    uint256 constant PAUSE_UNTIL_NODE_OPERATOR_MANAGER    = 0;
+    // PAUSE_UNTIL_* targets are gated to contracts that mix in PausableUntil. The
+    // four ex-targets (EtherFiAdmin, MembershipManager, MembershipNFT, NodeOperatorManager)
+    // have no setPauseUntilDuration and were dropped.
+    uint256 constant PAUSE_UNTIL_EETH                                 = 0;
+    uint256 constant PAUSE_UNTIL_WEETH                                = 0;
+    uint256 constant PAUSE_UNTIL_LIQUIDITY_POOL                       = 0;
+    uint256 constant PAUSE_UNTIL_WITHDRAW_REQUEST_NFT                 = 0;
+    uint256 constant PAUSE_UNTIL_LIQUIFIER                            = 0;
+    uint256 constant PAUSE_UNTIL_ETHERFI_NODES_MANAGER                = 0;
+    uint256 constant PAUSE_UNTIL_ETHERFI_REDEMPTION_MGR               = 0;
+    uint256 constant PAUSE_UNTIL_AUCTION_MANAGER                      = 0;
+    uint256 constant PAUSE_UNTIL_PRIORITY_WITHDRAWAL_QUEUE             = 0;
+    uint256 constant PAUSE_UNTIL_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR = 0;
+    uint256 constant PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER               = 0;
 
     // Bucket IDs
     bytes32 constant EETH_MINT_LIMIT_ID      = keccak256("EETH_MINT_LIMIT_ID");
@@ -258,12 +260,11 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         require(PAUSE_UNTIL_WITHDRAW_REQUEST_NFT != 0,   "preflight: PAUSE_UNTIL_WITHDRAW_REQUEST_NFT unset");
         require(PAUSE_UNTIL_LIQUIFIER != 0,              "preflight: PAUSE_UNTIL_LIQUIFIER unset");
         require(PAUSE_UNTIL_ETHERFI_NODES_MANAGER != 0,  "preflight: PAUSE_UNTIL_ETHERFI_NODES_MANAGER unset");
-        require(PAUSE_UNTIL_ETHERFI_ADMIN != 0,          "preflight: PAUSE_UNTIL_ETHERFI_ADMIN unset");
         require(PAUSE_UNTIL_ETHERFI_REDEMPTION_MGR != 0, "preflight: PAUSE_UNTIL_ETHERFI_REDEMPTION_MGR unset");
-        require(PAUSE_UNTIL_MEMBERSHIP_MANAGER != 0,     "preflight: PAUSE_UNTIL_MEMBERSHIP_MANAGER unset");
-        require(PAUSE_UNTIL_MEMBERSHIP_NFT != 0,         "preflight: PAUSE_UNTIL_MEMBERSHIP_NFT unset");
         require(PAUSE_UNTIL_AUCTION_MANAGER != 0,        "preflight: PAUSE_UNTIL_AUCTION_MANAGER unset");
-        require(PAUSE_UNTIL_NODE_OPERATOR_MANAGER != 0,  "preflight: PAUSE_UNTIL_NODE_OPERATOR_MANAGER unset");
+        require(PAUSE_UNTIL_PRIORITY_WITHDRAWAL_QUEUE != 0,             "preflight: PAUSE_UNTIL_PRIORITY_WITHDRAWAL_QUEUE unset");
+        require(PAUSE_UNTIL_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR != 0, "preflight: PAUSE_UNTIL_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR unset");
+        require(PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER != 0,                "preflight: PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER unset");
 
         require(HOLDER_SUPER_GUARDIAN_ROLE          != address(0), "preflight: HOLDER_SUPER_GUARDIAN_ROLE unset");
         require(HOLDER_GUARDIAN_ROLE                != address(0), "preflight: HOLDER_GUARDIAN_ROLE unset");
@@ -1161,12 +1162,11 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         (targets[i], data[i]) = (WITHDRAW_REQUEST_NFT,       _pauseDur(PAUSE_UNTIL_WITHDRAW_REQUEST_NFT));   i++;
         (targets[i], data[i]) = (LIQUIFIER,                  _pauseDur(PAUSE_UNTIL_LIQUIFIER));              i++;
         (targets[i], data[i]) = (ETHERFI_NODES_MANAGER,      _pauseDur(PAUSE_UNTIL_ETHERFI_NODES_MANAGER));  i++;
-        (targets[i], data[i]) = (ETHERFI_ADMIN,              _pauseDur(PAUSE_UNTIL_ETHERFI_ADMIN));          i++;
         (targets[i], data[i]) = (ETHERFI_REDEMPTION_MANAGER, _pauseDur(PAUSE_UNTIL_ETHERFI_REDEMPTION_MGR)); i++;
-        (targets[i], data[i]) = (MEMBERSHIP_MANAGER,         _pauseDur(PAUSE_UNTIL_MEMBERSHIP_MANAGER));     i++;
-        (targets[i], data[i]) = (MEMBERSHIP_NFT,             _pauseDur(PAUSE_UNTIL_MEMBERSHIP_NFT));         i++;
         (targets[i], data[i]) = (AUCTION_MANAGER,            _pauseDur(PAUSE_UNTIL_AUCTION_MANAGER));        i++;
-        (targets[i], data[i]) = (NODE_OPERATOR_MANAGER,      _pauseDur(PAUSE_UNTIL_NODE_OPERATOR_MANAGER));  i++;
+        (targets[i], data[i]) = (PRIORITY_WITHDRAWAL_QUEUE,             _pauseDur(PAUSE_UNTIL_PRIORITY_WITHDRAWAL_QUEUE));             i++;
+        (targets[i], data[i]) = (CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR, _pauseDur(PAUSE_UNTIL_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR)); i++;
+        (targets[i], data[i]) = (WEETH_WITHDRAW_ADAPTER,                _pauseDur(PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER));                i++;
 
         i = _roleGrant(targets, data, i, roleRegistry.SUPER_GUARDIAN_ROLE(),          HOLDER_SUPER_GUARDIAN_ROLE);
         i = _roleGrant(targets, data, i, roleRegistry.GUARDIAN_ROLE(),                HOLDER_GUARDIAN_ROLE);
@@ -1214,6 +1214,12 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         require(LiquidityPool(payable(LIQUIDITY_POOL)).pauseUntilDuration()           == PAUSE_UNTIL_LIQUIDITY_POOL,        "LP pause duration mismatch");
         require(WithdrawRequestNFT(payable(WITHDRAW_REQUEST_NFT)).pauseUntilDuration()== PAUSE_UNTIL_WITHDRAW_REQUEST_NFT,  "NFT pause duration mismatch");
         require(Liquifier(payable(LIQUIFIER)).pauseUntilDuration()                    == PAUSE_UNTIL_LIQUIFIER,             "Liquifier pause duration mismatch");
+        require(EtherFiNodesManager(payable(ETHERFI_NODES_MANAGER)).pauseUntilDuration()                       == PAUSE_UNTIL_ETHERFI_NODES_MANAGER,                "EFNodesMgr pause duration mismatch");
+        require(EtherFiRedemptionManager(payable(ETHERFI_REDEMPTION_MANAGER)).pauseUntilDuration()             == PAUSE_UNTIL_ETHERFI_REDEMPTION_MGR,               "EFRedemption pause duration mismatch");
+        require(AuctionManager(AUCTION_MANAGER).pauseUntilDuration()                                           == PAUSE_UNTIL_AUCTION_MANAGER,                      "Auction pause duration mismatch");
+        require(PriorityWithdrawalQueue(payable(PRIORITY_WITHDRAWAL_QUEUE)).pauseUntilDuration()               == PAUSE_UNTIL_PRIORITY_WITHDRAWAL_QUEUE,             "PWQ pause duration mismatch");
+        require(CumulativeMerkleRewardsDistributor(payable(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR)).pauseUntilDuration() == PAUSE_UNTIL_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR, "CMRD pause duration mismatch");
+        require(WeETHWithdrawAdapter(payable(WEETH_WITHDRAW_ADAPTER)).pauseUntilDuration()                     == PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER,               "WeETHWA pause duration mismatch");
 
         require(roleRegistry.hasRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(),    HOLDER_UPGRADE_TIMELOCK_ROLE),   "UPGRADE_TIMELOCK_ROLE not granted");
         require(roleRegistry.hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE(),  HOLDER_OPERATION_TIMELOCK_ROLE), "OPERATION_TIMELOCK_ROLE not granted");
