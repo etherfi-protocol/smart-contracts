@@ -12,9 +12,15 @@ interface IEtherFiRateLimiter {
 
     // core
     function consume(bytes32 id, uint64 amount) external;
-    function consumeIfConfigured(bytes32 id, uint64 amount) external;
+    function consumeToken(bytes32 id, uint64 amount) external;
     function canConsume(bytes32 id, uint64 amount) external view returns (bool);
     function consumable(bytes32 id) external view returns (uint64);
+
+    // per-address (callable only by eETH/weETH; gated upstream to Guardian or Multisig)
+    function tightenAddressLimit(address user, uint64 capacity, uint64 refillRate) external;
+    function setAddressLimit(address user, uint64 capacity, uint64 refillRate) external;
+    function deleteAddressLimit(address user) external;
+    function consumeForAddressIfConfigured(address user, uint64 amount) external;
 
     // protocol
     function pauseContract() external;
@@ -22,6 +28,8 @@ interface IEtherFiRateLimiter {
 
     // view functions
     function getLimit(bytes32 id) external view returns (uint64 capacity, uint64 remaining, uint64 refillRate, uint256 lastRefill);
+    function getAddressLimit(address token, address user) external view returns (uint64 capacity, uint64 remaining, uint64 refillRate, uint256 lastRefill);
+    function addressLimitExists(address token, address user) external view returns (bool);
     function isConsumerAllowed(bytes32 id, address consumer) external view returns (bool);
     function limitExists(bytes32 id) external view returns (bool);
 
@@ -35,6 +43,10 @@ interface IEtherFiRateLimiter {
     event RemainingUpdated(bytes32 indexed id, uint256 remaining);
     event ConsumerUpdated(bytes32 indexed id, address indexed consumer, bool allowed);
 
+    event AddressLimitTightened(address indexed token, address indexed user, uint64 capacity, uint64 refillRate);
+    event AddressLimitSet(address indexed token, address indexed user, uint64 capacity, uint64 refillRate);
+    event AddressLimitDeleted(address indexed token, address indexed user);
+
     //--------------------------------------------------------------------------
     //-----------------------------  Errors  -----------------------------------
     //--------------------------------------------------------------------------
@@ -42,4 +54,6 @@ interface IEtherFiRateLimiter {
     error LimitAlreadyExists();
     error LimitExceeded();
     error UnknownLimit();
+    error OnlyToken();
+    error NotTightening();
 }

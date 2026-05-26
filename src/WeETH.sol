@@ -11,30 +11,41 @@ import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IRateProvider.sol";
 
 import "./AssetRecovery.sol";
+import "./interfaces/IBlacklister.sol";
 import "./utils/PausableUntil.sol";
 import "./utils/RolesLibrary.sol";
-import "./interfaces/IBlacklister.sol";
-import "./interfaces/IEtherFiRateLimiter.sol";
-import "./libraries/RateLimitMath.sol";
+import "./utils/RateLimitedToken.sol";
 
-contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, ERC20PermitUpgradeable, IRateProvider, AssetRecovery, RolesLibrary {
+contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, ERC20PermitUpgradeable, IRateProvider, AssetRecovery, RolesLibrary, RateLimitedToken {
     using SafeERC20 for IERC20;
 
     IeETH public immutable eETH;
     ILiquidityPool public immutable liquidityPool;
     IBlacklister public immutable blacklister;
-    IEtherFiRateLimiter public immutable rateLimiter;
+    // `roleRegistry` is inherited from RolesLibrary; `rateLimiter` from RateLimitedToken.
 
-    /// @dev Operationally, the WEETH_MINT_LIMIT_ID bucket capacity should be configured
-    ///      ≤ the EETH_MINT_LIMIT_ID capacity on EtherFiRateLimiter. weETH minting via wrap
-    ///      is a downstream operation on already-minted eETH: any minted weETH consumes from
-    ///      the underlying eETH supply, which is itself bounded by EETH_MINT. Setting weETH
-    ///      mint higher than eETH mint creates an inconsistent rate-limit profile (the eETH
-    ///      cap is still the binding constraint for the wrap path) and only makes sense if
-    ///      a direct weETH minter exists (e.g. an L1 bridge inflow), which today does not.
+    /// @dev Protocol-wide circuit breakers on supply changes.
+    ///      These globals fire on supply changes that are NOT a wrap/unwrap.
+    ///      wrap/unwrap is a value-neutral share swap (eETH↔weETH at the live rate);
+    ///      charging it against a gross-flow bucket would let an attacker grief the
+    ///      protocol with a wrap+unwrap loop (drain MINT and BURN with ~$5 of gas per
+    ///      cycle). Instead, `wrap()`/`unwrap()` set a transient flag (see _WRAP_CTX_SLOT
+    ///      below) and `_beforeTokenTransfer` skips the global on those paths. Any
+    ///      OTHER `_mint`/`_burn` reach — a future bridge adapter, a new mint
+    ///      authority, or an exploit that finds a new path — has no way to set the
+    ///      flag and so consumes the global bucket normally. That makes the global
+    ///      bucket a real circuit breaker for unauthorized supply changes while
+    ///      keeping wrap/unwrap non-griefable.
     bytes32 public constant WEETH_MINT_LIMIT_ID = keccak256("WEETH_MINT_LIMIT_ID");
     bytes32 public constant WEETH_BURN_LIMIT_ID = keccak256("WEETH_BURN_LIMIT_ID");
-    bytes32 public constant WEETH_TRANSFER_LIMIT_ID = keccak256("WEETH_TRANSFER_LIMIT_ID");
+
+    /// @dev Transient-storage slot (EIP-1153) marking that the currently-executing
+    ///      mint/burn is part of a wrap/unwrap call. Auto-clears at end of
+    ///      transaction; subcall reverts also revert any tstore writes, so the slot
+    ///      can never get "stuck set" across txs or after an aborted wrap. Any new
+    ///      wrap-like helper added in the future MUST follow the same set-before /
+    ///      clear-after pattern; otherwise its mints WILL trip the global bucket.
+    bytes32 private constant _WRAP_CTX_SLOT = keccak256("etherfi.weeth.wrap_ctx");
 
     event Paused();
     event Unpaused();
@@ -43,6 +54,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     error AddressZero();
     error ZeroAmount();
     error ContractPaused();
+    error WeETHUnderbacked(uint256 weETHSupply, uint256 proxyShares);
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  STORAGE  ----------------------------------
@@ -57,12 +69,14 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _eETH, address _liquidityPool, address _roleRegistry, address _blacklister, address _rateLimiter) RolesLibrary(_roleRegistry) {
+    constructor(address _eETH, address _liquidityPool, address _roleRegistry, address _blacklister, address _rateLimiter)
+        RolesLibrary(_roleRegistry)
+        RateLimitedToken(_rateLimiter)
+    {
         if(_eETH == address(0) || _liquidityPool == address(0) || _blacklister == address(0) || _rateLimiter == address(0)) revert AddressZero();
         eETH = IeETH(_eETH);
         liquidityPool = ILiquidityPool(_liquidityPool);
         blacklister = IBlacklister(_blacklister);
-        rateLimiter = IEtherFiRateLimiter(_rateLimiter);
         _disableInitializers();
     }
 
@@ -83,12 +97,26 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     /// @notice Wraps eEth
     /// @param _eETHAmount the amount of eEth to wrap
     /// @return returns the amount of weEth the user receives
+    /// @dev Order is deposit-then-mint:
+    ///        1. Pull eETH from user → proxy. eETH.shares(proxy) increases by
+    ///           sharesForAmount(_eETHAmount).
+    ///        2. _mint(weETH) increases weETH.totalSupply by the same number.
+    ///           The `_afterTokenTransfer` hook runs at the end of _mint and
+    ///           asserts the backing invariant
+    ///           (weETH.totalSupply <= eETH.shares(proxy)); the deposit-first
+    ///           ordering means the proxy's share balance is already raised
+    ///           when the check fires, so the invariant holds with equality.
+    ///      `_WRAP_CTX_SLOT` flags the mint so `_beforeTokenTransfer` skips
+    ///      the global WEETH_MINT bucket on this value-neutral path; that's
+    ///      a separate concern from the backing invariant.
     function wrap(uint256 _eETHAmount) public returns (uint256) {
         if (_eETHAmount == 0) revert ZeroAmount();
         uint256 weEthAmount = liquidityPool.sharesForAmount(_eETHAmount);
-        rateLimiter.consumeIfConfigured(WEETH_MINT_LIMIT_ID, RateLimitMath.toBucketUnit(weEthAmount));
-        _mint(msg.sender, weEthAmount);
         IERC20(address(eETH)).safeTransferFrom(msg.sender, address(this), _eETHAmount);
+        bytes32 slot = _WRAP_CTX_SLOT;
+        assembly { tstore(slot, 1) }
+        _mint(msg.sender, weEthAmount);
+        assembly { tstore(slot, 0) }
         return weEthAmount;
     }
 
@@ -106,13 +134,43 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     /// @notice Unwraps weETH
     /// @param _weETHAmount the amount of weETH to unwrap
     /// @return returns the amount of eEth the user receives
+    /// @dev Sets `_WRAP_CTX_SLOT = 1` around `_burn` for the same reason wrap()
+    ///      does — see the doc comment on `wrap` and `_WRAP_CTX_SLOT`.
     function unwrap(uint256 _weETHAmount) external returns (uint256) {
         if (_weETHAmount == 0) revert ZeroAmount();
         uint256 eETHAmount = liquidityPool.amountForShare(_weETHAmount);
-        rateLimiter.consumeIfConfigured(WEETH_BURN_LIMIT_ID, RateLimitMath.toBucketUnit(_weETHAmount));
+        bytes32 slot = _WRAP_CTX_SLOT;
+        assembly { tstore(slot, 1) }
         _burn(msg.sender, _weETHAmount);
+        assembly { tstore(slot, 0) }
         IERC20(address(eETH)).safeTransfer(msg.sender, eETHAmount);
         return eETHAmount;
+    }
+
+    //--------------------------------------------------------------------------------------
+    //----------------------  PER-ADDRESS RATE LIMIT MANAGEMENT  ---------------------------
+    //--------------------------------------------------------------------------------------
+    // Thin role-gated wrappers around the internal helpers in RateLimitedToken.
+    // For a single user, pass a length-1 array.
+
+    function tightenAddressRateLimits(
+        address[] calldata users,
+        uint64[] calldata capacities,
+        uint64[] calldata refillRates
+    ) external onlyGuardian {
+        _tightenAddressRateLimits(users, capacities, refillRates);
+    }
+
+    function setAddressRateLimits(
+        address[] calldata users,
+        uint64[] calldata capacities,
+        uint64[] calldata refillRates
+    ) external onlyOperatingMultisig {
+        _setAddressRateLimits(users, capacities, refillRates);
+    }
+
+    function deleteAddressRateLimits(address[] calldata users) external onlyOperatingMultisig {
+        _deleteAddressRateLimits(users);
     }
 
     function pause() external onlyOperatingMultisig {
@@ -166,9 +224,53 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         blacklister.nonBlacklisted(from);
         blacklister.nonBlacklisted(to);
         blacklister.nonBlacklisted(msg.sender);
-        if (from != address(0) && to != address(0)) {
-            rateLimiter.consumeIfConfigured(WEETH_TRANSFER_LIMIT_ID, RateLimitMath.toBucketUnit(amount));
+
+        uint64 amt = toBucketUnit(amount);
+        bytes32 slot = _WRAP_CTX_SLOT;
+        uint256 wrapCtx;
+        assembly { wrapCtx := tload(slot) }
+
+        if (from == address(0)) {
+            // mint: value-neutral wraps skip the global; everything else (bridge,
+            // future mint authority, exploit) trips the global circuit breaker.
+            if (wrapCtx == 0) rateLimiter.consumeToken(WEETH_MINT_LIMIT_ID, amt);
+            rateLimiter.consumeForAddressIfConfigured(to, amt);
+        } else if (to == address(0)) {
+            // burn: same — unwrap is value-neutral; anything else trips global BURN.
+            if (wrapCtx == 0) rateLimiter.consumeToken(WEETH_BURN_LIMIT_ID, amt);
+            rateLimiter.consumeForAddressIfConfigured(from, amt);
+        } else {
+            // transfer: no supply change, per-address only.
+            rateLimiter.consumeForAddressIfConfigured(from, amt);
+            rateLimiter.consumeForAddressIfConfigured(to,   amt);
         }
+    }
+
+    /// @notice Invariant — weETH supply is at-least-fully-backed by eETH shares
+    ///         held in this contract (the weETH proxy).
+    /// @dev    `weETH.totalSupply <= eETH.shares(address(this))`. Runs after
+    ///         every mint/burn (skipped on transfers — they don't change
+    ///         totalSupply). The `<=` form permits benign over-collateralization
+    ///         from accidental eETH transfers to the proxy.
+    ///
+    ///         Why this holds today:
+    ///           wrap(X eETH) → safeTransferFrom moves sharesForAmount(X)
+    ///           eETH shares to the proxy AND _mint adds sharesForAmount(X)
+    ///           weETH supply. Both sides increment by the same number.
+    ///           unwrap is the symmetric decrement (_burn first, then
+    ///           transfer eETH out — the invariant trivially holds at the
+    ///           hook because supply just dropped and proxy balance is
+    ///           still high).
+    ///
+    ///         What it catches:
+    ///           Any future code path that mints weETH without pulling in
+    ///           proportional eETH shares (bridge integration, new mint
+    ///           authority, exploited path) trips the revert.
+    function _afterTokenTransfer(address from, address to, uint256 /*amount*/) internal virtual override {
+        if (from != address(0) && to != address(0)) return;     // transfers don't change supply
+        uint256 supply = totalSupply();
+        uint256 proxyShares = eETH.shares(address(this));
+        if (supply > proxyShares) revert WeETHUnderbacked(supply, proxyShares);
     }
 
     //--------------------------------------------------------------------------------------
@@ -197,4 +299,6 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     function getImplementation() external view returns (address) {
         return _getImplementation();
     }
+    // Role modifiers (`onlyAdmin`, `onlyOperatingMultisig`, `onlyGuardian`, `onlySuperGuardian`,
+    // `onlyUpgradeTimelock`, ...) are inherited from RolesLibrary.
 }

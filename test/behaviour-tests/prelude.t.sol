@@ -80,7 +80,9 @@ contract PreludeTest is Test, ArrayTestHelper {
         blacklisterInstance = Blacklister(address(new UUPSProxy(address(blacklisterImpl), abi.encodeWithSelector(Blacklister.initialize.selector))));
 
         // Deploy rate limiter first with proxy pattern (used by EtherFiNodesManager).
-        EtherFiRateLimiter rateLimiterImpl = new EtherFiRateLimiter(address(roleRegistry));
+        // Pass the on-chain eETH / weETH proxy addresses so the per-address bucket API
+        // works for behaviour tests that wrap or transfer through them.
+        EtherFiRateLimiter rateLimiterImpl = new EtherFiRateLimiter(address(roleRegistry), 0x35fA164735182de50811E8e2E824cFb9B6118ac2, 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee);
         UUPSProxy rateLimiterProxy = new UUPSProxy(address(rateLimiterImpl), "");
         rateLimiter = EtherFiRateLimiter(address(rateLimiterProxy));
         rateLimiter.initialize();
