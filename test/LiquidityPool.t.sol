@@ -1804,19 +1804,6 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.batchCreateBeaconValidators(emptyDd, empty, address(0));
     }
 
-    function test_batchApproveRegistration_blockedByPauseContractUntil() public {
-        _grantLpPauseUntilRoles();
-        vm.prank(lpPauseUntilPauser);
-        liquidityPoolInstance.pauseContractUntil();
-
-        uint256[] memory empty;
-        bytes[] memory emptyBytes;
-        vm.expectRevert(
-            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
-        );
-        liquidityPoolInstance.batchApproveRegistration(empty, emptyBytes, emptyBytes);
-    }
-
     function test_confirmAndFundBeaconValidators_blockedByPauseContractUntil() public {
         _grantLpPauseUntilRoles();
         vm.prank(lpPauseUntilPauser);

@@ -12,7 +12,6 @@ import "./interfaces/IStakingManager.sol";
 import "./interfaces/IWithdrawRequestNFT.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/ILiquifier.sol";
-import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/IEtherFiRedemptionManager.sol";
 import "./interfaces/IPriorityWithdrawalQueue.sol";
@@ -135,7 +134,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     error InsufficientLiquidity();
     error SendFail();
     error InvalidValidatorSize();
-    error InvalidArrayLengths();
     error InvalidAmountForShare();
     error InvalidRate();
     error AlreadyMigrated();
@@ -397,51 +395,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     /// @notice send remaining eth to deposit contract to activate the provided validators
-    /// @dev step 3 of staking flow. This version exists to remain compatible with existing callers.
-    ///   future services should use confirmAndFundBeaconValidators()
-     function batchApproveRegistration(
-        uint256[] memory _validatorIds,
-        bytes[] calldata _pubkeys,
-        bytes[] calldata _signatures
-    ) external nonReentrant whenNotPaused {
-        if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
-        if (validatorSizeWei < stakingManager.MIN_VALIDATOR_SIZE_WEI() || validatorSizeWei > stakingManager.MAX_VALIDATOR_SIZE_WEI()) revert InvalidValidatorSize();
-        if (_validatorIds.length == 0 || _validatorIds.length != _pubkeys.length || _validatorIds.length != _signatures.length) revert InvalidArrayLengths();
-
-        // we have already deposited the initial amount to create the validator on the beacon chain
-        uint256 remainingEthPerValidator = validatorSizeWei - stakingManager.INITIAL_DEPOSIT_AMOUNT();
-
-        // In order to maintain compatibility with current callers in this upgrade
-        // need to construct data from old format
-        IStakingManager.DepositData[] memory depositData = new IStakingManager.DepositData[](_validatorIds.length);
-
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            IEtherFiNode etherFiNode = IEtherFiNode(nodesManager.etherfiNodeAddress(_validatorIds[i]));
-            address eigenPod = address(etherFiNode.getEigenPod());
-            bytes memory withdrawalCredentials = nodesManager.addressToCompoundingWithdrawalCredentials(eigenPod);
-
-            bytes32 confirmDepositDataRoot = stakingManager.generateDepositDataRoot(
-                _pubkeys[i],
-                _signatures[i],
-                withdrawalCredentials,
-                remainingEthPerValidator
-            );
-            IStakingManager.DepositData memory confirmDepositData = IStakingManager.DepositData({
-                publicKey: _pubkeys[i],
-                signature: _signatures[i],
-                depositDataRoot: confirmDepositDataRoot,
-                ipfsHashForEncryptedValidatorKey: ""
-            });
-            depositData[i] = confirmDepositData;
-        }
-
-        uint256 outboundEthAmountFromLp = remainingEthPerValidator * _validatorIds.length;
-        stakingManager.confirmAndFundBeaconValidators{value: outboundEthAmountFromLp}(depositData, validatorSizeWei);
-
-        _accountForEthSentOut(outboundEthAmountFromLp);
-    }
-
-    /// @notice send remaining eth to deposit contract to activate the provided validators
     /// @dev step 3 of staking flow
     function confirmAndFundBeaconValidators(
         IStakingManager.DepositData[] calldata _depositData,
@@ -458,9 +411,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         _accountForEthSentOut(outboundEthAmountFromLp);
     }
 
-    /// @dev set the size of validators created when caling batchApproveRegistration().
-    ///   In a future upgrade this will be a parameter to that call but was done like this to
-    ///   to limit changes to other dependent contracts
+    /// @dev set the size of validators created when EtherFiAdmin.executeValidatorApprovalTask
+    ///   forwards into confirmAndFundBeaconValidators(). In a future upgrade this will be a
+    ///   parameter to that call but was done like this to limit changes to other dependent contracts.
     function setValidatorSizeWei(uint256 _validatorSizeWei) external onlyAdmin {
         if (_validatorSizeWei < stakingManager.MIN_VALIDATOR_SIZE_WEI() || _validatorSizeWei > stakingManager.MAX_VALIDATOR_SIZE_WEI()) revert InvalidValidatorSize();
         validatorSizeWei = _validatorSizeWei;

@@ -1113,7 +1113,8 @@ contract EtherFiOracleTest is TestSetup {
 
         // Execute the validator approval task
         // Note: We need valid pubKeys and signatures, but for testing we can use empty ones
-        // The actual validation happens in liquidityPool.batchApproveRegistration
+        // The actual deposit-data construction now lives in EtherFiAdmin._approveValidators
+        // which forwards to liquidityPool.confirmAndFundBeaconValidators.
         bytes[] memory pubKeys = new bytes[](1);
         bytes[] memory signatures = new bytes[](1);
         pubKeys[0] = new bytes(48);
