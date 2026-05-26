@@ -778,12 +778,24 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     ///
     ///         Overflow note: P, S each fit in uint128 in any plausible
     ///         protocol state; P*S ≈ 1.4e52 ≪ uint256 max. Safe by inspection.
+    ///
+    ///         Implementation note: the snapshot / check pair lives in two
+    ///         internal view helpers so the body isn't duplicated at every
+    ///         site Solidity inlines this modifier into. Same semantics,
+    ///         ~1 KB smaller runtime.
     modifier nonDecreasingRate() {
-        uint256 P0 = getTotalPooledEther();
-        uint256 S0 = eETH.totalShares();
+        (uint256 P0, uint256 S0) = _snapRate();
         _;
-        uint256 P1 = getTotalPooledEther();
-        uint256 S1 = eETH.totalShares();
+        _checkRateNonDec(P0, S0);
+    }
+
+    function _snapRate() internal view returns (uint256 P, uint256 S) {
+        P = getTotalPooledEther();
+        S = eETH.totalShares();
+    }
+
+    function _checkRateNonDec(uint256 P0, uint256 S0) internal view {
+        (uint256 P1, uint256 S1) = _snapRate();
         // Bootstrap exempt (no rate before/after to compare).
         if (S0 != 0 && S1 != 0 && P1 * S0 < P0 * S1) revert EETHRateDeflation(P0, S0, P1, S1);
     }
