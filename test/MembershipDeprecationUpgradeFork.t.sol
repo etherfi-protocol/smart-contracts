@@ -58,6 +58,8 @@ contract MembershipDeprecationUpgradeForkTest is Test {
     MembershipNFT     mnft;
 
     function setUp() public {
+        vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
+
         mm   = MembershipManager(payable(MM_PROXY));
         mnft = MembershipNFT(MNFT_PROXY);
 

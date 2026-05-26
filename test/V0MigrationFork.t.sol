@@ -45,6 +45,7 @@ contract V0MigrationForkTest is Test {
         // Use the latest fork — these are pure read/migrate flows so block
         // pinning is unnecessary. If a tester wants a specific block they can
         // override via cheatcodes before calling test_*.
+        vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
         mm = MembershipManager(payable(MEMBERSHIP_MANAGER));
     }
 
