@@ -7,7 +7,7 @@ import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 
-import "@etherfi/interfaces/IProtocolRevenueManager.sol";
+import "@etherfi/archive/interfaces/IProtocolRevenueManager.sol";
 import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
 import "@etherfi/staking/interfaces/IAuctionManager.sol";
 

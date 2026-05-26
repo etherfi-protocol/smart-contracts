@@ -8,7 +8,6 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 import "@etherfi/staking/interfaces/IAuctionManager.sol";
 import "@etherfi/staking/interfaces/INodeOperatorManager.sol";
-import "@etherfi/interfaces/IProtocolRevenueManager.sol";
 import "@etherfi/governance/interfaces/IBlacklister.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
@@ -34,7 +33,7 @@ contract AuctionManager is
     uint256 public numberOfActiveBids;
 
     INodeOperatorManager private DEPRECATED_nodeOperatorManager;
-    IProtocolRevenueManager private DEPRECATED_protocolRevenueManager;
+    address private DEPRECATED_protocolRevenueManager;
 
     address private DEPRECATED_stakingManagerContractAddress;
     bool public whitelistEnabled;
