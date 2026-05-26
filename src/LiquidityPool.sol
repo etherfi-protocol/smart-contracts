@@ -510,31 +510,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /// @notice Locks ETH for finalized NFT withdrawals by transferring from LP to WithdrawRequestNFT. TVL preserved by InLp/OutOfLp rebalance; share rate unchanged.
     function addEthAmountLockedForWithdrawal(uint128 _amount) external {
         if (msg.sender != address(etherFiAdminContract) && msg.sender != address(withdrawRequestNFT)) revert IncorrectCaller();
-        if (!escrowMigrationCompleted) revert MigrationNotComplete();
-        if (totalValueInLp < _amount) revert InsufficientLiquidity();
-
-        totalValueInLp     -= _amount;
-        totalValueOutOfLp  += _amount;
-
-        _sendFund(address(withdrawRequestNFT), _amount);
-
-        _checkTotalValueInLp();
-        _checkMinAmountForShare();
+        _lockEth(address(withdrawRequestNFT), _amount);
     }
 
     /// @notice Locks ETH for the priority withdrawal queue by transferring from LP to the queue contract. TVL preserved by InLp/OutOfLp rebalance.
     function transferLockedEthForPriority(uint128 _amount) external {
         if (msg.sender != address(priorityWithdrawalQueue)) revert IncorrectCaller();
-        if (!escrowMigrationCompleted) revert MigrationNotComplete();
-        if (totalValueInLp < _amount) revert InsufficientLiquidity();
-
-        totalValueInLp     -= _amount;
-        totalValueOutOfLp  += _amount;
-
-        _sendFund(address(priorityWithdrawalQueue), _amount);
-
-        _checkTotalValueInLp();
-        _checkMinAmountForShare();
+        _lockEth(address(priorityWithdrawalQueue), _amount);
     }
 
     /// @notice Returns ETH from the priority queue back to LP on a finalized cancel. Inverse of transferLockedEthForPriority.
@@ -600,6 +582,20 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         uint256 balance = address(this).balance;
         (bool sent, ) = _recipient.call{value: _amount}("");
         if (!sent || address(this).balance < balance - _amount) revert SendFail();
+    }
+
+    /// @dev Shared body for `addEthAmountLockedForWithdrawal` and `transferLockedEthForPriority`.
+    ///      Both move ETH out of LP into a segregated escrow (WRNFT or PQ) while keeping TVL
+    ///      invariant by rebalancing `totalValueInLp` -> `totalValueOutOfLp`. Caller-gating
+    ///      lives in the two external entry points.
+    function _lockEth(address _dest, uint128 _amount) internal {
+        if (!escrowMigrationCompleted) revert MigrationNotComplete();
+        if (totalValueInLp < _amount) revert InsufficientLiquidity();
+        totalValueInLp    -= _amount;
+        totalValueOutOfLp += _amount;
+        _sendFund(_dest, _amount);
+        _checkTotalValueInLp();
+        _checkMinAmountForShare();
     }
 
     function _accountForEthSentOut(uint256 _amount) internal {
