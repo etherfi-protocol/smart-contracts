@@ -5,22 +5,28 @@ import "forge-std/Script.sol";
 
 import {AuctionManager} from "../../../src/AuctionManager.sol";
 import {BucketRateLimiter} from "../../../src/BucketRateLimiter.sol";
+import {CumulativeMerkleRewardsDistributor} from "../../../src/CumulativeMerkleRewardsDistributor.sol";
+import {DepositAdapter} from "../../../src/DepositAdapter.sol";
 import {EETH as EETHToken} from "../../../src/EETH.sol";
 import {EtherFiAdmin} from "../../../src/EtherFiAdmin.sol";
 import {EtherFiNodesManager} from "../../../src/EtherFiNodesManager.sol";
 import {EtherFiOracle} from "../../../src/EtherFiOracle.sol";
 import {EtherFiRedemptionManager} from "../../../src/EtherFiRedemptionManager.sol";
 import {EtherFiRestaker} from "../../../src/EtherFiRestaker.sol";
+import {EtherFiRewardsRouter} from "../../../src/EtherFiRewardsRouter.sol";
 import {LiquidityPool} from "../../../src/LiquidityPool.sol";
 import {Liquifier} from "../../../src/Liquifier.sol";
 import {MembershipManager} from "../../../src/MembershipManager.sol";
 import {MembershipNFT} from "../../../src/MembershipNFT.sol";
 import {NodeOperatorManager} from "../../../src/NodeOperatorManager.sol";
+import {PriorityWithdrawalQueue} from "../../../src/PriorityWithdrawalQueue.sol";
+import {RestakingRewardsRouter} from "../../../src/RestakingRewardsRouter.sol";
 import {StakingManager} from "../../../src/StakingManager.sol";
 import {WeETH as WeETHToken} from "../../../src/WeETH.sol";
 import {WithdrawRequestNFT} from "../../../src/WithdrawRequestNFT.sol";
 
 import {Blacklister} from "../../../src/helpers/Blacklister.sol";
+import {WeETHWithdrawAdapter} from "../../../src/helpers/WeETHWithdrawAdapter.sol";
 import {UUPSProxy} from "../../../src/UUPSProxy.sol";
 
 import {Deployed} from "../../deploys/Deployed.s.sol";
@@ -46,7 +52,6 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
     // NOTE: These values are variable and would be further changed as per needed
     // Liquifier
     address public constant STETH_PRICE_FEED = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812; // Chainlink stETH/ETH
-    address public constant LIDO = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
     address public constant STETH_ETH_CURVE_POOL = 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022;
     uint256 public constant LIQUIFIER_MIN_DISCOUNT_BPS = 100;          // 1% floor
     uint256 public constant LIQUIFIER_STALE_PRICE_WINDOW = 7 days;
@@ -75,7 +80,9 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
     uint256 public constant WNFT_MAX_ACCEPTABLE_SHARE_RATE = 4 ether;
     uint256 public constant ADMIN_MAX_REQUESTS_TO_FINALIZE_PER_REPORT = 2_000;
 
-    // WITHDRAW_REQUEST_NFT_BUYBACK_SAFE inherited from Deployed.
+    // PriorityWithdrawalQueue — must match the constructor arg used at proxy genesis;
+    // the proxy's existing impl was deployed with 1 hour, so the new impl must too.
+    uint32  public constant PWQ_MIN_DELAY = 1 hours;
 
     // ----- Deployment outputs -----
     address public auctionManagerImpl;
@@ -97,6 +104,14 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
 
     address public blacklisterImpl;
     address public blacklisterProxy;
+
+    // Peripheral UUPS proxies modified by PR #385 — new impls only, existing proxies are reused.
+    address public priorityWithdrawalQueueImpl;
+    address public etherFiRewardsRouterImpl;
+    address public restakingRewardsRouterImpl;
+    address public cumulativeMerkleRewardsDistributorImpl;
+    address public depositAdapterImpl;
+    address public weETHWithdrawAdapterImpl;
 
     function run() public {
         console2.log("================================================");
@@ -175,7 +190,7 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
             Liquifier.ConstructorAddresses memory lqAddrs = Liquifier.ConstructorAddresses({
                 liquidityPool: LIQUIDITY_POOL,
                 lidoWithdrawalQueue: LIDO_WITHDRAWAL_QUEUE,
-                lido: LIDO,
+                lido: STETH,
                 stEth_Eth_Pool: STETH_ETH_CURVE_POOL,
                 roleRegistry: ROLE_REGISTRY,
                 stEthPriceFeed: STETH_PRICE_FEED,
@@ -325,6 +340,68 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
             bucketRateLimiterImpl = deploy(name, args, bc, commitHashSalt, true, factory);
         }
 
+        // 3. Peripheral UUPS proxies touched by PR #385.
+        {
+            string memory name = "PriorityWithdrawalQueue";
+            bytes memory args = abi.encode(
+                LIQUIDITY_POOL,
+                EETH,
+                WEETH,
+                ROLE_REGISTRY,
+                WITHDRAW_REQUEST_NFT_BUYBACK_SAFE,
+                PWQ_MIN_DELAY
+            );
+            bytes memory bc = abi.encodePacked(type(PriorityWithdrawalQueue).creationCode, args);
+            priorityWithdrawalQueueImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+        }
+        {
+            string memory name = "EtherFiRewardsRouter";
+            bytes memory args = abi.encode(LIQUIDITY_POOL, TREASURY, ROLE_REGISTRY);
+            bytes memory bc = abi.encodePacked(type(EtherFiRewardsRouter).creationCode, args);
+            etherFiRewardsRouterImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+        }
+        {
+            string memory name = "RestakingRewardsRouter";
+            bytes memory args = abi.encode(ROLE_REGISTRY, EIGEN, LIQUIDITY_POOL);
+            bytes memory bc = abi.encodePacked(type(RestakingRewardsRouter).creationCode, args);
+            restakingRewardsRouterImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+        }
+        {
+            string memory name = "CumulativeMerkleRewardsDistributor";
+            bytes memory args = abi.encode(ROLE_REGISTRY);
+            bytes memory bc = abi.encodePacked(type(CumulativeMerkleRewardsDistributor).creationCode, args);
+            cumulativeMerkleRewardsDistributorImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+        }
+        {
+            string memory name = "DepositAdapter";
+            bytes memory args = abi.encode(
+                LIQUIDITY_POOL,
+                LIQUIFIER,
+                WEETH,
+                EETH,
+                WETH,
+                STETH,
+                WSTETH,
+                ROLE_REGISTRY,
+                blacklisterProxy
+            );
+            bytes memory bc = abi.encodePacked(type(DepositAdapter).creationCode, args);
+            depositAdapterImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+        }
+        {
+            string memory name = "WeETHWithdrawAdapter";
+            bytes memory args = abi.encode(
+                WEETH,
+                EETH,
+                LIQUIDITY_POOL,
+                WITHDRAW_REQUEST_NFT,
+                ROLE_REGISTRY,
+                blacklisterProxy
+            );
+            bytes memory bc = abi.encodePacked(type(WeETHWithdrawAdapter).creationCode, args);
+            weETHWithdrawAdapterImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+        }
+
         vm.stopBroadcast();
 
         _logSummary();
@@ -353,6 +430,12 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
         console2.log("MembershipManager impl:         ", membershipManagerImpl);
         console2.log("MembershipNFT impl:             ", membershipNFTImpl);
         console2.log("BucketRateLimiter impl:         ", bucketRateLimiterImpl);
+        console2.log("PriorityWithdrawalQueue impl:   ", priorityWithdrawalQueueImpl);
+        console2.log("EtherFiRewardsRouter impl:      ", etherFiRewardsRouterImpl);
+        console2.log("RestakingRewardsRouter impl:    ", restakingRewardsRouterImpl);
+        console2.log("CumulativeMerkleRewardsDist impl:", cumulativeMerkleRewardsDistributorImpl);
+        console2.log("DepositAdapter impl:            ", depositAdapterImpl);
+        console2.log("WeETHWithdrawAdapter impl:      ", weETHWithdrawAdapterImpl);
         console2.log("================================================");
     }
 }
