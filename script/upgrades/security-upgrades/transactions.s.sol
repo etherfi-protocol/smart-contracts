@@ -50,8 +50,9 @@ import {Utils} from "../../utils/utils.sol";
  *   5. verifyImmutablePreservation — immutables on each new impl match wiring
  *   6. verifyAccessControlPreservation — owner + paused + init state unchanged
  *
- *   7. executeOperatingConfig      — Batch B (OPERATING_TIMELOCK, 2d)
- *   8. verifyOperatingConfig       — rate-limiter buckets + pause durations set
+ *   7. executeRoleGrants           — direct from ETHERFI_UPGRADE_ADMIN (RoleRegistry owner, no timelock)
+ *   8. executeOperatingConfig      — Batch B (OPERATING_TIMELOCK, 2d)
+ *   9. verifyOperatingConfig       — rate-limiter buckets + pause durations set + roles granted
  */
 contract SecurityUpgradesScript is Script, Deployed, Utils {
     // ─────────────────────────────────────────────────────────────────────
@@ -209,6 +210,8 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         verifyUpgrades();
         verifyImmutablePreservation();
         verifyAccessControlPreservation();
+
+        executeRoleGrants();
 
         executeOperatingConfig();
         verifyOperatingConfig();
@@ -777,9 +780,8 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         (targets[i], data[i]) = (WITHDRAW_REQUEST_NFT,
             abi.encodeWithSelector(WithdrawRequestNFT.initializeShareRateFreezeUpgrade.selector));    i++;
 
-        i = _roleGrant(targets, data, i, roleRegistry.UPGRADE_TIMELOCK_ROLE(),   HOLDER_UPGRADE_TIMELOCK_ROLE);
-        i = _roleGrant(targets, data, i, roleRegistry.OPERATION_TIMELOCK_ROLE(), HOLDER_OPERATION_TIMELOCK_ROLE);
-        i = _roleGrant(targets, data, i, roleRegistry.OPERATION_MULTISIG_ROLE(), HOLDER_OPERATION_MULTISIG_ROLE);
+        // Role grants live in executeRoleGrants() — they originate from the
+        // RoleRegistry owner (ETHERFI_UPGRADE_ADMIN), not from any timelock.
 
         _shrinkAndEmit(
             BatchEmit({
@@ -1132,10 +1134,64 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     }
 
     //--------------------------------------------------------------------------------------
-    // STEP 7: executeOperatingConfig - Batch B
+    // STEP 7: executeRoleGrants
+    //
+    // RoleRegistry.grantRole is gated by `onlyOwner` on the registry — the
+    // registry's owner is ETHERFI_UPGRADE_ADMIN (the upgrade multisig), NOT
+    // any timelock. So every role grant is emitted as one Safe transaction
+    // directly from that multisig, with no timelock wrapping.
+    //--------------------------------------------------------------------------------------
+    function executeRoleGrants() public {
+        console2.log("=== Step 7: Executing Role Grants (ETHERFI_UPGRADE_ADMIN, no timelock) ===");
+
+        address[] memory targets    = new address[](9);
+        uint256[] memory values     = new uint256[](9);
+        bytes[]   memory calldatas  = new bytes[](9);
+
+        bytes32[9] memory roles = [
+            roleRegistry.UPGRADE_TIMELOCK_ROLE(),
+            roleRegistry.OPERATION_TIMELOCK_ROLE(),
+            roleRegistry.OPERATION_MULTISIG_ROLE(),
+            roleRegistry.SUPER_GUARDIAN_ROLE(),
+            roleRegistry.GUARDIAN_ROLE(),
+            roleRegistry.ORACLE_OPERATIONS_ROLE(),
+            roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(),
+            roleRegistry.EXECUTOR_OPERATIONS_ROLE(),
+            roleRegistry.EIGENPOD_OPERATIONS_ROLE()
+        ];
+        address[9] memory holders = [
+            HOLDER_UPGRADE_TIMELOCK_ROLE,
+            HOLDER_OPERATION_TIMELOCK_ROLE,
+            HOLDER_OPERATION_MULTISIG_ROLE,
+            HOLDER_SUPER_GUARDIAN_ROLE,
+            HOLDER_GUARDIAN_ROLE,
+            HOLDER_ORACLE_OPERATIONS_ROLE,
+            HOLDER_HOUSEKEEPING_OPERATIONS_ROLE,
+            HOLDER_EXECUTOR_OPERATIONS_ROLE,
+            HOLDER_EIGENPOD_OPERATIONS_ROLE
+        ];
+        for (uint256 k = 0; k < 9; k++) {
+            targets[k]   = ROLE_REGISTRY;
+            calldatas[k] = abi.encodeWithSelector(RoleRegistry.grantRole.selector, roles[k], holders[k]);
+        }
+
+        writeSafeJson(OUT_DIR, "role_grants.json", ETHERFI_UPGRADE_ADMIN, targets, values, calldatas, 1);
+
+        console2.log("=== Dry-running role grants on fork ===");
+        vm.startPrank(ETHERFI_UPGRADE_ADMIN);
+        for (uint256 k = 0; k < 9; k++) {
+            roleRegistry.grantRole(roles[k], holders[k]);
+        }
+        vm.stopPrank();
+        console2.log("[OK] all 9 role grants executed on fork");
+        console2.log("");
+    }
+
+    //--------------------------------------------------------------------------------------
+    // STEP 8: executeOperatingConfig - Batch B
     //--------------------------------------------------------------------------------------
     function executeOperatingConfig() public {
-        console2.log("=== Step 7: Executing Operating Config (Batch B, OPERATING_TIMELOCK, 2d) ===");
+        console2.log("=== Step 8: Executing Operating Config (Batch B, OPERATING_TIMELOCK, 2d) ===");
 
         address[] memory targets = new address[](60);
         bytes[]   memory data    = new bytes[](60);
@@ -1168,13 +1224,6 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         (targets[i], data[i]) = (CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR, _pauseDur(PAUSE_UNTIL_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR)); i++;
         (targets[i], data[i]) = (WEETH_WITHDRAW_ADAPTER,                _pauseDur(PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER));                i++;
 
-        i = _roleGrant(targets, data, i, roleRegistry.SUPER_GUARDIAN_ROLE(),          HOLDER_SUPER_GUARDIAN_ROLE);
-        i = _roleGrant(targets, data, i, roleRegistry.GUARDIAN_ROLE(),                HOLDER_GUARDIAN_ROLE);
-        i = _roleGrant(targets, data, i, roleRegistry.ORACLE_OPERATIONS_ROLE(),       HOLDER_ORACLE_OPERATIONS_ROLE);
-        i = _roleGrant(targets, data, i, roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), HOLDER_HOUSEKEEPING_OPERATIONS_ROLE);
-        i = _roleGrant(targets, data, i, roleRegistry.EXECUTOR_OPERATIONS_ROLE(),     HOLDER_EXECUTOR_OPERATIONS_ROLE);
-        i = _roleGrant(targets, data, i, roleRegistry.EIGENPOD_OPERATIONS_ROLE(),     HOLDER_EIGENPOD_OPERATIONS_ROLE);
-
         _shrinkAndEmit(
             BatchEmit({
                 label: "Batch B - Operating",
@@ -1191,10 +1240,10 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     }
 
     //--------------------------------------------------------------------------------------
-    // STEP 8: verifyOperatingConfig
+    // STEP 9: verifyOperatingConfig
     //--------------------------------------------------------------------------------------
     function verifyOperatingConfig() public view {
-        console2.log("=== Step 8: Verifying Operating Config ===");
+        console2.log("=== Step 9: Verifying Operating Config ===");
         EtherFiRateLimiter rl = EtherFiRateLimiter(payable(ETHERFI_RATE_LIMITER));
         require(rl.limitExists(EETH_MINT_LIMIT_ID),      "EETH_MINT bucket missing");
         require(rl.limitExists(EETH_BURN_LIMIT_ID),      "EETH_BURN bucket missing");
@@ -1252,18 +1301,6 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
 
     function _pauseDur(uint256 d) internal pure returns (bytes memory) {
         return abi.encodeWithSignature("setPauseUntilDuration(uint256)", d);
-    }
-
-    function _roleGrant(
-        address[] memory targets,
-        bytes[]   memory data,
-        uint256          i,
-        bytes32          role,
-        address          account
-    ) internal pure returns (uint256) {
-        targets[i] = ROLE_REGISTRY;
-        data[i]    = abi.encodeWithSelector(RoleRegistry.grantRole.selector, role, account);
-        return i + 1;
     }
 
     struct BatchEmit {
