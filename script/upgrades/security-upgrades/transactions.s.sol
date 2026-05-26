@@ -50,8 +50,9 @@ import {Utils} from "../../utils/utils.sol";
  *   6. verifyAccessControlPreservation — owner + paused + init state unchanged
  *
  *   7. executeRoleGrants           — direct from ETHERFI_UPGRADE_ADMIN (RoleRegistry owner, no timelock)
- *   8. executeOperatingConfig      — Batch B (OPERATING_TIMELOCK, 2d)
- *   9. verifyOperatingConfig       — rate-limiter buckets + pause durations set + roles granted
+ *   8. executeLpWithdrawBounds     — direct from ETHERFI_OPERATING_ADMIN (operating multisig, no timelock)
+ *   9. executeOperatingConfig      — Batch B (OPERATING_TIMELOCK, 2d)
+ *  10. verifyOperatingConfig       — rate-limiter buckets + pause durations set + roles granted + LP withdraw bounds
  */
 contract SecurityUpgradesScript is Script, Deployed, Utils {
     // ─────────────────────────────────────────────────────────────────────
@@ -112,6 +113,11 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
 
     // LiquidityPool
     uint256 constant LP_MIN_AMOUNT_FOR_SHARE = 1 ether;
+    // Bounds for LP.requestWithdraw (queued NFT-mint path). Default storage is 0/0,
+    // which bricks the path; seeded via Safe tx from ETHERFI_OPERATING_ADMIN after
+    // executeRoleGrants() grants it OPERATION_MULTISIG_ROLE. Dummy values for now.
+    uint256 constant LP_MIN_WITHDRAW_AMOUNT = 100_000 gwei; // 0.0001 ether
+    uint256 constant LP_MAX_WITHDRAW_AMOUNT = 1_000 ether;
 
     // WithdrawRequestNFT
     uint256 constant WNFT_MIN_ACCEPTABLE_SHARE_RATE = 1;
@@ -235,6 +241,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         verifyAccessControlPreservation();
 
         executeRoleGrants();
+        executeLpWithdrawBounds();
 
         executeOperatingConfig();
         verifyOperatingConfig();
@@ -1244,10 +1251,48 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     }
 
     //--------------------------------------------------------------------------------------
-    // STEP 8: executeOperatingConfig - Batch B
+    // STEP 8: executeLpWithdrawBounds
+    //
+    // LP.setMinWithdrawAmount / setMaxWithdrawAmount are onlyOperatingMultisig.
+    // ETHERFI_OPERATING_ADMIN is granted OPERATION_MULTISIG_ROLE in step 7, so this
+    // tx is broadcast directly from that Safe (no timelock).
+    //
+    // Order matters: setMaxWithdrawAmount must run first. The setMinWithdrawAmount
+    // check requires _min <= maxWithdrawAmount, which is 0 in fresh storage and
+    // would force any non-zero _min to revert.
+    //--------------------------------------------------------------------------------------
+    function executeLpWithdrawBounds() public {
+        console2.log("=== Step 8: Executing LP Withdraw Bounds (ETHERFI_OPERATING_ADMIN, no timelock) ===");
+
+        address[] memory targets   = new address[](2);
+        uint256[] memory values    = new uint256[](2);
+        bytes[]   memory calldatas = new bytes[](2);
+
+        targets[0]   = LIQUIDITY_POOL;
+        calldatas[0] = abi.encodeWithSelector(LiquidityPool.setMaxWithdrawAmount.selector, LP_MAX_WITHDRAW_AMOUNT);
+        targets[1]   = LIQUIDITY_POOL;
+        calldatas[1] = abi.encodeWithSelector(LiquidityPool.setMinWithdrawAmount.selector, LP_MIN_WITHDRAW_AMOUNT);
+
+        writeSafeJson(OUT_DIR, "lp_withdraw_bounds.json", ETHERFI_OPERATING_ADMIN, targets, values, calldatas, 1);
+
+        console2.log("=== Dry-running LP withdraw bounds on fork ===");
+        vm.startPrank(ETHERFI_OPERATING_ADMIN);
+        LiquidityPool(payable(LIQUIDITY_POOL)).setMaxWithdrawAmount(LP_MAX_WITHDRAW_AMOUNT);
+        LiquidityPool(payable(LIQUIDITY_POOL)).setMinWithdrawAmount(LP_MIN_WITHDRAW_AMOUNT);
+        vm.stopPrank();
+
+        require(LiquidityPool(payable(LIQUIDITY_POOL)).maxWithdrawAmount() == LP_MAX_WITHDRAW_AMOUNT, "LP.maxWithdrawAmount not seeded");
+        require(LiquidityPool(payable(LIQUIDITY_POOL)).minWithdrawAmount() == LP_MIN_WITHDRAW_AMOUNT, "LP.minWithdrawAmount not seeded");
+
+        console2.log("[OK] LP min/max withdraw bounds set");
+        console2.log("");
+    }
+
+    //--------------------------------------------------------------------------------------
+    // STEP 9: executeOperatingConfig - Batch B
     //--------------------------------------------------------------------------------------
     function executeOperatingConfig() public {
-        console2.log("=== Step 8: Executing Operating Config (Batch B, OPERATING_TIMELOCK, 2d) ===");
+        console2.log("=== Step 9: Executing Operating Config (Batch B, OPERATING_TIMELOCK, 2d) ===");
 
         address[] memory targets = new address[](60);
         bytes[]   memory data    = new bytes[](60);
@@ -1311,10 +1356,10 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     }
 
     //--------------------------------------------------------------------------------------
-    // STEP 9: verifyOperatingConfig
+    // STEP 10: verifyOperatingConfig
     //--------------------------------------------------------------------------------------
     function verifyOperatingConfig() public view {
-        console2.log("=== Step 9: Verifying Operating Config ===");
+        console2.log("=== Step 10: Verifying Operating Config ===");
         EtherFiRateLimiter rl = EtherFiRateLimiter(payable(ETHERFI_RATE_LIMITER));
         require(rl.limitExists(EETH_MINT_LIMIT_ID),                "EETH_MINT bucket missing");
         require(rl.limitExists(EETH_BURN_LIMIT_ID),                "EETH_BURN bucket missing");
@@ -1360,7 +1405,10 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         require(roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(),     HOLDER_EXECUTOR_OPERATIONS_ROLE),     "EXECUTOR_OPERATIONS_ROLE not granted");
         require(roleRegistry.hasRole(roleRegistry.EIGENPOD_OPERATIONS_ROLE(),     HOLDER_EIGENPOD_OPERATIONS_ROLE),     "EIGENPOD_OPERATIONS_ROLE not granted");
 
-        console2.log("[OK] rate-limiter buckets + pause durations + role grants verified");
+        require(LiquidityPool(payable(LIQUIDITY_POOL)).maxWithdrawAmount() == LP_MAX_WITHDRAW_AMOUNT, "LP.maxWithdrawAmount mismatch");
+        require(LiquidityPool(payable(LIQUIDITY_POOL)).minWithdrawAmount() == LP_MIN_WITHDRAW_AMOUNT, "LP.minWithdrawAmount mismatch");
+
+        console2.log("[OK] rate-limiter buckets + pause durations + role grants + LP withdraw bounds verified");
         console2.log("");
     }
 
