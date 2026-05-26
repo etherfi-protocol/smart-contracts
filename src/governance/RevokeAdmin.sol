@@ -5,8 +5,9 @@ pragma solidity ^0.8.27;
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 import "../utils/RolesLibrary.sol";
+import "./interfaces/IRevokeAdmin.sol";
 
-contract RevokeAdmin is Initializable, UUPSUpgradeable, RolesLibrary {
+contract RevokeAdmin is Initializable, UUPSUpgradeable, RolesLibrary, IRevokeAdmin {
 
     constructor(address _roleRegistry) RolesLibrary(_roleRegistry) {
         _disableInitializers();
