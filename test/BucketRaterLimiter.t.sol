@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
-import "@etherfi/rate-limiting/BucketRateLimiter.sol";
+import "@etherfi/archive/BucketRateLimiter.sol";
 import "@etherfi/utils/UUPSProxy.sol";
 import "@etherfi/governance/RoleRegistry.sol";
 

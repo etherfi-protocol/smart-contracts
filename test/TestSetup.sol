@@ -49,7 +49,7 @@ import "@etherfi/oracle/EtherFiOracle.sol";
 import "@etherfi/oracle/EtherFiAdmin.sol";
 import "@etherfi/governance/EtherFiTimelock.sol";
 
-import "@etherfi/rate-limiting/BucketRateLimiter.sol";
+import "@etherfi/archive/BucketRateLimiter.sol";
 import "@etherfi/withdrawals/EtherFiRedemptionManager.sol";
 
 import "@scripts/ContractCodeChecker.sol";
