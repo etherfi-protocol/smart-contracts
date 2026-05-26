@@ -229,14 +229,14 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     // Used by eETH staking flow
-    function deposit(address _referral) public payable nonReentrant whenNotPaused nonBlacklisted nonDecreasingRate returns (uint256) {
+    function deposit(address _referral) public payable nonReentrant whenNotPaused nonBlacklisted returns (uint256) {
         emit Deposit(msg.sender, msg.value, SourceOfFunds.EETH, _referral);
 
         return _deposit(msg.sender, msg.value, 0);
     }
 
     // Used by eETH staking flow through Liquifier contract; deVamp or to pay protocol fees
-    function depositToRecipient(address _recipient, uint256 _amount, address _referral) public nonReentrant whenNotPaused nonDecreasingRate returns (uint256) {
+    function depositToRecipient(address _recipient, uint256 _amount, address _referral) public nonReentrant whenNotPaused returns (uint256) {
         if (msg.sender != address(liquifier) && msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
         blacklister.nonBlacklisted(_recipient);
 
@@ -246,7 +246,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     // Used by ether.fan staking flow
-    function deposit(address _user, address _referral) external payable nonReentrant whenNotPaused nonDecreasingRate returns (uint256) {
+    function deposit(address _user, address _referral) external payable nonReentrant whenNotPaused returns (uint256) {
         if (msg.sender != address(membershipManager)) revert IncorrectCaller();
         blacklister.nonBlacklisted(_user);
 
@@ -629,7 +629,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     //------------------------------  INTERNAL FUNCTIONS  ----------------------------------
     //--------------------------------------------------------------------------------------
 
-    function _deposit(address _recipient, uint256 _amountInLp, uint256 _amountOutOfLp) internal returns (uint256) {
+    function _deposit(address _recipient, uint256 _amountInLp, uint256 _amountOutOfLp) internal nonDecreasingRate returns (uint256) {
         totalValueInLp += uint128(_amountInLp);
         totalValueOutOfLp += uint128(_amountOutOfLp);
         uint256 amount = _amountInLp + _amountOutOfLp;
