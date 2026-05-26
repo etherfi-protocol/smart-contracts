@@ -727,7 +727,7 @@ contract TokenRateLimitTest is TestSetup {
 
     function test_global_eETH_mint_and_burn_buckets_are_independent() public {
         // Tighten only MINT to a tiny non-zero cap. NOTE: capacity == 0 on a
-        // global bucket means "disabled (no-op)" per consumeIfConfigured —
+        // global bucket means "disabled (no-op)" per consumeToken —
         // NOT frozen. Use 1 gwei as the smallest non-zero cap to actually
         // throttle. (Per-address buckets behave differently — capacity=0
         // there reverts on consume.)
@@ -820,7 +820,7 @@ contract TokenRateLimitTest is TestSetup {
     // the exact revert selector each one produces. If a future agent is debugging
     // an eETH/weETH upgrade revert, this is the lookup table:
     //
-    //   Global-bucket state                                    | consumeIfConfigured behavior
+    //   Global-bucket state                                    | consumeToken behavior
     //   -------------------------------------------------------|-----------------------------
     //   1. Bucket never created (no createNewLimiter)          | revert UnknownLimit
     //   2. Bucket created, consumer not whitelisted            | revert InvalidConsumer
@@ -856,7 +856,7 @@ contract TokenRateLimitTest is TestSetup {
 
         vm.prank(address(eETHInstance));
         vm.expectRevert(IEtherFiRateLimiter.UnknownLimit.selector);
-        rateLimiterInstance.consumeIfConfigured(neverCreatedId, 1);
+        rateLimiterInstance.consumeToken(neverCreatedId, 1);
 
         // Implication: a 3CP that upgrades eETH/weETH impls WITHOUT first calling
         // createNewLimiter for EETH_MINT_LIMIT_ID / EETH_BURN_LIMIT_ID /
@@ -979,14 +979,14 @@ contract TokenRateLimitTest is TestSetup {
         // State 1: bucket never created.
         vm.prank(address(eETHInstance));
         vm.expectRevert(IEtherFiRateLimiter.UnknownLimit.selector);
-        rateLimiterInstance.consumeIfConfigured(fakeId, 1);
+        rateLimiterInstance.consumeToken(fakeId, 1);
 
         // State 2: bucket created, consumer revoked.
         vm.prank(admin);
         rateLimiterInstance.updateConsumers(realId, address(eETHInstance), false);
         vm.prank(address(eETHInstance));
         vm.expectRevert(IEtherFiRateLimiter.InvalidConsumer.selector);
-        rateLimiterInstance.consumeIfConfigured(realId, 1);
+        rateLimiterInstance.consumeToken(realId, 1);
 
         // Re-whitelist for the remaining states.
         vm.prank(admin);
@@ -999,7 +999,7 @@ contract TokenRateLimitTest is TestSetup {
         vm.stopPrank();
         vm.prank(address(eETHInstance));
         vm.expectRevert(IEtherFiRateLimiter.LimitExceeded.selector);
-        rateLimiterInstance.consumeIfConfigured(realId, 1);
+        rateLimiterInstance.consumeToken(realId, 1);
 
         // State 4: cap > 0, sufficient → succeeds.
         vm.startPrank(admin);
@@ -1008,12 +1008,12 @@ contract TokenRateLimitTest is TestSetup {
         rateLimiterInstance.setRefillRate(realId, 0);
         vm.stopPrank();
         vm.prank(address(eETHInstance));
-        rateLimiterInstance.consumeIfConfigured(realId, 50);
+        rateLimiterInstance.consumeToken(realId, 50);
 
         // State 5: cap > 0, insufficient → LimitExceeded.
         // After the 50-unit consume above, remaining == 50. Asking for 51 reverts.
         vm.prank(address(eETHInstance));
         vm.expectRevert(IEtherFiRateLimiter.LimitExceeded.selector);
-        rateLimiterInstance.consumeIfConfigured(realId, 51);
+        rateLimiterInstance.consumeToken(realId, 51);
     }
 }

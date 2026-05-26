@@ -175,29 +175,28 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     /// @param amount The amount to consume in gwei
     /// @dev Reverts if the consumer is not whitelisted or if insufficient capacity is available
     function consume(bytes32 id, uint64 amount) external whenNotPaused {
-        if (!limitExists(id)) revert UnknownLimit();
-        if (!consumers[id][msg.sender]) revert InvalidConsumer(); // must be whitelisted consumer
-
-        // returns false if full amount cannot be consumed
-        if (!BucketLimiter.consume(limits[id], amount)) revert LimitExceeded();
+        _consume(id, amount);
     }
 
     /// @notice Consume capacity from a global rate limit; reverts on insufficient capacity.
     /// @param id The rate limit identifier
     /// @param amount The amount to consume in gwei
-    /// @dev Designed for token transfer/mint/burn paths that want a gas-cheap rate-limit
-    ///      enforcement in a single external call. Intentionally skips `whenNotPaused` —
-    ///      pausing the rate limiter must not halt token transfers; operators pause the
-    ///      token contract itself for a hard stop. Still enforces bucket existence and
-    ///      the consumer whitelist, so this is not a backdoor: only consumers explicitly
-    ///      whitelisted by an admin (e.g. eETH, weETH for their respective buckets) can use it.
+    /// @dev Token-only entry point for transfer/mint/burn paths. Intentionally skips
+    ///      `whenNotPaused` — pausing the rate limiter must not halt token transfers;
+    ///      operators pause the token contract itself for a hard stop. `onlyToken`
+    ///      restricts callers to eETH/weETH, and `_consume` still enforces the consumer
+    ///      whitelist, so the token must also be admin-whitelisted on the target bucket.
     ///
     ///      CAPACITY == 0 SEMANTICS: `capacity == 0` on an existing bucket reverts
     ///      LimitExceeded (symmetric with `consumeForAddressIfConfigured` below). To
     ///      soft-disable a global rate limit without un-whitelisting the consumer,
     ///      set capacity to type(uint64).max — effectively unlimited, the consume
     ///      always succeeds.
-    function consumeIfConfigured(bytes32 id, uint64 amount) external {
+    function consumeToken(bytes32 id, uint64 amount) external onlyToken {
+        _consume(id, amount);
+    }
+
+    function _consume(bytes32 id, uint64 amount) internal {
         if (!limitExists(id)) revert UnknownLimit();
         if (!consumers[id][msg.sender]) revert InvalidConsumer();
         if (!BucketLimiter.consume(limits[id], amount)) revert LimitExceeded();
@@ -208,7 +207,7 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     ///      created" (unrestricted user) and short-circuits to a no-op.
     ///
     ///      CAPACITY == 0 SEMANTICS: `capacity == 0` on an existing bucket reverts
-    ///      LimitExceeded (symmetric with `consumeIfConfigured` above). This is the
+    ///      LimitExceeded (symmetric with `consumeToken` above). This is the
     ///      freeze path the Guardian uses via `tightenAddressLimit(user, 0, 0)`; the
     ///      Multisig clears it via `deleteAddressLimit` (returns to "never created" →
     ///      no-op) or `setAddressLimit` (creates fresh with non-zero cap). The two
