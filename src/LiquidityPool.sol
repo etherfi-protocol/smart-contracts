@@ -141,7 +141,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     error AlreadyRegistered();
     error NotRegistered();
     error ContractPaused();
-    error EETHRateDeflation(uint256 P0, uint256 S0, uint256 P1, uint256 S1);
+    error EETHRateDeflation();
 
     struct ConstructorAddresses {
         address stakingManager;
@@ -746,6 +746,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     function _checkRateNonDec(uint256 P0, uint256 S0) internal view {
         (uint256 P1, uint256 S1) = _snapRate();
         // Bootstrap exempt (no rate before/after to compare).
-        if (S0 != 0 && S1 != 0 && P1 * S0 < P0 * S1) revert EETHRateDeflation(P0, S0, P1, S1);
+        if (S0 != 0 && S1 != 0 && P1 * S0 < P0 * S1) revert EETHRateDeflation();
     }
 }
