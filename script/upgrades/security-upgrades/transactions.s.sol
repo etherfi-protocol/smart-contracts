@@ -4,36 +4,36 @@ pragma solidity ^0.8.27;
 import "forge-std/Script.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
-import {EtherFiTimelock} from "../../../src/EtherFiTimelock.sol";
-import {RoleRegistry} from "../../../src/RoleRegistry.sol";
-import {EtherFiRateLimiter} from "../../../src/EtherFiRateLimiter.sol";
+import {EtherFiTimelock} from "@etherfi/governance/EtherFiTimelock.sol";
+import {RoleRegistry} from "@etherfi/governance/RoleRegistry.sol";
+import {EtherFiRateLimiter} from "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
 
-import {EETH as EETHToken} from "../../../src/EETH.sol";
-import {WeETH as WeETHToken} from "../../../src/WeETH.sol";
-import {LiquidityPool} from "../../../src/LiquidityPool.sol";
-import {WithdrawRequestNFT} from "../../../src/WithdrawRequestNFT.sol";
-import {Liquifier} from "../../../src/Liquifier.sol";
-import {EtherFiAdmin} from "../../../src/EtherFiAdmin.sol";
-import {EtherFiOracle} from "../../../src/EtherFiOracle.sol";
-import {EtherFiRedemptionManager} from "../../../src/EtherFiRedemptionManager.sol";
-import {EtherFiRestaker} from "../../../src/EtherFiRestaker.sol";
-import {EtherFiNodesManager} from "../../../src/EtherFiNodesManager.sol";
-import {EtherFiNode} from "../../../src/EtherFiNode.sol";
-import {StakingManager} from "../../../src/StakingManager.sol";
-import {AuctionManager} from "../../../src/AuctionManager.sol";
-import {NodeOperatorManager} from "../../../src/NodeOperatorManager.sol";
-import {MembershipManager} from "../../../src/MembershipManager.sol";
-import {MembershipNFT} from "../../../src/MembershipNFT.sol";
-import {PriorityWithdrawalQueue} from "../../../src/PriorityWithdrawalQueue.sol";
-import {EtherFiRewardsRouter} from "../../../src/EtherFiRewardsRouter.sol";
-import {RestakingRewardsRouter} from "../../../src/RestakingRewardsRouter.sol";
-import {CumulativeMerkleRewardsDistributor} from "../../../src/CumulativeMerkleRewardsDistributor.sol";
-import {DepositAdapter} from "../../../src/DepositAdapter.sol";
-import {WeETHWithdrawAdapter} from "../../../src/helpers/WeETHWithdrawAdapter.sol";
+import {EETH as EETHToken} from "@etherfi/core/EETH.sol";
+import {WeETH as WeETHToken} from "@etherfi/core/WeETH.sol";
+import {LiquidityPool} from "@etherfi/core/LiquidityPool.sol";
+import {WithdrawRequestNFT} from "@etherfi/withdrawals/WithdrawRequestNFT.sol";
+import {Liquifier} from "@etherfi/deposits/Liquifier.sol";
+import {EtherFiAdmin} from "@etherfi/oracle/EtherFiAdmin.sol";
+import {EtherFiOracle} from "@etherfi/oracle/EtherFiOracle.sol";
+import {EtherFiRedemptionManager} from "@etherfi/withdrawals/EtherFiRedemptionManager.sol";
+import {EtherFiRestaker} from "@etherfi/restaking/EtherFiRestaker.sol";
+import {EtherFiNodesManager} from "@etherfi/staking/EtherFiNodesManager.sol";
+import {EtherFiNode} from "@etherfi/staking/EtherFiNode.sol";
+import {StakingManager} from "@etherfi/staking/StakingManager.sol";
+import {AuctionManager} from "@etherfi/staking/AuctionManager.sol";
+import {NodeOperatorManager} from "@etherfi/staking/NodeOperatorManager.sol";
+import {MembershipManager} from "@etherfi/membership/MembershipManager.sol";
+import {MembershipNFT} from "@etherfi/membership/MembershipNFT.sol";
+import {PriorityWithdrawalQueue} from "@etherfi/withdrawals/PriorityWithdrawalQueue.sol";
+import {EtherFiRewardsRouter} from "@etherfi/rewards/EtherFiRewardsRouter.sol";
+import {RestakingRewardsRouter} from "@etherfi/restaking/RestakingRewardsRouter.sol";
+import {CumulativeMerkleRewardsDistributor} from "@etherfi/rewards/CumulativeMerkleRewardsDistributor.sol";
+import {DepositAdapter} from "@etherfi/deposits/DepositAdapter.sol";
+import {WeETHWithdrawAdapter} from "@etherfi/withdrawals/WeETHWithdrawAdapter.sol";
 
-import {ContractCodeChecker} from "../../ContractCodeChecker.sol";
-import {Deployed} from "../../deploys/Deployed.s.sol";
-import {Utils} from "../../utils/utils.sol";
+import {ContractCodeChecker} from "@scripts/ContractCodeChecker.sol";
+import {Deployed} from "@scripts/deploys/Deployed.s.sol";
+import {Utils} from "@scripts/utils/utils.sol";
 
 /**
  * 26Q2 Security Upgrades - Timelocked Upgrade + Configuration
@@ -449,7 +449,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         codeChecker.verifyContractByteCodeMatch(stakingManagerImpl, address(fresh3));
 
         AuctionManager fresh4 = new AuctionManager(
-            ROLE_REGISTRY, blacklisterProxy, NODE_OPERATOR_MANAGER, STAKING_MANAGER, MEMBERSHIP_MANAGER, TREASURY
+            ROLE_REGISTRY, blacklisterProxy, NODE_OPERATOR_MANAGER, STAKING_MANAGER, TREASURY
         );
         codeChecker.verifyContractByteCodeMatch(auctionManagerImpl, address(fresh4));
 
@@ -1117,7 +1117,6 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         require(address(a.blacklister())                == blacklisterProxy,     "Auction.blacklister");
         require(address(a.nodeOperatorManager())        == NODE_OPERATOR_MANAGER,"Auction.nodeOperatorManager");
         require(a.stakingManagerContractAddress()       == STAKING_MANAGER,      "Auction.stakingManagerContractAddress");
-        require(a.membershipManagerContractAddress()    == MEMBERSHIP_MANAGER,   "Auction.membershipManagerContractAddress");
         require(a.treasury()                            == TREASURY,             "Auction.treasury");
 
         NodeOperatorManager nm = NodeOperatorManager(NODE_OPERATOR_MANAGER);

@@ -3,37 +3,37 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
 
-import {AuctionManager} from "../../../src/AuctionManager.sol";
-import {EtherFiRateLimiter} from "../../../src/EtherFiRateLimiter.sol";
-import {CumulativeMerkleRewardsDistributor} from "../../../src/CumulativeMerkleRewardsDistributor.sol";
-import {DepositAdapter} from "../../../src/DepositAdapter.sol";
-import {EETH as EETHToken} from "../../../src/EETH.sol";
-import {EtherFiAdmin} from "../../../src/EtherFiAdmin.sol";
-import {EtherFiNode} from "../../../src/EtherFiNode.sol";
-import {EtherFiNodesManager} from "../../../src/EtherFiNodesManager.sol";
-import {EtherFiOracle} from "../../../src/EtherFiOracle.sol";
-import {EtherFiRedemptionManager} from "../../../src/EtherFiRedemptionManager.sol";
-import {EtherFiRestaker} from "../../../src/EtherFiRestaker.sol";
-import {EtherFiRewardsRouter} from "../../../src/EtherFiRewardsRouter.sol";
-import {LiquidityPool} from "../../../src/LiquidityPool.sol";
-import {Liquifier} from "../../../src/Liquifier.sol";
-import {MembershipManager} from "../../../src/MembershipManager.sol";
-import {MembershipNFT} from "../../../src/MembershipNFT.sol";
-import {NodeOperatorManager} from "../../../src/NodeOperatorManager.sol";
-import {PriorityWithdrawalQueue} from "../../../src/PriorityWithdrawalQueue.sol";
-import {RestakingRewardsRouter} from "../../../src/RestakingRewardsRouter.sol";
-import {StakingManager} from "../../../src/StakingManager.sol";
-import {WeETH as WeETHToken} from "../../../src/WeETH.sol";
-import {WithdrawRequestNFT} from "../../../src/WithdrawRequestNFT.sol";
-import {RoleRegistry} from "../../../src/RoleRegistry.sol";
+import {AuctionManager} from "@etherfi/staking/AuctionManager.sol";
+import {EtherFiRateLimiter} from "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
+import {CumulativeMerkleRewardsDistributor} from "@etherfi/rewards/CumulativeMerkleRewardsDistributor.sol";
+import {DepositAdapter} from "@etherfi/deposits/DepositAdapter.sol";
+import {EETH as EETHToken} from "@etherfi/core/EETH.sol";
+import {EtherFiAdmin} from "@etherfi/oracle/EtherFiAdmin.sol";
+import {EtherFiNode} from "@etherfi/staking/EtherFiNode.sol";
+import {EtherFiNodesManager} from "@etherfi/staking/EtherFiNodesManager.sol";
+import {EtherFiOracle} from "@etherfi/oracle/EtherFiOracle.sol";
+import {EtherFiRedemptionManager} from "@etherfi/withdrawals/EtherFiRedemptionManager.sol";
+import {EtherFiRestaker} from "@etherfi/restaking/EtherFiRestaker.sol";
+import {EtherFiRewardsRouter} from "@etherfi/rewards/EtherFiRewardsRouter.sol";
+import {LiquidityPool} from "@etherfi/core/LiquidityPool.sol";
+import {Liquifier} from "@etherfi/deposits/Liquifier.sol";
+import {MembershipManager} from "@etherfi/membership/MembershipManager.sol";
+import {MembershipNFT} from "@etherfi/membership/MembershipNFT.sol";
+import {NodeOperatorManager} from "@etherfi/staking/NodeOperatorManager.sol";
+import {PriorityWithdrawalQueue} from "@etherfi/withdrawals/PriorityWithdrawalQueue.sol";
+import {RestakingRewardsRouter} from "@etherfi/restaking/RestakingRewardsRouter.sol";
+import {StakingManager} from "@etherfi/staking/StakingManager.sol";
+import {WeETH as WeETHToken} from "@etherfi/core/WeETH.sol";
+import {WithdrawRequestNFT} from "@etherfi/withdrawals/WithdrawRequestNFT.sol";
+import {RoleRegistry} from "@etherfi/governance/RoleRegistry.sol";
 
-import {Blacklister} from "../../../src/helpers/Blacklister.sol";
-import {RevokeAdmin} from "../../../src/helpers/RevokeAdmin.sol";
-import {WeETHWithdrawAdapter} from "../../../src/helpers/WeETHWithdrawAdapter.sol";
-import {UUPSProxy} from "../../../src/UUPSProxy.sol";
+import {Blacklister} from "@etherfi/governance/Blacklister.sol";
+import {RevokeAdmin} from "@etherfi/governance/RevokeAdmin.sol";
+import {WeETHWithdrawAdapter} from "@etherfi/withdrawals/WeETHWithdrawAdapter.sol";
+import {UUPSProxy} from "@etherfi/utils/UUPSProxy.sol";
 
-import {Deployed} from "../../deploys/Deployed.s.sol";
-import {Utils, ICreate2Factory} from "../../utils/utils.sol";
+import {Deployed} from "@scripts/deploys/Deployed.s.sol";
+import {Utils, ICreate2Factory} from "@scripts/utils/utils.sol";
 
 /**
  * 26Q2 Security Upgrades — Deployment
@@ -340,7 +340,6 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
                 blacklisterProxy,
                 NODE_OPERATOR_MANAGER,
                 STAKING_MANAGER,
-                MEMBERSHIP_MANAGER,
                 TREASURY
             );
             bytes memory bc = abi.encodePacked(type(AuctionManager).creationCode, args);

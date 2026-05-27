@@ -4,11 +4,11 @@ pragma solidity ^0.8.27;
 import "forge-std/Script.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
-import {EtherFiTimelock} from "../../../src/EtherFiTimelock.sol";
-import {StakingManager} from "../../../src/StakingManager.sol";
+import {EtherFiTimelock} from "@etherfi/governance/EtherFiTimelock.sol";
+import {StakingManager} from "@etherfi/staking/StakingManager.sol";
 
-import {Deployed} from "../../deploys/Deployed.s.sol";
-import {Utils} from "../../utils/utils.sol";
+import {Deployed} from "@scripts/deploys/Deployed.s.sol";
+import {Utils} from "@scripts/utils/utils.sol";
 
 /**
  * 26Q2 Security Upgrades - REVERT Script
