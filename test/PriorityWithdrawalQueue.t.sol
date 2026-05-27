@@ -1680,7 +1680,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         }
     }
 
-    function test_handleRemainder_roundsBuybackSplitUp() public {
+    function test_handleRemainder_roundsTreasurySplitUp() public {
         vm.prank(alice);
         priorityQueue.updateShareRemainderSplitToTreasury(5000); // 50%
 
@@ -1709,12 +1709,12 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         priorityQueue.handleRemainder(amountToHandle);
 
         uint256 treasuryReceived = eETHInstance.balanceOf(treasury) - treasuryBalanceBefore;
-        uint256 expectedBuybackAmount = amountToHandle / 2;
+        uint256 expectedTreasuryAmount = amountToHandle / 2;
         assertEq(amountToHandle % 2, 1, "Test setup must use odd amount");
-        assertEq(treasuryReceived, expectedBuybackAmount, "Buyback split round down");
+        assertEq(treasuryReceived, expectedTreasuryAmount, "Treasury split round down");
     }
 
-    // function test_handleRemainder_withBuybackSplit() public {
+    // function test_handleRemainder_withTreasurySplit() public {
     //     // Set 50% split to treasury (5000 bps)
     //     vm.prank(alice);
     //     priorityQueue.updateShareRemainderSplitToTreasury(5000);
@@ -1745,18 +1745,18 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
     //         // Verify treasury received ~50% of remainder as eETH
     //         uint256 treasuryBalanceAfter = eETHInstance.balanceOf(treasury);
-    //         assertGt(treasuryBalanceAfter, treasuryBalanceBefore, "Buyback should receive eETH");
+    //         assertGt(treasuryBalanceAfter, treasuryBalanceBefore, "Treasury should receive eETH");
             
     //         // Approximately 50% should go to treasury (allowing for rounding)
-    //         uint256 expectedToBuyback = remainderAmount / 2;
-    //         assertApproxEqRel(treasuryBalanceAfter - treasuryBalanceBefore, expectedToBuyback, 0.01e18, "Buyback should receive ~50%");
+    //         uint256 expectedToTreasury = remainderAmount / 2;
+    //         assertApproxEqRel(treasuryBalanceAfter - treasuryBalanceBefore, expectedToTreasury, 0.01e18, "Treasury should receive ~50%");
 
     //         // Remainder should be cleared
     //         assertLt(priorityQueue.totalRemainderShares(), remainderSharesBefore, "Remainder shares should decrease");
     //     }
     // }
 
-    // function test_handleRemainder_fullBuybackSplit() public {
+    // function test_handleRemainder_fullTreasurySplit() public {
     //     // Set 100% split to treasury (10000 bps)
     //     vm.prank(alice);
     //     priorityQueue.updateShareRemainderSplitToTreasury(10000);
@@ -1785,7 +1785,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
     //         // Verify treasury received all remainder as eETH (nothing burned)
     //         uint256 treasuryBalanceAfter = eETHInstance.balanceOf(treasury);
-    //         assertApproxEqRel(treasuryBalanceAfter - treasuryBalanceBefore, remainderAmount, 0.01e18, "Buyback should receive ~100%");
+    //         assertApproxEqRel(treasuryBalanceAfter - treasuryBalanceBefore, remainderAmount, 0.01e18, "Treasury should receive ~100%");
     //     }
     // }
 
@@ -1818,7 +1818,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
     //         // Verify treasury received nothing
     //         uint256 treasuryBalanceAfter = eETHInstance.balanceOf(treasury);
-    //         assertEq(treasuryBalanceAfter, treasuryBalanceBefore, "Buyback should receive nothing");
+    //         assertEq(treasuryBalanceAfter, treasuryBalanceBefore, "Treasury should receive nothing");
     //     }
     // }
 

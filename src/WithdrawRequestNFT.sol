@@ -106,7 +106,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     event WithdrawRequestInvalidated(uint32 indexed requestId);
     event WithdrawRequestValidated(uint32 indexed requestId);
     event WithdrawRequestSeized(uint32 indexed requestId);
-    event HandledRemainderOfClaimedWithdrawRequests(uint256 eEthAmountToBuyback, uint256 eEthAmountBurnt);
+    event HandledRemainderOfClaimedWithdrawRequests(uint256 eEthAmountToTreasury, uint256 eEthAmountBurnt);
 
     event Paused();
     event Unpaused();
@@ -396,7 +396,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     /// @dev Handles the remainder of the eEth shares after the claim of the withdraw request
     /// the remainder eETH share for a request = request.shareOfEEth - request.amountOfEEth / (eETH amount to eETH shares rate)
     /// - Splits the remainder into two parts:
-    ///  - Buyback: treasury gets a split of the remainder
+    ///  - Treasury: treasury gets a split of the remainder
     ///   - Burn: the rest of the remainder is burned
     /// @param _eEthAmount: the remainder of the eEth amount
     function handleRemainder(uint256 _eEthAmount) external onlyHousekeepingOperations {
@@ -405,19 +405,19 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
         uint256 beforeEEthShares = eETH.shares(address(this));
 
-        uint256 eEthAmountToBuyback = _eEthAmount.mulDiv(shareRemainderSplitToTreasuryInBps, BASIS_POINT_SCALE);
-        uint256 eEthAmountToBurn = _eEthAmount - eEthAmountToBuyback;
+        uint256 eEthAmountToTreasury = _eEthAmount.mulDiv(shareRemainderSplitToTreasuryInBps, BASIS_POINT_SCALE);
+        uint256 eEthAmountToBurn = _eEthAmount - eEthAmountToTreasury;
         uint256 eEthSharesToBurn = liquidityPool.sharesForAmount(eEthAmountToBurn);
-        uint256 eEthSharesToMoved = eEthSharesToBurn + liquidityPool.sharesForAmount(eEthAmountToBuyback);
+        uint256 eEthSharesToMoved = eEthSharesToBurn + liquidityPool.sharesForAmount(eEthAmountToTreasury);
 
         totalRemainderEEthShares -= eEthSharesToMoved;
 
-        if (eEthAmountToBuyback > 0) IERC20(address(eETH)).safeTransfer(treasury, eEthAmountToBuyback);
+        if (eEthAmountToTreasury > 0) IERC20(address(eETH)).safeTransfer(treasury, eEthAmountToTreasury);
         if (eEthSharesToBurn > 0) liquidityPool.burnEEthShares(eEthSharesToBurn);
 
         if (beforeEEthShares - eEthSharesToMoved != eETH.shares(address(this))) revert InvalidEEthShares();
 
-        emit HandledRemainderOfClaimedWithdrawRequests(eEthAmountToBuyback, eEthAmountToBurn);
+        emit HandledRemainderOfClaimedWithdrawRequests(eEthAmountToTreasury, eEthAmountToBurn);
 
         // Sweep accumulated ETH back to treasury
         // In case of negative rebase, the ETH is stranded in the NFT contract
