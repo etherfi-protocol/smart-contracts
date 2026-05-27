@@ -20,6 +20,14 @@ contract WithdrawRequestNFTIntrusive is WithdrawRequestNFT {
     function setLastFinalizedRequestIdForTest(uint32 _id) external {
         lastFinalizedRequestId = _id;
     }
+
+    /// @dev Test-only: zero out the `_finalizationRates` length so tests can re-exercise
+    ///      the `initializeShareRateFreezeUpgrade` flow from a "pre-init" state. Slot 311
+    ///      matches `forge inspect WithdrawRequestNFT storageLayout`; keep in sync if the
+    ///      storage layout shifts.
+    function clearFinalizationRatesForTest() external {
+        assembly { sstore(311, 0) }
+    }
 }
 
 contract WithdrawRequestNFTTest is TestSetup {
@@ -2019,9 +2027,25 @@ contract WithdrawRequestNFTTest is TestSetup {
         withdrawRequestNFTInstance.upgradeTo(cur_impl);
     }
 
+    /// @dev Test-only helper to revert the WRNFT to the "pre-init" state for `_finalizationRates`,
+    ///      so tests can exercise the `initializeShareRateFreezeUpgrade` flow directly even
+    ///      though `setUp` pushes the sentinel by default.
+    function _clearFinalizationRatesForTest() internal {
+        address cur_impl = withdrawRequestNFTInstance.getImplementation();
+        address new_impl = address(new WithdrawRequestNFTIntrusive(address(roleRegistryInstance)));
+        vm.prank(withdrawRequestNFTInstance.owner());
+        withdrawRequestNFTInstance.upgradeTo(new_impl);
+        WithdrawRequestNFTIntrusive(payable(address(withdrawRequestNFTInstance))).clearFinalizationRatesForTest();
+        vm.prank(withdrawRequestNFTInstance.owner());
+        withdrawRequestNFTInstance.upgradeTo(cur_impl);
+    }
+
     /// @dev Requests that pre-date `initializeShareRateFreezeUpgrade()` see value 0 from
     ///      `lowerLookup` and fall back to the live-rate path.
     function test_shareRateFreeze_legacySentinel_fallsBackToLiveRate() public {
+        // setUp pushes the sentinel by default; this test exercises the pre-init flow.
+        _clearFinalizationRatesForTest();
+
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 10 ether}();
         vm.stopPrank();
@@ -2074,6 +2098,7 @@ contract WithdrawRequestNFTTest is TestSetup {
     /// @dev After the upgrade init, the next finalize pushes a real snapshot and all
     ///      requestIds strictly above the sentinel use the frozen rate.
     function test_shareRateFreeze_postUpgradeRequests_useFrozenRate() public {
+        _clearFinalizationRatesForTest();
         vm.prank(withdrawRequestNFTInstance.owner());
         withdrawRequestNFTInstance.initializeShareRateFreezeUpgrade();
 
@@ -2092,6 +2117,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
     /// @dev `initializeShareRateFreezeUpgrade` is a one-shot.
     function test_shareRateFreeze_initializeUpgrade_revertsIfAlreadyInitialized() public {
+        _clearFinalizationRatesForTest();
         vm.startPrank(withdrawRequestNFTInstance.owner());
         withdrawRequestNFTInstance.initializeShareRateFreezeUpgrade();
         vm.expectRevert(WithdrawRequestNFT.AlreadyInitialized.selector);
@@ -2228,6 +2254,9 @@ contract WithdrawRequestNFTTest is TestSetup {
     ///         local live-rate fallback path. The claim payout must match what the pre-upgrade
     ///         code (live `amountForShare`-based) would have computed at that moment.
     function test_legacyFallback_matchesPreUpgradeLiveRate() public {
+        // setUp pushes the sentinel by default; this test exercises the pre-init flow.
+        _clearFinalizationRatesForTest();
+
         // 1. set up a "pre-upgrade finalized request" by stepping lastFinalizedRequestId without
         //    pushing a real snapshot — mirroring on-chain state at the moment of the upgrade.
         startHoax(bob);

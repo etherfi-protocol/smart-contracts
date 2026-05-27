@@ -759,6 +759,12 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             liquidityPoolInstance.initializeOnUpgradeV2();
         }
 
+        // Push the share-rate-freeze sentinel checkpoint that the new WRNFT
+        // `finalizeRequests` guard requires post-upgrade. Idempotent: skip if
+        // already pushed (length != 0 reverts AlreadyInitialized).
+        vm.prank(_roleRegOwner);
+        try withdrawRequestNFTInstance.initializeShareRateFreezeUpgrade() {} catch {}
+
         // The upgraded WeETH/EETH still have global MINT/BURN circuit-breaker
         // buckets (plus the new opt-in per-address buckets for transfers).
         // Bootstrap MINT/BURN at unbounded capacity on the fork so generic
@@ -1025,7 +1031,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(blacklisterInstance),
             address(nodeOperatorManagerProxy),
             address(stakingManagerProxy),
-            address(membershipManagerProxy),
             address(treasuryInstance)
         );
         auctionInstance.upgradeTo(address(auctionImplementation));
@@ -1322,6 +1327,10 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         membershipNftInstance.initialize("https://etherfi-cdn/{id}.json", address(membershipManagerInstance));
 
         withdrawRequestNFTInstance.initialize(payable(address(liquidityPoolProxy)), payable(address(eETHProxy)), payable(address(membershipManagerProxy)));
+        // Push the share-rate-freeze sentinel checkpoint that the new finalizeRequests
+        // guard requires. We're inside an active `vm.startPrank(owner)` block here and
+        // `owner` was granted UPGRADE_TIMELOCK_ROLE in Phase 1, so no extra prank needed.
+        withdrawRequestNFTInstance.initializeShareRateFreezeUpgrade();
         // initializeOnUpgrade now reverts (checks immutable roleRegistry == 0). Set the
         // share-remainder split + paused state it used to bootstrap directly.
         withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(1000);
