@@ -27,6 +27,24 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         vm.stopPrank();
         uint32 timeBoundCapRefreshInterval = liquifierInstance.timeBoundCapRefreshInterval();
         vm.warp(block.timestamp + timeBoundCapRefreshInterval + 1);
+
+        // The warp above pushes block.timestamp past the live stETH/ETH feed's
+        // updatedAt by more than Liquifier.stalePriceWindow, so any deposit that
+        // routes through the curve-quoting path (depositWithERC20 of stETH) would
+        // revert with StalePriceFeed(). Pin a fresh, ~1:1 answer so the staleness
+        // and deviation guards pass. Mirrors _mockFreshStEthFeed() in Liquifier.t.sol.
+        _mockFreshStEthFeed();
+    }
+
+    /// On a realistic mainnet fork the live stETH/ETH feed has a ~24h heartbeat and,
+    /// after setUp_Fork's vm.warp, sits past Liquifier.stalePriceWindow. Pin it to a
+    /// fresh, 1:1 answer dated at the current block so stETH deposits don't revert.
+    function _mockFreshStEthFeed() internal {
+        vm.mockCall(
+            stEthChainlinkFeed,
+            abi.encodeWithSignature("latestRoundData()"),
+            abi.encode(uint80(0), int256(1 ether), uint256(0), block.timestamp, uint80(0))
+        );
     }
 
     function test_upgrade_only_by_owner() public {
