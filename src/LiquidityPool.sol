@@ -274,23 +274,42 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         return share;
     }
 
-    /// @notice Settles a finalized claim for withdrawRequestNFT or priorityWithdrawalQueue against
-    ///         the rate snapshotted at finalize/fulfill time. Caller supplies the rate; LP derives
-    ///         the share burn from it. ETH was already segregated to the caller at finalize/fulfill
-    ///         via `addEthAmountLockedForWithdrawal` / `transferLockedEthForPriority`, so LP only
-    ///         performs accounting (burn + `totalValueOutOfLp -=`); the caller pays the user from
-    ///         its own balance.
-    /// @dev    `_rate == 0` is rejected — callers (WRNFT / Queue) are responsible for resolving
-    ///         any pre-upgrade legacy snapshot to a live rate locally via `amountPerShareCeil()`
-    ///         before invoking this function. Single codepath: one ceiling math expression.
-    function withdraw(uint256 _amount, uint256 _rate) external nonReentrant returns (uint256) {
+    /// @notice Settles a finalized claim for withdrawRequestNFT or priorityWithdrawalQueue.
+    ///         Caller supplies the snapshotted rate and the request's share allocation;
+    ///         LP derives the share burn defensively from both inputs and current live rate.
+    ///
+    /// @dev    Three guards bound caller-supplied inputs without trusting any single one:
+    ///         (1) `_amount <= _shareOfEEth * _rate / SHARE_UNIT` — caps `_amount` at the
+    ///             rate-implied value of the request's allocation. Defeats isolated `_amount`
+    ///             inflation independent of `_rate`.
+    ///         (2) Burn at `max(amount/_rate, amount/live)` shares — Lido-pattern worse-for-
+    ///             protocol clamp. An inflated `_rate` is silently floored to live; the protocol
+    ///             burns at the honest live rate regardless of what the caller passed.
+    ///         (3) Share burn capped at `_shareOfEEth` — bounds cross-request share extraction
+    ///             and un-DoSes legitimate down-rebase claims (where `amount/live > shareOfEEth`).
+    ///
+    ///         ETH was already segregated to the caller at finalize/fulfill via
+    ///         `addEthAmountLockedForWithdrawal` / `transferLockedEthForPriority`; LP only
+    ///         performs accounting (burn + `totalValueOutOfLp -=`).
+    function withdraw(uint256 _amount, uint256 _rate, uint256 _shareOfEEth) external nonReentrant returns (uint256) {
         if (msg.sender != address(withdrawRequestNFT) && msg.sender != address(priorityWithdrawalQueue)) {
             revert IncorrectCaller();
         }
         if (_amount > type(uint128).max || _amount == 0) revert InvalidAmount();
         if (_rate == 0) revert InvalidRate();
 
-        uint256 share = Math.mulDiv(_amount, SHARE_UNIT, _rate, Math.Rounding.Up); // rounding favors the protocol
+        // Guard 1: amount-cap against rate-implied entitlement of the request's allocation.
+        uint256 amountCap = Math.mulDiv(_shareOfEEth, _rate, SHARE_UNIT, Math.Rounding.Down);
+        if (_amount > amountCap) revert InvalidAmount();
+
+        // Guard 2: burn at the worse-for-protocol rate (the higher share count).
+        uint256 shareAtFrozen = Math.mulDiv(_amount, SHARE_UNIT, _rate, Math.Rounding.Up);
+        uint256 shareAtLive = Math.mulDiv(_amount, SHARE_UNIT, amountPerShareCeil(), Math.Rounding.Up);
+        uint256 share = shareAtFrozen > shareAtLive ? shareAtFrozen : shareAtLive;
+
+        // Guard 3: cap at the caller-asserted per-request allocation.
+        if (share > _shareOfEEth) share = _shareOfEEth;
+
         if (share == 0) revert InvalidAmount();
         if (eETH.shares(msg.sender) < share) revert InsufficientLiquidity();
 

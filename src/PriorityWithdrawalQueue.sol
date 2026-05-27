@@ -595,7 +595,7 @@ contract PriorityWithdrawalQueue is
         ethAmountLockedForPriorityWithdrawal -= uint128(request.amountOfEEth);
 
         uint256 rate = liquidityPool.amountPerShareCeil();
-        uint256 burnedShares = liquidityPool.withdraw(amountToWithdraw, rate);
+        uint256 burnedShares = liquidityPool.withdraw(amountToWithdraw, rate, request.shareOfEEth);
 
         uint256 remainder = request.shareOfEEth > burnedShares 
             ? request.shareOfEEth - burnedShares 

@@ -791,8 +791,10 @@ contract ProtocolInvariantsHandler is StdUtils {
         if (sharesToBurn >= ts) { callCounts["segClaim_skipped"]++; return; }
 
         // No `_checkNonExempt` here - this is the EXEMPT path.
+        // Pass `_shareOfEEth = sharesToBurn` so the new guards are no-ops and the handler
+        // reproduces the pre-Option-5 burn behavior exactly.
         vm.prank(wrn);
-        try lp.withdraw(amount, rate) {
+        try lp.withdraw(amount, rate, sharesToBurn) {
             ghost_ledgerTPE -= int256(amount);   // ETH leaves LP accounting
             callCounts["segClaim"]++;
         } catch (bytes memory err) {
