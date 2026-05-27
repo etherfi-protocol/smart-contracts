@@ -5,7 +5,7 @@ import "forge-std/Script.sol";
 import {LiquidityPool} from "@etherfi/core/LiquidityPool.sol";
 import {StakingManager} from "@etherfi/staking/StakingManager.sol";
 import {EtherFiNodesManager} from "@etherfi/staking/EtherFiNodesManager.sol";
-import {EtherFiRestaker} from "@etherfi/periphery/EtherFiRestaker.sol";
+import {EtherFiRestaker} from "@etherfi/restaking/EtherFiRestaker.sol";
 
 interface ICreate2Factory {
     function deploy(bytes memory code, bytes32 salt) external payable returns (address);

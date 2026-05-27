@@ -5,7 +5,7 @@ import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Deployed} from "@scripts/deploys/Deployed.s.sol";
-import {EtherFiRestaker} from "@etherfi/periphery/EtherFiRestaker.sol";
+import {EtherFiRestaker} from "@etherfi/restaking/EtherFiRestaker.sol";
 import {IDelegationManager} from "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
 
 // Full un-restake (all stETH restaked in EigenLayer):

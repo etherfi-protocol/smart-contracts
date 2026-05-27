@@ -3,15 +3,15 @@ pragma solidity ^0.8.13;
 
 import "@tests/TestSetup.sol";
 import "@etherfi/staking/AuctionManager.sol";
-import "@etherfi/periphery/DepositAdapter.sol";
+import "@etherfi/deposits/DepositAdapter.sol";
 import "@etherfi/withdrawals/EtherFiRedemptionManager.sol";
 import "@etherfi/core/LiquidityPool.sol";
-import "@etherfi/periphery/Liquifier.sol";
+import "@etherfi/deposits/Liquifier.sol";
 import "@etherfi/membership/MembershipManager.sol";
 import "@etherfi/withdrawals/WithdrawRequestNFT.sol";
 import "@etherfi/governance/Blacklister.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
-import "@etherfi/periphery/interfaces/ILiquifier.sol";
+import "@etherfi/deposits/interfaces/ILiquifier.sol";
 import "@etherfi/core/interfaces/IeETH.sol";
 import "@etherfi/core/interfaces/IWeETH.sol";
 

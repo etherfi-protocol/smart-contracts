@@ -3,7 +3,7 @@ pragma solidity ^0.8.23;
 
 import "forge-std/Test.sol";
 
-import "@etherfi/periphery/Liquifier.sol";
+import "@etherfi/deposits/Liquifier.sol";
 import "@etherfi/governance/RoleRegistry.sol";
 import "@etherfi/utils/UUPSProxy.sol";
 import "@tests/mocks/MockChainlinkPriceFeed.sol";

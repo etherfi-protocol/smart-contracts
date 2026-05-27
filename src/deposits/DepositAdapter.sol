@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
-import "@etherfi/periphery/interfaces/ILiquifier.sol";
+import "@etherfi/deposits/interfaces/ILiquifier.sol";
 import "@etherfi/core/interfaces/IeETH.sol";
 import "@etherfi/core/interfaces/IWeETH.sol";
 import "@etherfi/interfaces/IWETH.sol";

@@ -15,8 +15,8 @@ import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
 import "@etherfi/core/interfaces/IeETH.sol";
 import "@etherfi/core/interfaces/IWeETH.sol";
-import "@etherfi/periphery/interfaces/ILiquifier.sol";
-import "@etherfi/periphery/interfaces/IEtherFiRestaker.sol";
+import "@etherfi/deposits/interfaces/ILiquifier.sol";
+import "@etherfi/restaking/interfaces/IEtherFiRestaker.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
 

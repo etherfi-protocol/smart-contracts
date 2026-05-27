@@ -11,7 +11,7 @@ import "@etherfi/core/interfaces/IeETH.sol";
 import "@etherfi/staking/interfaces/IStakingManager.sol";
 import "@etherfi/withdrawals/interfaces/IWithdrawRequestNFT.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
-import "@etherfi/periphery/interfaces/ILiquifier.sol";
+import "@etherfi/deposits/interfaces/ILiquifier.sol";
 import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
 import "@etherfi/withdrawals/interfaces/IEtherFiRedemptionManager.sol";
 import "@etherfi/withdrawals/interfaces/IPriorityWithdrawalQueue.sol";

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import "forge-std/Script.sol";
-import "@etherfi/periphery/RestakingRewardsRouter.sol";
+import "@etherfi/restaking/RestakingRewardsRouter.sol";
 import "@etherfi/utils/UUPSProxy.sol";
 import "@scripts/utils/utils.sol";
 

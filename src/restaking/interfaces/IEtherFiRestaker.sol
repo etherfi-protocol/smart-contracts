@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "@etherfi/periphery/interfaces/ILiquifier.sol";
+import "@etherfi/deposits/interfaces/ILiquifier.sol";
 
 interface IEtherFiRestaker {
     function stEthRequestWithdrawal(uint256 _amount) external returns (uint256[] memory);

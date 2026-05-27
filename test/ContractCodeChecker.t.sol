@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import "@tests/TestSetup.sol";
 import "@etherfi/staking/EtherFiNode.sol";
 import "@etherfi/staking/EtherFiNodesManager.sol";
-import "@etherfi/periphery/EtherFiRestaker.sol";
+import "@etherfi/restaking/EtherFiRestaker.sol";
 
 /**
  * @title TestByteCodeMatch

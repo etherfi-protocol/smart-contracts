@@ -1,7 +1,7 @@
  // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "@etherfi/periphery/DepositAdapter.sol";
+import "@etherfi/deposits/DepositAdapter.sol";
 import "@tests/TestSetup.sol";
 
 

@@ -7,7 +7,7 @@ import {UUPSUpgradeable} from "@openzeppelin-upgradeable/contracts/proxy/utils/U
 import {AssetRecovery} from "@etherfi/utils/AssetRecovery.sol";
 import {PausableUntil} from "@etherfi/governance/utils/PausableUntil.sol";
 import {RolesLibrary} from "@etherfi/governance/utils/RolesLibrary.sol";
-import {ICumulativeMerkleRewardsDistributor}  from "@etherfi/periphery/interfaces/ICumulativeMerkleRewardsDistributor.sol";
+import {ICumulativeMerkleRewardsDistributor}  from "@etherfi/rewards/interfaces/ICumulativeMerkleRewardsDistributor.sol";
 
 contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistributor, OwnableUpgradeable, UUPSUpgradeable, PausableUntil, AssetRecovery, RolesLibrary {
 using SafeERC20 for IERC20;

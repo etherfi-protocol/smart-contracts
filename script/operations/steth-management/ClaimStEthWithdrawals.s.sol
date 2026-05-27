@@ -4,8 +4,8 @@ pragma solidity ^0.8.27;
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 import {Deployed} from "@scripts/deploys/Deployed.s.sol";
-import {EtherFiRestaker} from "@etherfi/periphery/EtherFiRestaker.sol";
-import {ILidoWithdrawalQueue} from "@etherfi/periphery/interfaces/ILiquifier.sol";
+import {EtherFiRestaker} from "@etherfi/restaking/EtherFiRestaker.sol";
+import {ILidoWithdrawalQueue} from "@etherfi/deposits/interfaces/ILiquifier.sol";
 
 // forge script script/operations/steth-management/ClaimStEthWithdrawals.s.sol --fork-url $MAINNET_RPC_URL -vvvv
 

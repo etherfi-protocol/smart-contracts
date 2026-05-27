@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import "forge-std/Script.sol";
 import "forge-std/console.sol";
 import "forge-std/StdJson.sol";
-import  "@etherfi/periphery/LiquidRefer.sol";
+import  "@etherfi/deposits/LiquidRefer.sol";
 import "@etherfi/utils/UUPSProxy.sol";
 import "@scripts/Create2Factory.sol";
 

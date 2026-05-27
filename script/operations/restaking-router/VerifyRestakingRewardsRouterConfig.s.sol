@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import "forge-std/Script.sol";
 import "forge-std/Test.sol";
 import {ContractCodeChecker} from "@scripts/ContractCodeChecker.sol";
-import {RestakingRewardsRouter} from "@etherfi/periphery/RestakingRewardsRouter.sol";
+import {RestakingRewardsRouter} from "@etherfi/restaking/RestakingRewardsRouter.sol";
 import {UUPSProxy} from "@etherfi/utils/UUPSProxy.sol";
 import {RoleRegistry} from "@etherfi/governance/RoleRegistry.sol";
 import "@scripts/utils/utils.sol";

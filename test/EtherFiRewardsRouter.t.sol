@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import "forge-std/Test.sol";
-import "@etherfi/periphery/EtherFiRewardsRouter.sol";
+import "@etherfi/rewards/EtherFiRewardsRouter.sol";
 import "@etherfi/governance/RoleRegistry.sol";
 import "@etherfi/utils/UUPSProxy.sol";
 import "@tests/TestERC20.sol";

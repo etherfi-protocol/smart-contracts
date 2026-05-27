@@ -6,7 +6,7 @@ import "@scripts/deploys/Deployed.s.sol";
 import "@etherfi/oracle/EtherFiOracle.sol";
 import "@etherfi/staking/NodeOperatorManager.sol";
 import "@etherfi/staking/AuctionManager.sol";
-import "@etherfi/periphery/EtherFiRestaker.sol";
+import "@etherfi/restaking/EtherFiRestaker.sol";
 
 interface IUUPSProxy {
     function upgradeTo(address newImpl) external;

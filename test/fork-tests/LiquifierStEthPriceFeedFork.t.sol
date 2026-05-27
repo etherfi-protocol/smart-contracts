@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 import "@tests/TestSetup.sol";
-import "@etherfi/periphery/Liquifier.sol";
+import "@etherfi/deposits/Liquifier.sol";
 
 /// @notice Mainnet-fork tests scoped narrowly to the stETH price-feed sanity
 ///         check in `Liquifier.quoteByMarketValue`. Confirms the upgraded

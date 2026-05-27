@@ -7,7 +7,7 @@ import {LiquidityPool} from "@etherfi/core/LiquidityPool.sol";
 import {StakingManager} from "@etherfi/staking/StakingManager.sol";
 import {EtherFiNodesManager} from "@etherfi/staking/EtherFiNodesManager.sol";
 import {RoleRegistry} from "@etherfi/governance/RoleRegistry.sol";
-import {EtherFiRestaker} from "@etherfi/periphery/EtherFiRestaker.sol";
+import {EtherFiRestaker} from "@etherfi/restaking/EtherFiRestaker.sol";
 
 import {IEtherFiNodesManager} from "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
 import {IStakingManager} from "@etherfi/staking/interfaces/IStakingManager.sol";
