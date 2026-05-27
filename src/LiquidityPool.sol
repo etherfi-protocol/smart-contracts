@@ -142,6 +142,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     error NotRegistered();
     error ContractPaused();
     error EETHRateDeflation();
+    error AlreadyPaused();
+    error NotPaused();
 
     struct ConstructorAddresses {
         address stakingManager;
@@ -181,8 +183,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         if (msg.value > type(uint128).max) revert InvalidAmount();
         totalValueOutOfLp -= uint128(msg.value);
         totalValueInLp += uint128(msg.value);
-        _checkTotalValueInLp();
-        _checkMinAmountForShare();
+        _checkInvariants();
     }
 
     function initialize(address _eEthAddress, address _stakingManagerAddress, address _nodesManagerAddress, address _membershipManagerAddress, address _tNftAddress, address _etherFiAdminContract, address _withdrawRequestNFT) external initializer {
@@ -215,8 +216,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
             if (queueLocked > 0) _sendFund(address(priorityWithdrawalQueue), queueLocked);
         }
 
-        _checkTotalValueInLp();
-        _checkMinAmountForShare();
+        _checkInvariants();
         escrowMigrationCompleted = true;
     }
 
@@ -268,8 +268,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
         _sendFund(_recipient, _amount);
 
-        _checkTotalValueInLp();
-        _checkMinAmountForShare();
+        _checkInvariants();
 
         return share;
     }
@@ -346,14 +345,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         uint256 share = sharesForAmount(amount);
         if (share == 0) revert InvalidShareAmount();
 
-        // transfer shares to WithdrawRequestNFT contract from this contract
-        IERC20(address(eETH)).safeTransferFrom(msg.sender, address(withdrawRequestNFT), amount);
-
-        uint256 requestId = withdrawRequestNFT.requestWithdraw(uint96(amount), uint96(share), recipient);
-       
-        emit Withdraw(msg.sender, recipient, amount, SourceOfFunds.EETH);
-
-        return requestId;
+        return _requestWithdraw(recipient, amount, share, SourceOfFunds.EETH);
     }
 
     /// @notice request withdraw from pool with signed permit data and receive a WithdrawRequestNFT
@@ -362,11 +354,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /// @param _amount requested amount to withdraw from contract
     /// @param _permit signed permit data to approve transfer of eETH
     /// @return uint256 requestId of the WithdrawRequestNFT
-    function requestWithdrawWithPermit(address _owner, uint256 _amount, PermitInput calldata _permit)
-        external
-        whenNotPaused
-        nonBlacklisted
-        returns (uint256)
+    function requestWithdrawWithPermit(address _owner, uint256 _amount, PermitInput calldata _permit) external returns (uint256)
     {
         try eETH.permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} catch {}
         return requestWithdraw(_owner, _amount);
@@ -383,14 +371,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         uint256 share = sharesForAmount(amount);
         if (amount > type(uint96).max || amount == 0 || share == 0) revert InvalidAmount();
 
-        // transfer shares to WithdrawRequestNFT contract
-        IERC20(address(eETH)).safeTransferFrom(msg.sender, address(withdrawRequestNFT), amount);
-
-        uint256 requestId = withdrawRequestNFT.requestWithdraw(uint96(amount), uint96(share), recipient);
-
-        emit Withdraw(msg.sender, recipient, amount, SourceOfFunds.ETHER_FAN);
-
-        return requestId;
+        return _requestWithdraw(recipient, amount, share, SourceOfFunds.ETHER_FAN);
     }
 
 
@@ -438,7 +419,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         uint256 _validatorSizeWei
     ) external nonReentrant whenNotPaused {
         if (msg.sender != address(etherFiAdminContract)) roleRegistry.onlyOracleOperations(msg.sender);
-        if (_validatorSizeWei < stakingManager.MIN_VALIDATOR_SIZE_WEI() || _validatorSizeWei > stakingManager.MAX_VALIDATOR_SIZE_WEI()) revert InvalidValidatorSize();
+        _requireValidValidatorSize(_validatorSizeWei);
 
         // we have already deposited the initial amount to create the validator on the beacon chain
         uint256 remainingEthPerValidator = _validatorSizeWei - stakingManager.INITIAL_DEPOSIT_AMOUNT();
@@ -453,7 +434,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     ///   forwards into confirmAndFundBeaconValidators(). In a future upgrade this will be a
     ///   parameter to that call but was done like this to limit changes to other dependent contracts.
     function setValidatorSizeWei(uint256 _validatorSizeWei) external onlyAdmin {
-        if (_validatorSizeWei < stakingManager.MIN_VALIDATOR_SIZE_WEI() || _validatorSizeWei > stakingManager.MAX_VALIDATOR_SIZE_WEI()) revert InvalidValidatorSize();
+        _requireValidValidatorSize(_validatorSizeWei);
         validatorSizeWei = _validatorSizeWei;
     }
 
@@ -504,7 +485,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     // Pauses the contract
     function pauseContract() external onlyOperatingMultisig {
-        if (paused) revert("Pausable: already paused");
+        if (paused) revert AlreadyPaused();
 
         paused = true;
         emit Paused();
@@ -512,7 +493,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     // Unpauses the contract
     function unPauseContract() external onlyOperatingMultisig {
-        if (!paused) revert("Pausable: not paused");
+        if (!paused) revert NotPaused();
 
         paused = false;
         emit Unpaused();
@@ -564,8 +545,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         totalValueOutOfLp -= uint128(_amount);
         totalValueInLp    += uint128(_amount);
 
-        _checkTotalValueInLp();
-        _checkMinAmountForShare();
+        _checkInvariants();
     }
 
     function burnEEthShares(uint256 shares) external nonDecreasingRate {
@@ -602,10 +582,17 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
         eETH.mintShares(_recipient, share);
 
-        _checkTotalValueInLp();
-        _checkMinAmountForShare();
+        _checkInvariants();
 
         return share;
+    }
+
+    /// @dev Shared tail for requestWithdraw / requestMembershipNFTWithdraw: moves `amount` eETH
+    ///      from the caller to the WithdrawRequestNFT, mints the request NFT, and emits Withdraw.
+    function _requestWithdraw(address recipient, uint256 amount, uint256 share, SourceOfFunds source) internal returns (uint256 requestId) {
+        IERC20(address(eETH)).safeTransferFrom(msg.sender, address(withdrawRequestNFT), amount);
+        requestId = withdrawRequestNFT.requestWithdraw(uint96(amount), uint96(share), recipient);
+        emit Withdraw(msg.sender, recipient, amount, source);
     }
 
     function _sharesForDepositAmount(uint256 _depositAmount) internal view returns (uint256) {
@@ -632,15 +619,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         totalValueInLp    -= _amount;
         totalValueOutOfLp += _amount;
         _sendFund(_dest, _amount);
-        _checkTotalValueInLp();
-        _checkMinAmountForShare();
+        _checkInvariants();
     }
 
     function _accountForEthSentOut(uint256 _amount) internal {
         totalValueOutOfLp += uint128(_amount);
         totalValueInLp -= uint128(_amount);
-        _checkTotalValueInLp();
-        _checkMinAmountForShare();
+        _checkInvariants();
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
@@ -709,7 +694,16 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         if (amountForShare(SHARE_UNIT) < minAmountForShare) revert InvalidAmountForShare();
     }
 
+    function _checkInvariants() internal view {
+        _checkTotalValueInLp();
+        _checkMinAmountForShare();
+    }
+
     function getImplementation() external view returns (address) {return _getImplementation();}
+
+    function _requireValidValidatorSize(uint256 _validatorSizeWei) internal view {
+        if (_validatorSizeWei < stakingManager.MIN_VALIDATOR_SIZE_WEI() || _validatorSizeWei > stakingManager.MAX_VALIDATOR_SIZE_WEI()) revert InvalidValidatorSize();
+    }
 
     function _requireNotPaused() internal view virtual {
         if (paused) revert ContractPaused();

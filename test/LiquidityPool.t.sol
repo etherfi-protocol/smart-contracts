@@ -1480,13 +1480,13 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.pauseContract();
         
         vm.prank(admin);
-        vm.expectRevert("Pausable: already paused");
+        vm.expectRevert(LiquidityPool.AlreadyPaused.selector);
         liquidityPoolInstance.pauseContract();
     }
 
     function test_UnpauseWhenNotPaused() public {
         vm.prank(admin);
-        vm.expectRevert("Pausable: not paused");
+        vm.expectRevert(LiquidityPool.NotPaused.selector);
         liquidityPoolInstance.unPauseContract();
     }
 
