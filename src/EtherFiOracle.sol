@@ -36,7 +36,8 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     uint32 public numActiveCommitteeMembers; // the number of active (enabled) committee members
 
     // deprecated storage slots
-    uint256 private __gap_0;
+    uint160 private __gap_0;
+    uint256 private __gap_1;
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  IMMUTABLES  --------------------------------------
