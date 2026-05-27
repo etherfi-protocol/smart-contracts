@@ -36,6 +36,7 @@ contract PriorityWithdrawalQueue is
     uint96 public constant MIN_AMOUNT = 0.01 ether;
     uint96 public constant MAX_AMOUNT = 1000 ether;
     uint256 private constant _BASIS_POINT_SCALE = 1e4;
+    uint256 public constant SHARE_UNIT = 1e18;
     uint256 private constant _TOLERANCE_BUFFER = 10; // in wei to account for rounding errors
 
     //--------------------------------------------------------------------------------------
@@ -594,8 +595,16 @@ contract PriorityWithdrawalQueue is
 
         ethAmountLockedForPriorityWithdrawal -= uint128(request.amountOfEEth);
 
-        uint256 rate = liquidityPool.amountPerShareCeil();
-        uint256 burnedShares = liquidityPool.withdraw(amountToWithdraw, rate);
+        // Derive `rate` from the request's own (amountWithFee, shareOfEEth) instead of using
+        // the live rate. This makes LP's Guard 1 (`_amount <= _shareOfEEth * _rate / SHARE_UNIT`)
+        // admit `amountToWithdraw` by construction (ceiling rounding ensures
+        // `shareOfEEth * derivedRate / SHARE_UNIT >= amountWithFee`), eliminating a sub-tolerance
+        // rate-drop DoS where PWQ's 10-wei `_TOLERANCE_BUFFER` admits but Guard 1's tighter
+        // ceil/floor combo reverts. Burn semantics are unchanged: Guard 2's max-clamp picks
+        // `shareAtLive` if live dropped, and Guard 3 caps at `shareOfEEth` — the request's
+        // own allocation, which is also the existing PWQ-side expectation.
+        uint256 rate = Math.mulDiv(amountToWithdraw, SHARE_UNIT, request.shareOfEEth, Math.Rounding.Up);
+        uint256 burnedShares = liquidityPool.withdraw(amountToWithdraw, rate, request.shareOfEEth);
 
         uint256 remainder = request.shareOfEEth > burnedShares 
             ? request.shareOfEEth - burnedShares 

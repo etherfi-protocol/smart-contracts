@@ -119,6 +119,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     error NotRegistered();
     error ContractPaused();
     error EETHRateDeflation();
+    error AlreadyPaused();
+    error NotPaused();
 
     struct ConstructorAddresses {
         address stakingManager;
@@ -158,8 +160,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         if (msg.value > type(uint128).max) revert InvalidAmount();
         totalValueOutOfLp -= uint128(msg.value);
         totalValueInLp += uint128(msg.value);
-        _checkTotalValueInLp();
-        _checkMinAmountForShare();
+        _checkInvariants();
     }
 
     function initialize(address _eEthAddress, address _stakingManagerAddress, address _nodesManagerAddress, address _membershipManagerAddress, address _tNftAddress, address _etherFiAdminContract, address _withdrawRequestNFT) external initializer {
@@ -192,8 +193,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
             if (queueLocked > 0) _sendFund(address(priorityWithdrawalQueue), queueLocked);
         }
 
-        _checkTotalValueInLp();
-        _checkMinAmountForShare();
+        _checkInvariants();
         escrowMigrationCompleted = true;
     }
 
@@ -245,29 +245,61 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
         _sendFund(_recipient, _amount);
 
-        _checkTotalValueInLp();
-        _checkMinAmountForShare();
+        _checkInvariants();
 
         return share;
     }
 
-    /// @notice Settles a finalized claim for withdrawRequestNFT or priorityWithdrawalQueue against
-    ///         the rate snapshotted at finalize/fulfill time. Caller supplies the rate; LP derives
-    ///         the share burn from it. ETH was already segregated to the caller at finalize/fulfill
-    ///         via `addEthAmountLockedForWithdrawal` / `transferLockedEthForPriority`, so LP only
-    ///         performs accounting (burn + `totalValueOutOfLp -=`); the caller pays the user from
-    ///         its own balance.
-    /// @dev    `_rate == 0` is rejected — callers (WRNFT / Queue) are responsible for resolving
-    ///         any pre-upgrade legacy snapshot to a live rate locally via `amountPerShareCeil()`
-    ///         before invoking this function. Single codepath: one ceiling math expression.
-    function withdraw(uint256 _amount, uint256 _rate) external nonReentrant returns (uint256) {
+    /// @notice Settles a finalized claim for withdrawRequestNFT or priorityWithdrawalQueue.
+    ///         Caller supplies the snapshotted rate and the request's share allocation;
+    ///         LP derives the share burn defensively from both inputs and current live rate.
+    ///
+    /// @dev    Three guards bound caller-supplied inputs without trusting any single one:
+    ///         (1) `_amount <= _shareOfEEth * _rate / SHARE_UNIT` — caps `_amount` at the
+    ///             rate-implied value of `_shareOfEEth`. Defeats isolated `_amount` inflation
+    ///             when `_rate` is honest. (Does NOT catch proportional `_amount`/`_rate`
+    ///             co-inflation — see residual below.)
+    ///         (2) Burn at `max(amount/_rate, amount/live)` shares — Lido-pattern worse-for-
+    ///             protocol clamp. An inflated `_rate` is silently floored to live; the protocol
+    ///             burns at the honest live rate regardless of what the caller passed.
+    ///         (3) Share burn capped at `_shareOfEEth` — per-call cap on burn. Un-DoSes
+    ///             legitimate down-rebase claims (where `amount/live > shareOfEEth`).
+    ///
+    /// @dev    `_shareOfEEth` MUST be the request-time share snapshot, not a live-derived value.
+    ///         If a future caller refactor breaks this invariant, Guard 3's cap silently loosens.
+    ///         LP cannot independently verify this — the caller (WRN / PWQ) is trusted to pass
+    ///         the snapshot honestly. The downstream `eETH.shares(msg.sender) < share` solvency
+    ///         check is the only bound against caller-asserted `_shareOfEEth` exceeding the
+    ///         caller's actual share holdings; it does NOT enforce a per-request bound.
+    ///
+    /// @dev    Residual: a caller corrupted in MULTIPLE inputs simultaneously (e.g. proportional
+    ///         `_amount` and `_rate` inflation) can bypass Guard 1 and Guard 2. The remaining
+    ///         bound is `eETH.shares(msg.sender)` (aggregate caller holdings), not per-request.
+    ///         This is the documented limit of LP-local defense; tighter bounds would require
+    ///         a per-request ledger on the LP side.
+    ///
+    ///         ETH was already segregated to the caller at finalize/fulfill via
+    ///         `addEthAmountLockedForWithdrawal` / `transferLockedEthForPriority`; LP only
+    ///         performs accounting (burn + `totalValueOutOfLp -=`).
+    function withdraw(uint256 _amount, uint256 _rate, uint256 _shareOfEEth) external nonReentrant returns (uint256) {
         if (msg.sender != address(withdrawRequestNFT) && msg.sender != address(priorityWithdrawalQueue)) {
             revert IncorrectCaller();
         }
         if (_amount > type(uint128).max || _amount == 0) revert InvalidAmount();
         if (_rate == 0) revert InvalidRate();
 
-        uint256 share = Math.mulDiv(_amount, SHARE_UNIT, _rate, Math.Rounding.Up); // rounding favors the protocol
+        // Guard 1: amount-cap against rate-implied entitlement of the request's allocation.
+        uint256 amountCap = Math.mulDiv(_shareOfEEth, _rate, SHARE_UNIT, Math.Rounding.Down);
+        if (_amount > amountCap) revert InvalidAmount();
+
+        // Guard 2: burn at the worse-for-protocol rate (the higher share count).
+        uint256 shareAtFrozen = Math.mulDiv(_amount, SHARE_UNIT, _rate, Math.Rounding.Up);
+        uint256 shareAtLive = Math.mulDiv(_amount, SHARE_UNIT, amountPerShareCeil(), Math.Rounding.Up);
+        uint256 share = Math.max(shareAtFrozen, shareAtLive);
+
+        // Guard 3: cap at the caller-asserted per-request allocation.
+        if (share > _shareOfEEth) share = _shareOfEEth;
+
         if (share == 0) revert InvalidAmount();
         if (eETH.shares(msg.sender) < share) revert InsufficientLiquidity();
 
@@ -290,14 +322,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         uint256 share = sharesForAmount(amount);
         if (share == 0) revert InvalidShareAmount();
 
-        // transfer shares to WithdrawRequestNFT contract from this contract
-        IERC20(address(eETH)).safeTransferFrom(msg.sender, address(withdrawRequestNFT), amount);
-
-        uint256 requestId = withdrawRequestNFT.requestWithdraw(uint96(amount), uint96(share), recipient);
-       
-        emit Withdraw(msg.sender, recipient, amount, SourceOfFunds.EETH);
-
-        return requestId;
+        return _requestWithdraw(recipient, amount, share, SourceOfFunds.EETH);
     }
 
     /// @notice request withdraw from pool with signed permit data and receive a WithdrawRequestNFT
@@ -306,11 +331,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /// @param _amount requested amount to withdraw from contract
     /// @param _permit signed permit data to approve transfer of eETH
     /// @return uint256 requestId of the WithdrawRequestNFT
-    function requestWithdrawWithPermit(address _owner, uint256 _amount, PermitInput calldata _permit)
-        external
-        whenNotPaused
-        nonBlacklisted
-        returns (uint256)
+    function requestWithdrawWithPermit(address _owner, uint256 _amount, PermitInput calldata _permit) external returns (uint256)
     {
         try eETH.permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} catch {}
         return requestWithdraw(_owner, _amount);
@@ -327,14 +348,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         uint256 share = sharesForAmount(amount);
         if (amount > type(uint96).max || amount == 0 || share == 0) revert InvalidAmount();
 
-        // transfer shares to WithdrawRequestNFT contract
-        IERC20(address(eETH)).safeTransferFrom(msg.sender, address(withdrawRequestNFT), amount);
-
-        uint256 requestId = withdrawRequestNFT.requestWithdraw(uint96(amount), uint96(share), recipient);
-
-        emit Withdraw(msg.sender, recipient, amount, SourceOfFunds.ETHER_FAN);
-
-        return requestId;
+        return _requestWithdraw(recipient, amount, share, SourceOfFunds.ETHER_FAN);
     }
 
 
@@ -382,7 +396,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         uint256 _validatorSizeWei
     ) external nonReentrant whenNotPaused {
         if (msg.sender != address(etherFiAdminContract)) roleRegistry.onlyOracleOperations(msg.sender);
-        if (_validatorSizeWei < stakingManager.MIN_VALIDATOR_SIZE_WEI() || _validatorSizeWei > stakingManager.MAX_VALIDATOR_SIZE_WEI()) revert InvalidValidatorSize();
+        _requireValidValidatorSize(_validatorSizeWei);
 
         // we have already deposited the initial amount to create the validator on the beacon chain
         uint256 remainingEthPerValidator = _validatorSizeWei - stakingManager.INITIAL_DEPOSIT_AMOUNT();
@@ -397,7 +411,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     ///   forwards into confirmAndFundBeaconValidators(). In a future upgrade this will be a
     ///   parameter to that call but was done like this to limit changes to other dependent contracts.
     function setValidatorSizeWei(uint256 _validatorSizeWei) external onlyAdmin {
-        if (_validatorSizeWei < stakingManager.MIN_VALIDATOR_SIZE_WEI() || _validatorSizeWei > stakingManager.MAX_VALIDATOR_SIZE_WEI()) revert InvalidValidatorSize();
+        _requireValidValidatorSize(_validatorSizeWei);
         validatorSizeWei = _validatorSizeWei;
     }
 
@@ -448,7 +462,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     // Pauses the contract
     function pauseContract() external onlyOperatingMultisig {
-        if (paused) revert("Pausable: already paused");
+        if (paused) revert AlreadyPaused();
 
         paused = true;
         emit Paused();
@@ -456,7 +470,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     // Unpauses the contract
     function unPauseContract() external onlyOperatingMultisig {
-        if (!paused) revert("Pausable: not paused");
+        if (!paused) revert NotPaused();
 
         paused = false;
         emit Unpaused();
@@ -508,8 +522,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         totalValueOutOfLp -= uint128(_amount);
         totalValueInLp    += uint128(_amount);
 
-        _checkTotalValueInLp();
-        _checkMinAmountForShare();
+        _checkInvariants();
     }
 
     function burnEEthShares(uint256 shares) external nonDecreasingRate {
@@ -546,10 +559,17 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
         eETH.mintShares(_recipient, share);
 
-        _checkTotalValueInLp();
-        _checkMinAmountForShare();
+        _checkInvariants();
 
         return share;
+    }
+
+    /// @dev Shared tail for requestWithdraw / requestMembershipNFTWithdraw: moves `amount` eETH
+    ///      from the caller to the WithdrawRequestNFT, mints the request NFT, and emits Withdraw.
+    function _requestWithdraw(address recipient, uint256 amount, uint256 share, SourceOfFunds source) internal returns (uint256 requestId) {
+        IERC20(address(eETH)).safeTransferFrom(msg.sender, address(withdrawRequestNFT), amount);
+        requestId = withdrawRequestNFT.requestWithdraw(uint96(amount), uint96(share), recipient);
+        emit Withdraw(msg.sender, recipient, amount, source);
     }
 
     function _sharesForDepositAmount(uint256 _depositAmount) internal view returns (uint256) {
@@ -576,15 +596,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         totalValueInLp    -= _amount;
         totalValueOutOfLp += _amount;
         _sendFund(_dest, _amount);
-        _checkTotalValueInLp();
-        _checkMinAmountForShare();
+        _checkInvariants();
     }
 
     function _accountForEthSentOut(uint256 _amount) internal {
         totalValueOutOfLp += uint128(_amount);
         totalValueInLp -= uint128(_amount);
-        _checkTotalValueInLp();
-        _checkMinAmountForShare();
+        _checkInvariants();
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
@@ -653,7 +671,16 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         if (amountForShare(SHARE_UNIT) < minAmountForShare) revert InvalidAmountForShare();
     }
 
+    function _checkInvariants() internal view {
+        _checkTotalValueInLp();
+        _checkMinAmountForShare();
+    }
+
     function getImplementation() external view returns (address) {return _getImplementation();}
+
+    function _requireValidValidatorSize(uint256 _validatorSizeWei) internal view {
+        if (_validatorSizeWei < stakingManager.MIN_VALIDATOR_SIZE_WEI() || _validatorSizeWei > stakingManager.MAX_VALIDATOR_SIZE_WEI()) revert InvalidValidatorSize();
+    }
 
     function _requireNotPaused() internal view virtual {
         if (paused) revert ContractPaused();
@@ -698,9 +725,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     ///               belt-and-suspenders
     ///
     ///         INTENTIONALLY NOT applied to:
-    ///           - withdraw(uint256, uint256) — frozen-rate finalized claim,
-    ///             rate-drop bounded by the oracle-signed `_rate` parameter
-    ///             (WRN/PQ-only)
+    ///           - withdraw(uint256, uint256, uint256) — frozen-rate finalized claim,
+    ///             rate-drop bounded by the three-guard design at that function's
+    ///             docblock (WRN/PQ-only)
     ///           - rebase() — oracle path, rate-change bounded by
     ///             EtherFiAdmin._validateRebaseApr's APR cap
     ///

@@ -233,6 +233,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
             // Pre-upgrade legacy request — sentinel returned 0. Fall back to the live rate so
             // claim semantics match the pre-upgrade behavior. New (post-upgrade) finalizations
             // always push a non-zero snapshot, so this branch only fires for legacy tokenIds.
+            // Bounds-check the live rate before adopting it — this path is the only one where
+            // `frozenRate` was not already gated by `finalizeRequests`'s write-time check.
             uint256 live = liquidityPool.amountPerShareCeil();
             if (live < minAcceptableShareRate || live > maxAcceptableShareRate) revert InvalidLiveRate();
             frozenRate = uint224(live);
@@ -270,10 +272,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         if (ethAmountLockedForWithdrawal < amountToWithdraw) revert InsufficientEscrow();
         ethAmountLockedForWithdrawal -= uint128(request.amountOfEEth);
 
-        uint256 burnedShares = liquidityPool.withdraw(amountToWithdraw, uint256(frozenRate));
-        // When `amountToWithdraw` was computed at `frozenRate` (or live rate, for legacy), the
-        // round-trip ceiling division yields `burnedShares <= request.shareOfEEth` by construction;
-        // the require both pins that invariant and protects the remainder bookkeeping below.
+        uint256 burnedShares = liquidityPool.withdraw(amountToWithdraw, uint256(frozenRate), request.shareOfEEth);
+        // LP caps `burnedShares <= request.shareOfEEth` (Guard 3). Defensive duplication.
         if (burnedShares > request.shareOfEEth) revert BurnExceedsShares();
         totalRemainderEEthShares += request.shareOfEEth - burnedShares;
 
