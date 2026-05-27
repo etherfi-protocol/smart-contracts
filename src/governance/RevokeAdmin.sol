@@ -19,6 +19,10 @@ contract RevokeAdmin is Initializable, UUPSUpgradeable, RolesLibrary, IRevokeAdm
 
     function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
+    function revokeSuperGuardianRole(address account) external onlyOperatingMultisig {
+        _revokeFast(roleRegistry.SUPER_GUARDIAN_ROLE(), account);
+    }
+
     function revokeGuardianRole(address account) external onlyOperatingMultisig {
         _revokeFast(roleRegistry.GUARDIAN_ROLE(), account);
     }
