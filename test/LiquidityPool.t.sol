@@ -2678,6 +2678,8 @@ contract LiquidityPoolTest is TestSetup {
     /// @dev Property test: across a wide grid of (amount, rate, shareOfEEth) values,
     ///      the burn always equals `min(max(shareAtFrozen, shareAtLive), shareOfEEth)`,
     ///      and the three guards never let the protocol be net-worse than today's code.
+    ///      Uses `vm.assume` (which Foundry surfaces in skipped-sample stats) instead
+    ///      of `return` so coverage degradation is observable.
     function testFuzz_withdrawGuards_burnFollowsSpec(
         uint128 amountSeed,
         uint128 rateSeed,
@@ -2693,21 +2695,50 @@ contract LiquidityPoolTest is TestSetup {
         uint256 rate = bound(uint256(rateSeed), 0.5e18, 2e18);
         uint256 shareOfEEth = bound(uint256(shareSeed), 1, 100 ether);
 
-        // Guard 1: skip if amount exceeds entitlement (the call would revert; not under test here).
+        // Guard 1: assume the call would not revert on the amount-cap (covered separately).
         uint256 amountCap = Math.mulDiv(shareOfEEth, rate, 1e18, Math.Rounding.Down);
-        if (amount > amountCap) return;
+        vm.assume(amount <= amountCap);
 
         uint256 shareAtFrozen = Math.mulDiv(amount, 1e18, rate, Math.Rounding.Up);
         uint256 shareAtLive   = Math.mulDiv(amount, 1e18, liveRate, Math.Rounding.Up);
         uint256 expectedBurn  = shareAtFrozen > shareAtLive ? shareAtFrozen : shareAtLive;
         if (expectedBurn > shareOfEEth) expectedBurn = shareOfEEth;
-        if (expectedBurn == 0) return;
-
-        // Solvency: skip if NFT lacks the shares (not under test).
-        if (eETHInstance.shares(address(withdrawRequestNFTInstance)) < expectedBurn) return;
+        vm.assume(expectedBurn > 0);
+        vm.assume(eETHInstance.shares(address(withdrawRequestNFTInstance)) >= expectedBurn);
 
         vm.prank(address(withdrawRequestNFTInstance));
         uint256 burned = liquidityPoolInstance.withdraw(amount, rate, shareOfEEth);
         assertEq(burned, expectedBurn, "burn must match three-guard spec");
+
+        // Differential oracle for the up-rebase case (`rate >= liveRate`): the burn must
+        // match the live-rate ceiling closed-form, NOT the frozen-rate one. Independent
+        // computation guards against the test re-implementing the same bug as production.
+        if (rate >= liveRate) {
+            uint256 oracleBurn = Math.mulDiv(amount, 1e18, liveRate, Math.Rounding.Up);
+            if (oracleBurn > shareOfEEth) oracleBurn = shareOfEEth;
+            assertEq(burned, oracleBurn, "up-rebase oracle: burn = ceil(amount/live), capped at shareOfEEth");
+        }
+    }
+
+    /// @dev Guard 1 negative path: the fuzz above skips Guard-1 violations via `vm.assume`.
+    ///      This dedicated fuzz asserts the REVERT side: any `_amount` strictly above
+    ///      `_shareOfEEth * _rate / SHARE_UNIT` reverts `InvalidAmount`.
+    function testFuzz_withdrawGuard1_amountAboveCapReverts(
+        uint128 amountSeed,
+        uint128 rateSeed,
+        uint128 shareSeed
+    ) public {
+        _seedNftEscrow(1000 ether, uint128(100 ether));
+
+        uint256 amount = bound(uint256(amountSeed), 1, 50 ether);
+        uint256 rate = bound(uint256(rateSeed), 0.5e18, 2e18);
+        uint256 shareOfEEth = bound(uint256(shareSeed), 1, 100 ether);
+
+        uint256 amountCap = Math.mulDiv(shareOfEEth, rate, 1e18, Math.Rounding.Down);
+        vm.assume(amount > amountCap);
+
+        vm.prank(address(withdrawRequestNFTInstance));
+        vm.expectRevert(LiquidityPool.InvalidAmount.selector);
+        liquidityPoolInstance.withdraw(amount, rate, shareOfEEth);
     }
 }

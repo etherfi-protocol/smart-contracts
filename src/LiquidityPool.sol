@@ -280,13 +280,27 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     ///
     /// @dev    Three guards bound caller-supplied inputs without trusting any single one:
     ///         (1) `_amount <= _shareOfEEth * _rate / SHARE_UNIT` — caps `_amount` at the
-    ///             rate-implied value of the request's allocation. Defeats isolated `_amount`
-    ///             inflation independent of `_rate`.
+    ///             rate-implied value of `_shareOfEEth`. Defeats isolated `_amount` inflation
+    ///             when `_rate` is honest. (Does NOT catch proportional `_amount`/`_rate`
+    ///             co-inflation — see residual below.)
     ///         (2) Burn at `max(amount/_rate, amount/live)` shares — Lido-pattern worse-for-
     ///             protocol clamp. An inflated `_rate` is silently floored to live; the protocol
     ///             burns at the honest live rate regardless of what the caller passed.
-    ///         (3) Share burn capped at `_shareOfEEth` — bounds cross-request share extraction
-    ///             and un-DoSes legitimate down-rebase claims (where `amount/live > shareOfEEth`).
+    ///         (3) Share burn capped at `_shareOfEEth` — per-call cap on burn. Un-DoSes
+    ///             legitimate down-rebase claims (where `amount/live > shareOfEEth`).
+    ///
+    /// @dev    `_shareOfEEth` MUST be the request-time share snapshot, not a live-derived value.
+    ///         If a future caller refactor breaks this invariant, Guard 3's cap silently loosens.
+    ///         LP cannot independently verify this — the caller (WRN / PWQ) is trusted to pass
+    ///         the snapshot honestly. The downstream `eETH.shares(msg.sender) < share` solvency
+    ///         check is the only bound against caller-asserted `_shareOfEEth` exceeding the
+    ///         caller's actual share holdings; it does NOT enforce a per-request bound.
+    ///
+    /// @dev    Residual: a caller corrupted in MULTIPLE inputs simultaneously (e.g. proportional
+    ///         `_amount` and `_rate` inflation) can bypass Guard 1 and Guard 2. The remaining
+    ///         bound is `eETH.shares(msg.sender)` (aggregate caller holdings), not per-request.
+    ///         This is the documented limit of LP-local defense; tighter bounds would require
+    ///         a per-request ledger on the LP side.
     ///
     ///         ETH was already segregated to the caller at finalize/fulfill via
     ///         `addEthAmountLockedForWithdrawal` / `transferLockedEthForPriority`; LP only
@@ -740,9 +754,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     ///               belt-and-suspenders
     ///
     ///         INTENTIONALLY NOT applied to:
-    ///           - withdraw(uint256, uint256) — frozen-rate finalized claim,
-    ///             rate-drop bounded by the oracle-signed `_rate` parameter
-    ///             (WRN/PQ-only)
+    ///           - withdraw(uint256, uint256, uint256) — frozen-rate finalized claim,
+    ///             rate-drop bounded by the three-guard design at that function's
+    ///             docblock (WRN/PQ-only)
     ///           - rebase() — oracle path, rate-change bounded by
     ///             EtherFiAdmin._validateRebaseApr's APR cap
     ///

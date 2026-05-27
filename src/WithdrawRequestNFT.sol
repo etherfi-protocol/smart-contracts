@@ -123,6 +123,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     error InvalidMinAcceptableShareRate();
     error InvalidMinMaxAcceptableShareRate();
     error AlreadyInitialized();
+    error InvalidLiveRate();
     error BurnExceedsShares();
     error InvalidEEthShares();
 
@@ -207,12 +208,12 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
             // Pre-upgrade legacy request — sentinel returned 0. Fall back to the live rate so
             // claim semantics match the pre-upgrade behavior. New (post-upgrade) finalizations
             // always push a non-zero snapshot, so this branch only fires for legacy tokenIds.
-            frozenRate = uint224(liquidityPool.amountPerShareCeil());
+            // Bounds-check the live rate before adopting it — this path is the only one where
+            // `frozenRate` was not already gated by `finalizeRequests`'s write-time check.
+            uint256 live = liquidityPool.amountPerShareCeil();
+            if (live < minAcceptableShareRate || live > maxAcceptableShareRate) revert InvalidLiveRate();
+            frozenRate = uint224(live);
         }
-        // Bounds re-check at the claim site. Finalize already enforces this at write time
-        // (`finalizeRequests`); re-checking here defends against in-impl bugs and ensures the
-        // legacy live-rate fallback above is also bounded.
-        if (frozenRate < minAcceptableShareRate || frozenRate > maxAcceptableShareRate) revert InvalidShareRate();
 
         uint256 amountForShares = Math.mulDiv(uint256(request.shareOfEEth), frozenRate, SHARE_UNIT);
 
