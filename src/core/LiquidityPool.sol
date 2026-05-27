@@ -295,7 +295,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         // Guard 2: burn at the worse-for-protocol rate (the higher share count).
         uint256 shareAtFrozen = Math.mulDiv(_amount, SHARE_UNIT, _rate, Math.Rounding.Up);
         uint256 shareAtLive = Math.mulDiv(_amount, SHARE_UNIT, amountPerShareCeil(), Math.Rounding.Up);
-        uint256 share = shareAtFrozen > shareAtLive ? shareAtFrozen : shareAtLive;
+        uint256 share = Math.max(shareAtFrozen, shareAtLive);
 
         // Guard 3: cap at the caller-asserted per-request allocation.
         if (share > _shareOfEEth) share = _shareOfEEth;
