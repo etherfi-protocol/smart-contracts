@@ -48,7 +48,6 @@ contract AuctionManager is
     IBlacklister public immutable blacklister;
     INodeOperatorManager public immutable nodeOperatorManager;
     address public immutable stakingManagerContractAddress;
-    address public immutable membershipManagerContractAddress;
     address public immutable treasury;
 
     //--------------------------------------------------------------------------------------
@@ -58,6 +57,7 @@ contract AuctionManager is
     event BidCreated(address indexed bidder, uint256 amountPerBid, uint256[] bidIdArray, uint64[] ipfsIndexArray);
     event BidCancelled(uint256 indexed bidId);
     event BidReEnteredAuction(uint256 indexed bidId);
+    event BidRevenueForwarded(uint256 indexed bidId, address indexed treasury, uint256 amount);
     event WhitelistDisabled(bool whitelistStatus);
     event WhitelistEnabled(bool whitelistStatus);
 
@@ -85,11 +85,10 @@ contract AuctionManager is
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _roleRegistry, address _blacklister, address _nodeOperatorManagerContract, address _stakingManagerContractAddress, address _membershipManagerContractAddress, address _treasury) RolesLibrary(_roleRegistry) {
+    constructor(address _roleRegistry, address _blacklister, address _nodeOperatorManagerContract, address _stakingManagerContractAddress, address _treasury) RolesLibrary(_roleRegistry) {
         blacklister = IBlacklister(_blacklister);
         nodeOperatorManager = INodeOperatorManager(_nodeOperatorManagerContract);
         stakingManagerContractAddress = _stakingManagerContractAddress;
-        membershipManagerContractAddress = _membershipManagerContractAddress;
         treasury = _treasury;
         _disableInitializers();
     }
@@ -193,7 +192,9 @@ contract AuctionManager is
     }
 
     /// @notice Updates the details of the bid which has been used in a stake match
-    /// @dev Called by batchDepositWithBidIds() in StakingManager.sol
+    /// @dev Called by batchDepositWithBidIds() in StakingManager.sol. Forwards the
+    ///      consumed bid's ETH to `treasury` so protocol-side bid revenue is not
+    ///      stranded in this contract.
     /// @param _bidId the ID of the bid being removed from the auction (since it has been selected)
     function updateSelectedBidInformation(
         uint256 _bidId
@@ -203,6 +204,13 @@ contract AuctionManager is
 
         bid.isActive = false;
         numberOfActiveBids--;
+
+        uint256 amount = bid.amount;
+        if (amount > 0) {
+            (bool sent, ) = treasury.call{value: amount}("");
+            if (!sent) revert EtherTransferFailed();
+            emit BidRevenueForwarded(_bidId, treasury, amount);
+        }
     }
 
     /// @notice Lets a bid that was matched to a cancelled stake re-enter the auction

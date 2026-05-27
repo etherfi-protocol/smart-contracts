@@ -141,6 +141,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     error InvalidMinAcceptableShareRate();
     error InvalidMinMaxAcceptableShareRate();
     error AlreadyInitialized();
+    error NotInitialized();
     error InvalidLiveRate();
     error BurnExceedsShares();
     error InvalidEEthShares();
@@ -326,6 +327,12 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     function finalizeRequests(uint256 requestId) external {
         if (msg.sender != address(etherFiAdmin)) revert IncorrectCaller();
+        // Defends against the upgrade-ordering trap: if `initializeShareRateFreezeUpgrade`
+        // has not yet pushed the sentinel, the first `finalizeRequests` would push a real
+        // rate as the trace's first entry, causing every legacy tokenId to look up to that
+        // rate instead of 0 — corrupting the live-rate fallback semantic for pre-upgrade
+        // requests. Block until the sentinel is in place.
+        if (_finalizationRates.length() == 0) revert NotInitialized();
         if (requestId < lastFinalizedRequestId) revert CannotUndoFinalization();
         if (requestId >= nextRequestId) revert CannotFinalizeFutureRequests();
 
