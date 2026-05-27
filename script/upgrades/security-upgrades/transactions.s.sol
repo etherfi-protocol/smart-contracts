@@ -607,7 +607,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     }
     function _nftImmSels() internal pure returns (bytes4[] memory s) {
         s = new bytes4[](9);
-        s[0] = bytes4(keccak256("ethfiBuybackAddress()"));
+        s[0] = bytes4(keccak256("treasury()"));
         s[1] = bytes4(keccak256("liquidityPool()"));
         s[2] = bytes4(keccak256("eETH()"));
         s[3] = bytes4(keccak256("membershipManager()"));
@@ -740,7 +740,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         s[0] = bytes4(keccak256("liquidityPool()"));
         s[1] = bytes4(keccak256("eETH()"));
         s[2] = bytes4(keccak256("weETH()"));
-        s[3] = bytes4(keccak256("ethfiBuybackAddress()"));
+        s[3] = bytes4(keccak256("treasury()"));
         s[4] = bytes4(keccak256("minDelay()"));
         s[5] = bytes4(keccak256("roleRegistry()"));
     }
@@ -1020,7 +1020,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
 
     function _verifyImmutablesNFT() internal view {
         WithdrawRequestNFT n = WithdrawRequestNFT(payable(WITHDRAW_REQUEST_NFT));
-        require(n.ethfiBuybackAddress()       == WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, "NFT.ethfiBuybackAddress");
+        require(n.treasury()       == WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, "NFT.treasury");
         require(address(n.liquidityPool())    == LIQUIDITY_POOL,           "NFT.liquidityPool");
         require(address(n.eETH())             == EETH,                     "NFT.eETH");
         require(address(n.membershipManager())== MEMBERSHIP_MANAGER,       "NFT.membershipManager");
@@ -1153,7 +1153,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         require(address(pwq.liquidityPool()) == LIQUIDITY_POOL,                  "PWQ.liquidityPool");
         require(address(pwq.eETH())          == EETH,                            "PWQ.eETH");
         require(address(pwq.weETH())         == WEETH,                           "PWQ.weETH");
-        require(pwq.ethfiBuybackAddress()    == WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, "PWQ.ethfiBuybackAddress");
+        require(pwq.treasury()    == WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, "PWQ.treasury");
         require(pwq.minDelay()               == PWQ_MIN_DELAY,                   "PWQ.minDelay");
         require(address(pwq.roleRegistry())  == ROLE_REGISTRY,                   "PWQ.roleRegistry");
 

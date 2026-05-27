@@ -22,6 +22,10 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
     event RemovedFromWhitelist(address userAddress);
     event UpdatedOperatorApprovals(address operator, LiquidityPool.SourceOfFunds source, bool approved);
 
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  ERRORS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
+
     error IncorrectCaller();
     error InvalidLengths();
     error AlreadyRegistered();
@@ -32,21 +36,27 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
 
-    address private DEPRECATED_auctionManagerContractAddress;
+    // deprecated storage slots
+    uint160 private __gap_0;
 
     // user address => OperaterData Struct
     mapping(address => KeyData) public addressToOperatorData;
     mapping(address => bool) private whitelistedAddresses;
     mapping(address => bool) public registered;
 
-    mapping(address => bool) private DEPRECATED_admins;
+    // deprecated storage slots
+    uint256 private __gap_1;
+
     mapping(address => mapping(ILiquidityPool.SourceOfFunds => bool)) public operatorApprovedTags;
 
-    // Immutables are not part of proxy storage; stored in implementation bytecode only.
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  IMMUTABLES  --------------------------------------
+    //--------------------------------------------------------------------------------------
+
     address public immutable auctionManagerContractAddress;
 
     //--------------------------------------------------------------------------------------
-    //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
+    //---------------------------------  CONSTRUCTOR  -------------------------------------
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -54,6 +64,10 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
         auctionManagerContractAddress = _auctionManagerContractAddress;
         _disableInitializers();
     }
+
+    //--------------------------------------------------------------------------------------
+    //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
+    //--------------------------------------------------------------------------------------
 
     /// @notice initializes contract
     function initialize() external initializer {

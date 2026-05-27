@@ -68,5 +68,5 @@ interface IPriorityWithdrawalQueue {
     function setPauseUntilDuration(uint256 _pauseUntilDuration) external;
 
     // Immutables
-    function ethfiBuybackAddress() external view returns (address);
+    function treasury() external view returns (address);
 }

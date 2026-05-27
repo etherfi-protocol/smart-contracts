@@ -12,6 +12,10 @@ import "./utils/RolesLibrary.sol";
 
 contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable, IEtherFiOracle, RolesLibrary {
 
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  STATE-VARIABLES  ----------------------------------
+    //--------------------------------------------------------------------------------------
+
     mapping(address => IEtherFiOracle.CommitteeMemberState) public committeeMemberStates; // committee member wallet address to its State
     mapping(bytes32 => IEtherFiOracle.ConsensusState) public consensusStates; // report's hash -> Consensus State
 
@@ -31,13 +35,21 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     uint32 public numCommitteeMembers; // the total number of committee members
     uint32 public numActiveCommitteeMembers; // the number of active (enabled) committee members
 
-    IEtherFiAdmin private DEPRECATED_etherFiAdmin;
+    // deprecated storage slots
+    uint160 private __gap_0;
+    uint256 private __gap_1;
 
-    mapping(address => bool) private DEPRECATED_admins;
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  IMMUTABLES  --------------------------------------
+    //--------------------------------------------------------------------------------------
 
     // Immutables are not part of proxy storage; stored in implementation bytecode only.
     IEtherFiAdmin public immutable etherFiAdmin;
     uint32 public immutable minQuorumSize;
+
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  CONSTANTS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
 
     event CommitteeMemberAdded(address indexed member);
     event CommitteeMemberRemoved(address indexed member);
@@ -50,6 +62,10 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     event ReportPublished(uint32 consensusVersion, uint32 refSlotFrom, uint32 refSlotTo, uint32 refBlockFrom, uint32 refBlockTo, bytes32 indexed hash);
     event ReportSubmitted(uint32 consensusVersion, uint32 refSlotFrom, uint32 refSlotTo, uint32 refBlockFrom, uint32 refBlockTo, bytes32 indexed hash, address indexed committeeMember);
     event ReportUnpublished(bytes32 indexed hash);
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  ERRORS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
 
     error ConsensusAlreadyReached();
     error ReportNotNeeded();
@@ -72,12 +88,20 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     error InvalidConsensusVersion();
     error InvalidQuorum();
 
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  CONSTRUCTOR  ----------------------------------
+    //--------------------------------------------------------------------------------------
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(uint32 _minQuorumSize, address _etherFiAdmin, address _roleRegistry) RolesLibrary(_roleRegistry) {
         minQuorumSize = _minQuorumSize;
         etherFiAdmin = IEtherFiAdmin(_etherFiAdmin);
         _disableInitializers();
     }
+
+    //--------------------------------------------------------------------------------------
+    //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
+    //--------------------------------------------------------------------------------------
 
     function initialize(uint32 _quorumSize, uint32 _reportPeriodSlot, uint32 _reportStartSlot, uint32 _slotsPerEpoch, uint32 _secondsPerSlot, uint32 _genesisTime)
         external

@@ -30,10 +30,24 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         IStrategy elStrategy;
     }
 
-    IRewardsCoordinator public immutable rewardsCoordinator;
-    address public immutable etherFiRedemptionManager;
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  STATE-VARIABLES  ----------------------------------
+    //--------------------------------------------------------------------------------------
+    // deprecated storage slots
+    uint256[8] private __gap_0;
 
-    // Immutables are not part of proxy storage; stored in implementation bytecode only.
+    mapping(address => TokenInfo) public tokenInfos;
+
+    EnumerableSet.Bytes32Set private withdrawalRootsSet;
+    
+    // deprecated storage slots
+    uint256 private __gap_1;
+
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  IMMUTABLES  --------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    IRewardsCoordinator public immutable rewardsCoordinator;
     ILiquidityPool public immutable liquidityPool;
     ILiquifier public immutable liquifier;
     ILidoWithdrawalQueue public immutable lidoWithdrawalQueue;
@@ -41,6 +55,11 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     IDelegationManager public immutable eigenLayerDelegationManager;
     IStrategyManager public immutable eigenLayerStrategyManager;
     IEtherFiRateLimiter public immutable rateLimiter;
+    address public immutable etherFiRedemptionManager;
+
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  CONSTANTS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
 
     bytes32 public constant STETH_REQUEST_WITHDRAWAL_LIMIT_ID = keccak256("STETH_REQUEST_WITHDRAWAL_LIMIT_ID");
     bytes32 public constant QUEUE_WITHDRAWALS_LIMIT_ID        = keccak256("QUEUE_WITHDRAWALS_LIMIT_ID");
@@ -50,25 +69,17 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// storage reads and writes, but low enough to prevent griefing.
     uint256 internal constant GAS_STIPEND_NO_GRIEF = 100_000;
 
-    LiquidityPool private DEPRECATED_liquidityPool;
-    Liquifier private DEPRECATED_liquifier;
-    ILidoWithdrawalQueue private DEPRECATED_lidoWithdrawalQueue;
-    ILido private DEPRECATED_lido;
-    IDelegationManager private DEPRECATED_eigenLayerDelegationManager;
-    IStrategyManager private DEPRECATED_eigenLayerStrategyManager;
-
-    mapping(address => bool) private DEPRECATED_pausers;
-    mapping(address => bool) private DEPRECATED_admins;
-
-    mapping(address => TokenInfo) public tokenInfos;
-
-    EnumerableSet.Bytes32Set private withdrawalRootsSet;
-    mapping(bytes32 => IDelegationManager.Withdrawal) private DEPRECATED_withdrawalRootToWithdrawal;
-
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  EVENTS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
 
     event QueuedStEthWithdrawals(uint256[] _reqIds);
     event CompletedStEthQueuedWithdrawals(uint256[] _reqIds);
     event CompletedQueuedWithdrawal(bytes32 _withdrawalRoot);
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  ERRORS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
 
     error NotEnoughBalance();
     error IncorrectAmount();
@@ -79,6 +90,10 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     error AlreadyClaimed();
     error AmountOverflowsUint64Gwei();
     error WithdrawalRootNotFound();
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  CONSTRUCTOR  ----------------------------------
+    //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(
@@ -102,6 +117,10 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         rateLimiter = IEtherFiRateLimiter(_rateLimiter);
         _disableInitializers();
     }
+
+    //--------------------------------------------------------------------------------------
+    //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
+    //--------------------------------------------------------------------------------------
 
     /// @notice initialize to set variables on deployment
     function initialize(address _liquidityPool, address _liquifier) initializer external {
