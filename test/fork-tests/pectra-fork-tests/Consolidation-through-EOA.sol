@@ -6,11 +6,11 @@ import "forge-std/console2.sol";
 import "@etherfi/staking/EtherFiNodesManager.sol";
 import "@etherfi/staking/EtherFiNode.sol";
 import "@etherfi/governance/EtherFiTimelock.sol";
-import "@etherfi/rate-limiting/EtherFiRateLimiter.sol";
+import "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
 import "@etherfi/governance/RoleRegistry.sol";
 import "@etherfi/governance/interfaces/IRoleRegistry.sol";
 import "@etherfi/staking/interfaces/IStakingManager.sol";
-import "@etherfi/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
+import "@etherfi/governance/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
 import {IEigenPod, IEigenPodTypes } from "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
 import {EigenPodTestHelpers} from "@tests/utils/EigenPodTestHelpers.sol";
 

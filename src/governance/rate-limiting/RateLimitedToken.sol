@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
-import "@etherfi/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
+import "@etherfi/governance/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
 
 /// @title  RateLimitedToken
 /// @notice Token-side helpers for the per-address rate-limit feature on EtherFiRateLimiter.

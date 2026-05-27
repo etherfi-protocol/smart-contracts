@@ -27,7 +27,7 @@ import "@etherfi/archive/ProtocolRevenueManager.sol";
 import "@etherfi/archive/BNFT.sol";
 import "@etherfi/archive/TNFT.sol";
 import "@etherfi/staking/EtherFiNode.sol";
-import "@etherfi/rate-limiting/EtherFiRateLimiter.sol";
+import "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
 import "@etherfi/core/LiquidityPool.sol";
 import "@etherfi/periphery/Liquifier.sol";
 import "@etherfi/periphery/EtherFiRestaker.sol";

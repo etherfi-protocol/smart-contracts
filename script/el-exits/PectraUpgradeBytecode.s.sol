@@ -7,7 +7,7 @@ import "@scripts/ContractCodeChecker.sol";
 import "@etherfi/staking/EtherFiNode.sol";
 import "@etherfi/staking/EtherFiNodesManager.sol";
 import "@etherfi/staking/StakingManager.sol";
-import "@etherfi/rate-limiting/EtherFiRateLimiter.sol";
+import "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
 
 
 contract PectraUpgradeBytecode is Script {

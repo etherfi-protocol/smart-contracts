@@ -5,7 +5,7 @@ import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 
 import "@etherfi/staking/EtherFiNodesManager.sol";
-import "@etherfi/rate-limiting/EtherFiRateLimiter.sol";
+import "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
 import "@etherfi/staking/StakingManager.sol";
 import "@etherfi/governance/RoleRegistry.sol";
 import "@etherfi/staking/EtherFiNode.sol";

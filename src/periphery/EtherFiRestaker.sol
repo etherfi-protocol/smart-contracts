@@ -19,7 +19,7 @@ import "@etherfi/eigenlayer-interfaces/IRewardsCoordinator.sol";
 
 import "@etherfi/periphery/interfaces/ILiquifier.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
-import "@etherfi/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
+import "@etherfi/governance/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
 
 contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable, RolesLibrary {
     using SafeERC20 for IERC20;

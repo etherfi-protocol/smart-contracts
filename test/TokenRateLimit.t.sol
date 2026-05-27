@@ -2,8 +2,8 @@
 pragma solidity ^0.8.13;
 
 import "@tests/TestSetup.sol";
-import "@etherfi/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
-import "@etherfi/rate-limiting/RateLimitedToken.sol";
+import "@etherfi/governance/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
+import "@etherfi/governance/rate-limiting/RateLimitedToken.sol";
 
 contract TokenRateLimitTest is TestSetup {
     uint64 private constant ONE_ETHER_GWEI = 1 ether / 1 gwei; // 1e9

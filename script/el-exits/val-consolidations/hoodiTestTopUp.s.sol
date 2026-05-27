@@ -11,7 +11,7 @@ import "@etherfi/oracle/EtherFiOracle.sol";
 import "@etherfi/oracle/EtherFiAdmin.sol";
 import "@etherfi/governance/RoleRegistry.sol";
 import "@etherfi/staking/StakingManager.sol";
-import "@etherfi/rate-limiting/EtherFiRateLimiter.sol";
+import "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
 import "@tests/common/ArrayTestHelper.sol";
 
 contract HoodiTestTopUp is Script, ArrayTestHelper {

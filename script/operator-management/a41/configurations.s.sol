@@ -11,7 +11,7 @@ import {EtherFiTimelock} from "@etherfi/governance/EtherFiTimelock.sol";
 import {EtherFiNodesManager} from "@etherfi/staking/EtherFiNodesManager.sol";
 import {RoleRegistry} from "@etherfi/governance/RoleRegistry.sol";
 import {IDelegationManager} from "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
-import {EtherFiRateLimiter} from "@etherfi/rate-limiting/EtherFiRateLimiter.sol";
+import {EtherFiRateLimiter} from "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
 
 contract Configurations is Script, Utils {
     using stdJson for string;

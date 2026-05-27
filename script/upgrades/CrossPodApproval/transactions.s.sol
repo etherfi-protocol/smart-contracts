@@ -8,7 +8,7 @@ import {RoleRegistry} from "@etherfi/governance/RoleRegistry.sol";
 import {EtherFiTimelock} from "@etherfi/governance/EtherFiTimelock.sol";
 import {EtherFiNodesManager} from "@etherfi/staking/EtherFiNodesManager.sol";
 import {LiquidityPool} from "@etherfi/core/LiquidityPool.sol";
-import {EtherFiRateLimiter} from "@etherfi/rate-limiting/EtherFiRateLimiter.sol";
+import {EtherFiRateLimiter} from "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
 import {IEtherFiNodesManager} from "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
 import {ContractCodeChecker} from "@scripts/ContractCodeChecker.sol";
 import {Deployed} from "@scripts/deploys/Deployed.s.sol";

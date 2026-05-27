@@ -20,7 +20,7 @@ import "@etherfi/periphery/interfaces/IEtherFiRestaker.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
 
-import "@etherfi/rate-limiting/libraries/BucketLimiter.sol";
+import "@etherfi/governance/rate-limiting/libraries/BucketLimiter.sol";
 
 import "@etherfi/withdrawals/interfaces/IPriorityWithdrawalQueue.sol";
 import "@etherfi/governance/interfaces/IBlacklister.sol";

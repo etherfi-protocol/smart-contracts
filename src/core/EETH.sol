@@ -14,7 +14,7 @@ import "@etherfi/core/interfaces/ILiquidityPool.sol";
 import "@etherfi/utils/AssetRecovery.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
 import "@etherfi/governance/interfaces/IBlacklister.sol";
-import "@etherfi/rate-limiting/RateLimitedToken.sol";
+import "@etherfi/governance/rate-limiting/RateLimitedToken.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 
 contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, IERC20PermitUpgradeable, IeETH, AssetRecovery, RolesLibrary, RateLimitedToken {

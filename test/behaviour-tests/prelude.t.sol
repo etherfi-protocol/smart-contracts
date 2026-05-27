@@ -13,7 +13,7 @@ import "@etherfi/staking/EtherFiNodesManager.sol";
 import "@etherfi/staking/interfaces/IEtherFiNode.sol";
 import {IEigenPod, IEigenPodTypes } from "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
 import "@etherfi/staking/EtherFiNode.sol";
-import "@etherfi/rate-limiting/EtherFiRateLimiter.sol";
+import "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
 import "@etherfi/utils/UUPSProxy.sol";
 import "@etherfi/staking/NodeOperatorManager.sol";
 import "@etherfi/archive/interfaces/ITNFT.sol";

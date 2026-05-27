@@ -12,7 +12,7 @@ import "@etherfi/oracle/EtherFiAdmin.sol";
 import "@etherfi/core/EETH.sol";
 import "@etherfi/core/WeETH.sol";
 import "@etherfi/governance/RoleRegistry.sol";
-import "@etherfi/rate-limiting/EtherFiRateLimiter.sol";
+import "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
 import "@etherfi/staking/libraries/DepositDataRootGenerator.sol";
 import "@etherfi/staking/NodeOperatorManager.sol";
 import "@etherfi/staking/AuctionManager.sol";

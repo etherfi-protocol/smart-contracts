@@ -6,8 +6,8 @@ import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
-import "@etherfi/rate-limiting/interfaces/IRateLimiter.sol";
-import "@etherfi/rate-limiting/libraries/BucketLimiter.sol";
+import "@etherfi/governance/rate-limiting/interfaces/IRateLimiter.sol";
+import "@etherfi/governance/rate-limiting/libraries/BucketLimiter.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
 
 contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, OwnableUpgradeable, UUPSUpgradeable, RolesLibrary {

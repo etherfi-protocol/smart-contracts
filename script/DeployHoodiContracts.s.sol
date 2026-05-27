@@ -4,7 +4,7 @@ pragma solidity ^0.8.27;
 import "forge-std/Script.sol";
 import "@etherfi/staking/EtherFiNodesManager.sol";
 import "@etherfi/staking/EtherFiNode.sol";
-import "@etherfi/rate-limiting/EtherFiRateLimiter.sol";
+import "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
 
 interface IUpgradable {
     function upgradeTo(address newImplementation) external;
