@@ -3,11 +3,11 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
-import "../ContractCodeChecker.sol";
-import "../../src/EtherFiNode.sol";
-import "../../src/EtherFiNodesManager.sol";
-import "../../src/StakingManager.sol";
-import "../../src/EtherFiRateLimiter.sol";
+import "@scripts/ContractCodeChecker.sol";
+import "@etherfi/staking/EtherFiNode.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/staking/StakingManager.sol";
+import "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
 
 
 contract PectraUpgradeBytecode is Script {

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.12;
 
-import "../../src/eigenlayer-interfaces/IETHPOSDeposit.sol";
+import "@etherfi/eigenlayer-interfaces/IETHPOSDeposit.sol";
 
 
 contract ETHPOSDepositMock is IETHPOSDeposit {

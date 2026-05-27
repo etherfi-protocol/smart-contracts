@@ -3,19 +3,19 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
-import {Utils, ICreate2Factory} from "../../utils/utils.sol";
-import {EtherFiTimelock} from "../../../src/EtherFiTimelock.sol";
-import {EtherFiNode} from "../../../src/EtherFiNode.sol";
-import {EtherFiRedemptionManager} from "../../../src/EtherFiRedemptionManager.sol";
-import {EtherFiRestaker} from "../../../src/EtherFiRestaker.sol";
-import {EtherFiRewardsRouter} from "../../../src/EtherFiRewardsRouter.sol";
-import {Liquifier} from "../../../src/Liquifier.sol";
-import {WithdrawRequestNFT} from "../../../src/WithdrawRequestNFT.sol";
-import {EtherFiViewer} from "../../../src/helpers/EtherFiViewer.sol";
-import {StakingManager} from "../../../src/StakingManager.sol";
-import {LiquidityPool} from "../../../src/LiquidityPool.sol";
+import {Utils, ICreate2Factory} from "@scripts/utils/utils.sol";
+import {EtherFiTimelock} from "@etherfi/governance/EtherFiTimelock.sol";
+import {EtherFiNode} from "@etherfi/staking/EtherFiNode.sol";
+import {EtherFiRedemptionManager} from "@etherfi/withdrawals/EtherFiRedemptionManager.sol";
+import {EtherFiRestaker} from "@etherfi/restaking/EtherFiRestaker.sol";
+import {EtherFiRewardsRouter} from "@etherfi/rewards/EtherFiRewardsRouter.sol";
+import {Liquifier} from "@etherfi/deposits/Liquifier.sol";
+import {WithdrawRequestNFT} from "@etherfi/withdrawals/WithdrawRequestNFT.sol";
+import {EtherFiViewer} from "@etherfi/helpers/EtherFiViewer.sol";
+import {StakingManager} from "@etherfi/staking/StakingManager.sol";
+import {LiquidityPool} from "@etherfi/core/LiquidityPool.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import {ContractCodeChecker} from "../../../script/ContractCodeChecker.sol";
+import {ContractCodeChecker} from "@scripts/ContractCodeChecker.sol";
 
 /**
  * @title ReauditFixesTransactions

@@ -2,10 +2,10 @@
 pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
-import "../src/MembershipManager.sol";
-import "../src/MembershipNFT.sol";
-import "../src/helpers/Blacklister.sol";
-import "../src/UUPSProxy.sol";
+import "@etherfi/membership/MembershipManager.sol";
+import "@etherfi/membership/MembershipNFT.sol";
+import "@etherfi/governance/Blacklister.sol";
+import "@etherfi/utils/UUPSProxy.sol";
 
 /// @notice Fork test for the membership-deprecation trim.
 ///

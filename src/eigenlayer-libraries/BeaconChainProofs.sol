@@ -2,8 +2,8 @@
 
 pragma solidity ^0.8.0;
 
-import "./EigenlayerMerkle.sol";
-import "./Endian.sol";
+import "@etherfi/eigenlayer-libraries/EigenlayerMerkle.sol";
+import "@etherfi/eigenlayer-libraries/Endian.sol";
 
 //Utility library for parsing and PHASE0 beacon chain block headers
 //SSZ Spec: https://github.com/ethereum/consensus-specs/blob/dev/ssz/simple-serialize.md#merkleization

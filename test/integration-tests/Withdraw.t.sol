@@ -2,10 +2,10 @@
 pragma solidity ^0.8.13;
 
 import "forge-std/console2.sol";
-import "../TestSetup.sol";
-import "lib/BucketLimiter.sol";
-import "../../script/deploys/Deployed.s.sol";
-import "../../src/interfaces/IWeETHWithdrawAdapter.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/governance/rate-limiting/libraries/BucketLimiter.sol";
+import "@scripts/deploys/Deployed.s.sol";
+import "@etherfi/withdrawals/interfaces/IWeETHWithdrawAdapter.sol";
 
 contract WithdrawIntegrationTest is TestSetup, Deployed {
     address public constant ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;

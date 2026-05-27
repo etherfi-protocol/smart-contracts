@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
-import "../src/EtherFiNode.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/staking/EtherFiNode.sol";
 import "@openzeppelin/contracts/proxy/beacon/IBeacon.sol";
 import "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
-import "../src/eigenlayer-interfaces/IEigenPodManager.sol";
-import "../src/eigenlayer-interfaces/IEigenPod.sol";
-import "../src/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
-import "../src/eigenlayer-libraries/BeaconChainProofs.sol";
+import "@etherfi/eigenlayer-interfaces/IEigenPodManager.sol";
+import "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
+import "@etherfi/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
+import "@etherfi/eigenlayer-libraries/BeaconChainProofs.sol";
 
-import "./eigenlayer-utils/ProofParsing.sol";
-import "./eigenlayer-mocks/BeaconChainOracleMock.sol";
+import "@tests/eigenlayer-utils/ProofParsing.sol";
+import "@tests/eigenlayer-mocks/BeaconChainOracleMock.sol";
 
 import "forge-std/console2.sol";
 import "forge-std/console.sol";

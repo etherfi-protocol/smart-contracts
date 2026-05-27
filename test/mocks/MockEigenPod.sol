@@ -2,7 +2,7 @@
 pragma solidity ^0.8.9;
 
 import "forge-std/Test.sol";
-import "../../test/mocks/MockEigenPodBase.sol";
+import "@tests/mocks/MockEigenPodBase.sol";
 
 contract MockEigenPod is MockEigenPodBase, Test {
 

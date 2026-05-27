@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
+import "@tests/TestSetup.sol";
 import "forge-std/Test.sol";
 
-import "../src/helpers/EtherFiOperationParameters.sol";
-import "../src/UUPSProxy.sol";
+import "@etherfi/helpers/EtherFiOperationParameters.sol";
+import "@etherfi/utils/UUPSProxy.sol";
 
 contract EtherFiOperationParametersTest is TestSetup {
 

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
-import "../src/interfaces/IRoleRegistry.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/governance/interfaces/IRoleRegistry.sol";
 
 contract StakingManagerTest is TestSetup {
     event StakeDeposit(
