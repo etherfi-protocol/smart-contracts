@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
-import "../src/interfaces/ILiquidityPool.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
 
 contract NodeOperatorManagerTest is TestSetup {
     event OperatorRegistered(address user, uint64 totalKeys, uint64 keysUsed, bytes ipfsHash);

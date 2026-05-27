@@ -3,17 +3,17 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
-import {UUPSUpgradeable} from "../../../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import {RoleRegistry} from "../../../src/RoleRegistry.sol";
-import {EtherFiTimelock} from "../../../src/EtherFiTimelock.sol";
-import {EtherFiNodesManager} from "../../../src/EtherFiNodesManager.sol";
-import {LiquidityPool} from "../../../src/LiquidityPool.sol";
-import {EtherFiRateLimiter} from "../../../src/EtherFiRateLimiter.sol";
-import {IEtherFiNodesManager} from "../../../src/interfaces/IEtherFiNodesManager.sol";
-import {ContractCodeChecker} from "../../ContractCodeChecker.sol";
-import {Deployed} from "../../deploys/Deployed.s.sol";
-import {Utils} from "../../utils/utils.sol";
-import {IEigenPodTypes} from "../../../src/eigenlayer-interfaces/IEigenPod.sol";
+import {UUPSUpgradeable} from "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import {RoleRegistry} from "@etherfi/governance/RoleRegistry.sol";
+import {EtherFiTimelock} from "@etherfi/governance/EtherFiTimelock.sol";
+import {EtherFiNodesManager} from "@etherfi/staking/EtherFiNodesManager.sol";
+import {LiquidityPool} from "@etherfi/core/LiquidityPool.sol";
+import {EtherFiRateLimiter} from "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
+import {IEtherFiNodesManager} from "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
+import {ContractCodeChecker} from "@scripts/ContractCodeChecker.sol";
+import {Deployed} from "@scripts/deploys/Deployed.s.sol";
+import {Utils} from "@scripts/utils/utils.sol";
+import {IEigenPodTypes} from "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
 
 // forge script script/upgrades/CrossPodApproval/transactions.s.sol:CrossPodApprovalScript --fork-url $MAINNET_RPC_URL -vvvv
 contract CrossPodApprovalScript is Script, Deployed, Utils {

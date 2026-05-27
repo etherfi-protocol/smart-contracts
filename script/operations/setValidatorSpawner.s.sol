@@ -3,10 +3,10 @@ pragma solidity ^0.8.24;
 
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
-import {EtherFiTimelock} from "../../src/EtherFiTimelock.sol";
-import {LiquidityPool} from "../../src/LiquidityPool.sol";
-import {Deployed} from "../deploys/Deployed.s.sol";
-import {Utils} from "../utils/utils.sol";
+import {EtherFiTimelock} from "@etherfi/governance/EtherFiTimelock.sol";
+import {LiquidityPool} from "@etherfi/core/LiquidityPool.sol";
+import {Deployed} from "@scripts/deploys/Deployed.s.sol";
+import {Utils} from "@scripts/utils/utils.sol";
 
 /// @title SetValidatorSpawner
 /// @notice Script to register a validator spawner via Operating Timelock

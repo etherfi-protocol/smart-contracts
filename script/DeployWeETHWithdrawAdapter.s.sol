@@ -4,8 +4,8 @@ pragma solidity ^0.8.13;
 import "forge-std/Script.sol";
 import "forge-std/console.sol";
 import "forge-std/StdJson.sol";
-import "../src/helpers/WeETHWithdrawAdapter.sol";
-import "../src/UUPSProxy.sol";
+import "@etherfi/withdrawals/WeETHWithdrawAdapter.sol";
+import "@etherfi/utils/UUPSProxy.sol";
 
 interface ICreate2Factory {
     function deploy(bytes memory code, bytes32 salt) external payable returns (address);

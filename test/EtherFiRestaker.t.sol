@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
+import "@tests/TestSetup.sol";
 import "forge-std/Test.sol";
 
 import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20BurnableUpgradeable.sol";
 
-import "../src/eigenlayer-interfaces/IDelegationManager.sol";
-import "../src/eigenlayer-interfaces/IStrategyManager.sol";
-import "../src/eigenlayer-interfaces/ISignatureUtils.sol";
+import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
+import "@etherfi/eigenlayer-interfaces/IStrategyManager.sol";
+import "@etherfi/eigenlayer-interfaces/ISignatureUtils.sol";
 
 
 contract EtherFiRestakerTest is TestSetup {

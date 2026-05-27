@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.22;
 
-import {LiquidReferBaseTest} from "./base/liquidReferBaseTest.t.sol";
-import {ILayerZeroTellerWithRateLimiting} from "src/liquid-interfaces/ILayerZeroTellerWithRateLimiting.sol";
+import {LiquidReferBaseTest} from "@tests/liquid-tests/base/liquidReferBaseTest.t.sol";
+import {ILayerZeroTellerWithRateLimiting} from "@etherfi/liquid-interfaces/ILayerZeroTellerWithRateLimiting.sol";
 
 contract LiquidReferEthTest is LiquidReferBaseTest {
     function _assetConfig() internal pure override returns (AssetConfig memory) {

@@ -5,8 +5,8 @@ pragma solidity ^0.8.13;
 
 import "forge-std/console2.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
-import "./TestSetup.sol";
-import "../src/utils/PausableUntil.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
 
 
 contract WithdrawRequestNFTIntrusive is WithdrawRequestNFT {

@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "../TestSetup.sol";
-import "../../script/deploys/Deployed.s.sol";
+import "@tests/TestSetup.sol";
+import "@scripts/deploys/Deployed.s.sol";
 
-import "../../src/interfaces/IStakingManager.sol";
-import "../../src/interfaces/IEtherFiNode.sol";
+import "@etherfi/staking/interfaces/IStakingManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNode.sol";
 
-import "../../src/libraries/DepositDataRootGenerator.sol";
+import "@etherfi/staking/libraries/DepositDataRootGenerator.sol";
 
 contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
     function setUp() public {
@@ -42,10 +42,11 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         // Upgrade WithdrawRequestNFT so it has a receive() function and accepts the
         // ETH-escrow transfer triggered by initializeOnUpgradeV2.
         address wrnOwner = withdrawRequestNFTInstance.owner();
+        // Deploy the impl BEFORE pranking — the inlined `new` is a CREATE that
+        // would otherwise consume the single-shot vm.prank (OnlyUpgradeTimelock).
+        address newWrnImpl = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(eETHInstance), address(liquidityPoolInstance), address(membershipManagerInstance), address(roleRegistryInstance), address(blacklisterInstance), address(etherFiAdminInstance), 1, 4e18));
         vm.prank(wrnOwner);
-        withdrawRequestNFTInstance.upgradeTo(
-            address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(eETHInstance), address(liquidityPoolInstance), address(membershipManagerInstance), address(roleRegistryInstance), address(blacklisterInstance), address(etherFiAdminInstance), 1, 4e18))
-        );
+        withdrawRequestNFTInstance.upgradeTo(newWrnImpl);
 
         // The production queue proxy on mainnet still runs the master impl which
         // has no receive(); initializeOnUpgradeV2 below sweeps queue-locked ETH

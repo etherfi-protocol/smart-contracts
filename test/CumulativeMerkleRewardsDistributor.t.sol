@@ -1,6 +1,6 @@
-import "./TestSetup.sol";
+import "@tests/TestSetup.sol";
 import "forge-std/console2.sol";
-import "../src/utils/PausableUntil.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
 
 contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
     address[] public accounts = new address[](4);

@@ -7,8 +7,8 @@ import "forge-std/StdJson.sol";
 import "forge-std/console.sol";
 import "forge-std/console2.sol";
 import "openzeppelin-contracts-upgradeable/contracts/interfaces/draft-IERC1822Upgradeable.sol";
-import {Deployed} from "../deploys/Deployed.s.sol";
-import {EtherFiTimelock} from "../../src/EtherFiTimelock.sol";
+import {Deployed} from "@scripts/deploys/Deployed.s.sol";
+import {EtherFiTimelock} from "@etherfi/governance/EtherFiTimelock.sol";
 
 interface ICreate2Factory {
     function deploy(bytes memory code, bytes32 salt) external payable returns (address);

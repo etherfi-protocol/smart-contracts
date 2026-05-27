@@ -2,10 +2,10 @@
 pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
-import {LiquidityPool} from "../../../src/LiquidityPool.sol";
-import {EtherFiNodesManager} from "../../../src/EtherFiNodesManager.sol";
-import {Deployed} from "../../deploys/Deployed.s.sol";
-import {Utils, ICreate2Factory} from "../../utils/utils.sol";
+import {LiquidityPool} from "@etherfi/core/LiquidityPool.sol";
+import {EtherFiNodesManager} from "@etherfi/staking/EtherFiNodesManager.sol";
+import {Deployed} from "@scripts/deploys/Deployed.s.sol";
+import {Utils, ICreate2Factory} from "@scripts/utils/utils.sol";
 
 /**
 command: 

@@ -2,69 +2,69 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
-import "../script/deploys/Deployed.s.sol";
-import "../src/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
-import "../src/eigenlayer-interfaces/IEigenPodManager.sol";
-import "../src/eigenlayer-interfaces/IBeaconChainOracle.sol";
-import "../src/eigenlayer-interfaces/IDelegationManager.sol";
-import "./eigenlayer-mocks/BeaconChainOracleMock.sol";
-import "../src/eigenlayer-interfaces/ITimelock.sol";
-import "./mocks/MockEigenPodManager.sol";
-import "./mocks/MockDelegationManager.sol";
-import "./mocks/MockChainlinkPriceFeed.sol";
-import "./common/ArrayTestHelper.sol";
+import "@scripts/deploys/Deployed.s.sol";
+import "@etherfi/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
+import "@etherfi/eigenlayer-interfaces/IEigenPodManager.sol";
+import "@etherfi/eigenlayer-interfaces/IBeaconChainOracle.sol";
+import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
+import "@tests/eigenlayer-mocks/BeaconChainOracleMock.sol";
+import "@etherfi/eigenlayer-interfaces/ITimelock.sol";
+import "@tests/mocks/MockEigenPodManager.sol";
+import "@tests/mocks/MockDelegationManager.sol";
+import "@tests/mocks/MockChainlinkPriceFeed.sol";
+import "@tests/common/ArrayTestHelper.sol";
 
-import "../src/interfaces/IStakingManager.sol";
-import "../src/interfaces/IEtherFiNode.sol";
-import "../src/interfaces/ILiquidityPool.sol";
-import "../src/interfaces/ILiquifier.sol";
-import "../src/EtherFiNodesManager.sol";
-import "../src/StakingManager.sol";
-import "../src/NodeOperatorManager.sol";
-import "../src/archive/RegulationsManager.sol";
-import "../src/AuctionManager.sol";
-import "../src/archive/ProtocolRevenueManager.sol";
-import "../src/BNFT.sol";
-import "../src/TNFT.sol";
-import "../src/EtherFiNode.sol";
-import "../src/EtherFiRateLimiter.sol";
-import "../src/LiquidityPool.sol";
-import "../src/Liquifier.sol";
-import "../src/EtherFiRestaker.sol";
-import "../src/EETH.sol";
-import "../src/WeETH.sol";
-import "../src/MembershipManager.sol";
-import "../src/MembershipNFT.sol";
-import "../src/EarlyAdopterPool.sol";
-import "../src/TVLOracle.sol";
-import "../src/UUPSProxy.sol";
-import "../src/WithdrawRequestNFT.sol";
-import "../src/helpers/AddressProvider.sol";
-import "./common/DepositDataGeneration.sol";
-import "./common/DepositContract.sol";
-import "./TestERC20.sol";
+import "@etherfi/staking/interfaces/IStakingManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNode.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/deposits/interfaces/ILiquifier.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/staking/StakingManager.sol";
+import "@etherfi/staking/NodeOperatorManager.sol";
+import "@etherfi/archive/RegulationsManager.sol";
+import "@etherfi/staking/AuctionManager.sol";
+import "@etherfi/archive/ProtocolRevenueManager.sol";
+import "@etherfi/archive/BNFT.sol";
+import "@etherfi/archive/TNFT.sol";
+import "@etherfi/staking/EtherFiNode.sol";
+import "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/deposits/Liquifier.sol";
+import "@etherfi/restaking/EtherFiRestaker.sol";
+import "@etherfi/core/EETH.sol";
+import "@etherfi/core/WeETH.sol";
+import "@etherfi/membership/MembershipManager.sol";
+import "@etherfi/membership/MembershipNFT.sol";
+import "@etherfi/archive/EarlyAdopterPool.sol";
+import "@etherfi/archive/TVLOracle.sol";
+import "@etherfi/utils/UUPSProxy.sol";
+import "@etherfi/withdrawals/WithdrawRequestNFT.sol";
+import "@etherfi/helpers/AddressProvider.sol";
+import "@tests/common/DepositDataGeneration.sol";
+import "@tests/common/DepositContract.sol";
+import "@tests/TestERC20.sol";
 
-import "../src/archive/MembershipManagerV0.sol";
-import "../src/EtherFiOracle.sol";
-import "../src/EtherFiAdmin.sol";
-import "../src/EtherFiTimelock.sol";
+import "@etherfi/archive/MembershipManagerV0.sol";
+import "@etherfi/oracle/EtherFiOracle.sol";
+import "@etherfi/oracle/EtherFiAdmin.sol";
+import "@etherfi/governance/EtherFiTimelock.sol";
 
-import "../src/BucketRateLimiter.sol";
-import "../src/EtherFiRedemptionManager.sol";
+import "@etherfi/archive/BucketRateLimiter.sol";
+import "@etherfi/withdrawals/EtherFiRedemptionManager.sol";
 
-import "../script/ContractCodeChecker.sol";
-import "../script/Create2Factory.sol";
-import "../src/RoleRegistry.sol";
-import "../src/EtherFiRewardsRouter.sol";
+import "@scripts/ContractCodeChecker.sol";
+import "@scripts/Create2Factory.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/rewards/EtherFiRewardsRouter.sol";
 
-import "../src/CumulativeMerkleRewardsDistributor.sol";
-import "../script/deploys/Deployed.s.sol";
+import "@etherfi/rewards/CumulativeMerkleRewardsDistributor.sol";
+import "@scripts/deploys/Deployed.s.sol";
 
-import "../src/DepositAdapter.sol";
-import "../src/interfaces/IWeETHWithdrawAdapter.sol";
-import "../src/PriorityWithdrawalQueue.sol";
-import "../src/helpers/Blacklister.sol";
-import "./common/PlaceholderImpl.sol";
+import "@etherfi/deposits/DepositAdapter.sol";
+import "@etherfi/withdrawals/interfaces/IWeETHWithdrawAdapter.sol";
+import "@etherfi/withdrawals/PriorityWithdrawalQueue.sol";
+import "@etherfi/governance/Blacklister.sol";
+import "@tests/common/PlaceholderImpl.sol";
 
 /// @notice Funds a contract by sending ETH from a fresh EOA via low-level call so the target's
 ///         receive()/fallback runs and any accounting it does stays in sync with its balance.
@@ -696,8 +696,12 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // safe to upgrade RoleRegistry. After this point, `onlyProtocolUpgrader`
         // no longer exists; any further proxy upgrade must use UPGRADE_TIMELOCK_ROLE
         // via `onlyUpgradeTimelock`.
+        // Deploy the new impl BEFORE pranking: a `new` inside the upgradeTo
+        // argument is a CREATE that would consume the single-shot vm.prank,
+        // leaving upgradeTo to run as the test contract (Ownable revert).
+        address newRoleRegistryImpl = address(new RoleRegistry(address(0)));
         vm.prank(roleRegistryInstance.owner());
-        roleRegistryInstance.upgradeTo(address(new RoleRegistry(address(0))));
+        roleRegistryInstance.upgradeTo(newRoleRegistryImpl);
 
         // Resolve role identifiers before vm.prank — every interleaved external
         // call would otherwise consume the prank before grantRole executes.
@@ -785,8 +789,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // RoleRegistry impl no longer exposes. `liquifierInstance.owner()` matches
         // RoleRegistry.owner() on mainnet, so the OLD impl's owner check passes.
         if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
-            vm.prank(liquifierInstance.owner());
-            liquifierInstance.upgradeTo(address(new Liquifier(Liquifier.ConstructorAddresses({
+            // Deploy the new impl BEFORE pranking — see note above; the inlined
+            // `new` would otherwise consume the single-shot vm.prank.
+            address newLiquifierImpl = address(new Liquifier(Liquifier.ConstructorAddresses({
                 liquidityPool: address(liquidityPoolInstance),
                 lidoWithdrawalQueue: address(lidoWithdrawalQueue),
                 lido: address(stEth),
@@ -796,7 +801,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 blacklister: address(blacklisterInstance),
                 etherfiRestaker: address(etherFiRestakerInstance),
                 l1SyncPool: address(0xA6)
-            }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS)));
+            }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS));
+            vm.prank(liquifierInstance.owner());
+            liquifierInstance.upgradeTo(newLiquifierImpl);
         }
 
         // Now swap RoleRegistry and grant roles used by tests.
@@ -816,7 +823,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         vm.startPrank(owner);
 
-        address impl = address(new BucketRateLimiter(address(roleRegistryInstance)));
+        address impl = address(new BucketRateLimiter());
         bucketRateLimiter = BucketRateLimiter(address(new UUPSProxy(impl, "")));
         bucketRateLimiter.initialize();
         vm.stopPrank();

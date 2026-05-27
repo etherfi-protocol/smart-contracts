@@ -3,8 +3,8 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
-import "../../utils/utils.sol";
-import "../../../src/helpers/EtherFiOperationParameters.sol";
+import "@scripts/utils/utils.sol";
+import "@etherfi/helpers/EtherFiOperationParameters.sol";
 
 // Generate direct calldata for Operations Params updates:
 // forge script script/upgrades/priority-queue/SetPriorityQueueParams.s.sol --fork-url $MAINNET_RPC_URL -vvvv

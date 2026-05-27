@@ -3,9 +3,9 @@ pragma solidity ^0.8.13;
 
 import "forge-std/console2.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
-import "../TestSetup.sol";
-import "../../src/PriorityWithdrawalQueue.sol";
-import "../../src/interfaces/IPriorityWithdrawalQueue.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/withdrawals/PriorityWithdrawalQueue.sol";
+import "@etherfi/withdrawals/interfaces/IPriorityWithdrawalQueue.sol";
 
 /// @notice End-to-end lifecycle tests for the ETH-escrow withdrawal flows.
 ///
@@ -133,17 +133,18 @@ contract WithdrawEscrowE2ETest is TestSetup {
 
     function _upgradeWithdrawRequestNFT() internal {
         address wrnOwner = withdrawRequestNFTInstance.owner();
+        // Deploy the impl BEFORE pranking — the inlined `new` is a CREATE that
+        // would otherwise consume the single-shot vm.prank (OnlyUpgradeTimelock).
+        address newWrnImpl = address(new WithdrawRequestNFT(
+            0x2f5301a3D59388c509C65f8698f521377D41Fd0F,
+            address(eETHInstance),
+            address(liquidityPoolInstance),
+            address(membershipManagerInstance),
+            address(roleRegistryInstance),
+            address(blacklisterInstance)
+        , address(etherFiAdminInstance), 1, 4e18));
         vm.prank(wrnOwner);
-        withdrawRequestNFTInstance.upgradeTo(
-            address(new WithdrawRequestNFT(
-                0x2f5301a3D59388c509C65f8698f521377D41Fd0F,
-                address(eETHInstance),
-                address(liquidityPoolInstance),
-                address(membershipManagerInstance),
-                address(roleRegistryInstance),
-                address(blacklisterInstance)
-            , address(etherFiAdminInstance), 1, 4e18))
-        );
+        withdrawRequestNFTInstance.upgradeTo(newWrnImpl);
     }
 
     function _grantRoles() internal {

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.12;
 
-import "../../src/eigenlayer-interfaces/IBeaconChainOracle.sol";
+import "@etherfi/eigenlayer-interfaces/IBeaconChainOracle.sol";
 
 
 

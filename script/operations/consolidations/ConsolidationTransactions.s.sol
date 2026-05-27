@@ -4,14 +4,14 @@ pragma solidity ^0.8.27;
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 import "forge-std/StdJson.sol";
-import "../../utils/utils.sol";
-import "../../utils/GnosisTxGeneratorLib.sol";
-import "../../utils/StringHelpers.sol";
-import "../../utils/ValidatorHelpers.sol";
-import "../../../src/interfaces/IEtherFiNodesManager.sol";
-import "../../../src/interfaces/IEtherFiNode.sol";
-import "../../../src/eigenlayer-interfaces/IEigenPod.sol";
-import "./GnosisConsolidationLib.sol";
+import "@scripts/utils/utils.sol";
+import "@scripts/utils/GnosisTxGeneratorLib.sol";
+import "@scripts/utils/StringHelpers.sol";
+import "@scripts/utils/ValidatorHelpers.sol";
+import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNode.sol";
+import "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
+import "@scripts/operations/consolidations/GnosisConsolidationLib.sol";
 
 /**
  * @title ConsolidationTransactions

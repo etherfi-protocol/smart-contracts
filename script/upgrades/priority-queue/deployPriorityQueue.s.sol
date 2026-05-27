@@ -2,11 +2,11 @@
 pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
-import {LiquidityPool} from "../../../src/LiquidityPool.sol";
-import {PriorityWithdrawalQueue} from "../../../src/PriorityWithdrawalQueue.sol";
-import {UUPSProxy} from "../../../src/UUPSProxy.sol";
-import {Utils, ICreate2Factory} from "../../utils/utils.sol";
-import {EtherFiRedemptionManager} from "../../../src/EtherFiRedemptionManager.sol";
+import {LiquidityPool} from "@etherfi/core/LiquidityPool.sol";
+import {PriorityWithdrawalQueue} from "@etherfi/withdrawals/PriorityWithdrawalQueue.sol";
+import {UUPSProxy} from "@etherfi/utils/UUPSProxy.sol";
+import {Utils, ICreate2Factory} from "@scripts/utils/utils.sol";
+import {EtherFiRedemptionManager} from "@etherfi/withdrawals/EtherFiRedemptionManager.sol";
 
 contract DeployPriorityQueue is Script, Utils {
     ICreate2Factory constant factory = ICreate2Factory(0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99);
