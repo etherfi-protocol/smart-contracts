@@ -16,11 +16,19 @@ import "forge-std/console.sol";
 
 contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ERC1155Upgradeable, IMembershipNFT, RolesLibrary {
 
-    IMembershipManager private DEPRECATED_membershipManager;
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  STATE-VARIABLES  ----------------------------------
+    //--------------------------------------------------------------------------------------
+
+    // deprecated storage slots
+    uint160 private __gap_0;
+
     uint32 public nextMintTokenId;
     uint32 public maxTokenId;
     bool public mintingPaused;
-    uint24 __gap0;
+
+    // deprecated storage slots
+    uint24 private __gap_1;
 
     mapping(uint256 => NftData) public nftData;
     mapping (address => bool) public eapDepositProcessed;
@@ -29,22 +37,39 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
 
     string private contractMetadataURI; /// @dev opensea contract-level metadata
 
-    address private DEPRECATED_admin;
+    // deprecated storage slots
+    uint256[3] private __gap_2;
 
-    mapping(address => bool) private DEPRECATED_admins;
-
-    ILiquidityPool private DEPRECATED_liquidityPool;
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  IMMUTABLES  --------------------------------------
+    //--------------------------------------------------------------------------------------
 
     ILiquidityPool public immutable liquidityPool;
     IMembershipManager public immutable membershipManager;
     IBlacklister public immutable blacklister;
 
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  CONSTANTS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
+
     uint256 public constant BASIS_POINTS_DENOMINATOR = 10000;
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  EVENTS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
 
     event TokenLocked(uint256 indexed _tokenId, uint256 until);
 
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  ERRORS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
+
     error RequireTokenUnlocked();
     error OnlyMembershipManagerContract();
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  CONSTRUCTOR  ----------------------------------
+    //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _liquidityPool, address _membershipManager, address _roleRegistry, address _blacklister) RolesLibrary(_roleRegistry) {
@@ -53,6 +78,10 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
         blacklister = IBlacklister(_blacklister);
         _disableInitializers();
     }
+
+    //--------------------------------------------------------------------------------------
+    //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
+    //--------------------------------------------------------------------------------------
 
     function initialize(string calldata _metadataURI, address _membershipManagerInstance) external initializer {
         __Ownable_init();
