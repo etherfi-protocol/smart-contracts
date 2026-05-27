@@ -10,6 +10,8 @@ import "../../../src/WithdrawRequestNFT.sol";
 import "../../../src/PriorityWithdrawalQueue.sol";
 import "../../../src/interfaces/IPriorityWithdrawalQueue.sol";
 
+import "@openzeppelin/contracts/utils/math/Math.sol";
+
 /// @notice Stateful-invariant handler for the WRN claim → stranded-ETH →
 ///         handleRemainder cycle, plus the parallel PQ cycle.
 ///
@@ -88,6 +90,19 @@ contract WithdrawRemainderHandler is StdUtils {
     bool public ghost_wrnInvalidShares;
     bool public ghost_pqInvalidShares;
     bool public ghost_burnExceedsShares;
+
+    /// @notice Set if `wrn.getClaimableAmount(tokenId)` diverged from the
+    ///         handler's independent recomputation of
+    ///         `min(amountOfEEth, mulDiv(shareOfEEth, frozenRate, 1e18))`.
+    ///         A drift here means `_getClaimableAmount` (the contract-side
+    ///         function the claim path also uses to size the payout) is
+    ///         returning a different value from the same inputs the handler
+    ///         can see externally — a serious bug in the rate-freeze logic.
+    bool public ghost_getClaimableAmountDrift;
+    /// @notice Forensic crumb on the first observed drift.
+    uint256 public ghost_drift_independent;
+    uint256 public ghost_drift_contract;
+    uint256 public ghost_drift_tokenId;
 
     /// @notice Critical-selector counters. None should fire under bounded fuzz.
     uint256 public ghost_insufficientEscrowCount;
@@ -222,16 +237,56 @@ contract WithdrawRemainderHandler is StdUtils {
         IWithdrawRequestNFT.WithdrawRequest memory req = wrn.getRequest(tokenId);
         if (!req.isValid) { callCounts["wrn_claim_skipped"]++; return; }
 
-        uint256 amountToWithdrawPreview;
-        try wrn.getClaimableAmount(tokenId) returns (uint256 a) { amountToWithdrawPreview = a; }
+        // (1) INDEPENDENT RECOMPUTATION OF `amountToWithdraw`. The previous
+        //     version of this handler pulled the value via
+        //     `wrn.getClaimableAmount(tokenId)`, which calls the SAME
+        //     `_getClaimableAmount` the contract uses internally to size
+        //     the payout. That made the stranded-ETH ledger an
+        //     oracle-aligned tautology: any bug in `_getClaimableAmount`
+        //     would be mirrored by the ghost.
+        //
+        //     Here we recompute the formula from first principles:
+        //         amountToWithdraw = min(
+        //             amountOfEEth,
+        //             mulDiv(shareOfEEth, frozenRate, 1e18)
+        //         )
+        //     Resolving the legacy-sentinel branch (frozenRate == 0 ⇒
+        //     fall back to `liquidityPool.amountPerShareCeil()`) and
+        //     differentially-asserting against the contract's view.
+        uint224 frozenRate = wrn.frozenRateFor(tokenId);
+        if (frozenRate == 0) {
+            uint256 live = lp.amountPerShareCeil();
+            if (live < wrn.minAcceptableShareRate() || live > wrn.maxAcceptableShareRate()) {
+                callCounts["wrn_claim_skipped"]++;
+                return;
+            }
+            frozenRate = uint224(live);
+        }
+        uint256 independentForShares = Math.mulDiv(
+            uint256(req.shareOfEEth), uint256(frozenRate), 1e18
+        );
+        uint256 independentAmount = independentForShares < uint256(req.amountOfEEth)
+            ? independentForShares
+            : uint256(req.amountOfEEth);
+
+        // Differential check: the contract's `getClaimableAmount` MUST
+        // return exactly what the independent recomputation produces. A
+        // divergence here is a finding.
+        uint256 contractAmount;
+        try wrn.getClaimableAmount(tokenId) returns (uint256 a) { contractAmount = a; }
         catch { callCounts["wrn_claim_skipped"]++; return; }
+        if (contractAmount != independentAmount) {
+            ghost_getClaimableAmountDrift = true;
+            ghost_drift_independent = independentAmount;
+            ghost_drift_contract = contractAmount;
+            ghost_drift_tokenId = tokenId;
+        }
 
         vm.prank(ownerAddr);
         try wrn.claimWithdraw(tokenId) {
-            // Per-claim stranded delta. The lock dropped by request.amountOfEEth
-            // (full requested), the balance dropped by amountToWithdraw
-            // (what was actually paid). Difference is stranded.
-            uint256 strandedDelta = uint256(req.amountOfEEth) - amountToWithdrawPreview;
+            // Per-claim stranded delta - computed from the INDEPENDENT value
+            // so a buggy `_getClaimableAmount` can't hide the drift.
+            uint256 strandedDelta = uint256(req.amountOfEEth) - independentAmount;
             ghost_wrnCumulativeStranded += strandedDelta;
 
             uint128 lockAfter = wrn.ethAmountLockedForWithdrawal();

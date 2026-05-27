@@ -117,6 +117,21 @@ contract WithdrawRemainderInvariantTest is TestSetup {
         );
     }
 
+    /// (1) Differential check between the contract's `getClaimableAmount`
+    /// and the handler's independent recomputation. They MUST agree
+    /// exactly. A divergence is a finding in `_getClaimableAmount`.
+    function invariant_wrn_getClaimableAmount_matches_recomputation() public view {
+        assertFalse(
+            handler.ghost_getClaimableAmountDrift(),
+            string.concat(
+                "getClaimableAmount differs from independent recompute - tokenId=",
+                vm.toString(handler.ghost_drift_tokenId()),
+                " contract=", vm.toString(handler.ghost_drift_contract()),
+                " independent=", vm.toString(handler.ghost_drift_independent())
+            )
+        );
+    }
+
     /// Always-on solvency. Already in the FrozenRate suite; included here
     /// for completeness so this file stands alone.
     function invariant_wrn_balance_covers_lock() public view {
