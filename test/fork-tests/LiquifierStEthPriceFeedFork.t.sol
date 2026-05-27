@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "../TestSetup.sol";
-import "../../src/Liquifier.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/deposits/Liquifier.sol";
 
 /// @notice Mainnet-fork tests scoped narrowly to the stETH price-feed sanity
 ///         check in `Liquifier.quoteByMarketValue`. Confirms the upgraded

@@ -4,9 +4,9 @@ pragma solidity ^0.8.13;
 import "forge-std/StdUtils.sol";
 import "forge-std/Vm.sol";
 
-import "../../../src/LiquidityPool.sol";
-import "../../../src/EETH.sol";
-import "../../../src/WeETH.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/core/EETH.sol";
+import "@etherfi/core/WeETH.sol";
 
 /// @notice Stateful-invariant handler for PR #428's two inlined invariants AND
 ///         the global protocol-accounting conservation laws those two invariants

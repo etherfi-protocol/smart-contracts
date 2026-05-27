@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
+import "@tests/TestSetup.sol";
 import "forge-std/Test.sol";
 
-import "../src/utils/ReentrancyGuardNamespaced.sol";
+import "@etherfi/governance/utils/ReentrancyGuardNamespaced.sol";
 
 /// @notice Verifies that the namespaced reentrancy guard's fixed storage slot
 ///         does NOT collide with any storage used by LiquidityPool or

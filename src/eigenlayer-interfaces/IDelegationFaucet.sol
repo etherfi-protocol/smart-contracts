@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity >=0.5.0;
 
-import "src/eigenlayer-interfaces/IStrategyManager.sol";
-import "src/eigenlayer-interfaces/IDelegationManager.sol";
+import "@etherfi/eigenlayer-interfaces/IStrategyManager.sol";
+import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 

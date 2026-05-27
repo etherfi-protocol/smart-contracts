@@ -2,16 +2,16 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
 import "forge-std/Test.sol";
-import {ContractCodeChecker} from "../ContractCodeChecker.sol";
-import {LiquidityPool} from "../../src/LiquidityPool.sol";
-import {StakingManager} from "../../src/StakingManager.sol";
-import {EtherFiNodesManager} from "../../src/EtherFiNodesManager.sol";
-import {RoleRegistry} from "../../src/RoleRegistry.sol";
-import {EtherFiRestaker} from "../../src/EtherFiRestaker.sol";
+import {ContractCodeChecker} from "@scripts/ContractCodeChecker.sol";
+import {LiquidityPool} from "@etherfi/core/LiquidityPool.sol";
+import {StakingManager} from "@etherfi/staking/StakingManager.sol";
+import {EtherFiNodesManager} from "@etherfi/staking/EtherFiNodesManager.sol";
+import {RoleRegistry} from "@etherfi/governance/RoleRegistry.sol";
+import {EtherFiRestaker} from "@etherfi/restaking/EtherFiRestaker.sol";
 
-import {IEtherFiNodesManager} from "../../src/interfaces/IEtherFiNodesManager.sol";
-import {IStakingManager} from "../../src/interfaces/IStakingManager.sol";
-import {IEigenPodTypes} from "../../src/eigenlayer-interfaces/IEigenPod.sol";
+import {IEtherFiNodesManager} from "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
+import {IStakingManager} from "@etherfi/staking/interfaces/IStakingManager.sol";
+import {IEigenPodTypes} from "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
 
 interface ICreate2Factory {
     function deploy(bytes memory code, bytes32 salt) external payable returns (address);

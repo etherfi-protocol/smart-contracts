@@ -2,8 +2,8 @@
 pragma solidity ^0.8.27;
 
 import "forge-std/Test.sol";
-import "./TestSetup.sol";
-import "../src/utils/PausableUntil.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
 
 contract PausableUntilHarness is PausableUntil {
     function pauseUntil() external { _pauseUntil(); }

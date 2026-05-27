@@ -4,12 +4,12 @@ pragma solidity ^0.8.13;
 import "forge-std/StdUtils.sol";
 import "forge-std/Vm.sol";
 
-import "../../../src/LiquidityPool.sol";
-import "../../../src/EETH.sol";
-import "../../../src/WeETH.sol";
-import "../../../src/WithdrawRequestNFT.sol";
-import "../../../src/PriorityWithdrawalQueue.sol";
-import "../../../src/interfaces/IPriorityWithdrawalQueue.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/core/EETH.sol";
+import "@etherfi/core/WeETH.sol";
+import "@etherfi/withdrawals/WithdrawRequestNFT.sol";
+import "@etherfi/withdrawals/PriorityWithdrawalQueue.sol";
+import "@etherfi/withdrawals/interfaces/IPriorityWithdrawalQueue.sol";
 
 /// @notice Stateful-invariant handler for the WithdrawRequestNFT and
 ///         PriorityWithdrawalQueue frozen-rate withdrawal paths.

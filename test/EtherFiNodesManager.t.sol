@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
-import "../src/EtherFiNode.sol";
-import "../src/interfaces/IEtherFiNodesManager.sol";
-import "../src/eigenlayer-interfaces/IEigenPod.sol";
-import "../src/eigenlayer-interfaces/IDelegationManager.sol";
-import "../src/eigenlayer-interfaces/IStrategy.sol";
-import "../src/utils/PausableUntil.sol";
-import {BeaconChainProofs} from "../src/eigenlayer-libraries/BeaconChainProofs.sol";
-import {IDelegationManagerTypes} from "../src/eigenlayer-interfaces/IDelegationManager.sol";
-import {IEigenPodTypes} from "../src/eigenlayer-interfaces/IEigenPod.sol";
-import {EigenPodTestHelpers} from "./utils/EigenPodTestHelpers.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/staking/EtherFiNode.sol";
+import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
+import "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
+import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
+import "@etherfi/eigenlayer-interfaces/IStrategy.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
+import {BeaconChainProofs} from "@etherfi/eigenlayer-libraries/BeaconChainProofs.sol";
+import {IDelegationManagerTypes} from "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
+import {IEigenPodTypes} from "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
+import {EigenPodTestHelpers} from "@tests/utils/EigenPodTestHelpers.sol";
 import "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 
 contract EtherFiNodesManagerTest is TestSetup {

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
+import "@tests/TestSetup.sol";
 import "forge-std/Test.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
-import "../src/utils/PausableUntil.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
 
 contract LiquidityPoolTest is TestSetup {
     using stdStorage for StdStorage;

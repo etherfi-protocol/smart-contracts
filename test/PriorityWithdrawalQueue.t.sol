@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
+import "@tests/TestSetup.sol";
 import "forge-std/console2.sol";
 
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
-import "../src/PriorityWithdrawalQueue.sol";
-import "../src/interfaces/IPriorityWithdrawalQueue.sol";
-import "../src/utils/PausableUntil.sol";
+import "@etherfi/withdrawals/PriorityWithdrawalQueue.sol";
+import "@etherfi/withdrawals/interfaces/IPriorityWithdrawalQueue.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
 
 contract PriorityWithdrawalQueueTest is TestSetup {
     PriorityWithdrawalQueue public priorityQueue;

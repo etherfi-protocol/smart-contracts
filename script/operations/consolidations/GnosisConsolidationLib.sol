@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import "../../../src/interfaces/IEtherFiNodesManager.sol";
-import "../../../src/eigenlayer-interfaces/IEigenPod.sol";
+import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
+import "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
 
 /**
  * @title Consolidation Transaction Library
