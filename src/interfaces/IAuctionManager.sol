@@ -32,6 +32,4 @@ interface IAuctionManager {
 
     function pauseContract() external;
     function unPauseContract() external;
-    
-    function transferAccumulatedRevenue() external;
 }
