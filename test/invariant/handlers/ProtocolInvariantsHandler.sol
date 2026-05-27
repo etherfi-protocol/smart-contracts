@@ -207,7 +207,10 @@ contract ProtocolInvariantsHandler is StdUtils {
         actors.push(_treasury);
 
         // Seed each EOA actor with eETH so wrap/burn/transfer paths have
-        // stock from call 1.
+        // stock from call 1. Pre-approve weETH for the wrap path so the
+        // per-call `eETH.approve` (previously outside the wrap try/catch)
+        // is no longer a hidden revert surface that would skip both the
+        // success counter and the revert counter.
         for (uint256 i = 0; i < N_EOAS; i++) {
             vm.deal(actors[i], 1_000 ether);
             vm.prank(actors[i]);
@@ -215,6 +218,10 @@ contract ProtocolInvariantsHandler is StdUtils {
             _observeShareHolder(actors[i]);
             // Ledger: deposit adds 100 ether to TPE.
             ghost_ledgerTPE += int256(uint256(100 ether));
+            // One-shot approval: weETH spends eETH for wrap. Doing this
+            // here removes the approve from the per-op critical path.
+            vm.prank(actors[i]);
+            eETH.approve(address(weETH), type(uint256).max);
         }
 
         // Probe: a dedicated address holding a fixed share balance, used as
@@ -264,7 +271,9 @@ contract ProtocolInvariantsHandler is StdUtils {
     }
 
     /// (F-020) Wrap bound widened to [1, bal] so dust and full-balance
-    /// inputs are reachable.
+    /// inputs are reachable. Approval is pre-granted in the constructor
+    /// so the wrap path's only revert surface is `weETH.wrap` itself,
+    /// captured by the try/catch + selector counter.
     function wrap(uint256 actorSeed, uint128 amount) external {
         address actor = _eoa(actorSeed);
         uint256 bal = eETH.balanceOf(actor);
@@ -274,8 +283,6 @@ contract ProtocolInvariantsHandler is StdUtils {
         }
         amount = uint128(bound(uint256(amount), 1, bal));
 
-        vm.prank(actor);
-        eETH.approve(address(weETH), type(uint256).max);
         vm.prank(actor);
         try weETH.wrap(amount) {
             _observeShareHolder(address(weETH));
@@ -546,8 +553,9 @@ contract ProtocolInvariantsHandler is StdUtils {
             return;
         }
 
-        vm.prank(probeActor);
-        eETH.approve(address(weETH), type(uint256).max);
+        // probeActor is an EOA from `actors`; constructor already
+        // pre-approved weETH for all such actors. No need to re-approve
+        // here, which would have been an untracked revert surface.
         vm.prank(probeActor);
         bool wrapDidNotRevert = false;
         try weETH.wrap(1) {

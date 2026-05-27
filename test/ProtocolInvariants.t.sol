@@ -43,6 +43,14 @@ contract ProtocolInvariantsTest is TestSetup {
         vm.deal(alice, 100 ether);
         vm.prank(alice);
         liquidityPoolInstance.deposit{value: 50 ether}();
+
+        // Seed `totalValueOutOfLp` so the rebase-before-* fuzz tests can
+        // legitimately rebase. Alice's deposit only bumps `totalValueInLp`;
+        // without this seed, the three "after rebase" fuzz tests below
+        // would silently degenerate into plain wrap/deposit tests because
+        // their `outOfLp / 3` bound would be zero.
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(int128(int256(uint256(10 ether))));
     }
 
     // =====================================================================
@@ -320,16 +328,15 @@ contract ProtocolInvariantsTest is TestSetup {
     ///         weETH per eETH wrapped. The deposit-first-then-mint ordering
     ///         in `wrap()` is what makes this hold.
     function testFuzz_inv1_wrap_after_rebase_holds(int128 rebaseDelta, uint128 wrapAmt) public {
-        // Bound rebase to ±~30% of totalValueOutOfLp so we don't underflow
-        // its uint128 accumulator. After the rebase, fuzz the wrap amount
-        // against the *post-rebase* balance.
+        // setUp seeds `totalValueOutOfLp` so we can always rebase. Bound
+        // the magnitude to ±outOfLp/3 to avoid uint128 underflow on the
+        // negative leg.
         uint256 outOfLp = uint256(liquidityPoolInstance.totalValueOutOfLp());
-        if (outOfLp > 0) {
-            int128 maxDelta = int128(uint128(outOfLp / 3));
-            rebaseDelta = int128(bound(int256(rebaseDelta), -int256(uint256(uint128(maxDelta))), int256(uint256(uint128(maxDelta)))));
-            vm.prank(address(membershipManagerInstance));
-            liquidityPoolInstance.rebase(rebaseDelta);
-        }
+        int256 cap = int256(outOfLp / 3);
+        if (cap < 1) cap = 1;
+        rebaseDelta = int128(bound(int256(rebaseDelta), -cap, cap));
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(rebaseDelta);
 
         uint256 aliceEEth = eETHInstance.balanceOf(alice);
         if (aliceEEth < 4) return; // nothing meaningful to wrap; skip the case
@@ -471,7 +478,11 @@ contract ProtocolInvariantsTest is TestSetup {
     /// @notice For any deposit amount with any depositor, the modifier passes
     ///         and the rate is non-decreasing.
     function testFuzz_inv2_deposit_holds_rate(uint128 depositAmt, uint64 actorSeed) public {
-        depositAmt = uint128(bound(uint256(depositAmt), 1, 1_000_000 ether));
+        // Lower bound 1 gwei: after the setUp rebase seed the rate is > 1
+        // so 1-wei deposits floor to 0 shares (InvalidAmount). The dust
+        // path has its own fuzz test (`testFuzz_inv2_dust_deposit_holds_rate`)
+        // that explicitly tolerates the InvalidAmount revert.
+        depositAmt = uint128(bound(uint256(depositAmt), 1 gwei, 1_000_000 ether));
         address user = _actor(actorSeed);
         vm.deal(user, depositAmt);
 
@@ -518,12 +529,13 @@ contract ProtocolInvariantsTest is TestSetup {
     ///         non-decreasing across the deposit only — the rebase is exempt
     ///         and not measured here.
     function testFuzz_inv2_deposit_after_positive_rebase_holds(uint128 rebaseGain, uint128 depositAmt) public {
+        // setUp seeds outOfLp so this rebase always executes.
         uint256 outOfLp = uint256(liquidityPoolInstance.totalValueOutOfLp());
-        if (outOfLp > 0) {
-            rebaseGain = uint128(bound(uint256(rebaseGain), 1, outOfLp / 3));
-            vm.prank(address(membershipManagerInstance));
-            liquidityPoolInstance.rebase(int128(rebaseGain));
-        }
+        uint256 cap = outOfLp / 3;
+        if (cap < 1) cap = 1;
+        rebaseGain = uint128(bound(uint256(rebaseGain), 1, cap));
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(int128(rebaseGain));
         depositAmt = uint128(bound(uint256(depositAmt), 1 gwei, 100_000 ether));
 
         address user = _actor(uint64(uint256(keccak256(abi.encode(rebaseGain, depositAmt)))));
@@ -543,12 +555,14 @@ contract ProtocolInvariantsTest is TestSetup {
     ///         pass — its (P0, S0) snapshot is taken at the new, lower rate
     ///         and the floor-rounded mint preserves or improves it.
     function testFuzz_inv2_deposit_after_negative_rebase_holds(uint128 rebaseLoss, uint128 depositAmt) public {
+        // setUp seeds outOfLp so the negative rebase has room to subtract
+        // without underflowing the uint128 accumulator.
         uint256 outOfLp = uint256(liquidityPoolInstance.totalValueOutOfLp());
-        if (outOfLp > 0) {
-            rebaseLoss = uint128(bound(uint256(rebaseLoss), 1, outOfLp / 3));
-            vm.prank(address(membershipManagerInstance));
-            liquidityPoolInstance.rebase(-int128(rebaseLoss));
-        }
+        uint256 cap = outOfLp / 3;
+        if (cap < 1) cap = 1;
+        rebaseLoss = uint128(bound(uint256(rebaseLoss), 1, cap));
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(-int128(rebaseLoss));
         depositAmt = uint128(bound(uint256(depositAmt), 1 gwei, 100_000 ether));
 
         address user = _actor(uint64(uint256(keccak256(abi.encode(rebaseLoss, depositAmt)))));
