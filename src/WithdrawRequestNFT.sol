@@ -338,7 +338,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         emit WithdrawRequestValidated(uint32(requestId));
     }
 
-    function updateShareRemainderSplitToBuybackInBps(uint16 _shareRemainderSplitToTreasuryInBps) external onlyAdmin {
+    function updateShareRemainderSplitToTreasuryInBps(uint16 _shareRemainderSplitToTreasuryInBps) external onlyAdmin {
         if (_shareRemainderSplitToTreasuryInBps > BASIS_POINT_SCALE) revert InvalidShareRemainderSplit();
         shareRemainderSplitToTreasuryInBps = _shareRemainderSplitToTreasuryInBps;
     }

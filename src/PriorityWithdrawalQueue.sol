@@ -413,7 +413,7 @@ contract PriorityWithdrawalQueue is
         emit RemainderHandled(uint96(eEthAmountToBuyback), uint96(eEthSharesToBurn));
     }
 
-    function updateShareRemainderSplitToBuyback(uint16 _shareRemainderSplitToTreasuryInBps) external onlyAdmin {
+    function updateShareRemainderSplitToTreasury(uint16 _shareRemainderSplitToTreasuryInBps) external onlyAdmin {
         if (_shareRemainderSplitToTreasuryInBps > _BASIS_POINT_SCALE) revert BadInput();
         shareRemainderSplitToTreasuryInBps = _shareRemainderSplitToTreasuryInBps;
         emit ShareRemainderSplitUpdated(_shareRemainderSplitToTreasuryInBps);

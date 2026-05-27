@@ -1682,7 +1682,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
     function test_handleRemainder_roundsBuybackSplitUp() public {
         vm.prank(alice);
-        priorityQueue.updateShareRemainderSplitToBuyback(5000); // 50%
+        priorityQueue.updateShareRemainderSplitToTreasury(5000); // 50%
 
         // Create and complete a withdrawal to accumulate remainder
         uint96 withdrawAmount = 10 ether;
@@ -1717,7 +1717,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     // function test_handleRemainder_withBuybackSplit() public {
     //     // Set 50% split to ethfiBuybackAddress (5000 bps)
     //     vm.prank(alice);
-    //     priorityQueue.updateShareRemainderSplitToBuyback(5000);
+    //     priorityQueue.updateShareRemainderSplitToTreasury(5000);
 
     //     // Create and complete a withdrawal to accumulate remainder
     //     uint96 withdrawAmount = 10 ether;
@@ -1759,7 +1759,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     // function test_handleRemainder_fullBuybackSplit() public {
     //     // Set 100% split to ethfiBuybackAddress (10000 bps)
     //     vm.prank(alice);
-    //     priorityQueue.updateShareRemainderSplitToBuyback(10000);
+    //     priorityQueue.updateShareRemainderSplitToTreasury(10000);
 
     //     // Create and complete a withdrawal to accumulate remainder
     //     uint96 withdrawAmount = 10 ether;
@@ -1792,7 +1792,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     // function test_handleRemainder_noBurn() public {
     //     // Set 0% split to ethfiBuybackAddress (all burn)
     //     vm.prank(alice);
-    //     priorityQueue.updateShareRemainderSplitToBuyback(0);
+    //     priorityQueue.updateShareRemainderSplitToTreasury(0);
 
     //     // Create and complete a withdrawal to accumulate remainder
     //     uint96 withdrawAmount = 10 ether;
@@ -1822,25 +1822,25 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     //     }
     // }
 
-    function test_updateShareRemainderSplitToBuyback() public {
+    function test_updateShareRemainderSplitToTreasury() public {
         assertEq(priorityQueue.shareRemainderSplitToTreasuryInBps(), 10000, "Initial split should be 100%");
 
         vm.prank(alice);
-        priorityQueue.updateShareRemainderSplitToBuyback(5000);
+        priorityQueue.updateShareRemainderSplitToTreasury(5000);
 
         assertEq(priorityQueue.shareRemainderSplitToTreasuryInBps(), 5000, "Split should be updated to 50%");
     }
 
-    function test_revert_updateShareRemainderSplitToBuyback_tooHigh() public {
+    function test_revert_updateShareRemainderSplitToTreasury_tooHigh() public {
         vm.prank(alice);
         vm.expectRevert(PriorityWithdrawalQueue.BadInput.selector);
-        priorityQueue.updateShareRemainderSplitToBuyback(10001); // > 100%
+        priorityQueue.updateShareRemainderSplitToTreasury(10001); // > 100%
     }
 
-    function test_revert_updateShareRemainderSplitToBuyback_notAdmin() public {
+    function test_revert_updateShareRemainderSplitToTreasury_notAdmin() public {
         vm.prank(regularUser);
         vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
-        priorityQueue.updateShareRemainderSplitToBuyback(5000);
+        priorityQueue.updateShareRemainderSplitToTreasury(5000);
     }
 
     function test_revert_handleRemainderTooMuch() public {

@@ -50,10 +50,10 @@ upgraded by PR #385, with the exact function name and the role that gates it.
 | AuctionManager | `setPauseUntilDuration` |
 | LiquidityPool | `setValidatorSizeWei`, `registerValidatorSpawner`, `setFeeRecipient`, `setPauseUntilDuration` |
 | Liquifier | `updateDepositCap`, `updateTimeBoundCapRefreshInterval`, `updateDiscountInBasisPoints`, `updateQuoteStEthWithCurve`, `setPauseUntilDuration` |
-| WithdrawRequestNFT | `validateRequest`, `updateShareRemainderSplitToBuybackInBps`, `setPauseUntilDuration` |
+| WithdrawRequestNFT | `validateRequest`, `updateShareRemainderSplitToTreasuryInBps`, `setPauseUntilDuration` |
 | EETH | `setPauseUntilDuration`, `recoverETH`, `recoverERC20`, `recoverERC721` |
 | WeETH | `setPauseUntilDuration`, `recoverETH`, `recoverERC20`, `recoverERC721` |
-| PriorityWithdrawalQueue | `addToWhitelist`, `batchUpdateWhitelist`, `updateShareRemainderSplitToBuyback`, `setPauseUntilDuration` |
+| PriorityWithdrawalQueue | `addToWhitelist`, `batchUpdateWhitelist`, `updateShareRemainderSplitToTreasury`, `setPauseUntilDuration` |
 | CumulativeMerkleRewardsDistributor | `setClaimDelay`, `updateWhitelistedRecipient`, `setPauseUntilDuration`, `recoverETH`, `recoverERC20` |
 | RestakingRewardsRouter | `setRecipientAddress` |
 | EtherFiRestaker | `setRewardsClaimer` |

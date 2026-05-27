@@ -1324,7 +1324,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         withdrawRequestNFTInstance.initialize(payable(address(liquidityPoolProxy)), payable(address(eETHProxy)), payable(address(membershipManagerProxy)));
         // initializeOnUpgrade now reverts (checks immutable roleRegistry == 0). Set the
         // share-remainder split + paused state it used to bootstrap directly.
-        withdrawRequestNFTInstance.updateShareRemainderSplitToBuybackInBps(1000);
+        withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(1000);
         {
             // Slot 306 packs (nextRequestId, lastFinalizedRequestId, shareRemainderSplit,
             // _unused_gap, currentRequestIdToScanFromForShareRemainder, lastRequestIdToScanUntilForShareRemainder).

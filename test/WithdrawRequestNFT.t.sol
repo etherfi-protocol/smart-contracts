@@ -440,7 +440,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Configure remainder split
         vm.prank(withdrawRequestNFTInstance.owner());
-        withdrawRequestNFTInstance.updateShareRemainderSplitToBuybackInBps(remainderSplitBps);
+        withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(remainderSplitBps);
 
         // First deposit ETH to get eETH
         vm.startPrank(recipient);
@@ -825,23 +825,23 @@ contract WithdrawRequestNFTTest is TestSetup {
         liquidityPoolInstance.addEthAmountLockedForWithdrawal(1 ether);
     }
 
-    function test_updateShareRemainderSplitToBuybackInBps() public {
+    function test_updateShareRemainderSplitToTreasuryInBps() public {
         uint16 newSplit = 5000; // 50%
         
         vm.prank(withdrawRequestNFTInstance.owner());
-        withdrawRequestNFTInstance.updateShareRemainderSplitToBuybackInBps(newSplit);
+        withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(newSplit);
         
         assertEq(withdrawRequestNFTInstance.shareRemainderSplitToTreasuryInBps(), newSplit, "Split should be updated");
 
         // Test invalid value (> 10000)
         vm.prank(withdrawRequestNFTInstance.owner());
         vm.expectRevert(WithdrawRequestNFT.InvalidShareRemainderSplit.selector);
-        withdrawRequestNFTInstance.updateShareRemainderSplitToBuybackInBps(10001);
+        withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(10001);
 
         // Test non-owner cannot update
         vm.prank(bob);
         vm.expectRevert();
-        withdrawRequestNFTInstance.updateShareRemainderSplitToBuybackInBps(3000);
+        withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(3000);
     }
 
     function test_pauseContract() public {

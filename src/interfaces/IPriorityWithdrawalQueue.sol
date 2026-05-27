@@ -59,7 +59,7 @@ interface IPriorityWithdrawalQueue {
     function removeFromWhitelist(address user) external;
     function batchUpdateWhitelist(address[] calldata users, bool[] calldata statuses) external;
     function invalidateRequests(WithdrawRequest[] calldata requests) external returns(bytes32[] memory);
-    function updateShareRemainderSplitToBuyback(uint16 _shareRemainderSplitToTreasuryInBps) external;
+    function updateShareRemainderSplitToTreasury(uint16 _shareRemainderSplitToTreasuryInBps) external;
     function handleRemainder(uint256 eEthAmount) external;
     function pauseContract() external;
     function unPauseContract() external;
