@@ -5,6 +5,7 @@ import "forge-std/Script.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 import {EtherFiTimelock} from "../../../src/EtherFiTimelock.sol";
+import {StakingManager} from "../../../src/StakingManager.sol";
 
 import {Deployed} from "../../deploys/Deployed.s.sol";
 import {Utils} from "../../utils/utils.sol";
@@ -21,6 +22,11 @@ import {Utils} from "../../utils/utils.sol";
  *     - The ERC1967 implementation slot on each of the 22 proxies plus the
  *       RoleRegistry. After execution, each proxy delegates to the original
  *       impl address again. RoleRegistry is reverted last (see executeRevert).
+ *     - The EtherFiNode beacon implementation. EtherFiNode is a beacon proxy,
+ *       not UUPS, so it is re-pointed via StakingManager.upgradeEtherFiNode
+ *       (the beacon owner), not upgradeTo. Done before the StakingManager proxy
+ *       revert and well before the RoleRegistry revert, so the new impl's
+ *       onlyUpgradeTimelock gate still authorizes it.
  *
  *   IT DOES NOT REVERT:
  *     - The one-shot post-upgrade migration calls
@@ -37,7 +43,8 @@ import {Utils} from "../../utils/utils.sol";
  *
  * If you need any of the above undone, write a separate operation. This
  * script intentionally has the smallest possible blast radius: 23
- * `upgradeTo(oldImpl)` calls (22 proxies + RoleRegistry).
+ * `upgradeTo(oldImpl)` calls (22 proxies + RoleRegistry) plus one
+ * `StakingManager.upgradeEtherFiNode(oldImpl)` beacon revert.
  *
  * Every PRE_* constant below must be refreshed from the current mainnet
  * ERC1967 implementation slot before broadcasting. _preflight() reverts if
@@ -79,6 +86,11 @@ contract SecurityUpgradesRevertScript is Script, Deployed, Utils {
     address constant PRE_WEETH_WITHDRAW_ADAPTER              = address(0);
     address constant PRE_ROLE_REGISTRY                       = address(0);
 
+    // EtherFiNode is a beacon proxy: its pre-upgrade impl is NOT in any ERC1967
+    // slot. Read it from the beacon via StakingManager.implementation():
+    //   cast call <STAKING_MANAGER> "implementation()(address)" --rpc-url $MAINNET_RPC_URL
+    address constant PRE_ETHERFI_NODE_IMPL                   = address(0);
+
     EtherFiTimelock constant upgradeTimelock = EtherFiTimelock(payable(UPGRADE_TIMELOCK));
     uint256 constant UPGRADE_TIMELOCK_DELAY = 10 days;
     string constant OUT_DIR = "script/upgrades/security-upgrades";
@@ -111,6 +123,7 @@ contract SecurityUpgradesRevertScript is Script, Deployed, Utils {
         require(PRE_ETHERFI_RESTAKER                    != address(0), "preflight: PRE_ETHERFI_RESTAKER unset");
         require(PRE_ETHERFI_NODES_MANAGER               != address(0), "preflight: PRE_ETHERFI_NODES_MANAGER unset");
         require(PRE_STAKING_MANAGER                     != address(0), "preflight: PRE_STAKING_MANAGER unset");
+        require(PRE_ETHERFI_NODE_IMPL                   != address(0), "preflight: PRE_ETHERFI_NODE_IMPL unset");
         require(PRE_AUCTION_MANAGER                     != address(0), "preflight: PRE_AUCTION_MANAGER unset");
         require(PRE_NODE_OPERATOR_MANAGER               != address(0), "preflight: PRE_NODE_OPERATOR_MANAGER unset");
         require(PRE_MEMBERSHIP_MANAGER                  != address(0), "preflight: PRE_MEMBERSHIP_MANAGER unset");
@@ -153,7 +166,11 @@ contract SecurityUpgradesRevertScript is Script, Deployed, Utils {
         _assertNotAlreadyOnPre(DEPOSIT_ADAPTER,                     PRE_DEPOSIT_ADAPTER,                     "DepositAdapter");
         _assertNotAlreadyOnPre(WEETH_WITHDRAW_ADAPTER,              PRE_WEETH_WITHDRAW_ADAPTER,              "WeETHWithdrawAdapter");
         _assertNotAlreadyOnPre(ROLE_REGISTRY,                       PRE_ROLE_REGISTRY,                       "RoleRegistry");
-        console2.log("[OK] RoleRegistry + all 22 proxies are on post-upgrade impls; revert is meaningful");
+        // EtherFiNode beacon impl is read from the beacon, not an ERC1967 slot.
+        address currentNodeImpl = StakingManager(STAKING_MANAGER).implementation();
+        require(currentNodeImpl != PRE_ETHERFI_NODE_IMPL, "EtherFiNode beacon: already on pre-upgrade impl - nothing to revert");
+        console2.log("[CURRENT] EtherFiNode beacon", currentNodeImpl);
+        console2.log("[OK] RoleRegistry + 22 proxies + EtherFiNode beacon are on post-upgrade impls; revert is meaningful");
         console2.log("");
     }
 
@@ -176,36 +193,48 @@ contract SecurityUpgradesRevertScript is Script, Deployed, Utils {
     function executeRevert() public {
         console2.log("=== Step 2: Executing revert (UPGRADE_TIMELOCK, 10d) ===");
 
-        address[] memory targets = new address[](23);
-        bytes[]   memory data    = new bytes[](23);
-        uint256[] memory values  = new uint256[](23);
+        address[] memory targets = new address[](24);
+        bytes[]   memory data    = new bytes[](24);
+        uint256[] memory values  = new uint256[](24);
+        uint256 i;
 
-        targets[0]  = EETH;                                data[0]  = _upgradeTo(PRE_EETH);
-        targets[1]  = WEETH;                               data[1]  = _upgradeTo(PRE_WEETH);
-        targets[2]  = LIQUIDITY_POOL;                      data[2]  = _upgradeTo(PRE_LIQUIDITY_POOL);
-        targets[3]  = WITHDRAW_REQUEST_NFT;                data[3]  = _upgradeTo(PRE_WITHDRAW_REQUEST_NFT);
-        targets[4]  = LIQUIFIER;                           data[4]  = _upgradeTo(PRE_LIQUIFIER);
-        targets[5]  = ETHERFI_ADMIN;                       data[5]  = _upgradeTo(PRE_ETHERFI_ADMIN);
-        targets[6]  = ETHERFI_ORACLE;                      data[6]  = _upgradeTo(PRE_ETHERFI_ORACLE);
-        targets[7]  = ETHERFI_REDEMPTION_MANAGER;          data[7]  = _upgradeTo(PRE_ETHERFI_REDEMPTION_MANAGER);
-        targets[8]  = ETHERFI_RESTAKER;                    data[8]  = _upgradeTo(PRE_ETHERFI_RESTAKER);
-        targets[9]  = ETHERFI_NODES_MANAGER;               data[9]  = _upgradeTo(PRE_ETHERFI_NODES_MANAGER);
-        targets[10] = STAKING_MANAGER;                     data[10] = _upgradeTo(PRE_STAKING_MANAGER);
-        targets[11] = AUCTION_MANAGER;                     data[11] = _upgradeTo(PRE_AUCTION_MANAGER);
-        targets[12] = NODE_OPERATOR_MANAGER;               data[12] = _upgradeTo(PRE_NODE_OPERATOR_MANAGER);
-        targets[13] = MEMBERSHIP_MANAGER;                  data[13] = _upgradeTo(PRE_MEMBERSHIP_MANAGER);
-        targets[14] = MEMBERSHIP_NFT;                      data[14] = _upgradeTo(PRE_MEMBERSHIP_NFT);
-        targets[15] = ETHERFI_RATE_LIMITER;                data[15] = _upgradeTo(PRE_ETHERFI_RATE_LIMITER);
-        targets[16] = PRIORITY_WITHDRAWAL_QUEUE;           data[16] = _upgradeTo(PRE_PRIORITY_WITHDRAWAL_QUEUE);
-        targets[17] = ETHERFI_REWARDS_ROUTER;              data[17] = _upgradeTo(PRE_ETHERFI_REWARDS_ROUTER);
-        targets[18] = RESTAKING_REWARDS_ROUTER;            data[18] = _upgradeTo(PRE_RESTAKING_REWARDS_ROUTER);
-        targets[19] = CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR; data[19] = _upgradeTo(PRE_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR);
-        targets[20] = DEPOSIT_ADAPTER;                     data[20] = _upgradeTo(PRE_DEPOSIT_ADAPTER);
-        targets[21] = WEETH_WITHDRAW_ADAPTER;              data[21] = _upgradeTo(PRE_WEETH_WITHDRAW_ADAPTER);
+        (targets[i], data[i]) = (EETH,                       _upgradeTo(PRE_EETH));                          i++;
+        (targets[i], data[i]) = (WEETH,                      _upgradeTo(PRE_WEETH));                         i++;
+        (targets[i], data[i]) = (LIQUIDITY_POOL,             _upgradeTo(PRE_LIQUIDITY_POOL));                i++;
+        (targets[i], data[i]) = (WITHDRAW_REQUEST_NFT,       _upgradeTo(PRE_WITHDRAW_REQUEST_NFT));          i++;
+        (targets[i], data[i]) = (LIQUIFIER,                  _upgradeTo(PRE_LIQUIFIER));                     i++;
+        (targets[i], data[i]) = (ETHERFI_ADMIN,              _upgradeTo(PRE_ETHERFI_ADMIN));                 i++;
+        (targets[i], data[i]) = (ETHERFI_ORACLE,             _upgradeTo(PRE_ETHERFI_ORACLE));                i++;
+        (targets[i], data[i]) = (ETHERFI_REDEMPTION_MANAGER, _upgradeTo(PRE_ETHERFI_REDEMPTION_MANAGER));    i++;
+        (targets[i], data[i]) = (ETHERFI_RESTAKER,           _upgradeTo(PRE_ETHERFI_RESTAKER));              i++;
+        (targets[i], data[i]) = (ETHERFI_NODES_MANAGER,      _upgradeTo(PRE_ETHERFI_NODES_MANAGER));         i++;
+
+        // EtherFiNode is a beacon proxy, not UUPS. Revert it via the beacon owner
+        // (the StakingManager) using upgradeEtherFiNode, gated by the same
+        // UPGRADE_TIMELOCK authority executing this batch. Done BEFORE the StakingManager
+        // proxy revert so it runs against the current (new) impl's upgrade gate, mirroring
+        // the forward upgrade ordering. RoleRegistry is still on the new impl here, so its
+        // onlyUpgradeTimelock gate authorizes the call.
+        (targets[i], data[i]) = (STAKING_MANAGER,
+            abi.encodeWithSelector(StakingManager.upgradeEtherFiNode.selector, PRE_ETHERFI_NODE_IMPL));     i++;
+
+        (targets[i], data[i]) = (STAKING_MANAGER,            _upgradeTo(PRE_STAKING_MANAGER));               i++;
+        (targets[i], data[i]) = (AUCTION_MANAGER,            _upgradeTo(PRE_AUCTION_MANAGER));               i++;
+        (targets[i], data[i]) = (NODE_OPERATOR_MANAGER,      _upgradeTo(PRE_NODE_OPERATOR_MANAGER));         i++;
+        (targets[i], data[i]) = (MEMBERSHIP_MANAGER,         _upgradeTo(PRE_MEMBERSHIP_MANAGER));            i++;
+        (targets[i], data[i]) = (MEMBERSHIP_NFT,             _upgradeTo(PRE_MEMBERSHIP_NFT));                i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER,       _upgradeTo(PRE_ETHERFI_RATE_LIMITER));          i++;
+        (targets[i], data[i]) = (PRIORITY_WITHDRAWAL_QUEUE,  _upgradeTo(PRE_PRIORITY_WITHDRAWAL_QUEUE));     i++;
+        (targets[i], data[i]) = (ETHERFI_REWARDS_ROUTER,     _upgradeTo(PRE_ETHERFI_REWARDS_ROUTER));        i++;
+        (targets[i], data[i]) = (RESTAKING_REWARDS_ROUTER,   _upgradeTo(PRE_RESTAKING_REWARDS_ROUTER));      i++;
+        (targets[i], data[i]) = (CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR, _upgradeTo(PRE_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR)); i++;
+        (targets[i], data[i]) = (DEPOSIT_ADAPTER,            _upgradeTo(PRE_DEPOSIT_ADAPTER));               i++;
+        (targets[i], data[i]) = (WEETH_WITHDRAW_ADAPTER,     _upgradeTo(PRE_WEETH_WITHDRAW_ADAPTER));        i++;
         // RoleRegistry reverts LAST: while it is still on the new impl it provides the
-        // onlyUpgradeTimelock gate authorizing the 22 reverts above. Reverting it first
-        // would strip that gate and the remaining reverts would lose their authorizer.
-        targets[22] = ROLE_REGISTRY;                       data[22] = _upgradeTo(PRE_ROLE_REGISTRY);
+        // onlyUpgradeTimelock gate authorizing the reverts above (including the beacon
+        // revert). Reverting it first would strip that gate and the remaining reverts
+        // would lose their authorizer.
+        (targets[i], data[i]) = (ROLE_REGISTRY,              _upgradeTo(PRE_ROLE_REGISTRY));                 i++;
 
         bytes32 salt = keccak256(abi.encode("security-upgrades-v1-REVERT", block.number));
 
@@ -256,6 +285,10 @@ contract SecurityUpgradesRevertScript is Script, Deployed, Utils {
         _assertImpl(DEPOSIT_ADAPTER,                     PRE_DEPOSIT_ADAPTER,                     "DepositAdapter");
         _assertImpl(WEETH_WITHDRAW_ADAPTER,              PRE_WEETH_WITHDRAW_ADAPTER,              "WeETHWithdrawAdapter");
         _assertImpl(ROLE_REGISTRY,                       PRE_ROLE_REGISTRY,                       "RoleRegistry");
+        // EtherFiNode beacon: implementation lives on the beacon, read via StakingManager.
+        address revertedNodeImpl = StakingManager(STAKING_MANAGER).implementation();
+        require(revertedNodeImpl == PRE_ETHERFI_NODE_IMPL, "EtherFiNode beacon: revert failed (impl mismatch)");
+        console2.log("[REVERTED] EtherFiNode beacon", revertedNodeImpl);
         console2.log("");
     }
 
