@@ -9,6 +9,7 @@ import {CumulativeMerkleRewardsDistributor} from "../../../src/CumulativeMerkleR
 import {DepositAdapter} from "../../../src/DepositAdapter.sol";
 import {EETH as EETHToken} from "../../../src/EETH.sol";
 import {EtherFiAdmin} from "../../../src/EtherFiAdmin.sol";
+import {EtherFiNode} from "../../../src/EtherFiNode.sol";
 import {EtherFiNodesManager} from "../../../src/EtherFiNodesManager.sol";
 import {EtherFiOracle} from "../../../src/EtherFiOracle.sol";
 import {EtherFiRedemptionManager} from "../../../src/EtherFiRedemptionManager.sol";
@@ -92,6 +93,7 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
     address public etherFiRateLimiterImpl;
     address public eEthImpl;
     address public etherFiAdminImpl;
+    address public etherFiNodeImpl;
     address public etherFiNodesManagerImpl;
     address public etherFiOracleImpl;
     address public etherFiRedemptionManagerImpl;
@@ -113,7 +115,6 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
 
     address public roleRegistryImpl;
 
-    // Peripheral UUPS proxies modified by PR #385 — new impls only, existing proxies are reused.
     address public priorityWithdrawalQueueImpl;
     address public etherFiRewardsRouterImpl;
     address public restakingRewardsRouterImpl;
@@ -308,6 +309,12 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
             etherFiRestakerImpl = deploy(name, args, bc, commitHashSalt, true, factory);
         }
         {
+            string memory name = "EtherFiNode";
+            bytes memory args = abi.encode(LIQUIDITY_POOL, ETHERFI_NODES_MANAGER, EIGENLAYER_POD_MANAGER, EIGENLAYER_DELEGATION_MANAGER);
+            bytes memory bc = abi.encodePacked(type(EtherFiNode).creationCode, args);
+            etherFiNodeImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+        }
+        {
             string memory name = "EtherFiNodesManager";
             bytes memory args = abi.encode(STAKING_MANAGER, ROLE_REGISTRY, ETHERFI_RATE_LIMITER);
             bytes memory bc = abi.encodePacked(type(EtherFiNodesManager).creationCode, args);
@@ -462,6 +469,7 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
         console2.log("EtherFiOracle impl:             ", etherFiOracleImpl);
         console2.log("EtherFiRedemptionManager impl:  ", etherFiRedemptionManagerImpl);
         console2.log("EtherFiRestaker impl:           ", etherFiRestakerImpl);
+        console2.log("EtherFiNode impl:               ", etherFiNodeImpl);
         console2.log("EtherFiNodesManager impl:       ", etherFiNodesManagerImpl);
         console2.log("StakingManager impl:            ", stakingManagerImpl);
         console2.log("AuctionManager impl:            ", auctionManagerImpl);

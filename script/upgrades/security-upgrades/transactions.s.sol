@@ -18,6 +18,7 @@ import {EtherFiOracle} from "../../../src/EtherFiOracle.sol";
 import {EtherFiRedemptionManager} from "../../../src/EtherFiRedemptionManager.sol";
 import {EtherFiRestaker} from "../../../src/EtherFiRestaker.sol";
 import {EtherFiNodesManager} from "../../../src/EtherFiNodesManager.sol";
+import {EtherFiNode} from "../../../src/EtherFiNode.sol";
 import {StakingManager} from "../../../src/StakingManager.sol";
 import {AuctionManager} from "../../../src/AuctionManager.sol";
 import {NodeOperatorManager} from "../../../src/NodeOperatorManager.sol";
@@ -70,6 +71,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     address constant etherFiOracleImpl            = address(0);
     address constant etherFiRedemptionManagerImpl = address(0);
     address constant etherFiRestakerImpl          = address(0);
+    address constant etherFiNodeImpl              = address(0);
     address constant etherFiNodesManagerImpl      = address(0);
     address constant stakingManagerImpl           = address(0);
     address constant auctionManagerImpl           = address(0);
@@ -263,6 +265,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         require(etherFiOracleImpl != address(0), "preflight: etherFiOracleImpl unset");
         require(etherFiRedemptionManagerImpl != address(0), "preflight: etherFiRedemptionManagerImpl unset");
         require(etherFiRestakerImpl != address(0), "preflight: etherFiRestakerImpl unset");
+        require(etherFiNodeImpl != address(0), "preflight: etherFiNodeImpl unset");
         require(etherFiNodesManagerImpl != address(0), "preflight: etherFiNodesManagerImpl unset");
         require(stakingManagerImpl != address(0), "preflight: stakingManagerImpl unset");
         require(auctionManagerImpl != address(0), "preflight: auctionManagerImpl unset");
@@ -435,6 +438,9 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
 
         EtherFiNodesManager fresh2 = new EtherFiNodesManager(STAKING_MANAGER, ROLE_REGISTRY, ETHERFI_RATE_LIMITER);
         codeChecker.verifyContractByteCodeMatch(etherFiNodesManagerImpl, address(fresh2));
+
+        EtherFiNode freshNode = new EtherFiNode(LIQUIDITY_POOL, ETHERFI_NODES_MANAGER, EIGENLAYER_POD_MANAGER, EIGENLAYER_DELEGATION_MANAGER);
+        codeChecker.verifyContractByteCodeMatch(etherFiNodeImpl, address(freshNode));
 
         StakingManager fresh3 = new StakingManager(
             LIQUIDITY_POOL, ETHERFI_NODES_MANAGER, ETH2_DEPOSIT_CONTRACT,
@@ -828,6 +834,13 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         (targets[i], data[i]) = (ETHERFI_REDEMPTION_MANAGER, _upgradeTo(etherFiRedemptionManagerImpl)); i++;
         (targets[i], data[i]) = (ETHERFI_RESTAKER,           _upgradeTo(etherFiRestakerImpl));        i++;
         (targets[i], data[i]) = (ETHERFI_NODES_MANAGER,      _upgradeTo(etherFiNodesManagerImpl));    i++;
+
+        // EtherFiNode is a beacon proxy, not UUPS. Upgrade it via the beacon owner
+        // (the StakingManager) using upgradeEtherFiNode, which is gated by the same
+        // UPGRADE_TIMELOCK authority executing this batch. Done before the StakingManager
+        // proxy swap so it runs against the current impl's upgrade gate.
+        (targets[i], data[i]) = (STAKING_MANAGER,
+            abi.encodeWithSelector(StakingManager.upgradeEtherFiNode.selector, etherFiNodeImpl));     i++;
         (targets[i], data[i]) = (STAKING_MANAGER,            _upgradeTo(stakingManagerImpl));         i++;
         (targets[i], data[i]) = (AUCTION_MANAGER,            _upgradeTo(auctionManagerImpl));         i++;
         (targets[i], data[i]) = (NODE_OPERATOR_MANAGER,      _upgradeTo(nodeOperatorManagerImpl));    i++;
@@ -883,6 +896,8 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         _assertImpl(ETHERFI_RESTAKER,           etherFiRestakerImpl,          "EtherFiRestaker");
         _assertImpl(ETHERFI_NODES_MANAGER,      etherFiNodesManagerImpl,      "EtherFiNodesManager");
         _assertImpl(STAKING_MANAGER,            stakingManagerImpl,           "StakingManager");
+        // EtherFiNode beacon: implementation lives on the beacon, read via StakingManager.
+        require(StakingManager(STAKING_MANAGER).implementation() == etherFiNodeImpl, "EtherFiNode: beacon implementation mismatch");
         _assertImpl(AUCTION_MANAGER,            auctionManagerImpl,           "AuctionManager");
         _assertImpl(NODE_OPERATOR_MANAGER,      nodeOperatorManagerImpl,      "NodeOperatorManager");
         _assertImpl(MEMBERSHIP_MANAGER,         membershipManagerImpl,        "MembershipManager");
