@@ -154,6 +154,30 @@ contract ProtocolInvariantsHandler is StdUtils {
             lp.deposit{value: 100 ether}();
             _observeShareHolder(actors[i]);
         }
+
+        // Pre-enumerate the system catalogue. The existing handler ops
+        // already call `_observeShareHolder` dynamically when shares move
+        // to a new address, but pre-registering known protocol-side
+        // share-holders here makes the global-conservation invariant
+        // resilient to a future handler op that credits one of these
+        // addresses but forgets the dynamic observe call — the sum would
+        // still cover the new credit, surfacing a `totalShares` drift the
+        // moment it happens rather than a sequence later.
+        //
+        // Addresses with zero shares cost nothing in the sum. Production
+        // share-holders missing from this list (e.g. Liquifier, fee
+        // recipient) would require constructor wiring and aren't added
+        // here because the existing handler doesn't expose ops that route
+        // through them; if such ops are added, extend this list in lock-
+        // step.
+        _observeShareHolder(address(_lp));
+        _observeShareHolder(address(_eETH));
+        _observeShareHolder(address(_weETH));
+        _observeShareHolder(_erm);
+        _observeShareHolder(_wrn);
+        _observeShareHolder(_pq);
+        _observeShareHolder(_membershipManager);
+        _observeShareHolder(_treasury);
     }
 
     // =====================================================================
