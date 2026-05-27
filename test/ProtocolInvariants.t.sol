@@ -15,15 +15,29 @@ import "../src/WeETH.sol";
 ///         observe. There is no separate ProtocolInvariants contract and
 ///         no kill switch — the checks are always active.
 contract ProtocolInvariantsTest is TestSetup {
+    using stdStorage for StdStorage;
 
-    // weETH `_totalSupply` lives at storage slot 103 (verified via
-    // `forge inspect WeETH storageLayout`). The slot is high because of OZ's
-    // multi-layer __gap padding. Used to synthesize an underbacked state via
-    // vm.store without going through a real mint path.
-    uint256 private constant WEETH_TOTAL_SUPPLY_SLOT = 103;
+    // weETH `_totalSupply` slot. Derived at setup time via stdstore (F-004),
+    // not a hardcoded `= 103`, so an OZ-Upgradeable parent change that
+    // shifts the layout breaks loudly in setUp() rather than silently
+    // poking an unrelated slot and giving false-pass confidence.
+    uint256 private WEETH_TOTAL_SUPPLY_SLOT;
 
     function setUp() public {
         setUpTests();
+
+        // (F-004) Derive the WeETH._totalSupply slot via stdstore. The
+        // canonical accessor is `totalSupply()`, returning `_totalSupply`.
+        WEETH_TOTAL_SUPPLY_SLOT = stdstore
+            .target(address(weEthInstance))
+            .sig(weEthInstance.totalSupply.selector)
+            .find();
+        // Sanity: poking this slot must round-trip through totalSupply().
+        uint256 sentinel = uint256(keccak256("inv.slot.sentinel"));
+        bytes32 prior = vm.load(address(weEthInstance), bytes32(WEETH_TOTAL_SUPPLY_SLOT));
+        vm.store(address(weEthInstance), bytes32(WEETH_TOTAL_SUPPLY_SLOT), bytes32(sentinel));
+        require(weEthInstance.totalSupply() == sentinel, "WeETH slot layout drift; update derivation");
+        vm.store(address(weEthInstance), bytes32(WEETH_TOTAL_SUPPLY_SLOT), prior);
 
         // Fund alice for wrap/unwrap tests.
         vm.deal(alice, 100 ether);
@@ -254,24 +268,31 @@ contract ProtocolInvariantsTest is TestSetup {
     // FUZZ — Invariant 1 (weETH backing)
     // =====================================================================
 
-    /// @notice For any wrap amount inside alice's eETH balance, the
-    ///         backing invariant holds with equality (proxyShares is bumped
-    ///         by the same value the mint added).
+    /// @notice (F-024) Delta assertion: post-call inequality is necessary
+    ///         but not sufficient — the hook would have reverted on a
+    ///         violation. We ALSO assert the supply delta equals the
+    ///         proxy-shares delta, which catches a hook removal that
+    ///         wouldn't cause a revert but breaks proportionality.
     function testFuzz_inv1_wrap_holds_backing(uint128 wrapAmt) public {
         uint256 aliceEEth = eETHInstance.balanceOf(alice);
-        // Lower bound 2 wei: wrap(1) on a fresh pool can produce sharesForAmount==0
-        // when the rate inflates due to dust, and 0-share mints still pass the
-        // invariant trivially without exercising it. We want non-trivial mints.
         wrapAmt = uint128(bound(uint256(wrapAmt), 2, aliceEEth - 1));
+
+        uint256 supplyBefore = weEthInstance.totalSupply();
+        uint256 proxyBefore  = eETHInstance.shares(address(weEthInstance));
 
         vm.startPrank(alice);
         eETHInstance.approve(address(weEthInstance), type(uint256).max);
         weEthInstance.wrap(wrapAmt);
         vm.stopPrank();
 
-        // Invariant — checked by the hook on every mint, so reaching here at
-        // all is the assertion. Recompute and assert explicitly for clarity.
+        // Hook check (post-call inequality).
         assertLe(weEthInstance.totalSupply(), eETHInstance.shares(address(weEthInstance)), "weETH underbacked");
+        // Delta check (F-024): wrap is proportional.
+        assertEq(
+            weEthInstance.totalSupply() - supplyBefore,
+            eETHInstance.shares(address(weEthInstance)) - proxyBefore,
+            "wrap broke supply/proxy-shares proportionality"
+        );
     }
 
     /// @notice Unwrap any fraction of the held weETH; backing invariant
@@ -479,8 +500,15 @@ contract ProtocolInvariantsTest is TestSetup {
         try liquidityPoolInstance.deposit{value: uint256(dustWei)}() returns (uint256) {
             (uint256 P1, uint256 S1) = _snap();
             _assertRateNonDecreasing(P0, S0, P1, S1);
-        } catch {
-            // Revert is fine (InvalidAmount on 0-share floor); no state change.
+        } catch (bytes memory err) {
+            // (F-025) Confirmation-bias guard: a revert is only acceptable
+            // when it's the documented dust path (InvalidAmount selector).
+            // Anything else (pause, blacklist, panic) means the bound
+            // landed in a wrong-reason zone and the test isn't asserting
+            // what it claims.
+            bytes4 sel;
+            if (err.length >= 4) assembly { sel := mload(add(err, 32)) }
+            assertEq(sel, LiquidityPool.InvalidAmount.selector, "dust deposit reverted with non-InvalidAmount selector");
         }
     }
 

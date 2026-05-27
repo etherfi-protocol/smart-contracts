@@ -5,24 +5,21 @@ import "../TestSetup.sol";
 import "./handlers/FrozenRateWithdrawalHandler.sol";
 
 /// @notice Stateful invariant suite for the WithdrawRequestNFT and
-///         PriorityWithdrawalQueue frozen-rate withdrawal paths — the
-///         EXEMPT paths PR #428's `nonDecreasingRate` modifier deliberately
-///         leaves uncovered.
+///         PriorityWithdrawalQueue frozen-rate withdrawal paths - hardened
+///         against multi-reviewer findings:
 ///
-///         For these paths the rate-deflation guarantee is upstream:
-///         WRN snapshots `amountPerShareCeil()` at finalize and bounds it
-///         in [min, max] per its own `InvalidShareRate` revert; the claim
-///         path's `BurnExceedsShares` revert prevents burning beyond the
-///         request's own share allocation. PQ enforces a per-claim
-///         solvency tolerance.
-///
-///         What this suite catches that the existing PR-#428 suite cannot:
-///         - WRN/PQ ETH segregation drifting from the on-chain lock counter.
-///         - A frozen rate written outside [min, max] (would require an
-///           upstream check bypass).
-///         - A frozen rate mutating after finalize (the H-02 fix regression).
-///         - A claim burning more shares than the request authorized.
-///         - PQ finalize/claim/cancel state-machine bookkeeping desync.
+///         - (F-003) Write-once frozen-rate ghost catches re-finalize overwrite.
+///         - (F-005) All checkpoint rates in WRN's _finalizationRates trace
+///           are asserted in [min, max], not just the post-call read.
+///         - (F-006) Realistic rebase bound (50 bps); extreme path is opt-in.
+///         - (F-008) weETH-input PQ path now exercised.
+///         - (F-010) PQ struct reconstruction drift surfaces as a ghost
+///           flag, no longer silently swallowed by fail-on-revert = false.
+///         - (F-016) NFT transfer + cross-owner claim covered.
+///         - (F-022) Tolerance boundary explicit fuzz op.
+///         - (F-023) handleRemainder paths exercised.
+///         - (F-026) invalidate / validate / seize state transitions exercised.
+///         - (F-027) Cancel exercises both pending and finalized branches.
 ///
 /// forge-config: default.invariant.runs = 256
 /// forge-config: default.invariant.depth = 64
@@ -35,12 +32,9 @@ contract FrozenRateWithdrawalInvariantTest is TestSetup {
     function setUp() public {
         setUpTests();
 
-        // WRN ships paused; unpause so requestWithdraw is reachable. PQ
-        // defaults unpaused so no equivalent step is needed there.
         vm.prank(alice);
         withdrawRequestNFTInstance.unPauseContract();
 
-        // ---- Provision 5 EOA actors with eETH and PQ whitelist ----
         for (uint256 i = 0; i < 5; i++) {
             address a = address(uint160(uint256(keccak256(abi.encodePacked("frozen.actor.", i)))));
             handlerActors.push(a);
@@ -49,19 +43,18 @@ contract FrozenRateWithdrawalInvariantTest is TestSetup {
             liquidityPoolInstance.deposit{value: 100 ether}();
         }
 
-        // ---- Roles ----
-        // HOUSEKEEPING_OPERATIONS_ROLE isn't granted to alice by setUpTests but
-        // the handler doesn't call handleRemainder, so we don't need it.
-        // PQ.addToWhitelist is `onlyAdmin`. `alice` already holds
-        // OPERATION_TIMELOCK_ROLE from setUpTests (which is what onlyAdmin
-        // checks here), so prank as alice for whitelist additions.
+        // F-023 prereq: grant HOUSEKEEPING_OPERATIONS_ROLE to alice. Pre-
+        // extract the role constant so it doesn't consume the vm.prank.
+        bytes32 housekeepingRole = roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE();
+        vm.prank(owner);
+        roleRegistryInstance.grantRole(housekeepingRole, alice);
+
         vm.startPrank(alice);
         for (uint256 i = 0; i < handlerActors.length; i++) {
             priorityQueueInstance.addToWhitelist(handlerActors[i]);
         }
         vm.stopPrank();
 
-        // ---- eETH approvals (so wrn_request and pq_request work without burning a handler op slot) ----
         for (uint256 i = 0; i < handlerActors.length; i++) {
             vm.startPrank(handlerActors[i]);
             eETHInstance.approve(address(liquidityPoolInstance), type(uint256).max);
@@ -71,7 +64,6 @@ contract FrozenRateWithdrawalInvariantTest is TestSetup {
             vm.stopPrank();
         }
 
-        // ---- Deploy the handler ----
         handler = new FrozenRateWithdrawalHandler(
             liquidityPoolInstance,
             eETHInstance,
@@ -80,6 +72,8 @@ contract FrozenRateWithdrawalInvariantTest is TestSetup {
             priorityQueueInstance,
             address(etherFiAdminInstance),
             address(membershipManagerInstance),
+            alice,
+            alice,
             alice,
             handlerActors
         );
@@ -91,10 +85,6 @@ contract FrozenRateWithdrawalInvariantTest is TestSetup {
     // SOLVENCY
     // =====================================================================
 
-    /// @notice WRN's ETH balance must cover its declared lock at all times.
-    ///         Enforced per-op by `_checkEthAmountLockedForWithdrawal`; this
-    ///         global assertion catches any future path that bypasses the
-    ///         helper.
     function invariant_wrn_balance_covers_lock() public view {
         assertGe(
             address(withdrawRequestNFTInstance).balance,
@@ -103,7 +93,6 @@ contract FrozenRateWithdrawalInvariantTest is TestSetup {
         );
     }
 
-    /// @notice PQ's ETH balance must cover its declared lock at all times.
     function invariant_pq_balance_covers_lock() public view {
         assertGe(
             address(priorityQueueInstance).balance,
@@ -113,16 +102,9 @@ contract FrozenRateWithdrawalInvariantTest is TestSetup {
     }
 
     // =====================================================================
-    // FROZEN-RATE INTEGRITY — the load-bearing security boundary on the
-    // exempt path PR #428 doesn't cover.
+    // FROZEN-RATE INTEGRITY
     // =====================================================================
 
-    /// @notice Every frozen rate the handler observed at finalize lived
-    ///         inside the WRN-declared bounds. The bound check inside
-    ///         `WRN.finalizeRequests` is what enforces this; the flag is
-    ///         set in the handler if a finalize ever wrote an out-of-bounds
-    ///         value (it can't today; the assertion guards against a
-    ///         regression that drops the check).
     function invariant_frozen_rate_within_bounds() public view {
         assertFalse(
             handler.ghost_frozenRateOutOfBounds(),
@@ -130,14 +112,11 @@ contract FrozenRateWithdrawalInvariantTest is TestSetup {
         );
     }
 
-    /// @notice The frozen rate WRN returns for a finalized tokenId never
-    ///         changes once it's been recorded. The H-02 fix snapshots the
-    ///         rate at finalize so subsequent rebases don't move the claim
-    ///         payout. This invariant proves the snapshot is immutable.
-    ///
-    ///         The handler's `verifyFrozenRatePersistence` re-reads
-    ///         `WRN.frozenRateFor(tokenId)` for every tokenId it has
-    ///         finalized; mismatches flip the ghost flag.
+    function invariant_all_checkpoints_in_bounds() public view {
+        (bool ok, uint256 firstOOB) = handler.verifyAllFinalizationCheckpointsInBounds();
+        assertTrue(ok, string.concat("frozen rate OOB for tokenId=", vm.toString(firstOOB)));
+    }
+
     function invariant_frozen_rate_persists_under_rebase() public {
         handler.verifyFrozenRatePersistence();
         assertFalse(
@@ -146,9 +125,6 @@ contract FrozenRateWithdrawalInvariantTest is TestSetup {
         );
     }
 
-    /// @notice For every claim observed, `burnedShares <= request.shareOfEEth`.
-    ///         WRN reverts with `BurnExceedsShares` if violated; the ghost
-    ///         flag is the regression guard.
     function invariant_wrn_burn_bounded_by_request_shares() public view {
         assertFalse(
             handler.ghost_wrnBurnExceededShares(),
@@ -157,15 +133,21 @@ contract FrozenRateWithdrawalInvariantTest is TestSetup {
     }
 
     // =====================================================================
-    // PQ STATE MACHINE — pending / finalized / removed must be disjoint
-    // and the lock counter must match the sum of currently-finalized
-    // request amounts.
+    // F-010 - drift ghosts
     // =====================================================================
 
-    /// @notice Sum of `amountOfEEth` for PQ requests currently in the
-    ///         finalized set equals `ethAmountLockedForPriorityWithdrawal`.
-    ///         Drift means a request moved out of `_finalizedRequests`
-    ///         without the corresponding ETH debit (or vice versa).
+    function invariant_pq_struct_no_drift() public view {
+        assertFalse(handler.ghost_pqStructDrift(), "PQ request struct reconstruction drifted from on-chain hash");
+    }
+
+    function invariant_wrn_nextId_no_drift() public view {
+        assertFalse(handler.ghost_wrnNextIdDrift(), "WRN nextRequestId drifted from handler's prediction");
+    }
+
+    // =====================================================================
+    // PQ STATE MACHINE
+    // =====================================================================
+
     function invariant_pq_finalized_eth_sum_matches_lock() public view {
         assertEq(
             handler.pqSumFinalizedAmount(),
@@ -175,30 +157,10 @@ contract FrozenRateWithdrawalInvariantTest is TestSetup {
     }
 
     // =====================================================================
-    // WRN ETH ACCOUNTING — the lock counter is bounded below by the
-    // unclaimed-finalized request amount. The handler over-debits on
-    // rate-drop claims (debit = amountOfEEth, payment = amountToWithdraw),
-    // so equality doesn't hold; the lower-bound form does. `handleRemainder`
-    // sweeps the stranded excess to treasury but is not called in this
-    // suite, so the only debit path is claim.
+    // WRN ETH ACCOUNTING
     // =====================================================================
 
-    /// @notice The on-chain lock is at least the sum of unclaimed-finalized
-    ///         request amounts. This is the WRN counterpart of the PQ
-    ///         finalized-sum invariant; equality doesn't hold because of
-    ///         the documented over-debit on rate-drop claims (see
-    ///         `WithdrawRequestNFT._claimWithdraw` and the `strandedEth`
-    ///         cleanup in `handleRemainder`). The lower bound MUST hold —
-    ///         otherwise a future claim of an unrelated unclaimed request
-    ///         would `InsufficientEscrow`-revert with funds still owed.
     function invariant_wrn_lock_covers_unclaimed_finalized() public view {
-        // Note: lock = sum(amountOfEEth of finalized-not-yet-claimed). Any
-        // CLAIM debit subtracts `amountOfEEth` regardless of payment; the
-        // sum the handler computes follows the same accounting (only
-        // unclaimed are summed), so this should be an exact equality at
-        // all times BEFORE handleRemainder ever runs. We assert the
-        // tighter `>=` for forward-compat with a future suite that runs
-        // handleRemainder.
         assertGe(
             uint256(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal()),
             handler.wrnSumUnclaimedFinalizedAmount(),
@@ -207,9 +169,7 @@ contract FrozenRateWithdrawalInvariantTest is TestSetup {
     }
 
     // =====================================================================
-    // LP TVL SANITY — re-asserted in this suite because the WRN/PQ flow
-    // moves ETH InLp <-> OutOfLp via lock/unlock; a bug there would surface
-    // here first.
+    // LP TVL SANITY
     // =====================================================================
 
     function invariant_lp_tvl_decomposition() public view {
@@ -227,36 +187,31 @@ contract FrozenRateWithdrawalInvariantTest is TestSetup {
     }
 
     // =====================================================================
-    // COVERAGE SUMMARY — emits at the end of each run so we can confirm
-    // the fuzzer actually exercises both flows.
+    // COVERAGE SUMMARY
     // =====================================================================
 
     function invariant_call_coverage_summary() public {
         emit log_named_uint("wrn_req                  ", handler.callCounts("wrn_req"));
-        emit log_named_uint("wrn_req_revert           ", handler.callCounts("wrn_req_revert"));
-        emit log_named_uint("wrn_req_skipped          ", handler.callCounts("wrn_req_skipped"));
         emit log_named_uint("wrn_finalize             ", handler.callCounts("wrn_finalize"));
-        emit log_named_uint("wrn_finalize_revert      ", handler.callCounts("wrn_finalize_revert"));
-        emit log_named_uint("wrn_finalize_no_liquidity", handler.callCounts("wrn_finalize_no_liquidity"));
-        emit log_named_uint("wrn_finalize_skipped     ", handler.callCounts("wrn_finalize_skipped"));
         emit log_named_uint("wrn_claim                ", handler.callCounts("wrn_claim"));
-        emit log_named_uint("wrn_claim_revert         ", handler.callCounts("wrn_claim_revert"));
-        emit log_named_uint("wrn_claim_skipped        ", handler.callCounts("wrn_claim_skipped"));
+        emit log_named_uint("wrn_xfer                 ", handler.callCounts("wrn_xfer"));
+        emit log_named_uint("wrn_invalidate           ", handler.callCounts("wrn_invalidate"));
+        emit log_named_uint("wrn_validate             ", handler.callCounts("wrn_validate"));
+        emit log_named_uint("wrn_remainder            ", handler.callCounts("wrn_remainder"));
         emit log_named_uint("pq_req                   ", handler.callCounts("pq_req"));
-        emit log_named_uint("pq_req_revert            ", handler.callCounts("pq_req_revert"));
-        emit log_named_uint("pq_req_skipped           ", handler.callCounts("pq_req_skipped"));
+        emit log_named_uint("pq_reqWeETH              ", handler.callCounts("pq_reqWeETH"));
+        emit log_named_uint("pq_boundary              ", handler.callCounts("pq_boundary"));
         emit log_named_uint("pq_fulfill               ", handler.callCounts("pq_fulfill"));
-        emit log_named_uint("pq_fulfill_revert        ", handler.callCounts("pq_fulfill_revert"));
-        emit log_named_uint("pq_fulfill_skipped       ", handler.callCounts("pq_fulfill_skipped"));
-        emit log_named_uint("pq_fulfill_no_liquidity  ", handler.callCounts("pq_fulfill_no_liquidity"));
         emit log_named_uint("pq_claim                 ", handler.callCounts("pq_claim"));
-        emit log_named_uint("pq_claim_revert          ", handler.callCounts("pq_claim_revert"));
-        emit log_named_uint("pq_claim_skipped         ", handler.callCounts("pq_claim_skipped"));
-        emit log_named_uint("pq_cancel                ", handler.callCounts("pq_cancel"));
-        emit log_named_uint("pq_cancel_revert         ", handler.callCounts("pq_cancel_revert"));
-        emit log_named_uint("pq_cancel_skipped        ", handler.callCounts("pq_cancel_skipped"));
-        emit log_named_uint("rebase                   ", handler.callCounts("rebase"));
-        emit log_named_uint("rebase_revert            ", handler.callCounts("rebase_revert"));
+        emit log_named_uint("pq_cancel_pending        ", handler.callCounts("pq_cancel_pending"));
+        emit log_named_uint("pq_cancel_finalized      ", handler.callCounts("pq_cancel_finalized"));
+        emit log_named_uint("pq_cancel_not_matured    ", handler.callCounts("pq_cancel_not_matured"));
+        emit log_named_uint("pq_invalidate            ", handler.callCounts("pq_invalidate"));
+        emit log_named_uint("pq_remainder             ", handler.callCounts("pq_remainder"));
+        emit log_named_uint("rebase_positive          ", handler.callCounts("rebase_positive"));
+        emit log_named_uint("rebase_negative          ", handler.callCounts("rebase_negative"));
+        emit log_named_uint("rebaseExtreme            ", handler.callCounts("rebaseExtreme"));
         emit log_named_uint("advance_time             ", handler.callCounts("advance_time"));
+        emit log_named_uint("tolerance_boundary_hits  ", handler.ghost_toleranceBoundaryHits());
     }
 }
