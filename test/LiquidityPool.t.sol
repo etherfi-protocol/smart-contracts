@@ -2720,6 +2720,40 @@ contract LiquidityPoolTest is TestSetup {
         }
     }
 
+    /// @dev Regression test for Cursor Bugbot finding on commit `6c3f4bf`:
+    ///      PWQ claims could DoS under a tiny rate drop because PWQ's 10-wei
+    ///      `_TOLERANCE_BUFFER` admits values that Guard 1's ceil/floor combo rejects.
+    ///      Fix: PWQ derives `_rate` from `(amountWithFee, shareOfEEth)` instead of
+    ///      using the live rate, so Guard 1 admits `amountWithFee` by construction.
+    ///
+    ///      This test verifies the underlying LP invariant: passing
+    ///      `_rate = ceil(amount * 1e18 / shareOfEEth)` always admits `_amount`,
+    ///      regardless of how the live rate has moved relative to the request's queue-time rate.
+    function test_withdrawGuard1_pwqDerivedRateAdmitsAnyTolerableAmount() public {
+        // Seed NFT with shares. Lock 20 ether worth in totalValueOutOfLp so the burn's
+        // `totalValueOutOfLp -= _amount` does not underflow.
+        _seedNftEscrow(100 ether, 20 ether);
+
+        // Pretend the request was queued at rate 1.0, shareOfEEth = 10e18, amountWithFee = 10e18 + 7 wei
+        // (the 7 wei is within PWQ's 10-wei tolerance buffer — a tiny rate drop happened).
+        uint256 shareOfEEth = 10 ether;
+        uint256 amountWithFee = 10 ether + 7; // 7 wei over what shareOfEEth justifies at rate 1.0
+
+        // PWQ's pre-fix code would compute `rate = amountPerShareCeil()`. After a small
+        // rate drop, `amountCap = floor(shareOfEEth * rate / 1e18)` would fall below
+        // `amountWithFee`, tripping Guard 1's `InvalidAmount`.
+
+        // Post-fix code computes `rate = ceil(amountWithFee * 1e18 / shareOfEEth)`.
+        // This makes `amountCap >= amountWithFee` by construction (ceiling rounding).
+        uint256 derivedRate = Math.mulDiv(amountWithFee, 1e18, shareOfEEth, Math.Rounding.Up);
+
+        // The call must succeed.
+        vm.prank(address(withdrawRequestNFTInstance));
+        uint256 burned = liquidityPoolInstance.withdraw(amountWithFee, derivedRate, shareOfEEth);
+        assertGt(burned, 0, "claim must succeed with derived rate");
+        assertLe(burned, shareOfEEth, "Guard 3 must cap burn at shareOfEEth");
+    }
+
     /// @dev Guard 1 negative path: the fuzz above skips Guard-1 violations via `vm.assume`.
     ///      This dedicated fuzz asserts the REVERT side: any `_amount` strictly above
     ///      `_shareOfEEth * _rate / SHARE_UNIT` reverts `InvalidAmount`.

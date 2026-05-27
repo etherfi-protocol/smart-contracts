@@ -594,7 +594,16 @@ contract PriorityWithdrawalQueue is
 
         ethAmountLockedForPriorityWithdrawal -= uint128(request.amountOfEEth);
 
-        uint256 rate = liquidityPool.amountPerShareCeil();
+        // Derive `rate` from the request's own (amountWithFee, shareOfEEth) instead of using
+        // the live rate. This makes LP's Guard 1 (`_amount <= _shareOfEEth * _rate / 1e18`)
+        // admit `amountToWithdraw` by construction (ceiling rounding ensures
+        // `shareOfEEth * derivedRate / 1e18 >= amountWithFee`), eliminating a sub-tolerance
+        // rate-drop DoS where PWQ's 10-wei `_TOLERANCE_BUFFER` admits but Guard 1's tighter
+        // ceil/floor combo reverts. Burn semantics are unchanged: Guard 2's max-clamp picks
+        // `shareAtLive` if live dropped, and Guard 3 caps at `shareOfEEth` — the request's
+        // own allocation, which is also the existing PWQ-side expectation.
+        // 1e18 matches `LiquidityPool.SHARE_UNIT` (single source of truth in LP).
+        uint256 rate = Math.mulDiv(amountToWithdraw, 1e18, request.shareOfEEth, Math.Rounding.Up);
         uint256 burnedShares = liquidityPool.withdraw(amountToWithdraw, rate, request.shareOfEEth);
 
         uint256 remainder = request.shareOfEEth > burnedShares 
