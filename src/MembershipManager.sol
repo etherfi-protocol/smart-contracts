@@ -26,19 +26,14 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
 
-    IeETH private DEPRECATED_eETH;
-    ILiquidityPool private DEPRECATED_liquidityPool;
-    IMembershipNFT private DEPRECATED_membershipNFT;
-    address private DEPRECATED_treasury;
-    address private DEPRECATED_protocolRevenueManager;
+    // deprecated storage slots
+    uint256[5] private __gap_0;
 
     mapping (uint256 => uint256) public allTimeHighDepositAmount;
     mapping (uint256 => TokenDeposit) public tokenDeposits;
     mapping (uint256 => TokenData) public tokenData;
     TierDeposit[] public tierDeposits;
     TierData[] public tierData;
-
-    // [BEGIN] SLOT 261
 
     uint16 public pointsBoostFactor; // + (X / 10000) more points, if staking rewards are sacrificed
     uint16 public pointsGrowthRate; // + (X / 10000) kwei points are earned per ETH per day
@@ -48,8 +43,9 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     uint16 private mintFee; // fee = 0.001 ETH * 'mintFee'
     uint16 private burnFee; // fee = 0.001 ETH * 'burnFee'
     uint16 private upgradeFee; // fee = 0.001 ETH * 'upgradeFee'
-    uint8 private DEPRECATED_treasuryFeeSplitPercent;
-    uint8 private DEPRECATED_protocolRevenueFeeSplitPercent;
+
+    // deprecated storage slots
+    uint16 private __gap_1;
 
     uint32 public topUpCooltimePeriod;
     uint32 public withdrawalLockBlocks;
@@ -57,23 +53,27 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     uint16 private fanBoostThreshold; // = 0.001 ETH * fanBoostThreshold
     uint16 private burnFeeWaiverPeriodInDays;
 
-    // [END] SLOT 261 END
+    // deprecated storage slots
+    uint256[3] private __gap_2;
 
-    uint128 private DEPRECATED_sharesReservedForRewards;
-
-    address private DEPRECATED_admin;
-    mapping(address => bool) private DEPRECATED_admins;
-
-    // Phase 2
     TierVault[] public tierVaults;
 
-    IEtherFiAdmin private DEPRECATED_etherFiAdmin;
+    // deprecated storage slots
+    uint160 private __gap_3;
+
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  IMMUTABLES  --------------------------------------
+    //--------------------------------------------------------------------------------------
 
     IeETH public immutable eETH;
     ILiquidityPool public immutable liquidityPool;
     IMembershipNFT public immutable membershipNFT;
     IEtherFiAdmin public immutable etherFiAdmin;
     IBlacklister public immutable blacklister;
+
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  CONSTANTS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
 
     uint256 public constant BASIS_POINTS_DENOMINATOR = 10000;
     uint256 public constant FEE_UNIT = 0.001 ether;
