@@ -26,50 +26,27 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
 
-    IStakingManager private DEPRECATED_stakingManager;
-    IEtherFiNodesManager private DEPRECATED_nodesManager;
-    address private DEPRECATED_regulationsManager;
-    address private DEPRECATED_membershipManager;
-    address private DEPRECATED_TNFT;
-    IeETH private DEPRECATED_eETH;
-
-    bool private DEPRECATED_eEthliquidStakingOpened;
+    // deprecated storage slots
+    uint256[6] private __gap_0;
 
     uint128 public totalValueOutOfLp;
     uint128 public totalValueInLp;
-
     address public feeRecipient;
 
-    uint32 private DEPRECATED_numPendingDeposits; // number of validator deposits, which needs 'registerValidator'
+    // deprecated storage slots
+    uint32 private __gap_1;
+    uint256[10] private __gap_2;
 
-    address private DEPRECATED_bNftTreasury;
-    IWithdrawRequestNFT private DEPRECATED_withdrawRequestNFT;
-
-    BnftHolder[] private DEPRECATED_bnftHolders;
-    uint128 private DEPRECATED_maxValidatorsPerOwner;
-    uint128 private DEPRECATED_schedulingPeriodInSeconds;
-
-    HoldersUpdate private DEPRECATED_holdersUpdate;
-
-    mapping(address => bool) private DEPRECATED_admins;
-    mapping(SourceOfFunds => FundStatistics) private DEPRECATED_fundStatistics;
-    mapping(uint256 => bytes32) private DEPRECATED_depositDataRootForApprovalDeposits;
-    address private DEPRECATED_etherFiAdminContract;
-    bool private DEPRECATED_whitelistEnabled;
-    mapping(address => bool) private DEPRECATED_whitelisted;
     mapping(address => ValidatorSpawner) public validatorSpawner;
 
-    bool private DEPRECATED_restakeBnftDeposits;
+    // deprecated storage slots
+    uint8 private __gap_3;
     uint128 private DEPRECATED_ethAmountLockedForWithdrawal;
     bool public paused;
-    address private DEPRECATED_auctionManager;
-    ILiquifier private DEPRECATED_liquifier;
 
-    bool private DEPRECATED_isLpBnftHolder;
+    // deprecated storage slots
+    uint256[4] private __gap_4;
 
-    IEtherFiRedemptionManager private DEPRECATED_etherFiRedemptionManager;
-
-    IRoleRegistry private DEPRECATED_roleRegistry;
     uint256 public validatorSizeWei;
     uint256 public maxWithdrawAmount;
     uint256 public minWithdrawAmount;
