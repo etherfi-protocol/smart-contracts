@@ -23,52 +23,32 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     using SafeERC20 for IERC20;
     using Math for uint256;
 
-    uint32 private DEPRECATED_eigenLayerWithdrawalClaimGasCost;
-    uint32 public timeBoundCapRefreshInterval; // seconds
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  STATE-VARIABLES  ----------------------------------
+    //--------------------------------------------------------------------------------------
+    // deprecated storage slots
+    uint32 private __gap_0;
 
+    uint32 public timeBoundCapRefreshInterval; // seconds
     bool public quoteStEthWithCurve;
 
-    uint128 private DEPRECATED_accumulatedFee;
+    // deprecated storage slots
+    uint128 private __gap_1;
 
     mapping(address => TokenInfo) public tokenInfos;
-    mapping(bytes32 => bool) private DEPRECATED_isRegisteredQueuedWithdrawals;
-    mapping(address => bool) private DEPRECATED_admins;
-
-    address private DEPRECATED_treasury;
-    ILiquidityPool private DEPRECATED_liquidityPool;
-    IStrategyManager private DEPRECATED_eigenLayerStrategyManager;
-    ILidoWithdrawalQueue private DEPRECATED_lidoWithdrawalQueue;
-
-    ICurvePool private DEPRECATED_cbEth_Eth_Pool;
-    ICurvePool private DEPRECATED_wbEth_Eth_Pool;
-    ICurvePool private DEPRECATED_stEth_Eth_Pool;
-
-    IcbETH private DEPRECATED_cbEth;
-    IwBETH private DEPRECATED_wbEth;
-    ILido private DEPRECATED_lido;
-
-    IDelegationManager private DEPRECATED_eigenLayerDelegationManager;
-
-    IPancackeV3SwapRouter private DEPRECATED_pancakeRouter;
-
-    mapping(string => bool) private DEPRECATED_flags;
+    
+    // deprecated storage slots
+    uint256[15] private __gap_2;
     
     // To support L2 native minting of weETH
     IERC20[] public dummies;
-    address private DEPRECATED_l1SyncPool;
+    
+    // deprecated storage slots
+    uint256[3] private __gap_3;
 
-    mapping(address => bool) private DEPRECATED_pausers;
-
-    address private DEPRECATED_etherfiRestaker;
-
-    uint256 public constant BASIS_POINT_SCALE = 10_000;
-    uint256 public constant SHARE_UNIT = 1e18;
-    uint32 public constant MAX_TIME_BOUND_CAP_IN_ETHER = 500_000_000;
-    uint32 public constant MAX_TOTAL_CAP_IN_ETHER = 2_000_000_000;
-
-    /// @dev Suggested gas stipend for contract receiving ETH to perform a few
-    /// storage reads and writes, but low enough to prevent griefing.
-    uint256 internal constant GAS_STIPEND_NO_GRIEF = 100_000;
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  IMMUTABLES  --------------------------------------
+    //--------------------------------------------------------------------------------------
 
     ILiquidityPool public immutable liquidityPool;
     ILidoWithdrawalQueue public immutable lidoWithdrawalQueue;
@@ -84,6 +64,23 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     uint256 public immutable stalePriceWindow;
     uint256 public immutable maxPriceDeviationInBps;
 
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  CONSTANTS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    uint256 public constant BASIS_POINT_SCALE = 10_000;
+    uint256 public constant SHARE_UNIT = 1e18;
+    uint32 public constant MAX_TIME_BOUND_CAP_IN_ETHER = 500_000_000;
+    uint32 public constant MAX_TOTAL_CAP_IN_ETHER = 2_000_000_000;
+
+    /// @dev Suggested gas stipend for contract receiving ETH to perform a few
+    /// storage reads and writes, but low enough to prevent griefing.
+    uint256 internal constant GAS_STIPEND_NO_GRIEF = 100_000;
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  EVENTS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
+
     event Liquified(address _user, uint256 _toEEthAmount, address _fromToken, bool _isRestaked);
     // This event is deprecated. will be removed in the next release.
     // event RegisteredQueuedWithdrawal(bytes32 _withdrawalRoot, IStrategyManager.DeprecatedStruct_QueuedWithdrawal _queuedWithdrawal);
@@ -91,6 +88,10 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     event CompletedQueuedWithdrawal(bytes32 _withdrawalRoot);
     event QueuedStEthWithdrawals(uint256[] _reqIds);
     event CompletedStEthQueuedWithdrawals(uint256[] _reqIds);
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  ERRORS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
 
     error NotSupportedToken();
     error EthTransferFailed();
@@ -127,6 +128,10 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         address l1SyncPool;
     }
 
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  CONSTRUCTOR  ----------------------------------
+    //--------------------------------------------------------------------------------------
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(ConstructorAddresses memory _constructorAddresses, uint256 _minDiscountInBasisPoints, uint256 _stalePriceWindow, uint256 _maxPriceDeviationInBps) RolesLibrary(_constructorAddresses.roleRegistry) {
         if (_minDiscountInBasisPoints == 0 || _minDiscountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
@@ -153,6 +158,10 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         maxPriceDeviationInBps = _maxPriceDeviationInBps;
         _disableInitializers();
     }
+
+    //--------------------------------------------------------------------------------------
+    //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
+    //--------------------------------------------------------------------------------------
 
     /// @notice initialize to set variables on deployment
     function initialize(address _treasury, address _liquidityPool, address _eigenLayerStrategyManager, address _lidoWithdrawalQueue, 
