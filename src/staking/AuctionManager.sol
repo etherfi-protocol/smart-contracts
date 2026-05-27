@@ -32,24 +32,19 @@ contract AuctionManager is
     uint256 public numberOfBids;
     uint256 public numberOfActiveBids;
 
-    INodeOperatorManager private DEPRECATED_nodeOperatorManager;
-    address private DEPRECATED_protocolRevenueManager;
+    // deprecated storage slots
+    uint256[2] private __gap_0;
+    uint160 private __gap_1;
 
-    address private DEPRECATED_stakingManagerContractAddress;
     bool public whitelistEnabled;
-
     mapping(uint256 => Bid) public bids;
 
-    address private DEPRECATED_admin;
+    // deprecated storage slots
+    uint256[4] private __gap_2;
 
-    // new state variables for phase 2
-    address private DEPRECATED_membershipManagerContractAddress;
-    uint128 public accumulatedRevenue;
-    uint128 public accumulatedRevenueThreshold;
-
-    mapping(address => bool) private DEPRECATED_admins;
-
-    // Immutables are not part of proxy storage; stored in implementation bytecode only.
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  IMMUTABLES  --------------------------------------
+    //--------------------------------------------------------------------------------------
     IBlacklister public immutable blacklister;
     INodeOperatorManager public immutable nodeOperatorManager;
     address public immutable stakingManagerContractAddress;
@@ -66,6 +61,10 @@ contract AuctionManager is
     event WhitelistDisabled(bool whitelistStatus);
     event WhitelistEnabled(bool whitelistStatus);
 
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  ERRORS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
+
     error AddressZero();
     error InvalidBidSize();
     error NotWhitelisted();
@@ -80,6 +79,10 @@ contract AuctionManager is
     error InvalidMaxBid();
     error InvalidWhitelistAmount();
     error IncorrectCaller();
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  CONSTRUCTOR  ----------------------------------
+    //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _roleRegistry, address _blacklister, address _nodeOperatorManagerContract, address _stakingManagerContractAddress, address _membershipManagerContractAddress, address _treasury) RolesLibrary(_roleRegistry) {
@@ -213,13 +216,6 @@ contract AuctionManager is
         bid.isActive = true;
         numberOfActiveBids++;
         emit BidReEnteredAuction(_bidId);
-    }
-
-    function transferAccumulatedRevenue() external onlyHousekeepingOperations {
-        uint256 transferAmount = accumulatedRevenue;
-        accumulatedRevenue = 0;
-        (bool sent, ) = treasury.call{value: transferAmount}("");
-        if (!sent) revert EtherTransferFailed();
     }
 
     /// @notice Disables the whitelisting phase of the bidding

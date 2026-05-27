@@ -60,8 +60,10 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     //---------------------------------  STORAGE  ----------------------------------
     //--------------------------------------------------------------------------------------
 
-    IeETH private DEPRECATED_eETH;
-    ILiquidityPool private DEPRECATED_liquidityPool;
+    // deprecated storage slots
+    uint160 private __gap_0;
+    uint160 private __gap_1;
+
     bool public paused;
 
     //--------------------------------------------------------------------------------------

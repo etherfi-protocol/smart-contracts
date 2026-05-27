@@ -823,7 +823,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         vm.startPrank(owner);
 
-        address impl = address(new BucketRateLimiter(address(roleRegistryInstance)));
+        address impl = address(new BucketRateLimiter());
         bucketRateLimiter = BucketRateLimiter(address(new UUPSProxy(impl, "")));
         bucketRateLimiter.initialize();
         vm.stopPrank();

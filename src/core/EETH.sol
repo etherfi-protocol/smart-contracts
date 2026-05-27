@@ -19,7 +19,13 @@ import "@etherfi/governance/utils/PausableUntil.sol";
 
 contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, IERC20PermitUpgradeable, IeETH, AssetRecovery, RolesLibrary, RateLimitedToken {
     using CountersUpgradeable for CountersUpgradeable.Counter;
-    ILiquidityPool private DEPRECATED_liquidityPool;
+
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  STATE-VARIABLES  ----------------------------------
+    //--------------------------------------------------------------------------------------
+
+    // deprecated storage slot
+    uint160 private __gap_0;
 
     uint256 public totalShares;
     mapping (address => uint256) public shares;
@@ -27,7 +33,9 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     mapping (address => CountersUpgradeable.Counter) private _nonces;
     bool public paused;
 
-    bytes32 private constant _PERMIT_TYPEHASH = keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  IMMUTABLES  --------------------------------------
+    //--------------------------------------------------------------------------------------
 
     // Cache the domain separator as an immutable value, but also store the chain id that it corresponds to, in order to
     // invalidate the cached domain separator if the chain id changes.
@@ -43,6 +51,9 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     IBlacklister public immutable blacklister;
     // `roleRegistry` is inherited from RolesLibrary; `rateLimiter` from RateLimitedToken.
 
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  CONSTANTS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
     /// @dev Protocol-wide circuit breakers on supply changes. Mints and burns
     ///      each draw from their own global bucket via `consumeToken`,
     ///      independent of (and additive with) the per-address buckets. A
@@ -54,9 +65,19 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     bytes32 public constant EETH_MINT_LIMIT_ID = keccak256("EETH_MINT_LIMIT_ID");
     bytes32 public constant EETH_BURN_LIMIT_ID = keccak256("EETH_BURN_LIMIT_ID");
 
+    bytes32 private constant _PERMIT_TYPEHASH = keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  EVENTS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
+
     event Paused();
     event Unpaused();
     event TransferShares( address indexed from, address indexed to, uint256 sharesValue);
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  ERRORS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
 
     error AddressZero();
     error IncorrectCaller();
@@ -67,6 +88,10 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     error InvalidSignature();
     error TransferAmountExceedsBalance();
     error ContractPaused();
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  CONSTRUCTOR  ----------------------------------
+    //--------------------------------------------------------------------------------------
 
     constructor(address _liquidityPool, address _roleRegistry, address _blacklister, address _rateLimiter)
         RolesLibrary(_roleRegistry)
@@ -88,6 +113,10 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
 
         _disableInitializers();
     }
+
+    //--------------------------------------------------------------------------------------
+    //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
+    //--------------------------------------------------------------------------------------
 
     function initialize(address _liquidityPool) external initializer {
         if (_liquidityPool == address(0)) revert AddressZero();

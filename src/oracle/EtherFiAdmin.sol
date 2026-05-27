@@ -29,40 +29,40 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
         bool exists;
     }
 
-    IEtherFiOracle private DEPRECATED_etherFiOracle;
-    IStakingManager private DEPRECATED_stakingManager;
-    IAuctionManager private DEPRECATED_auctionManager;
-    IEtherFiNodesManager private DEPRECATED_etherFiNodesManager;
-    ILiquidityPool private DEPRECATED_liquidityPool;
-    IMembershipManager private DEPRECATED_membershipManager;
-    IWithdrawRequestNFT private DEPRECATED_withdrawRequestNft;
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  STATE-VARIABLES  ----------------------------------
+    //--------------------------------------------------------------------------------------
 
-    mapping(address => bool) private DEPRECATED_admins;
+    // deprecated storage slots
+    uint256[8] private __gap_0;
 
     uint32 public lastHandledReportRefSlot;
     uint32 public lastHandledReportRefBlock;
-    uint32 public __gap_0;
+
+    // deprecated storage slots
+    uint32 public __gap_1;
 
     int32 public acceptableRebaseAprInBps;
 
     uint16 public postReportWaitTimeInSlots;
     uint32 public lastAdminExecutionBlock;
 
-    mapping(address => bool) private DEPRECATED_pausers;
+    // deprecated storage slots
+    uint256 private __gap_2;
 
     mapping(bytes32 => TaskStatus) public validatorApprovalTaskStatus;
     uint16 validatorTaskBatchSize;
 
-    address private DEPRECATED_roleRegistry;
+    // deprecated storage slots
+    uint160 private __gap_3;
 
     uint256 public lastStaleReportFinalizationBlock;
     uint256 public maxFinalizedWithdrawalAmountPerDay;
     uint256 public maxNumValidatorsToApprovePerDay;
 
-    // Protocol fees must not exceed 1/MAX_PROTOCOL_FEE_INV_RATIO of total rewards (currently 20%).
-    uint256 public constant MAX_PROTOCOL_FEE_INV_RATIO = 5;
-    uint256 public constant STALE_REPORT_FINALIZATION_COOLDOWN = 7200; // 1 day
-    uint256 public constant BASIS_POINTS_DENOMINATOR = 10_000;
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  IMMUTABLES  --------------------------------------
+    //--------------------------------------------------------------------------------------
 
     IEtherFiOracle public immutable etherFiOracle;
     IStakingManager public immutable stakingManager;
@@ -80,6 +80,15 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
     uint256 public immutable maxAcceptableNumValidatorsToApprovePerDay;
     uint256 public immutable staleOracleReportBlockWindow;
 
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  CONSTANTS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    // Protocol fees must not exceed 1/MAX_PROTOCOL_FEE_INV_RATIO of total rewards (currently 20%).
+    uint256 public constant MAX_PROTOCOL_FEE_INV_RATIO = 5;
+    uint256 public constant STALE_REPORT_FINALIZATION_COOLDOWN = 7200; // 1 day
+    uint256 public constant BASIS_POINTS_DENOMINATOR = 10_000;
+
     struct ConstructorAddresses {
         address etherFiOracle;
         address stakingManager;
@@ -92,12 +101,20 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
         address priorityWithdrawalQueue;
     }
 
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  EVENTS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
+
     event AdminUpdated(address _address, bool _isAdmin);
     event AdminOperationsExecuted(address indexed _address, bytes32 indexed _reportHash);
 
     event ValidatorApprovalTaskCreated(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators);
     event ValidatorApprovalTaskCompleted(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators);
     event ValidatorApprovalTaskInvalidated(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators);
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  ERRORS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
 
     error InvalidMaxAcceptableFinalizedWithdrawalAmount();
     error InvalidMaxNumberOfRequestsToFinalizePerReport();
@@ -117,6 +134,10 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
     error TaskAlreadyExists();
     error InvalidValidatorSize();
     error InvalidArrayLengths();
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  CONSTRUCTOR  ----------------------------------
+    //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(
@@ -152,6 +173,10 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
 
         _disableInitializers();
     }
+
+    //--------------------------------------------------------------------------------------
+    //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
+    //--------------------------------------------------------------------------------------
 
     function initialize(
         address _etherFiOracle,
