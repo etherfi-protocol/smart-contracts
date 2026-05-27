@@ -266,7 +266,10 @@ contract ProtocolInvariantsHandler is StdUtils {
             ghost_ledgerTPE += int256(uint256(amount));     // F-014
             callCounts["deposit"]++;
         } catch (bytes memory err) {
-            _recordRevert("depositEth", err);
+            // Counter prefix MUST match the success-counter key so the
+            // coverage summary `callCounts("deposit_revert")` resolves
+            // to the same `_concat`-produced key.
+            _recordRevert("deposit", err);
         }
     }
 
@@ -341,7 +344,7 @@ contract ProtocolInvariantsHandler is StdUtils {
             _checkNonExempt("burnEEthShares", before_, /*organicPath=*/true);
             callCounts["burn"]++;
         } catch (bytes memory err) {
-            _recordRevert("burnEEthShares", err);
+            _recordRevert("burn", err);     // align with `callCounts["burn"]` success key
         }
     }
 
@@ -644,9 +647,15 @@ contract ProtocolInvariantsHandler is StdUtils {
             callCounts["drainShares_skipped"]++;
             return;
         }
-        // Leave a single-digit residual (some number 1..9) so we explore
-        // the boundary of the rate-precision regime.
-        uint256 burnAmt = callerShares - (callerSeed % 9 + 1);
+        // Leave a residual (1 .. min(9, callerShares - 1)) so we explore
+        // the boundary of the rate-precision regime. The cap prevents
+        // underflow when callerShares is itself in the single-digit zone
+        // (otherwise `callerShares - (callerSeed % 9 + 1)` could panic
+        // under fail-on-revert=false, silently disabling the op).
+        uint256 maxResidual = callerShares - 1;
+        if (maxResidual > 9) maxResidual = 9;
+        uint256 residual = (callerSeed % maxResidual) + 1;
+        uint256 burnAmt = callerShares - residual;
 
         Snapshot memory before_ = _snap();
         vm.prank(caller);

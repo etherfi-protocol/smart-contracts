@@ -627,21 +627,15 @@ contract FrozenRateWithdrawalHandler is StdUtils {
     /// finalize is necessary but covers only the read-after-success; a
     /// finalize that pushed an OOB value AND reverted would not surface
     /// via the per-call read.
+    /// `Checkpoints.Trace224` exposes no direct iterator over the (key,
+    /// value) pairs, so we sample the trace via `lowerLookup(tokenId)`
+    /// for every tokenId the handler has tracked. Each tracked tokenId
+    /// belongs to exactly one finalize batch and every finalize batch
+    /// covers at least one tracked tokenId, so the per-tokenId loop is
+    /// equivalent to walking the trace.
     function verifyAllFinalizationCheckpointsInBounds() external view returns (bool ok, uint256 firstOOB) {
-        uint256 len = wrn.finalizationRatesLength();
         uint256 lo = wrn.minAcceptableShareRate();
         uint256 hi = wrn.maxAcceptableShareRate();
-        for (uint256 i = 0; i < len; i++) {
-            // Read by walking through tokenId space - rates form a
-            // monotonically-keyed Trace224, so lowerLookup(N) gives the
-            // checkpoint at-or-after N. We sample at every (last + 1)
-            // breakpoint by re-reading via known finalized tokenIds.
-            // For tokenIds the handler tracked.
-            // Conservative: just sample the live rate via frozenRateFor
-            // for every tracked tokenId we've observed.
-        }
-        // Fall back to the per-tokenId check (sufficient since every
-        // finalize covers at least one tokenId).
         for (uint256 i = 0; i < wrnTokenIds.length; i++) {
             uint256 t = wrnTokenIds[i];
             if (!ghost_wrnFrozenRateAtFinalizeRecorded[t]) continue;
