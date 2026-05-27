@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity >=0.5.0;
 
-import {OperatorSet} from "../eigenlayer-libraries/OperatorSetLib.sol";
-import "./IPauserRegistry.sol";
-import "./IStrategy.sol";
-import "./IAVSRegistrar.sol";
-import "./ISemVerMixin.sol";
+import {OperatorSet} from "@etherfi/eigenlayer-libraries/OperatorSetLib.sol";
+import "@etherfi/eigenlayer-interfaces/IPauserRegistry.sol";
+import "@etherfi/eigenlayer-interfaces/IStrategy.sol";
+import "@etherfi/eigenlayer-interfaces/IAVSRegistrar.sol";
+import "@etherfi/eigenlayer-interfaces/ISemVerMixin.sol";
 
 interface IAllocationManagerErrors {
     /// Input Validation

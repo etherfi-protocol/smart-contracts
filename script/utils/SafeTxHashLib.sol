@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import "./StringHelpers.sol";
+import "@scripts/utils/StringHelpers.sol";
 
 /**
  * @title Safe Transaction Hash Library

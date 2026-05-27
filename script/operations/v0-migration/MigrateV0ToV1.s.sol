@@ -3,8 +3,8 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Script.sol";
 import "forge-std/StdJson.sol";
-import "../../../src/interfaces/IMembershipManager.sol";
-import "./MembershipV0Migrator.sol";
+import "@etherfi/membership/interfaces/IMembershipManager.sol";
+import "@scripts/operations/v0-migration/MembershipV0Migrator.sol";
 
 /// @notice Deploys MembershipV0Migrator and walks the remaining V0 membership
 ///         NFTs through `migrateFromV0ToV1` in batches. After all batches, the

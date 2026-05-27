@@ -3,16 +3,16 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
 import "forge-std/console.sol";
-import "../../src/interfaces/ILiquidityPool.sol";
-import {LiquidityPool} from "../../src/LiquidityPool.sol";
-import "../../src/interfaces/IStakingManager.sol";
-import "../../src/interfaces/IEtherFiNodesManager.sol";
-import "../../src/interfaces/IAuctionManager.sol";
-import "../../src/interfaces/INodeOperatorManager.sol";
-import {NodeOperatorManager} from "../../src/NodeOperatorManager.sol";
-import "../../src/interfaces/IEtherFiNode.sol";
-import "../../src/interfaces/IRoleRegistry.sol";
-import {StakingManager} from "../../src/StakingManager.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import {LiquidityPool} from "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/staking/interfaces/IStakingManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
+import "@etherfi/staking/interfaces/IAuctionManager.sol";
+import "@etherfi/staking/interfaces/INodeOperatorManager.sol";
+import {NodeOperatorManager} from "@etherfi/staking/NodeOperatorManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNode.sol";
+import "@etherfi/governance/interfaces/IRoleRegistry.sol";
+import {StakingManager} from "@etherfi/staking/StakingManager.sol";
 
 /**
  * @title Staking Part 1: Setup & Get EigenPod Address

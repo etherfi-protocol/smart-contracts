@@ -4,10 +4,10 @@ pragma solidity ^0.8.13;
 import "forge-std/StdUtils.sol";
 import "forge-std/Vm.sol";
 
-import "../../../src/LiquidityPool.sol";
-import "../../../src/EETH.sol";
-import "../../../src/WeETH.sol";
-import "../../../src/EtherFiRedemptionManager.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/core/EETH.sol";
+import "@etherfi/core/WeETH.sol";
+import "@etherfi/withdrawals/EtherFiRedemptionManager.sol";
 
 /// @notice Stateful-invariant handler for EtherFiRedemptionManager + BucketLimiter.
 ///         Scoped to the ETH redemption path. The stETH path requires a mainnet

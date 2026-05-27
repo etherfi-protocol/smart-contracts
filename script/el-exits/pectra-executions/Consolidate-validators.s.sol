@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import "../../../src/EtherFiTimelock.sol";
-import "../../../src/interfaces/IEtherFiNode.sol";
-import "../../../src/EtherFiNodesManager.sol";
-import {IEigenPod, IEigenPodTypes} from "../../../src/eigenlayer-interfaces/IEigenPod.sol";
+import "@etherfi/governance/EtherFiTimelock.sol";
+import "@etherfi/staking/interfaces/IEtherFiNode.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import {IEigenPod, IEigenPodTypes} from "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 

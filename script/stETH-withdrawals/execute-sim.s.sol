@@ -3,7 +3,7 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
-import {Utils} from "../utils/utils.sol";
+import {Utils} from "@scripts/utils/utils.sol";
 
 contract ExecuteSim is Utils {
     function run() external {

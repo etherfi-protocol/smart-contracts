@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
+import "@tests/TestSetup.sol";
 import "forge-std/Test.sol";
 
-import "../src/utils/ReentrancyGuardNamespaced.sol";
-import "../src/WithdrawRequestNFT.sol";
+import "@etherfi/governance/utils/ReentrancyGuardNamespaced.sol";
+import "@etherfi/withdrawals/WithdrawRequestNFT.sol";
 
 /// @dev Attacker contract that owns two withdrawal NFTs. On receiving ETH during
 ///      a claimWithdraw call, it attempts to re-enter WithdrawRequestNFT via

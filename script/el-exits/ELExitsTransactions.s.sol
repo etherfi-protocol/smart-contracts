@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import "../../test/TestSetup.sol";
-import "../../src/EtherFiTimelock.sol";
-import "../../src/EtherFiNode.sol";
-import "../../src/EtherFiNodesManager.sol";
-import "../../src/LiquidityPool.sol";
-import "../../src/StakingManager.sol";
-import "../../src/EtherFiOracle.sol";
-import "../../src/EtherFiAdmin.sol";
-import "../../src/EETH.sol";
-import "../../src/WeETH.sol";
-import "../../src/RoleRegistry.sol";
-import "../../src/EtherFiRateLimiter.sol";
-import "../../lib/openzeppelin-contracts/contracts/access/IAccessControl.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/governance/EtherFiTimelock.sol";
+import "@etherfi/staking/EtherFiNode.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/staking/StakingManager.sol";
+import "@etherfi/oracle/EtherFiOracle.sol";
+import "@etherfi/oracle/EtherFiAdmin.sol";
+import "@etherfi/core/EETH.sol";
+import "@etherfi/core/WeETH.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
+import "@openzeppelin/contracts/access/IAccessControl.sol";
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 

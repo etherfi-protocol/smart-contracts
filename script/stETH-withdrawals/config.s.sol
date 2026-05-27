@@ -3,10 +3,10 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
-import {Utils} from "../utils/utils.sol";
-import "../../src/EtherFiRedemptionManager.sol";
-import "../../src/LiquidityPool.sol";
-import "../../src/EtherFiTimelock.sol";
+import {Utils} from "@scripts/utils/utils.sol";
+import "@etherfi/withdrawals/EtherFiRedemptionManager.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/governance/EtherFiTimelock.sol";
 import "forge-std/Test.sol";
 
 // Command to run this script: forge script script/stETH-withdrawals/config.s.sol --fork-url $MAINNET_RPC_URL -vvvv

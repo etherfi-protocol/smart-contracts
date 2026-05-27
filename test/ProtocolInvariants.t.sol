@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
-import "../src/LiquidityPool.sol";
-import "../src/WeETH.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/core/WeETH.sol";
 
 /// @notice Tests for the two inlined protocol invariants:
 ///         - Invariant 1 (in WeETH._afterTokenTransfer):

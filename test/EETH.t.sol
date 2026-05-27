@@ -1,10 +1,10 @@
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
-import "./TestERC20.sol";
-import "./TestERC721.sol";
-import "../src/helpers/Blacklister.sol";
-import "../src/utils/PausableUntil.sol";
+import "@tests/TestSetup.sol";
+import "@tests/TestERC20.sol";
+import "@tests/TestERC721.sol";
+import "@etherfi/governance/Blacklister.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
 
 // Helper contract to force ETH into a contract using selfdestruct
 contract ForceETHSender {

@@ -2,14 +2,14 @@
 pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
-import {EtherFiNode} from "../../../src/EtherFiNode.sol";
-import {EtherFiRedemptionManager} from "../../../src/EtherFiRedemptionManager.sol";
-import {EtherFiRestaker} from "../../../src/EtherFiRestaker.sol";
-import {EtherFiRewardsRouter} from "../../../src/EtherFiRewardsRouter.sol";
-import {Liquifier} from "../../../src/Liquifier.sol";
-import {WithdrawRequestNFT} from "../../../src/WithdrawRequestNFT.sol";
-import {EtherFiViewer} from "../../../src/helpers/EtherFiViewer.sol";
-import {Utils} from "../../utils/utils.sol";
+import {EtherFiNode} from "@etherfi/staking/EtherFiNode.sol";
+import {EtherFiRedemptionManager} from "@etherfi/withdrawals/EtherFiRedemptionManager.sol";
+import {EtherFiRestaker} from "@etherfi/restaking/EtherFiRestaker.sol";
+import {EtherFiRewardsRouter} from "@etherfi/rewards/EtherFiRewardsRouter.sol";
+import {Liquifier} from "@etherfi/deposits/Liquifier.sol";
+import {WithdrawRequestNFT} from "@etherfi/withdrawals/WithdrawRequestNFT.sol";
+import {EtherFiViewer} from "@etherfi/helpers/EtherFiViewer.sol";
+import {Utils} from "@scripts/utils/utils.sol";
 
 /**
  * @title DeployReauditedContracts

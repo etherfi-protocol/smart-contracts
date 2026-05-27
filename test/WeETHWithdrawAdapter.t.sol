@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
-import "../src/helpers/WeETHWithdrawAdapter.sol";
-import "../src/helpers/Blacklister.sol";
-import "../src/interfaces/IWeETHWithdrawAdapter.sol";
-import "../src/utils/PausableUntil.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/withdrawals/WeETHWithdrawAdapter.sol";
+import "@etherfi/governance/Blacklister.sol";
+import "@etherfi/withdrawals/interfaces/IWeETHWithdrawAdapter.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
 
 contract WeETHWithdrawAdapterTest is TestSetup {
     WeETHWithdrawAdapter public adapter;

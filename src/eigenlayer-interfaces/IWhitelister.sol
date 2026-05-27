@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity >=0.5.0;
 
-import "./IStrategyManager.sol";
-import "./IStrategy.sol";
-import "./IDelegationManager.sol";
+import "@etherfi/eigenlayer-interfaces/IStrategyManager.sol";
+import "@etherfi/eigenlayer-interfaces/IStrategy.sol";
+import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
 // import "../../../script/whitelist/Staker.sol";
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";

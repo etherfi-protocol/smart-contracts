@@ -4,9 +4,9 @@ pragma solidity ^0.8.13;
 import "forge-std/StdUtils.sol";
 import "forge-std/Vm.sol";
 
-import "../../../src/LiquidityPool.sol";
-import "../../../src/EETH.sol";
-import "../../../src/WeETH.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/core/EETH.sol";
+import "@etherfi/core/WeETH.sol";
 
 /// @notice Stateful-invariant handler for PR #428's two inlined invariants AND
 ///         the global protocol-accounting conservation laws those two invariants
@@ -791,8 +791,10 @@ contract ProtocolInvariantsHandler is StdUtils {
         if (sharesToBurn >= ts) { callCounts["segClaim_skipped"]++; return; }
 
         // No `_checkNonExempt` here - this is the EXEMPT path.
+        // Pass `_shareOfEEth = sharesToBurn` so the new guards are no-ops and the handler
+        // reproduces the pre-Option-5 burn behavior exactly.
         vm.prank(wrn);
-        try lp.withdraw(amount, rate) {
+        try lp.withdraw(amount, rate, sharesToBurn) {
             ghost_ledgerTPE -= int256(amount);   // ETH leaves LP accounting
             callCounts["segClaim"]++;
         } catch (bytes memory err) {
