@@ -133,13 +133,13 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     // which bricks the path; seeded via the OPERATION_MULTISIG Safe tx (Batch 3) after
     // the upgrade batch grants it OPERATION_MULTISIG_ROLE. Dummy values for now.
     uint256 constant LP_MIN_WITHDRAW_AMOUNT = 100_000 gwei; // 0.0001 ether
-    uint256 constant LP_MAX_WITHDRAW_AMOUNT = 3_000 ether;
+    uint256 constant LP_MAX_WITHDRAW_AMOUNT = 1_000 ether;
 
     // deposits — Liquifier
     address constant STETH_PRICE_FEED = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812;
     address constant STETH_ETH_CURVE_POOL = 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022;
     uint256 constant LIQUIFIER_MIN_DISCOUNT_BPS = 100;
-    uint256 constant LIQUIFIER_STALE_PRICE_WINDOW = 1 days;
+    uint256 constant LIQUIFIER_STALE_PRICE_WINDOW = 7 days;
     uint256 constant LIQUIFIER_MAX_PRICE_DEVIATION_BPS = 500;
 
     // oracle — EtherFiAdmin

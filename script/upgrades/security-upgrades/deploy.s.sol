@@ -80,13 +80,13 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
     address public constant STETH_PRICE_FEED = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812; // Chainlink stETH/ETH
     address public constant STETH_ETH_CURVE_POOL = 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022;
     uint256 public constant LIQUIFIER_MIN_DISCOUNT_BPS = 100;          // 1% floor
-    uint256 public constant LIQUIFIER_STALE_PRICE_WINDOW = 1 days;       // Chainlink stETH/ETH heartbeat is 24h; 1d is the tight bound (see H5)
+    uint256 public constant LIQUIFIER_STALE_PRICE_WINDOW = 7 days;
     uint256 public constant LIQUIFIER_MAX_PRICE_DEVIATION_BPS = 500;   // 5%
 
     // oracle — EtherFiAdmin immutable params
     int256  public constant ADMIN_MAX_REBASE_APR_BPS = 1_000;           // 10% absolute ceiling
     uint256 public constant ADMIN_MAX_VALIDATOR_TASK_BATCH_SIZE = 100; // 50 Currently
-    uint256 public constant ADMIN_STALE_ORACLE_REPORT_BLOCK_WINDOW = 7200 * 14; // 14 days @ 12s blocks (7200 blocks/day × 14)
+    uint256 public constant ADMIN_STALE_ORACLE_REPORT_BLOCK_WINDOW = 7200 * 14; // ~14 days @ 12s blocks
     uint256 public constant ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY = 100_000 ether;
     uint256 public constant ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY = 1_000;
     uint256 public constant ADMIN_MAX_REQUESTS_TO_FINALIZE_PER_REPORT = 2_000;
