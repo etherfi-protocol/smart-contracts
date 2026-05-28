@@ -55,10 +55,12 @@ import {Utils} from "@scripts/utils/utils.sol";
  * `run()` follows the standard upgrade-script pattern:
  *   1. verifyDeployedBytecode      — fresh deploys match the recorded impls
  *   2. takePreUpgradeSnapshots     — owners + paused, per upgraded proxy
- *   3. executeRoleGrants           — direct from ETHERFI_UPGRADE_ADMIN (RoleRegistry owner, no timelock).
- *                                    Runs BEFORE the upgrade so UPGRADE_TIMELOCK already holds
- *                                    UPGRADE_TIMELOCK_ROLE when Batch A invokes the onlyUpgradeTimelock
- *                                    initializers (LiquidityPool.initializeOnUpgradeV2,
+ *   3. executeRoleGrants           — Batch G (UPGRADE_TIMELOCK, 10d). grantRole is owner-gated and the
+ *                                    registry owner IS the UPGRADE_TIMELOCK, so grants are their own
+ *                                    timelock batch (proposed/executed by ETHERFI_UPGRADE_ADMIN, the
+ *                                    timelock admin). Must EXECUTE before Batch A so UPGRADE_TIMELOCK
+ *                                    already holds UPGRADE_TIMELOCK_ROLE when Batch A invokes the
+ *                                    onlyUpgradeTimelock initializers (LiquidityPool.initializeOnUpgradeV2,
  *                                    WithdrawRequestNFT.initializeShareRateFreezeUpgrade). Role IDs are
  *                                    hardcoded (below) because the pre-upgrade registry impl doesn't
  *                                    expose the *_ROLE() getters yet.
@@ -70,6 +72,12 @@ import {Utils} from "@scripts/utils/utils.sol";
  *   8. executeLpWithdrawBounds     — direct from ETHERFI_OPERATING_ADMIN (operating multisig, no timelock)
  *   9. executeOperatingConfig      — Batch B (OPERATING_TIMELOCK, 2d)
  *  10. verifyOperatingConfig       — rate-limiter buckets + pause durations set + roles granted + LP withdraw bounds
+ *
+ *  11. executeLegacyRoleRevocations — Batch R (UPGRADE_TIMELOCK, 10d). After everything is upgraded,
+ *                                    revoke every holder of the legacy (pre-upgrade) granular roles,
+ *                                    enumerated live via roleHolders(). The upgraded contracts no longer
+ *                                    check these roles, so this is pure cleanup; revokeRole is owner-gated.
+ *  12. verifyLegacyRolesRevoked    — assert roleHolders() is empty for every legacy role
  */
 contract SecurityUpgradesScript is Script, Deployed, Utils {
     // ─────────────────────────────────────────────────────────────────────
@@ -188,6 +196,47 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     bytes32 constant EIGENPOD_OPERATIONS_ROLE     = keccak256("EIGENPOD_OPERATIONS_ROLE");     // 0x1d35f3653d06c44a47eae771269a6fec1babec5f5c25127bb524f5fefc5673e7
 
     // ─────────────────────────────────────────────────────────────────────
+    // LEGACY ROLE IDs — the pre-upgrade granular roles, enumerated from every
+    // keccak256("..._ROLE") / PROTOCOL_PAUSER/UNPAUSER constant declared across
+    // the master-branch src/ contracts (the currently-deployed code). After this
+    // upgrade every gated function routes through the 9 RolesLibrary roles above,
+    // so these 31 are orphaned; executeLegacyRoleRevocations() revokes their
+    // holders. NONE of these collide with the 9 new role IDs (distinct strings),
+    // so revoking them never touches the fresh grants from executeRoleGrants.
+    // ─────────────────────────────────────────────────────────────────────
+    bytes32 constant L_PROTOCOL_PAUSER                                       = keccak256("PROTOCOL_PAUSER");
+    bytes32 constant L_PROTOCOL_UNPAUSER                                     = keccak256("PROTOCOL_UNPAUSER");
+    bytes32 constant L_EETH_OPERATING_ADMIN_ROLE                             = keccak256("EETH_OPERATING_ADMIN_ROLE");
+    bytes32 constant L_WEETH_OPERATING_ADMIN_ROLE                            = keccak256("WEETH_OPERATING_ADMIN_ROLE");
+    bytes32 constant L_LIQUIDITY_POOL_ADMIN_ROLE                             = keccak256("LIQUIDITY_POOL_ADMIN_ROLE");
+    bytes32 constant L_LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE                = keccak256("LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE");
+    bytes32 constant L_LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE                 = keccak256("LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE");
+    bytes32 constant L_STAKING_MANAGER_ADMIN_ROLE                            = keccak256("STAKING_MANAGER_ADMIN_ROLE");
+    bytes32 constant L_STAKING_MANAGER_NODE_CREATOR_ROLE                     = keccak256("STAKING_MANAGER_NODE_CREATOR_ROLE");
+    bytes32 constant L_STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE            = keccak256("STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE");
+    bytes32 constant L_ETHERFI_NODES_MANAGER_ADMIN_ROLE                      = keccak256("ETHERFI_NODES_MANAGER_ADMIN_ROLE");
+    bytes32 constant L_ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE           = keccak256("ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE");
+    bytes32 constant L_ETHERFI_NODES_MANAGER_POD_PROVER_ROLE                 = keccak256("ETHERFI_NODES_MANAGER_POD_PROVER_ROLE");
+    bytes32 constant L_ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE             = keccak256("ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE");
+    bytes32 constant L_ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE            = keccak256("ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE");
+    bytes32 constant L_ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE           = keccak256("ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE");
+    bytes32 constant L_ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE              = keccak256("ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE");
+    bytes32 constant L_ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE                    = keccak256("ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE");
+    bytes32 constant L_ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE             = keccak256("ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE");
+    bytes32 constant L_ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE                 = keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE");
+    bytes32 constant L_ETHERFI_RATE_LIMITER_ADMIN_ROLE                       = keccak256("ETHERFI_RATE_LIMITER_ADMIN_ROLE");
+    bytes32 constant L_WITHDRAW_REQUEST_NFT_ADMIN_ROLE                       = keccak256("WITHDRAW_REQUEST_NFT_ADMIN_ROLE");
+    bytes32 constant L_IMPLICIT_FEE_CLAIMER_ROLE                             = keccak256("IMPLICIT_FEE_CLAIMER_ROLE");
+    bytes32 constant L_PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE                  = keccak256("PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE");
+    bytes32 constant L_PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE      = keccak256("PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE");
+    bytes32 constant L_PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE        = keccak256("PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE");
+    bytes32 constant L_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE      = keccak256("CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE");
+    bytes32 constant L_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_CLAIM_DELAY_SETTER_ROLE = keccak256("CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_CLAIM_DELAY_SETTER_ROLE");
+    bytes32 constant L_ETHERFI_REWARDS_ROUTER_ADMIN_ROLE                     = keccak256("ETHERFI_REWARDS_ROUTER_ADMIN_ROLE");
+    bytes32 constant L_ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE            = keccak256("ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE");
+    bytes32 constant L_WEETH_WITHDRAW_ADAPTER_ADMIN_ROLE                     = keccak256("WEETH_WITHDRAW_ADAPTER_ADMIN_ROLE");
+
+    // ─────────────────────────────────────────────────────────────────────
     // OPERATIONAL PARAMETERS
     // ─────────────────────────────────────────────────────────────────────
     // core — Token-side global buckets (consumeToken on eETH/weETH paths).
@@ -291,12 +340,10 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         verifyDeployedBytecode();
         takePreUpgradeSnapshots();
 
-        // Grants run BEFORE the upgrade: Batch A ends with the onlyUpgradeTimelock
-        // initializers (LiquidityPool.initializeOnUpgradeV2,
-        // WithdrawRequestNFT.initializeShareRateFreezeUpgrade), which require
-        // UPGRADE_TIMELOCK to already hold UPGRADE_TIMELOCK_ROLE on the new
-        // RoleRegistry impl. grantRole is onlyOwner (ETHERFI_UPGRADE_ADMIN), so it
-        // is independent of the timelock batch and can be applied first.
+        // Batch G (role grants) must EXECUTE before Batch A: Batch A ends with the
+        // onlyUpgradeTimelock initializers, which need UPGRADE_TIMELOCK to already
+        // hold UPGRADE_TIMELOCK_ROLE. grantRole is owner-gated and the registry owner
+        // is the UPGRADE_TIMELOCK, so the grants are their own timelock batch.
         executeRoleGrants();
 
         executeUpgrade();
@@ -308,6 +355,13 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
 
         executeOperatingConfig();
         verifyOperatingConfig();
+
+        // After everything is upgraded + configured, revoke every holder of the
+        // legacy (pre-upgrade) granular roles. The upgraded contracts route all
+        // gating through the 9 RolesLibrary roles now, so the legacy roles are
+        // orphaned and this is pure cleanup. revokeRole is owner-gated (UPGRADE_TIMELOCK).
+        executeLegacyRoleRevocations();
+        verifyLegacyRolesRevoked();
     }
 
     /// @dev Fail loudly the moment a required constant is unset.
@@ -627,7 +681,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
 
     /// @dev Capture `staticcall` returns for every selector; silently skip the
     ///      ones that revert (e.g. immutable getters that didn't exist on the
-    ///      old impl). Only the surviving selectors get diffed in step 5.
+    ///      old impl). Only the surviving selectors get diffed in step 6.
     function _safeSnapshot(address target, bytes4[] memory selectors)
         internal
         view
@@ -1364,30 +1418,32 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     }
 
     //--------------------------------------------------------------------------------------
-    // STEP 3: executeRoleGrants
+    // STEP 3: executeRoleGrants — Batch G (UPGRADE_TIMELOCK, 10d)
     //
-    // Runs BEFORE executeUpgrade. Batch A ends by calling the onlyUpgradeTimelock
+    // Must EXECUTE before Batch A. Batch A ends by calling the onlyUpgradeTimelock
     // initializers (LiquidityPool.initializeOnUpgradeV2,
     // WithdrawRequestNFT.initializeShareRateFreezeUpgrade); those revert unless
-    // UPGRADE_TIMELOCK already holds UPGRADE_TIMELOCK_ROLE on the new RoleRegistry
-    // impl. So the grants must land first.
+    // UPGRADE_TIMELOCK already holds UPGRADE_TIMELOCK_ROLE. So the grants must land first.
     //
-    // RoleRegistry.grantRole is gated by `onlyOwner` on the registry — the
-    // registry's owner is ETHERFI_UPGRADE_ADMIN (the upgrade multisig), NOT any
-    // timelock — so this grant is independent of Batch A and emitted as one Safe
-    // transaction directly from that multisig, with no timelock wrapping.
+    // grantRole is owner-gated (Solady setRole -> contract owner). The RoleRegistry
+    // owner IS the UPGRADE_TIMELOCK (the same authority whose onlyOwner gate lets
+    // Batch A swap the registry impl) — NOT the ETHERFI_UPGRADE_ADMIN multisig. So
+    // the grants are emitted as their own UPGRADE_TIMELOCK batch (Batch G), proposed
+    // and executed by ETHERFI_UPGRADE_ADMIN (the timelock's admin), exactly like
+    // Batch A. The grant calldata runs against the pre-upgrade registry impl, which
+    // shares Solady's role storage, so the grants are visible to the new impl after
+    // Batch A swaps it in.
     //
     // Role IDs are the hardcoded keccak256 constants above (mirroring
-    // RoleRegistry.sol), NOT roleRegistry.<ROLE>() calls: at this point the
-    // registry is still on its pre-upgrade impl, which doesn't expose those
-    // getters.
+    // RoleRegistry.sol), NOT roleRegistry.<ROLE>() calls: the pre-upgrade impl
+    // doesn't expose those getters.
     //--------------------------------------------------------------------------------------
     function executeRoleGrants() public {
-        console2.log("=== Step 3: Executing Role Grants (ETHERFI_UPGRADE_ADMIN, no timelock) ===");
+        console2.log("=== Step 3: Executing Role Grants (Batch G, UPGRADE_TIMELOCK, 10d) ===");
 
-        address[] memory targets    = new address[](9);
-        uint256[] memory values     = new uint256[](9);
-        bytes[]   memory calldatas  = new bytes[](9);
+        address[] memory targets = new address[](9);
+        uint256[] memory values  = new uint256[](9);
+        bytes[]   memory data    = new bytes[](9);
 
         bytes32[9] memory roles = [
             UPGRADE_TIMELOCK_ROLE,
@@ -1412,28 +1468,31 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
             HOLDER_EIGENPOD_OPERATIONS_ROLE
         ];
         for (uint256 k = 0; k < 9; k++) {
-            targets[k]   = ROLE_REGISTRY;
-            calldatas[k] = abi.encodeWithSelector(RoleRegistry.grantRole.selector, roles[k], holders[k]);
+            targets[k] = ROLE_REGISTRY;
+            data[k]    = abi.encodeWithSelector(RoleRegistry.grantRole.selector, roles[k], holders[k]);
         }
 
-        writeSafeJson(OUT_DIR, "role_grants.json", ETHERFI_UPGRADE_ADMIN, targets, values, calldatas, 1);
-
-        console2.log("=== Dry-running role grants on fork ===");
-        vm.startPrank(ETHERFI_UPGRADE_ADMIN);
-        for (uint256 k = 0; k < 9; k++) {
-            roleRegistry.grantRole(roles[k], holders[k]);
-        }
-        vm.stopPrank();
-        console2.log("[OK] all 9 role grants executed on fork");
-        console2.log("");
+        _shrinkAndEmit(
+            BatchEmit({
+                label: "Batch G - Role Grants",
+                timelock: upgradeTimelock,
+                timelockAddr: UPGRADE_TIMELOCK,
+                adminSafe: ETHERFI_UPGRADE_ADMIN,
+                minDelay: UPGRADE_TIMELOCK_DELAY,
+                salt: keccak256(abi.encode("security-upgrades-v1-batchG-grants", block.number)),
+                scheduleFile: "role_grants_schedule.json",
+                executeFile: "role_grants_execute.json"
+            }),
+            targets, values, data, 9
+        );
     }
 
     //--------------------------------------------------------------------------------------
     // STEP 8: executeLpWithdrawBounds
     //
     // LP.setMinWithdrawAmount / setMaxWithdrawAmount are onlyOperatingMultisig.
-    // ETHERFI_OPERATING_ADMIN is granted OPERATION_MULTISIG_ROLE in step 7, so this
-    // tx is broadcast directly from that Safe (no timelock).
+    // ETHERFI_OPERATING_ADMIN is granted OPERATION_MULTISIG_ROLE in step 3 (Batch G),
+    // so this tx is broadcast directly from that Safe (no timelock).
     //
     // Order matters: setMaxWithdrawAmount must run first. The setMinWithdrawAmount
     // check requires _min <= maxWithdrawAmount, which is 0 in fresh storage and
@@ -1607,6 +1666,120 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
 
         console2.log("[OK] rate-limiter buckets + pause durations + role grants + LP withdraw bounds verified");
         console2.log("");
+    }
+
+    //--------------------------------------------------------------------------------------
+    // STEP 11: executeLegacyRoleRevocations — Batch R (UPGRADE_TIMELOCK, 10d)
+    //
+    // Revokes every current holder of the 31 legacy (pre-upgrade) granular roles.
+    // Holders are enumerated LIVE via roleHolders() against the post-upgrade fork
+    // state. Legacy roles are untouched by Batches G/A/B, so what we read here
+    // equals the real mainnet holders. revokeRole is owner-gated and the registry
+    // owner is the UPGRADE_TIMELOCK, so this is a UPGRADE_TIMELOCK batch like Batch A.
+    //
+    // Safe to revoke: every master-branch contract that checked a legacy role is in
+    // the upgrade set and now routes gating through the 9 RolesLibrary roles, so the
+    // legacy roles are orphaned post-upgrade. Solady _setRole(active=false) is a
+    // no-op on a non-holder, so the batch tolerates holder drift between generation
+    // and execution.
+    //
+    // NOTE: the emitted JSON encodes the exact holders observed at generation time.
+    // Regenerate if a legacy role gains a new holder before this batch executes.
+    //--------------------------------------------------------------------------------------
+    function executeLegacyRoleRevocations() public {
+        console2.log("=== Step 11: Executing Legacy Role Revocations (Batch R, UPGRADE_TIMELOCK, 10d) ===");
+
+        bytes32[31] memory roles = _legacyRoles();
+
+        // First pass: count current holders across all legacy roles.
+        uint256 total;
+        for (uint256 r = 0; r < roles.length; r++) {
+            total += roleRegistry.roleHolders(roles[r]).length;
+        }
+
+        if (total == 0) {
+            console2.log("[OK] no legacy role holders found - nothing to revoke");
+            console2.log("");
+            return;
+        }
+
+        // Second pass: one revokeRole(role, holder) call per (role, holder) pair.
+        address[] memory targets = new address[](total);
+        uint256[] memory values  = new uint256[](total);
+        bytes[]   memory data    = new bytes[](total);
+        uint256 i;
+        for (uint256 r = 0; r < roles.length; r++) {
+            address[] memory holders = roleRegistry.roleHolders(roles[r]);
+            for (uint256 h = 0; h < holders.length; h++) {
+                targets[i] = ROLE_REGISTRY;
+                data[i]    = abi.encodeWithSelector(RoleRegistry.revokeRole.selector, roles[r], holders[h]);
+                i++;
+            }
+        }
+        console2.log("Legacy role holders to revoke:", total);
+
+        _shrinkAndEmit(
+            BatchEmit({
+                label: "Batch R - Legacy Role Revokes",
+                timelock: upgradeTimelock,
+                timelockAddr: UPGRADE_TIMELOCK,
+                adminSafe: ETHERFI_UPGRADE_ADMIN,
+                minDelay: UPGRADE_TIMELOCK_DELAY,
+                salt: keccak256(abi.encode("security-upgrades-v1-batchR-legacy-revokes", block.number)),
+                scheduleFile: "legacy_role_revokes_schedule.json",
+                executeFile: "legacy_role_revokes_execute.json"
+            }),
+            targets, values, data, total
+        );
+    }
+
+    //--------------------------------------------------------------------------------------
+    // STEP 12: verifyLegacyRolesRevoked
+    //--------------------------------------------------------------------------------------
+    function verifyLegacyRolesRevoked() public view {
+        console2.log("=== Step 12: Verifying Legacy Roles Fully Revoked ===");
+        bytes32[31] memory roles = _legacyRoles();
+        for (uint256 r = 0; r < roles.length; r++) {
+            require(roleRegistry.roleHolders(roles[r]).length == 0, "legacy role still has holders");
+        }
+        console2.log("[OK] all 31 legacy roles have zero holders");
+        console2.log("");
+    }
+
+    /// @dev The 31 pre-upgrade granular roles (see the LEGACY ROLE IDs block above).
+    ///      Order is irrelevant — every holder of every entry is revoked.
+    function _legacyRoles() internal pure returns (bytes32[31] memory list) {
+        list[0]  = L_PROTOCOL_PAUSER;
+        list[1]  = L_PROTOCOL_UNPAUSER;
+        list[2]  = L_EETH_OPERATING_ADMIN_ROLE;
+        list[3]  = L_WEETH_OPERATING_ADMIN_ROLE;
+        list[4]  = L_LIQUIDITY_POOL_ADMIN_ROLE;
+        list[5]  = L_LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE;
+        list[6]  = L_LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE;
+        list[7]  = L_STAKING_MANAGER_ADMIN_ROLE;
+        list[8]  = L_STAKING_MANAGER_NODE_CREATOR_ROLE;
+        list[9]  = L_STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE;
+        list[10] = L_ETHERFI_NODES_MANAGER_ADMIN_ROLE;
+        list[11] = L_ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE;
+        list[12] = L_ETHERFI_NODES_MANAGER_POD_PROVER_ROLE;
+        list[13] = L_ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE;
+        list[14] = L_ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE;
+        list[15] = L_ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE;
+        list[16] = L_ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE;
+        list[17] = L_ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE;
+        list[18] = L_ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE;
+        list[19] = L_ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE;
+        list[20] = L_ETHERFI_RATE_LIMITER_ADMIN_ROLE;
+        list[21] = L_WITHDRAW_REQUEST_NFT_ADMIN_ROLE;
+        list[22] = L_IMPLICIT_FEE_CLAIMER_ROLE;
+        list[23] = L_PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE;
+        list[24] = L_PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE;
+        list[25] = L_PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE;
+        list[26] = L_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE;
+        list[27] = L_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_CLAIM_DELAY_SETTER_ROLE;
+        list[28] = L_ETHERFI_REWARDS_ROUTER_ADMIN_ROLE;
+        list[29] = L_ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE;
+        list[30] = L_WEETH_WITHDRAW_ADAPTER_ADMIN_ROLE;
     }
 
     //--------------------------------------------------------------------------------------
