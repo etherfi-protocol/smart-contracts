@@ -53,7 +53,7 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         // into the queue and would revert with SendFail. Upgrade the queue first.
         address newPQ = address(new PriorityWithdrawalQueue(
             address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance),
-            address(roleRegistryInstance), treasuryInstance, 1 hours
+            address(blacklisterInstance), address(roleRegistryInstance), treasuryInstance, 1 hours
         ));
         vm.prank(UPGRADE_TIMELOCK);
         PriorityWithdrawalQueue(payable(PRIORITY_WITHDRAWAL_QUEUE)).upgradeTo(newPQ);
