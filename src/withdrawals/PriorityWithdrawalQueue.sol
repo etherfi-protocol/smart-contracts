@@ -129,8 +129,13 @@ contract PriorityWithdrawalQueue is
         _;
     }
 
+    /**
+     * @dev Reason why modifier has both whitelisted and blacklisted checks is becuase if whitelisted user gets compramised,
+     * they can access the protocol before operating multisig can remove whitelist. so guardian can blacklist user.
+     */
     modifier onlyWhitelisted() {
         if (!isWhitelisted[msg.sender]) revert NotWhitelisted();
+        blacklister.nonBlacklisted(msg.sender);
         _;
     }
 
