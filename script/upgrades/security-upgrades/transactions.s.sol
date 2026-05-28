@@ -261,6 +261,10 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     uint64 constant DEPOSIT_INTO_STRATEGY_REFILL_RATE    = 0;
 
     // staking — EtherFiNodesManager buckets (consume).
+    // NOTE: UNRESTAKING / EXIT_REQUEST / CONSOLIDATION_REQUEST buckets already exist on
+    // mainnet from a prior deployment (limitExists() == true). Batch 2 calls
+    // setCapacity + setRefillRate for these 3 rather than createNewLimiter; the 7 token
+    // and restaker buckets are still newly-created. See F2 in PR #420 review.
     uint64 constant UNRESTAKING_CAPACITY            = 0;
     uint64 constant UNRESTAKING_REFILL_RATE         = 0;
     uint64 constant EXIT_REQUEST_CAPACITY           = 0;
@@ -987,13 +991,15 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     }
     // staking
     function _auctionImmSels() internal pure returns (bytes4[] memory s) {
-        s = new bytes4[](6);
+        // membershipManagerContractAddress() was removed by the new AuctionManager impl
+        // and is no longer in the post-upgrade selector set. Excluded so _postSnap's
+        // strict re-call doesn't revert on it.
+        s = new bytes4[](5);
         s[0] = bytes4(keccak256("roleRegistry()"));
         s[1] = bytes4(keccak256("blacklister()"));
         s[2] = bytes4(keccak256("nodeOperatorManager()"));
         s[3] = bytes4(keccak256("stakingManagerContractAddress()"));
-        s[4] = bytes4(keccak256("membershipManagerContractAddress()"));
-        s[5] = bytes4(keccak256("treasury()"));
+        s[4] = bytes4(keccak256("treasury()"));
     }
     function _nodesMgrImmSels() internal pure returns (bytes4[] memory s) {
         s = new bytes4[](3);
@@ -1732,13 +1738,23 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(DEPOSIT_INTO_STRATEGY_LIMIT_ID,    ETHERFI_RESTAKER)); i++;
 
         // ───────── staking — EtherFiNodesManager buckets (consume) ─────────
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(UNRESTAKING_LIMIT_ID,           UNRESTAKING_CAPACITY,           UNRESTAKING_REFILL_RATE));           i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(EXIT_REQUEST_LIMIT_ID,          EXIT_REQUEST_CAPACITY,          EXIT_REQUEST_REFILL_RATE));          i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(CONSOLIDATION_REQUEST_LIMIT_ID, CONSOLIDATION_REQUEST_CAPACITY, CONSOLIDATION_REQUEST_REFILL_RATE)); i++;
-
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(UNRESTAKING_LIMIT_ID,           ETHERFI_NODES_MANAGER)); i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(EXIT_REQUEST_LIMIT_ID,          ETHERFI_NODES_MANAGER)); i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(CONSOLIDATION_REQUEST_LIMIT_ID, ETHERFI_NODES_MANAGER)); i++;
+        // NOTE: UNRESTAKING / EXIT_REQUEST / CONSOLIDATION_REQUEST buckets already exist
+        // on mainnet from a prior deployment (limitExists() == true). createNewLimiter
+        // would revert with LimitAlreadyExists(). Use setCapacity + setRefillRatePerSecond
+        // for these 3; the consumer wiring is also already in place so no updateConsumer
+        // call is needed.
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER,
+            abi.encodeWithSelector(EtherFiRateLimiter.setCapacity.selector, UNRESTAKING_LIMIT_ID, UNRESTAKING_CAPACITY));           i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER,
+            abi.encodeWithSelector(EtherFiRateLimiter.setRefillRate.selector, UNRESTAKING_LIMIT_ID, UNRESTAKING_REFILL_RATE));      i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER,
+            abi.encodeWithSelector(EtherFiRateLimiter.setCapacity.selector, EXIT_REQUEST_LIMIT_ID, EXIT_REQUEST_CAPACITY));         i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER,
+            abi.encodeWithSelector(EtherFiRateLimiter.setRefillRate.selector, EXIT_REQUEST_LIMIT_ID, EXIT_REQUEST_REFILL_RATE));    i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER,
+            abi.encodeWithSelector(EtherFiRateLimiter.setCapacity.selector, CONSOLIDATION_REQUEST_LIMIT_ID, CONSOLIDATION_REQUEST_CAPACITY));   i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER,
+            abi.encodeWithSelector(EtherFiRateLimiter.setRefillRate.selector, CONSOLIDATION_REQUEST_LIMIT_ID, CONSOLIDATION_REQUEST_REFILL_RATE)); i++;
 
         // ───────── oracle — EtherFiAdmin daily finalized-withdrawal cap (onlyAdmin) ─────────
         // Seeds maxFinalizedWithdrawalAmountPerDay (defaults to 0, which rejects all

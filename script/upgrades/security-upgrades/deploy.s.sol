@@ -245,7 +245,10 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
             });
             bytes memory args = abi.encode(lpAddrs, LP_MIN_AMOUNT_FOR_SHARE);
             bytes memory bc = abi.encodePacked(type(LiquidityPool).creationCode, args);
-            liquidityPoolImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+            // logging=false because Utils.formatStaticParam can't pretty-print the
+            // ConstructorAddresses struct (reverts "Unsupported static type"). Deployment
+            // still succeeds; only the JSON log is skipped for this contract.
+            liquidityPoolImpl = deploy(name, args, bc, commitHashSalt, false, factory);
         }
         {
             string memory name = "WeETH";
@@ -291,7 +294,7 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
                 LIQUIFIER_MAX_PRICE_DEVIATION_BPS
             );
             bytes memory bc = abi.encodePacked(type(Liquifier).creationCode, args);
-            liquifierImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+            liquifierImpl = deploy(name, args, bc, commitHashSalt, false, factory); // logging=false: struct arg
         }
 
         // governance (Blacklister / RevokeAdmin / RoleRegistry deployed in the prefix above)
@@ -352,7 +355,7 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
                 ADMIN_MAX_REQUESTS_TO_FINALIZE_PER_REPORT
             );
             bytes memory bc = abi.encodePacked(type(EtherFiAdmin).creationCode, args);
-            etherFiAdminImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+            etherFiAdminImpl = deploy(name, args, bc, commitHashSalt, false, factory); // logging=false: struct arg
         }
         {
             string memory name = "EtherFiOracle";
@@ -521,7 +524,7 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
     ///      `vm.startBroadcast` runs. See H3 in PR #420 review.
     function _printPleaseEyeball() internal pure {
         console2.log("================================================");
-        console2.log("===== PLEASE EYEBALL — DEPLOY CONSTANTS ========");
+        console2.log("===== PLEASE EYEBALL - DEPLOY CONSTANTS ========");
         console2.log("================================================");
         console2.log("GIT_COMMIT_SHA (first 20B of commit, hex):", vm.toString(GIT_COMMIT_SHA));
         console2.log("commitHashSalt:                           ", vm.toString(commitHashSalt));
