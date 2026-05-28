@@ -3,33 +3,44 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
 
-import {AuctionManager} from "@etherfi/staking/AuctionManager.sol";
-import {EtherFiRateLimiter} from "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
-import {CumulativeMerkleRewardsDistributor} from "@etherfi/rewards/CumulativeMerkleRewardsDistributor.sol";
-import {DepositAdapter} from "@etherfi/deposits/DepositAdapter.sol";
+// Contract imports ordered by src/ group:
+// core, deposits, governance, membership, oracle, restaking, rewards, staking, withdrawals.
+// core
 import {EETH as EETHToken} from "@etherfi/core/EETH.sol";
-import {EtherFiAdmin} from "@etherfi/oracle/EtherFiAdmin.sol";
-import {EtherFiNode} from "@etherfi/staking/EtherFiNode.sol";
-import {EtherFiNodesManager} from "@etherfi/staking/EtherFiNodesManager.sol";
-import {EtherFiOracle} from "@etherfi/oracle/EtherFiOracle.sol";
-import {EtherFiRedemptionManager} from "@etherfi/withdrawals/EtherFiRedemptionManager.sol";
-import {EtherFiRestaker} from "@etherfi/restaking/EtherFiRestaker.sol";
-import {EtherFiRewardsRouter} from "@etherfi/rewards/EtherFiRewardsRouter.sol";
 import {LiquidityPool} from "@etherfi/core/LiquidityPool.sol";
-import {Liquifier} from "@etherfi/deposits/Liquifier.sol";
-import {MembershipManager} from "@etherfi/membership/MembershipManager.sol";
-import {MembershipNFT} from "@etherfi/membership/MembershipNFT.sol";
-import {NodeOperatorManager} from "@etherfi/staking/NodeOperatorManager.sol";
-import {PriorityWithdrawalQueue} from "@etherfi/withdrawals/PriorityWithdrawalQueue.sol";
-import {RestakingRewardsRouter} from "@etherfi/restaking/RestakingRewardsRouter.sol";
-import {StakingManager} from "@etherfi/staking/StakingManager.sol";
 import {WeETH as WeETHToken} from "@etherfi/core/WeETH.sol";
-import {WithdrawRequestNFT} from "@etherfi/withdrawals/WithdrawRequestNFT.sol";
-import {RoleRegistry} from "@etherfi/governance/RoleRegistry.sol";
-
+// deposits
+import {DepositAdapter} from "@etherfi/deposits/DepositAdapter.sol";
+import {Liquifier} from "@etherfi/deposits/Liquifier.sol";
+// governance
 import {Blacklister} from "@etherfi/governance/Blacklister.sol";
 import {RevokeAdmin} from "@etherfi/governance/RevokeAdmin.sol";
+import {RoleRegistry} from "@etherfi/governance/RoleRegistry.sol";
+import {EtherFiRateLimiter} from "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
+// membership
+import {MembershipManager} from "@etherfi/membership/MembershipManager.sol";
+import {MembershipNFT} from "@etherfi/membership/MembershipNFT.sol";
+// oracle
+import {EtherFiAdmin} from "@etherfi/oracle/EtherFiAdmin.sol";
+import {EtherFiOracle} from "@etherfi/oracle/EtherFiOracle.sol";
+// restaking
+import {EtherFiRestaker} from "@etherfi/restaking/EtherFiRestaker.sol";
+import {RestakingRewardsRouter} from "@etherfi/restaking/RestakingRewardsRouter.sol";
+// rewards
+import {CumulativeMerkleRewardsDistributor} from "@etherfi/rewards/CumulativeMerkleRewardsDistributor.sol";
+import {EtherFiRewardsRouter} from "@etherfi/rewards/EtherFiRewardsRouter.sol";
+// staking
+import {AuctionManager} from "@etherfi/staking/AuctionManager.sol";
+import {EtherFiNode} from "@etherfi/staking/EtherFiNode.sol";
+import {EtherFiNodesManager} from "@etherfi/staking/EtherFiNodesManager.sol";
+import {NodeOperatorManager} from "@etherfi/staking/NodeOperatorManager.sol";
+import {StakingManager} from "@etherfi/staking/StakingManager.sol";
+// withdrawals
+import {EtherFiRedemptionManager} from "@etherfi/withdrawals/EtherFiRedemptionManager.sol";
+import {PriorityWithdrawalQueue} from "@etherfi/withdrawals/PriorityWithdrawalQueue.sol";
 import {WeETHWithdrawAdapter} from "@etherfi/withdrawals/WeETHWithdrawAdapter.sol";
+import {WithdrawRequestNFT} from "@etherfi/withdrawals/WithdrawRequestNFT.sol";
+
 import {UUPSProxy} from "@etherfi/utils/UUPSProxy.sol";
 
 import {Deployed} from "@scripts/deploys/Deployed.s.sol";
@@ -54,73 +65,80 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
 
     // ----- Immutable params (set per spec / ops review) -----
     // NOTE: These values are variable and would be further changed as per needed
-    // Liquifier
+    // Ordered by src/ group: core, deposits, oracle, withdrawals.
+
+    // core — LiquidityPool dust guard (spec — minimum amount per share)
+    uint256 public constant LP_MIN_AMOUNT_FOR_SHARE = 1 ether;
+
+    // deposits — Liquifier
     address public constant STETH_PRICE_FEED = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812; // Chainlink stETH/ETH
     address public constant STETH_ETH_CURVE_POOL = 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022;
     uint256 public constant LIQUIFIER_MIN_DISCOUNT_BPS = 100;          // 1% floor
     uint256 public constant LIQUIFIER_STALE_PRICE_WINDOW = 7 days;
     uint256 public constant LIQUIFIER_MAX_PRICE_DEVIATION_BPS = 500;   // 5%
 
-    // EtherFiRedemptionManager hardcoded ceilings (per spec §7.4.6 / §9)
-    uint256 public constant RM_MAX_EXIT_FEE_SPLIT_TO_BUYBACK_BPS = 10_000;
-    uint256 public constant RM_MAX_EXIT_FEE_BPS = 500;                  // 5% hardcoded ceiling
-    uint256 public constant RM_MAX_LOW_WATERMARK_BPS_OF_TVL = 2_000;    // 20% hardcoded ceiling
-
-    // EtherFiAdmin immutable params
+    // oracle — EtherFiAdmin immutable params
     int256  public constant ADMIN_MAX_REBASE_APR_BPS = 1_000;           // 10% absolute ceiling
     uint256 public constant ADMIN_MAX_VALIDATOR_TASK_BATCH_SIZE = 100; // 50 Currently
     uint256 public constant ADMIN_STALE_ORACLE_REPORT_BLOCK_WINDOW = 7200 * 7; // ~14 days @ 12s blocks
     uint256 public constant ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY = 100_000 ether;
-    uint256 public constant ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY = 1_000; 
-
-    // EtherFiOracle immutable params
-    uint256 public constant ORACLE_MIN_QUORUM_SIZE = 3; // enforces min 3/5 quorum for consensus
-
-    // LiquidityPool dust guard (spec — minimum amount per share)
-    uint256 public constant LP_MIN_AMOUNT_FOR_SHARE = 1 ether;
-
-    // WithdrawRequestNFT share-rate acceptance band
-    uint256 public constant WNFT_MIN_ACCEPTABLE_SHARE_RATE = 1;
-    uint256 public constant WNFT_MAX_ACCEPTABLE_SHARE_RATE = 4 ether;
+    uint256 public constant ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY = 1_000;
     uint256 public constant ADMIN_MAX_REQUESTS_TO_FINALIZE_PER_REPORT = 2_000;
 
-    // PriorityWithdrawalQueue — must match the constructor arg used at proxy genesis;
+    // oracle — EtherFiOracle immutable params
+    uint256 public constant ORACLE_MIN_QUORUM_SIZE = 3; // enforces min 3/5 quorum for consensus
+
+    // withdrawals — EtherFiRedemptionManager hardcoded ceilings (per spec §7.4.6 / §9)
+    uint256 public constant RM_MAX_EXIT_FEE_SPLIT_TO_BUYBACK_BPS = 10_000;
+    uint256 public constant RM_MAX_EXIT_FEE_BPS = 500;                  // 5% hardcoded ceiling
+    uint256 public constant RM_MAX_LOW_WATERMARK_BPS_OF_TVL = 2_000;    // 20% hardcoded ceiling
+
+    // withdrawals — WithdrawRequestNFT share-rate acceptance band
+    uint256 public constant WNFT_MIN_ACCEPTABLE_SHARE_RATE = 1;
+    uint256 public constant WNFT_MAX_ACCEPTABLE_SHARE_RATE = 4 ether;
+
+    // withdrawals — PriorityWithdrawalQueue — must match the constructor arg used at proxy genesis;
     // the proxy's existing impl was deployed with 1 hour, so the new impl must too.
     uint32  public constant PWQ_MIN_DELAY = 1 hours;
 
-    // ----- Deployment outputs -----
-    address public auctionManagerImpl;
-    address public etherFiRateLimiterImpl;
+    // ----- Deployment outputs (ordered by src/ group) -----
+    // core
     address public eEthImpl;
-    address public etherFiAdminImpl;
-    address public etherFiNodeImpl;
-    address public etherFiNodesManagerImpl;
-    address public etherFiOracleImpl;
-    address public etherFiRedemptionManagerImpl;
-    address public etherFiRestakerImpl;
     address public liquidityPoolImpl;
-    address public liquifierImpl;
-    address public membershipManagerImpl;
-    address public membershipNFTImpl;
-    address public nodeOperatorManagerImpl;
-    address public stakingManagerImpl;
     address public weEthImpl;
-    address public withdrawRequestNFTImpl;
-
+    // deposits
+    address public depositAdapterImpl;
+    address public liquifierImpl;
+    // governance
     address public blacklisterImpl;
     address public blacklisterProxy;
-
     address public revokeAdminImpl;
     address public revokeAdminProxy;
-
     address public roleRegistryImpl;
-
-    address public priorityWithdrawalQueueImpl;
-    address public etherFiRewardsRouterImpl;
+    address public etherFiRateLimiterImpl;
+    // membership
+    address public membershipManagerImpl;
+    address public membershipNFTImpl;
+    // oracle
+    address public etherFiAdminImpl;
+    address public etherFiOracleImpl;
+    // restaking
+    address public etherFiRestakerImpl;
     address public restakingRewardsRouterImpl;
+    // rewards
     address public cumulativeMerkleRewardsDistributorImpl;
-    address public depositAdapterImpl;
+    address public etherFiRewardsRouterImpl;
+    // staking
+    address public auctionManagerImpl;
+    address public etherFiNodeImpl;
+    address public etherFiNodesManagerImpl;
+    address public nodeOperatorManagerImpl;
+    address public stakingManagerImpl;
+    // withdrawals
+    address public etherFiRedemptionManagerImpl;
+    address public priorityWithdrawalQueueImpl;
     address public weETHWithdrawAdapterImpl;
+    address public withdrawRequestNFTImpl;
 
     function run() public {
         console2.log("================================================");
@@ -129,6 +147,13 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
         console2.log("");
 
         vm.startBroadcast();
+
+        // ─────────────────────────────────────────────────────────────────
+        // Dependency-ordered prefix (NOT group-ordered): the Blacklister and
+        // RevokeAdmin proxies plus the RoleRegistry impl must be deployed first
+        // because every other impl takes the Blacklister proxy as a constructor
+        // arg, and the RoleRegistry impl bakes in the RevokeAdmin proxy.
+        // ─────────────────────────────────────────────────────────────────
 
         // 1. Blacklister proxy first — every other impl takes it as a constructor arg.
         {
@@ -174,18 +199,16 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
         }
         console2.log("RoleRegistry impl:", roleRegistryImpl);
 
-        // 2. Implementations
+        // ─────────────────────────────────────────────────────────────────
+        // Remaining implementations, ordered by src/ group.
+        // ─────────────────────────────────────────────────────────────────
+
+        // core
         {
             string memory name = "EETH";
             bytes memory args = abi.encode(LIQUIDITY_POOL, ROLE_REGISTRY, blacklisterProxy, ETHERFI_RATE_LIMITER);
             bytes memory bc = abi.encodePacked(type(EETHToken).creationCode, args);
             eEthImpl = deploy(name, args, bc, commitHashSalt, true, factory);
-        }
-        {
-            string memory name = "WeETH";
-            bytes memory args = abi.encode(EETH, LIQUIDITY_POOL, ROLE_REGISTRY, blacklisterProxy, ETHERFI_RATE_LIMITER);
-            bytes memory bc = abi.encodePacked(type(WeETHToken).creationCode, args);
-            weEthImpl = deploy(name, args, bc, commitHashSalt, true, factory);
         }
         {
             string memory name = "LiquidityPool";
@@ -207,20 +230,28 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
             liquidityPoolImpl = deploy(name, args, bc, commitHashSalt, true, factory);
         }
         {
-            string memory name = "WithdrawRequestNFT";
+            string memory name = "WeETH";
+            bytes memory args = abi.encode(EETH, LIQUIDITY_POOL, ROLE_REGISTRY, blacklisterProxy, ETHERFI_RATE_LIMITER);
+            bytes memory bc = abi.encodePacked(type(WeETHToken).creationCode, args);
+            weEthImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+        }
+
+        // deposits
+        {
+            string memory name = "DepositAdapter";
             bytes memory args = abi.encode(
-                WITHDRAW_REQUEST_NFT_BUYBACK_SAFE,
-                EETH,
                 LIQUIDITY_POOL,
-                MEMBERSHIP_MANAGER,
+                LIQUIFIER,
+                WEETH,
+                EETH,
+                WETH,
+                STETH,
+                WSTETH,
                 ROLE_REGISTRY,
-                blacklisterProxy,
-                ETHERFI_ADMIN,
-                WNFT_MIN_ACCEPTABLE_SHARE_RATE,
-                WNFT_MAX_ACCEPTABLE_SHARE_RATE
+                blacklisterProxy
             );
-            bytes memory bc = abi.encodePacked(type(WithdrawRequestNFT).creationCode, args);
-            withdrawRequestNFTImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+            bytes memory bc = abi.encodePacked(type(DepositAdapter).creationCode, args);
+            depositAdapterImpl = deploy(name, args, bc, commitHashSalt, true, factory);
         }
         {
             string memory name = "Liquifier";
@@ -244,6 +275,42 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
             bytes memory bc = abi.encodePacked(type(Liquifier).creationCode, args);
             liquifierImpl = deploy(name, args, bc, commitHashSalt, true, factory);
         }
+
+        // governance (Blacklister / RevokeAdmin / RoleRegistry deployed in the prefix above)
+        {
+            string memory name = "EtherFiRateLimiter";
+            bytes memory args = abi.encode(ROLE_REGISTRY, EETH, WEETH);
+            bytes memory bc = abi.encodePacked(type(EtherFiRateLimiter).creationCode, args);
+            etherFiRateLimiterImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+        }
+
+        // membership
+        {
+            string memory name = "MembershipManager";
+            bytes memory args = abi.encode(
+                EETH,
+                LIQUIDITY_POOL,
+                MEMBERSHIP_NFT,
+                ETHERFI_ADMIN,
+                ROLE_REGISTRY,
+                blacklisterProxy
+            );
+            bytes memory bc = abi.encodePacked(type(MembershipManager).creationCode, args);
+            membershipManagerImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+        }
+        {
+            string memory name = "MembershipNFT";
+            bytes memory args = abi.encode(
+                LIQUIDITY_POOL,
+                MEMBERSHIP_MANAGER,
+                ROLE_REGISTRY,
+                blacklisterProxy
+            );
+            bytes memory bc = abi.encodePacked(type(MembershipNFT).creationCode, args);
+            membershipNFTImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+        }
+
+        // oracle
         {
             string memory name = "EtherFiAdmin";
             EtherFiAdmin.ConstructorAddresses memory adAddrs = EtherFiAdmin.ConstructorAddresses({
@@ -275,6 +342,90 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
             bytes memory bc = abi.encodePacked(type(EtherFiOracle).creationCode, args);
             etherFiOracleImpl = deploy(name, args, bc, commitHashSalt, true, factory);
         }
+
+        // restaking
+        {
+            string memory name = "EtherFiRestaker";
+            bytes memory args = abi.encode(
+                LIQUIDITY_POOL,
+                LIQUIFIER,
+                EIGENLAYER_REWARDS_COORDINATOR,
+                ETHERFI_REDEMPTION_MANAGER,
+                ROLE_REGISTRY,
+                ETHERFI_RATE_LIMITER,
+                EIGENLAYER_STRATEGY_MANAGER,
+                EIGENLAYER_DELEGATION_MANAGER
+            );
+            bytes memory bc = abi.encodePacked(type(EtherFiRestaker).creationCode, args);
+            etherFiRestakerImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+        }
+        {
+            string memory name = "RestakingRewardsRouter";
+            bytes memory args = abi.encode(ROLE_REGISTRY, EIGEN, LIQUIDITY_POOL);
+            bytes memory bc = abi.encodePacked(type(RestakingRewardsRouter).creationCode, args);
+            restakingRewardsRouterImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+        }
+
+        // rewards
+        {
+            string memory name = "CumulativeMerkleRewardsDistributor";
+            bytes memory args = abi.encode(ROLE_REGISTRY);
+            bytes memory bc = abi.encodePacked(type(CumulativeMerkleRewardsDistributor).creationCode, args);
+            cumulativeMerkleRewardsDistributorImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+        }
+        {
+            string memory name = "EtherFiRewardsRouter";
+            bytes memory args = abi.encode(LIQUIDITY_POOL, TREASURY, ROLE_REGISTRY);
+            bytes memory bc = abi.encodePacked(type(EtherFiRewardsRouter).creationCode, args);
+            etherFiRewardsRouterImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+        }
+
+        // staking
+        {
+            string memory name = "AuctionManager";
+            bytes memory args = abi.encode(
+                ROLE_REGISTRY,
+                blacklisterProxy,
+                NODE_OPERATOR_MANAGER,
+                STAKING_MANAGER,
+                TREASURY
+            );
+            bytes memory bc = abi.encodePacked(type(AuctionManager).creationCode, args);
+            auctionManagerImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+        }
+        {
+            string memory name = "EtherFiNode";
+            bytes memory args = abi.encode(LIQUIDITY_POOL, ETHERFI_NODES_MANAGER, EIGENLAYER_POD_MANAGER, EIGENLAYER_DELEGATION_MANAGER);
+            bytes memory bc = abi.encodePacked(type(EtherFiNode).creationCode, args);
+            etherFiNodeImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+        }
+        {
+            string memory name = "EtherFiNodesManager";
+            bytes memory args = abi.encode(STAKING_MANAGER, ROLE_REGISTRY, ETHERFI_RATE_LIMITER);
+            bytes memory bc = abi.encodePacked(type(EtherFiNodesManager).creationCode, args);
+            etherFiNodesManagerImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+        }
+        {
+            string memory name = "NodeOperatorManager";
+            bytes memory args = abi.encode(ROLE_REGISTRY, AUCTION_MANAGER);
+            bytes memory bc = abi.encodePacked(type(NodeOperatorManager).creationCode, args);
+            nodeOperatorManagerImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+        }
+        {
+            string memory name = "StakingManager";
+            bytes memory args = abi.encode(
+                LIQUIDITY_POOL,
+                ETHERFI_NODES_MANAGER,
+                ETH2_DEPOSIT_CONTRACT,
+                AUCTION_MANAGER,
+                ETHERFI_NODE_BEACON,
+                ROLE_REGISTRY
+            );
+            bytes memory bc = abi.encodePacked(type(StakingManager).creationCode, args);
+            stakingManagerImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+        }
+
+        // withdrawals
         {
             string memory name = "EtherFiRedemptionManager";
             bytes memory args = abi.encode(
@@ -294,96 +445,6 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
             etherFiRedemptionManagerImpl = deploy(name, args, bc, commitHashSalt, true, factory);
         }
         {
-            string memory name = "EtherFiRestaker";
-            bytes memory args = abi.encode(
-                LIQUIDITY_POOL,
-                LIQUIFIER,
-                EIGENLAYER_REWARDS_COORDINATOR,
-                ETHERFI_REDEMPTION_MANAGER,
-                ROLE_REGISTRY,
-                ETHERFI_RATE_LIMITER,
-                EIGENLAYER_STRATEGY_MANAGER,
-                EIGENLAYER_DELEGATION_MANAGER
-            );
-            bytes memory bc = abi.encodePacked(type(EtherFiRestaker).creationCode, args);
-            etherFiRestakerImpl = deploy(name, args, bc, commitHashSalt, true, factory);
-        }
-        {
-            string memory name = "EtherFiNode";
-            bytes memory args = abi.encode(LIQUIDITY_POOL, ETHERFI_NODES_MANAGER, EIGENLAYER_POD_MANAGER, EIGENLAYER_DELEGATION_MANAGER);
-            bytes memory bc = abi.encodePacked(type(EtherFiNode).creationCode, args);
-            etherFiNodeImpl = deploy(name, args, bc, commitHashSalt, true, factory);
-        }
-        {
-            string memory name = "EtherFiNodesManager";
-            bytes memory args = abi.encode(STAKING_MANAGER, ROLE_REGISTRY, ETHERFI_RATE_LIMITER);
-            bytes memory bc = abi.encodePacked(type(EtherFiNodesManager).creationCode, args);
-            etherFiNodesManagerImpl = deploy(name, args, bc, commitHashSalt, true, factory);
-        }
-        {
-            string memory name = "StakingManager";
-            bytes memory args = abi.encode(
-                LIQUIDITY_POOL,
-                ETHERFI_NODES_MANAGER,
-                ETH2_DEPOSIT_CONTRACT,
-                AUCTION_MANAGER,
-                ETHERFI_NODE_BEACON,
-                ROLE_REGISTRY
-            );
-            bytes memory bc = abi.encodePacked(type(StakingManager).creationCode, args);
-            stakingManagerImpl = deploy(name, args, bc, commitHashSalt, true, factory);
-        }
-        {
-            string memory name = "AuctionManager";
-            bytes memory args = abi.encode(
-                ROLE_REGISTRY,
-                blacklisterProxy,
-                NODE_OPERATOR_MANAGER,
-                STAKING_MANAGER,
-                TREASURY
-            );
-            bytes memory bc = abi.encodePacked(type(AuctionManager).creationCode, args);
-            auctionManagerImpl = deploy(name, args, bc, commitHashSalt, true, factory);
-        }
-        {
-            string memory name = "NodeOperatorManager";
-            bytes memory args = abi.encode(ROLE_REGISTRY, AUCTION_MANAGER);
-            bytes memory bc = abi.encodePacked(type(NodeOperatorManager).creationCode, args);
-            nodeOperatorManagerImpl = deploy(name, args, bc, commitHashSalt, true, factory);
-        }
-        {
-            string memory name = "MembershipManager";
-            bytes memory args = abi.encode(
-                EETH,
-                LIQUIDITY_POOL,
-                MEMBERSHIP_NFT,
-                ETHERFI_ADMIN,
-                ROLE_REGISTRY,
-                blacklisterProxy
-            );
-            bytes memory bc = abi.encodePacked(type(MembershipManager).creationCode, args);
-            membershipManagerImpl = deploy(name, args, bc, commitHashSalt, true, factory);
-        }
-        {
-            string memory name = "MembershipNFT";
-            bytes memory args = abi.encode(
-                LIQUIDITY_POOL,
-                MEMBERSHIP_MANAGER,
-                ROLE_REGISTRY,
-                blacklisterProxy
-            );
-            bytes memory bc = abi.encodePacked(type(MembershipNFT).creationCode, args);
-            membershipNFTImpl = deploy(name, args, bc, commitHashSalt, true, factory);
-        }
-        {
-            string memory name = "EtherFiRateLimiter";
-            bytes memory args = abi.encode(ROLE_REGISTRY, EETH, WEETH);
-            bytes memory bc = abi.encodePacked(type(EtherFiRateLimiter).creationCode, args);
-            etherFiRateLimiterImpl = deploy(name, args, bc, commitHashSalt, true, factory);
-        }
-
-        // 3. Peripheral UUPS proxies touched by PR #385.
-        {
             string memory name = "PriorityWithdrawalQueue";
             bytes memory args = abi.encode(
                 LIQUIDITY_POOL,
@@ -395,40 +456,6 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
             );
             bytes memory bc = abi.encodePacked(type(PriorityWithdrawalQueue).creationCode, args);
             priorityWithdrawalQueueImpl = deploy(name, args, bc, commitHashSalt, true, factory);
-        }
-        {
-            string memory name = "EtherFiRewardsRouter";
-            bytes memory args = abi.encode(LIQUIDITY_POOL, TREASURY, ROLE_REGISTRY);
-            bytes memory bc = abi.encodePacked(type(EtherFiRewardsRouter).creationCode, args);
-            etherFiRewardsRouterImpl = deploy(name, args, bc, commitHashSalt, true, factory);
-        }
-        {
-            string memory name = "RestakingRewardsRouter";
-            bytes memory args = abi.encode(ROLE_REGISTRY, EIGEN, LIQUIDITY_POOL);
-            bytes memory bc = abi.encodePacked(type(RestakingRewardsRouter).creationCode, args);
-            restakingRewardsRouterImpl = deploy(name, args, bc, commitHashSalt, true, factory);
-        }
-        {
-            string memory name = "CumulativeMerkleRewardsDistributor";
-            bytes memory args = abi.encode(ROLE_REGISTRY);
-            bytes memory bc = abi.encodePacked(type(CumulativeMerkleRewardsDistributor).creationCode, args);
-            cumulativeMerkleRewardsDistributorImpl = deploy(name, args, bc, commitHashSalt, true, factory);
-        }
-        {
-            string memory name = "DepositAdapter";
-            bytes memory args = abi.encode(
-                LIQUIDITY_POOL,
-                LIQUIFIER,
-                WEETH,
-                EETH,
-                WETH,
-                STETH,
-                WSTETH,
-                ROLE_REGISTRY,
-                blacklisterProxy
-            );
-            bytes memory bc = abi.encodePacked(type(DepositAdapter).creationCode, args);
-            depositAdapterImpl = deploy(name, args, bc, commitHashSalt, true, factory);
         }
         {
             string memory name = "WeETHWithdrawAdapter";
@@ -443,6 +470,22 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
             bytes memory bc = abi.encodePacked(type(WeETHWithdrawAdapter).creationCode, args);
             weETHWithdrawAdapterImpl = deploy(name, args, bc, commitHashSalt, true, factory);
         }
+        {
+            string memory name = "WithdrawRequestNFT";
+            bytes memory args = abi.encode(
+                WITHDRAW_REQUEST_NFT_BUYBACK_SAFE,
+                EETH,
+                LIQUIDITY_POOL,
+                MEMBERSHIP_MANAGER,
+                ROLE_REGISTRY,
+                blacklisterProxy,
+                ETHERFI_ADMIN,
+                WNFT_MIN_ACCEPTABLE_SHARE_RATE,
+                WNFT_MAX_ACCEPTABLE_SHARE_RATE
+            );
+            bytes memory bc = abi.encodePacked(type(WithdrawRequestNFT).creationCode, args);
+            withdrawRequestNFTImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+        }
 
         vm.stopBroadcast();
 
@@ -454,34 +497,43 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
         console2.log("================================================");
         console2.log("============== DEPLOYMENT SUMMARY ==============");
         console2.log("================================================");
+        // core
+        console2.log("EETH impl:                      ", eEthImpl);
+        console2.log("LiquidityPool impl:             ", liquidityPoolImpl);
+        console2.log("WeETH impl:                     ", weEthImpl);
+        // deposits
+        console2.log("DepositAdapter impl:            ", depositAdapterImpl);
+        console2.log("Liquifier impl:                 ", liquifierImpl);
+        // governance
         console2.log("Blacklister impl:               ", blacklisterImpl);
         console2.log("Blacklister proxy:              ", blacklisterProxy);
         console2.log("RevokeAdmin impl:               ", revokeAdminImpl);
         console2.log("RevokeAdmin proxy:              ", revokeAdminProxy);
         console2.log("RoleRegistry impl:              ", roleRegistryImpl);
-        console2.log("EETH impl:                      ", eEthImpl);
-        console2.log("WeETH impl:                     ", weEthImpl);
-        console2.log("LiquidityPool impl:             ", liquidityPoolImpl);
-        console2.log("WithdrawRequestNFT impl:        ", withdrawRequestNFTImpl);
-        console2.log("Liquifier impl:                 ", liquifierImpl);
-        console2.log("EtherFiAdmin impl:              ", etherFiAdminImpl);
-        console2.log("EtherFiOracle impl:             ", etherFiOracleImpl);
-        console2.log("EtherFiRedemptionManager impl:  ", etherFiRedemptionManagerImpl);
-        console2.log("EtherFiRestaker impl:           ", etherFiRestakerImpl);
-        console2.log("EtherFiNode impl:               ", etherFiNodeImpl);
-        console2.log("EtherFiNodesManager impl:       ", etherFiNodesManagerImpl);
-        console2.log("StakingManager impl:            ", stakingManagerImpl);
-        console2.log("AuctionManager impl:            ", auctionManagerImpl);
-        console2.log("NodeOperatorManager impl:       ", nodeOperatorManagerImpl);
+        console2.log("EtherFiRateLimiter impl:        ", etherFiRateLimiterImpl);
+        // membership
         console2.log("MembershipManager impl:         ", membershipManagerImpl);
         console2.log("MembershipNFT impl:             ", membershipNFTImpl);
-        console2.log("EtherFiRateLimiter impl:        ", etherFiRateLimiterImpl);
-        console2.log("PriorityWithdrawalQueue impl:   ", priorityWithdrawalQueueImpl);
-        console2.log("EtherFiRewardsRouter impl:      ", etherFiRewardsRouterImpl);
+        // oracle
+        console2.log("EtherFiAdmin impl:              ", etherFiAdminImpl);
+        console2.log("EtherFiOracle impl:             ", etherFiOracleImpl);
+        // restaking
+        console2.log("EtherFiRestaker impl:           ", etherFiRestakerImpl);
         console2.log("RestakingRewardsRouter impl:    ", restakingRewardsRouterImpl);
+        // rewards
         console2.log("CumulativeMerkleRewardsDist impl:", cumulativeMerkleRewardsDistributorImpl);
-        console2.log("DepositAdapter impl:            ", depositAdapterImpl);
+        console2.log("EtherFiRewardsRouter impl:      ", etherFiRewardsRouterImpl);
+        // staking
+        console2.log("AuctionManager impl:            ", auctionManagerImpl);
+        console2.log("EtherFiNode impl:               ", etherFiNodeImpl);
+        console2.log("EtherFiNodesManager impl:       ", etherFiNodesManagerImpl);
+        console2.log("NodeOperatorManager impl:       ", nodeOperatorManagerImpl);
+        console2.log("StakingManager impl:            ", stakingManagerImpl);
+        // withdrawals
+        console2.log("EtherFiRedemptionManager impl:  ", etherFiRedemptionManagerImpl);
+        console2.log("PriorityWithdrawalQueue impl:   ", priorityWithdrawalQueueImpl);
         console2.log("WeETHWithdrawAdapter impl:      ", weETHWithdrawAdapterImpl);
+        console2.log("WithdrawRequestNFT impl:        ", withdrawRequestNFTImpl);
         console2.log("================================================");
     }
 }
