@@ -145,7 +145,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     // oracle — EtherFiAdmin
     int256  constant ADMIN_MAX_REBASE_APR_BPS                       = 1_000;
     uint256 constant ADMIN_MAX_VALIDATOR_TASK_BATCH_SIZE            = 100;
-    uint256 constant ADMIN_STALE_ORACLE_REPORT_BLOCK_WINDOW         = 7200 * 7;
+    uint256 constant ADMIN_STALE_ORACLE_REPORT_BLOCK_WINDOW         = 7200 * 14; // 14 days @ 12s blocks
     uint256 constant ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY  = 100_000 ether;
     uint256 constant ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY        = 1_000;
     uint256 constant ADMIN_MAX_REQUESTS_TO_FINALIZE_PER_REPORT      = 2_000;
@@ -158,9 +158,10 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     uint256 constant RM_MAX_EXIT_FEE_BPS                   = 500;
     uint256 constant RM_MAX_LOW_WATERMARK_BPS_OF_TVL       = 2_000;
 
-    // withdrawals — WithdrawRequestNFT
-    uint256 constant WNFT_MIN_ACCEPTABLE_SHARE_RATE = 1;
-    uint256 constant WNFT_MAX_ACCEPTABLE_SHARE_RATE = 4 ether;
+    // withdrawals — WithdrawRequestNFT — must match deploy.s.sol exactly
+    // (tightened band ~[0.9, 1.1] × live amountPerShareCeil() snapshot; see H4)
+    uint256 constant WNFT_MIN_ACCEPTABLE_SHARE_RATE = 0.95 ether;
+    uint256 constant WNFT_MAX_ACCEPTABLE_SHARE_RATE = 1.15 ether;
 
     // withdrawals — PriorityWithdrawalQueue — must match the value baked into the proxy at genesis.
     uint32  constant PWQ_MIN_DELAY = 1 hours;
@@ -260,6 +261,10 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     uint64 constant DEPOSIT_INTO_STRATEGY_REFILL_RATE    = 0;
 
     // staking — EtherFiNodesManager buckets (consume).
+    // NOTE: UNRESTAKING / EXIT_REQUEST / CONSOLIDATION_REQUEST buckets already exist on
+    // mainnet from a prior deployment (limitExists() == true). Batch 2 calls
+    // setCapacity + setRefillRate for these 3 rather than createNewLimiter; the 7 token
+    // and restaker buckets are still newly-created. See F2 in PR #420 review.
     uint64 constant UNRESTAKING_CAPACITY            = 0;
     uint64 constant UNRESTAKING_REFILL_RATE         = 0;
     uint64 constant EXIT_REQUEST_CAPACITY           = 0;
@@ -325,6 +330,15 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     string constant OUT_DIR = "script/upgrades/security-upgrades";
 
     // ─────────────────────────────────────────────────────────────────────
+    // GIT_COMMIT_SHA — MUST match deploy.s.sol's value. Used to derive
+    // deterministic timelock salts so re-running this script across forks
+    // yields identical Safe JSONs (see PR #420 review C3 + C7).
+    // _preflight() rejects bytes20(0).
+    // ─────────────────────────────────────────────────────────────────────
+    bytes20 constant GIT_COMMIT_SHA = bytes20(hex"0000000000000000000000000000000000000000"); // TBD
+    bytes32 constant commitHashSalt = bytes32(GIT_COMMIT_SHA);
+
+    // ─────────────────────────────────────────────────────────────────────
     // PRE-UPGRADE SNAPSHOTS
     //
     // preSnap   - owner + paused per proxy.
@@ -346,7 +360,9 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         string memory forkUrl = vm.envString("MAINNET_RPC_URL");
         vm.selectFork(vm.createFork(forkUrl));
 
+        _printPleaseEyeball();
         _preflight();
+        _preflightRoleHashes();
         codeChecker = new ContractCodeChecker();
 
         verifyDeployedBytecode();
@@ -379,6 +395,11 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
 
     /// @dev Fail loudly the moment a required constant is unset.
     function _preflight() internal pure {
+        require(GIT_COMMIT_SHA != bytes20(0), "preflight: GIT_COMMIT_SHA unset - set to first 20 bytes of release commit (MUST match deploy.s.sol)");
+        require(WNFT_MIN_ACCEPTABLE_SHARE_RATE > 0,                               "preflight: WNFT_MIN_ACCEPTABLE_SHARE_RATE unset");
+        require(WNFT_MAX_ACCEPTABLE_SHARE_RATE > WNFT_MIN_ACCEPTABLE_SHARE_RATE,  "preflight: WNFT_MAX_ACCEPTABLE_SHARE_RATE <= MIN");
+        require(LP_MIN_WITHDRAW_AMOUNT > 0,                                       "preflight: LP_MIN_WITHDRAW_AMOUNT unset");
+        require(LP_MAX_WITHDRAW_AMOUNT > LP_MIN_WITHDRAW_AMOUNT,                  "preflight: LP_MAX_WITHDRAW_AMOUNT <= MIN");
         // core
         require(eEthImpl != address(0), "preflight: eEthImpl unset");
         require(liquidityPoolImpl != address(0), "preflight: liquidityPoolImpl unset");
@@ -464,6 +485,106 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         require(HOLDER_HOUSEKEEPING_OPERATIONS_ROLE != address(0), "preflight: HOLDER_HOUSEKEEPING_OPERATIONS_ROLE unset");
         require(HOLDER_EXECUTOR_OPERATIONS_ROLE     != address(0), "preflight: HOLDER_EXECUTOR_OPERATIONS_ROLE unset");
         require(HOLDER_EIGENPOD_OPERATIONS_ROLE     != address(0), "preflight: HOLDER_EIGENPOD_OPERATIONS_ROLE unset");
+    }
+
+    /// @dev Cross-check every hardcoded keccak256 role-ID string against a freshly-built
+    ///      RoleRegistry instance, so a typo in any of the 9 role strings fails BEFORE
+    ///      any JSON is written (see H8 in PR #420 review). Non-pure because `new`
+    ///      deploys a transient contract; runs after _preflight verified addresses.
+    function _preflightRoleHashes() internal {
+        RoleRegistry _rr = new RoleRegistry(revokeAdminProxy);
+        require(_rr.UPGRADE_TIMELOCK_ROLE()        == UPGRADE_TIMELOCK_ROLE,        "preflight: UPGRADE_TIMELOCK_ROLE hash mismatch");
+        require(_rr.OPERATION_TIMELOCK_ROLE()      == OPERATION_TIMELOCK_ROLE,      "preflight: OPERATION_TIMELOCK_ROLE hash mismatch");
+        require(_rr.OPERATION_MULTISIG_ROLE()      == OPERATION_MULTISIG_ROLE,      "preflight: OPERATION_MULTISIG_ROLE hash mismatch");
+        require(_rr.SUPER_GUARDIAN_ROLE()          == SUPER_GUARDIAN_ROLE,          "preflight: SUPER_GUARDIAN_ROLE hash mismatch");
+        require(_rr.GUARDIAN_ROLE()                == GUARDIAN_ROLE,                "preflight: GUARDIAN_ROLE hash mismatch");
+        require(_rr.ORACLE_OPERATIONS_ROLE()       == ORACLE_OPERATIONS_ROLE,       "preflight: ORACLE_OPERATIONS_ROLE hash mismatch");
+        require(_rr.HOUSEKEEPING_OPERATIONS_ROLE() == HOUSEKEEPING_OPERATIONS_ROLE, "preflight: HOUSEKEEPING_OPERATIONS_ROLE hash mismatch");
+        require(_rr.EXECUTOR_OPERATIONS_ROLE()     == EXECUTOR_OPERATIONS_ROLE,     "preflight: EXECUTOR_OPERATIONS_ROLE hash mismatch");
+        require(_rr.EIGENPOD_OPERATIONS_ROLE()     == EIGENPOD_OPERATIONS_ROLE,     "preflight: EIGENPOD_OPERATIONS_ROLE hash mismatch");
+    }
+
+    /// @dev Print every TBD / signer-reviewable constant at the top of run() so the
+    ///      broadcaster can eyeball them BEFORE any other output (H3 in PR #420 review).
+    function _printPleaseEyeball() internal view {
+        console2.log("================================================");
+        console2.log("===== PLEASE EYEBALL - UPGRADE CONSTANTS =======");
+        console2.log("================================================");
+        console2.log("GIT_COMMIT_SHA (must match deploy.s.sol):", vm.toString(GIT_COMMIT_SHA));
+        console2.log("commitHashSalt:                          ", vm.toString(commitHashSalt));
+        console2.log("");
+        console2.log("--- Deployed impl addresses (set after deploy.s.sol) ---");
+        console2.log("blacklisterProxy:                    ", blacklisterProxy);
+        console2.log("revokeAdminProxy:                    ", revokeAdminProxy);
+        console2.log("roleRegistryImpl:                    ", roleRegistryImpl);
+        console2.log("eEthImpl:                            ", eEthImpl);
+        console2.log("liquidityPoolImpl:                   ", liquidityPoolImpl);
+        console2.log("weEthImpl:                           ", weEthImpl);
+        console2.log("depositAdapterImpl:                  ", depositAdapterImpl);
+        console2.log("liquifierImpl:                       ", liquifierImpl);
+        console2.log("etherFiRateLimiterImpl:              ", etherFiRateLimiterImpl);
+        console2.log("membershipManagerImpl:               ", membershipManagerImpl);
+        console2.log("membershipNFTImpl:                   ", membershipNFTImpl);
+        console2.log("etherFiAdminImpl:                    ", etherFiAdminImpl);
+        console2.log("etherFiOracleImpl:                   ", etherFiOracleImpl);
+        console2.log("etherFiRestakerImpl:                 ", etherFiRestakerImpl);
+        console2.log("restakingRewardsRouterImpl:          ", restakingRewardsRouterImpl);
+        console2.log("cumulativeMerkleRewardsDistImpl:     ", cumulativeMerkleRewardsDistributorImpl);
+        console2.log("etherFiRewardsRouterImpl:            ", etherFiRewardsRouterImpl);
+        console2.log("auctionManagerImpl:                  ", auctionManagerImpl);
+        console2.log("etherFiNodeImpl (beacon):            ", etherFiNodeImpl);
+        console2.log("etherFiNodesManagerImpl:             ", etherFiNodesManagerImpl);
+        console2.log("nodeOperatorManagerImpl:             ", nodeOperatorManagerImpl);
+        console2.log("stakingManagerImpl:                  ", stakingManagerImpl);
+        console2.log("etherFiRedemptionManagerImpl:        ", etherFiRedemptionManagerImpl);
+        console2.log("priorityWithdrawalQueueImpl:         ", priorityWithdrawalQueueImpl);
+        console2.log("weETHWithdrawAdapterImpl:            ", weETHWithdrawAdapterImpl);
+        console2.log("withdrawRequestNFTImpl:              ", withdrawRequestNFTImpl);
+        console2.log("");
+        console2.log("--- 9 RoleRegistry role holders ---");
+        console2.log("UPGRADE_TIMELOCK    (prefilled):     ", HOLDER_UPGRADE_TIMELOCK_ROLE);
+        console2.log("OPERATION_TIMELOCK  (prefilled):     ", HOLDER_OPERATION_TIMELOCK_ROLE);
+        console2.log("OPERATION_MULTISIG  (prefilled):     ", HOLDER_OPERATION_MULTISIG_ROLE);
+        console2.log("SUPER_GUARDIAN_ROLE (TBD):           ", HOLDER_SUPER_GUARDIAN_ROLE);
+        console2.log("GUARDIAN_ROLE (TBD):                 ", HOLDER_GUARDIAN_ROLE);
+        console2.log("ORACLE_OPERATIONS_ROLE (TBD):        ", HOLDER_ORACLE_OPERATIONS_ROLE);
+        console2.log("HOUSEKEEPING_OPERATIONS_ROLE (TBD):  ", HOLDER_HOUSEKEEPING_OPERATIONS_ROLE);
+        console2.log("EXECUTOR_OPERATIONS_ROLE (TBD):      ", HOLDER_EXECUTOR_OPERATIONS_ROLE);
+        console2.log("EIGENPOD_OPERATIONS_ROLE (TBD):      ", HOLDER_EIGENPOD_OPERATIONS_ROLE);
+        console2.log("");
+        console2.log("--- Rate-limiter buckets (gwei units; TBD) ---");
+        console2.log("EETH_MINT  cap / refill:             ", EETH_MINT_CAPACITY,  EETH_MINT_REFILL_RATE);
+        console2.log("EETH_BURN  cap / refill:             ", EETH_BURN_CAPACITY,  EETH_BURN_REFILL_RATE);
+        console2.log("WEETH_MINT cap / refill:             ", WEETH_MINT_CAPACITY, WEETH_MINT_REFILL_RATE);
+        console2.log("WEETH_BURN cap / refill:             ", WEETH_BURN_CAPACITY, WEETH_BURN_REFILL_RATE);
+        console2.log("STETH_REQUEST_WITHDRAWAL cap/refill: ", STETH_REQUEST_WITHDRAWAL_CAPACITY, STETH_REQUEST_WITHDRAWAL_REFILL_RATE);
+        console2.log("QUEUE_WITHDRAWALS cap/refill:        ", QUEUE_WITHDRAWALS_CAPACITY,        QUEUE_WITHDRAWALS_REFILL_RATE);
+        console2.log("DEPOSIT_INTO_STRATEGY cap/refill:    ", DEPOSIT_INTO_STRATEGY_CAPACITY,    DEPOSIT_INTO_STRATEGY_REFILL_RATE);
+        console2.log("UNRESTAKING cap/refill:              ", UNRESTAKING_CAPACITY,              UNRESTAKING_REFILL_RATE);
+        console2.log("EXIT_REQUEST cap/refill:             ", EXIT_REQUEST_CAPACITY,             EXIT_REQUEST_REFILL_RATE);
+        console2.log("CONSOLIDATION_REQUEST cap/refill:    ", CONSOLIDATION_REQUEST_CAPACITY,    CONSOLIDATION_REQUEST_REFILL_RATE);
+        console2.log("");
+        console2.log("--- PausableUntil durations (sec; TBD) ---");
+        console2.log("PAUSE_UNTIL_EETH:                    ", PAUSE_UNTIL_EETH);
+        console2.log("PAUSE_UNTIL_WEETH:                   ", PAUSE_UNTIL_WEETH);
+        console2.log("PAUSE_UNTIL_LIQUIDITY_POOL:          ", PAUSE_UNTIL_LIQUIDITY_POOL);
+        console2.log("PAUSE_UNTIL_LIQUIFIER:               ", PAUSE_UNTIL_LIQUIFIER);
+        console2.log("PAUSE_UNTIL_CMRD:                    ", PAUSE_UNTIL_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR);
+        console2.log("PAUSE_UNTIL_AUCTION_MANAGER:         ", PAUSE_UNTIL_AUCTION_MANAGER);
+        console2.log("PAUSE_UNTIL_ETHERFI_NODES_MANAGER:   ", PAUSE_UNTIL_ETHERFI_NODES_MANAGER);
+        console2.log("PAUSE_UNTIL_ETHERFI_REDEMPTION_MGR:  ", PAUSE_UNTIL_ETHERFI_REDEMPTION_MGR);
+        console2.log("PAUSE_UNTIL_PRIORITY_WITHDRAWAL_QUEUE", PAUSE_UNTIL_PRIORITY_WITHDRAWAL_QUEUE);
+        console2.log("PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER:  ", PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER);
+        console2.log("PAUSE_UNTIL_WITHDRAW_REQUEST_NFT:    ", PAUSE_UNTIL_WITHDRAW_REQUEST_NFT);
+        console2.log("");
+        console2.log("--- Operational setpoints ---");
+        console2.log("ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT (TBD):", ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT);
+        console2.log("LP_MIN_WITHDRAW_AMOUNT (wei):                ", LP_MIN_WITHDRAW_AMOUNT);
+        console2.log("LP_MAX_WITHDRAW_AMOUNT (wei):                ", LP_MAX_WITHDRAW_AMOUNT);
+        console2.log("WNFT_MIN_ACCEPTABLE_SHARE_RATE:              ", WNFT_MIN_ACCEPTABLE_SHARE_RATE);
+        console2.log("WNFT_MAX_ACCEPTABLE_SHARE_RATE:              ", WNFT_MAX_ACCEPTABLE_SHARE_RATE);
+        console2.log("================================================");
+        console2.log("");
     }
 
     //--------------------------------------------------------------------------------------
@@ -624,7 +745,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
 
     function _verifyWithdrawalsBytecode() internal {
         EtherFiRedemptionManager fresh = new EtherFiRedemptionManager(
-            LIQUIDITY_POOL, EETH, WEETH, TREASURY, ROLE_REGISTRY, ETHERFI_RESTAKER,
+            LIQUIDITY_POOL, EETH, WEETH, WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, ROLE_REGISTRY, ETHERFI_RESTAKER,
             PRIORITY_WITHDRAWAL_QUEUE, blacklisterProxy,
             RM_MAX_EXIT_FEE_SPLIT_TO_TREASURY_BPS, RM_MAX_EXIT_FEE_BPS, RM_MAX_LOW_WATERMARK_BPS_OF_TVL
         );
@@ -870,13 +991,15 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     }
     // staking
     function _auctionImmSels() internal pure returns (bytes4[] memory s) {
-        s = new bytes4[](6);
+        // membershipManagerContractAddress() was removed by the new AuctionManager impl
+        // and is no longer in the post-upgrade selector set. Excluded so _postSnap's
+        // strict re-call doesn't revert on it.
+        s = new bytes4[](5);
         s[0] = bytes4(keccak256("roleRegistry()"));
         s[1] = bytes4(keccak256("blacklister()"));
         s[2] = bytes4(keccak256("nodeOperatorManager()"));
         s[3] = bytes4(keccak256("stakingManagerContractAddress()"));
-        s[4] = bytes4(keccak256("membershipManagerContractAddress()"));
-        s[5] = bytes4(keccak256("treasury()"));
+        s[4] = bytes4(keccak256("treasury()"));
     }
     function _nodesMgrImmSels() internal pure returns (bytes4[] memory s) {
         s = new bytes4[](3);
@@ -984,32 +1107,31 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     //
     // ONE atomic batch, executed by the UPGRADE_TIMELOCK, in this exact order:
     //   1. grant the 9 RolesLibrary roles      (grantRole is owner-gated; owner == UPGRADE_TIMELOCK)
-    //   2. upgrade RoleRegistry + every proxy + the EtherFiNode beacon
-    //   3. run the two onlyUpgradeTimelock one-shot initializers
-    //   4. revoke every holder of the 31 legacy roles (revokeRole is owner-gated)
+    //   2. upgrade every proxy + the EtherFiNode beacon (gated by OLD RR.onlyProtocolUpgrader = owner check)
+    //   3. swap RoleRegistry impl                       (gated by OLD RR._authorizeUpgrade = onlyOwner)
+    //   4. run the two onlyUpgradeTimelock one-shot initializers (gated by NEW RR.onlyUpgradeTimelock)
+    //   5. revoke every holder of the 31 legacy roles  (revokeRole is owner-gated; works on either RR impl)
     //
-    // Grants come first so the UPGRADE_TIMELOCK already holds UPGRADE_TIMELOCK_ROLE
-    // when the initializers run; they execute against the pre-upgrade RoleRegistry
-    // impl, which shares Solady's role storage, so they're visible to the new impl
-    // after the swap in step 2. Revokes come last, once the upgraded contracts have
-    // moved to the 9-role model and the legacy roles are orphaned. Everything here is
-    // either owner-gated or onlyUpgradeTimelock, so it all belongs to this one batch
-    // and emits a single schedule/execute pair.
+    // Grants come first so UPGRADE_TIMELOCK already holds UPGRADE_TIMELOCK_ROLE before the
+    // initializers run. Proxy upgrades come BEFORE the RR swap because OLD proxy impls gate
+    // `_authorizeUpgrade` via `roleRegistry.onlyProtocolUpgrader(msg.sender)`, which the
+    // NEW RoleRegistry does not implement — swapping RR first would brick every subsequent
+    // upgradeTo with an unknown-selector revert. See _appendUpgradeCalls for full rationale.
     //--------------------------------------------------------------------------------------
     function executeUpgrade() public {
-        console2.log("=== Step 3: Executing Upgrade Timelock Batch (grants -> upgrades -> initializers -> legacy revokes, UPGRADE_TIMELOCK, 10d) ===");
+        console2.log("=== Step 3: Executing Upgrade Timelock Batch (grants -> proxy upgrades -> RR swap -> initializers -> legacy revokes, UPGRADE_TIMELOCK, 10d) ===");
 
         uint256 revokeCount = _countLegacyRoleHolders();
 
-        // 9 grants + (upgrades + 2 initializers, <=50 headroom) + N legacy revokes.
+        // 9 grants + (21 proxy upgrades + 1 beacon + 1 RR swap + 2 initializers, <=50 headroom) + N legacy revokes.
         address[] memory targets = new address[](50 + revokeCount);
         bytes[]   memory data    = new bytes[](50 + revokeCount);
         uint256[] memory values  = new uint256[](50 + revokeCount);
         uint256 i;
 
-        i = _appendGrantCalls(targets, data, i);        // 1. role grants (precede the initializers)
-        i = _appendUpgradeCalls(targets, data, i);      // 2. proxy/beacon upgrades + 3. initializers
-        i = _appendLegacyRevokeCalls(targets, data, i); // 4. legacy role revocations
+        i = _appendGrantCalls(targets, data, i);        // 1. role grants
+        i = _appendUpgradeCalls(targets, data, i);      // 2-4. proxy upgrades -> RR swap -> initializers
+        i = _appendLegacyRevokeCalls(targets, data, i); // 5. legacy role revocations
 
         console2.log("Upgrade-timelock batch op count (incl legacy revokes):", i);
 
@@ -1020,7 +1142,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
                 timelockAddr: UPGRADE_TIMELOCK,
                 adminSafe: ETHERFI_UPGRADE_ADMIN,
                 minDelay: UPGRADE_TIMELOCK_DELAY,
-                salt: keccak256(abi.encode("security-upgrades-v1-upgrade-batch", block.number)),
+                salt: keccak256(abi.encode("batch-1", commitHashSalt)),
                 scheduleFile: "upgrade_schedule.json",
                 executeFile: "upgrade_execute.json"
             }),
@@ -1028,18 +1150,33 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         );
     }
 
-    /// @dev Append the proxy/beacon upgrades (RoleRegistry first) followed by the two
-    ///      onlyUpgradeTimelock one-shot initializers. Returns the updated write index.
+    /// @dev Append the proxy/beacon upgrades, then the RoleRegistry impl swap, then the
+    ///      two onlyUpgradeTimelock one-shot initializers. Returns the updated write index.
+    ///
+    /// ORDERING RATIONALE (see C1 in PR #420 review):
+    ///   The currently-deployed proxy impls gate `_authorizeUpgrade` via
+    ///   `roleRegistry.onlyProtocolUpgrader(msg.sender)`, which on the OLD RoleRegistry
+    ///   is a simple `owner() == account` check. The OLD RR's owner is the UPGRADE_TIMELOCK
+    ///   executing this batch, so all 21 proxy upgrades + the beacon upgrade pass against
+    ///   the OLD RR.
+    ///   The NEW RoleRegistry impl drops `onlyProtocolUpgrader` and exposes
+    ///   `onlyUpgradeTimelock` instead. If we swapped RR first, every subsequent
+    ///   `upgradeTo` call would revert with an unknown-selector fallback on the new RR.
+    ///   The 2 onlyUpgradeTimelock initializers (LP.initializeOnUpgradeV2,
+    ///   WRN.initializeShareRateFreezeUpgrade) are functions on the NEW impls whose
+    ///   modifier calls `roleRegistry.onlyUpgradeTimelock(msg.sender)`, so they need the
+    ///   NEW RR live. Hence the order: proxy upgrades → RR swap → initializers.
+    ///   Legacy revokes come after this function (still in the same batch); they're
+    ///   owner-gated (Solady setRole), and owner stays UPGRADE_TIMELOCK across the swap.
     function _appendUpgradeCalls(address[] memory targets, bytes[] memory data, uint256 i)
         internal
         pure
         returns (uint256)
     {
-        // RoleRegistry MUST upgrade before every other proxy. Its owner is the
-        // UPGRADE_TIMELOCK (this batch's executor), so the current impl's onlyOwner
-        // gate authorizes the swap; the new impl then gates upgrades on
-        // UPGRADE_TIMELOCK_ROLE (granted earlier in this same batch).
-        (targets[i], data[i]) = (ROLE_REGISTRY,              _upgradeTo(roleRegistryImpl));           i++;
+        // ─── Phase A: 21 UUPS proxy upgrades + 1 beacon upgrade ─────────────────────────
+        // All gated by the OLD impls' `_authorizeUpgrade`, which on master/main calls
+        // `roleRegistry.onlyProtocolUpgrader(msg.sender)` → OLD RR `owner() == msg.sender`
+        // → UPGRADE_TIMELOCK. Passes.
 
         // core
         (targets[i], data[i]) = (EETH,                       _upgradeTo(eEthImpl));                   i++;
@@ -1048,7 +1185,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         // deposits
         (targets[i], data[i]) = (DEPOSIT_ADAPTER,                       _upgradeTo(depositAdapterImpl));                     i++;
         (targets[i], data[i]) = (LIQUIFIER,                  _upgradeTo(liquifierImpl));              i++;
-        // governance (RoleRegistry already upgraded above)
+        // governance (RoleRegistry swap is deferred to Phase B below)
         (targets[i], data[i]) = (ETHERFI_RATE_LIMITER,       _upgradeTo(etherFiRateLimiterImpl));     i++;
         // membership
         (targets[i], data[i]) = (MEMBERSHIP_MANAGER,         _upgradeTo(membershipManagerImpl));      i++;
@@ -1080,8 +1217,18 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         (targets[i], data[i]) = (WEETH_WITHDRAW_ADAPTER,                _upgradeTo(weETHWithdrawAdapterImpl));               i++;
         (targets[i], data[i]) = (WITHDRAW_REQUEST_NFT,       _upgradeTo(withdrawRequestNFTImpl));     i++;
 
-        // Post-upgrade one-shot migration calls — must run after the impl swaps above,
-        // and after the grants (step 1) since both are onlyUpgradeTimelock.
+        // ─── Phase B: RoleRegistry impl swap ─────────────────────────────────────────────
+        // Run AFTER every other upgradeTo so those upgrades resolve against the OLD RR's
+        // `onlyProtocolUpgrader` (owner-check). The OLD RR's own `_authorizeUpgrade` is
+        // `onlyOwner` → UPGRADE_TIMELOCK, so this swap is authorized.
+        // After this, all future `_authorizeUpgrade` calls and the initializers below
+        // resolve against the NEW RR's `onlyUpgradeTimelock` → UPGRADE_TIMELOCK_ROLE,
+        // which was granted in step 1 (_appendGrantCalls).
+        (targets[i], data[i]) = (ROLE_REGISTRY,              _upgradeTo(roleRegistryImpl));           i++;
+
+        // ─── Phase C: post-upgrade one-shot initializers ─────────────────────────────────
+        // onlyUpgradeTimelock on the NEW impls → needs NEW RR + UPGRADE_TIMELOCK_ROLE,
+        // both delivered by Phase B and step 1 respectively.
         (targets[i], data[i]) = (LIQUIDITY_POOL,
             abi.encodeWithSelector(LiquidityPool.initializeOnUpgradeV2.selector));                    i++;
         (targets[i], data[i]) = (WITHDRAW_REQUEST_NFT,
@@ -1373,7 +1520,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
 
     function _verifyImmutablesWithdrawals() internal view {
         EtherFiRedemptionManager r = EtherFiRedemptionManager(payable(ETHERFI_REDEMPTION_MANAGER));
-        require(r.treasury()                          == TREASURY,                  "EFRedemption.treasury");
+        require(r.treasury()                          == WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, "EFRedemption.treasury");
         require(address(r.roleRegistry())             == ROLE_REGISTRY,             "EFRedemption.roleRegistry");
         require(address(r.eEth())                     == EETH,                      "EFRedemption.eEth");
         require(address(r.weEth())                    == WEETH,                     "EFRedemption.weEth");
@@ -1591,13 +1738,23 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(DEPOSIT_INTO_STRATEGY_LIMIT_ID,    ETHERFI_RESTAKER)); i++;
 
         // ───────── staking — EtherFiNodesManager buckets (consume) ─────────
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(UNRESTAKING_LIMIT_ID,           UNRESTAKING_CAPACITY,           UNRESTAKING_REFILL_RATE));           i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(EXIT_REQUEST_LIMIT_ID,          EXIT_REQUEST_CAPACITY,          EXIT_REQUEST_REFILL_RATE));          i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(CONSOLIDATION_REQUEST_LIMIT_ID, CONSOLIDATION_REQUEST_CAPACITY, CONSOLIDATION_REQUEST_REFILL_RATE)); i++;
-
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(UNRESTAKING_LIMIT_ID,           ETHERFI_NODES_MANAGER)); i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(EXIT_REQUEST_LIMIT_ID,          ETHERFI_NODES_MANAGER)); i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(CONSOLIDATION_REQUEST_LIMIT_ID, ETHERFI_NODES_MANAGER)); i++;
+        // NOTE: UNRESTAKING / EXIT_REQUEST / CONSOLIDATION_REQUEST buckets already exist
+        // on mainnet from a prior deployment (limitExists() == true). createNewLimiter
+        // would revert with LimitAlreadyExists(). Use setCapacity + setRefillRatePerSecond
+        // for these 3; the consumer wiring is also already in place so no updateConsumer
+        // call is needed.
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER,
+            abi.encodeWithSelector(EtherFiRateLimiter.setCapacity.selector, UNRESTAKING_LIMIT_ID, UNRESTAKING_CAPACITY));           i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER,
+            abi.encodeWithSelector(EtherFiRateLimiter.setRefillRate.selector, UNRESTAKING_LIMIT_ID, UNRESTAKING_REFILL_RATE));      i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER,
+            abi.encodeWithSelector(EtherFiRateLimiter.setCapacity.selector, EXIT_REQUEST_LIMIT_ID, EXIT_REQUEST_CAPACITY));         i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER,
+            abi.encodeWithSelector(EtherFiRateLimiter.setRefillRate.selector, EXIT_REQUEST_LIMIT_ID, EXIT_REQUEST_REFILL_RATE));    i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER,
+            abi.encodeWithSelector(EtherFiRateLimiter.setCapacity.selector, CONSOLIDATION_REQUEST_LIMIT_ID, CONSOLIDATION_REQUEST_CAPACITY));   i++;
+        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER,
+            abi.encodeWithSelector(EtherFiRateLimiter.setRefillRate.selector, CONSOLIDATION_REQUEST_LIMIT_ID, CONSOLIDATION_REQUEST_REFILL_RATE)); i++;
 
         // ───────── oracle — EtherFiAdmin daily finalized-withdrawal cap (onlyAdmin) ─────────
         // Seeds maxFinalizedWithdrawalAmountPerDay (defaults to 0, which rejects all
@@ -1630,7 +1787,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
                 timelockAddr: OPERATING_TIMELOCK,
                 adminSafe: ETHERFI_OPERATING_ADMIN,
                 minDelay: OPERATING_TIMELOCK_DELAY,
-                salt: keccak256(abi.encode("security-upgrades-v1-batchB", block.number)),
+                salt: keccak256(abi.encode("batch-2", commitHashSalt)),
                 scheduleFile: "ops_schedule.json",
                 executeFile: "ops_execute.json"
             }),

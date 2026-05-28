@@ -60,8 +60,14 @@ import {Utils, ICreate2Factory} from "@scripts/utils/utils.sol";
 contract DeploySecurityUpgrades is Script, Deployed, Utils {
     ICreate2Factory public constant factory = ICreate2Factory(0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99);
 
-    // Commit hash used as salt — update before broadcast.
-    bytes32 public constant commitHashSalt = bytes32(bytes20(hex"0000000000000000000000000000000000000000"));
+    // ─────────────────────────────────────────────────────────────────────
+    // GIT_COMMIT_SHA — TBD; set to the first 20 bytes of the release commit SHA
+    // BEFORE broadcasting (see PR #420 review C3). The same value must be set in
+    // transactions.s.sol and revert.s.sol so the CREATE2 salt and timelock salts agree.
+    // _preflight() rejects bytes20(0).
+    // ─────────────────────────────────────────────────────────────────────
+    bytes20 public constant GIT_COMMIT_SHA = bytes20(hex"0000000000000000000000000000000000000000"); // TBD
+    bytes32 public constant commitHashSalt = bytes32(GIT_COMMIT_SHA);
 
     // ----- Immutable params (set per spec / ops review) -----
     // NOTE: These values are variable and would be further changed as per needed
@@ -80,7 +86,7 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
     // oracle — EtherFiAdmin immutable params
     int256  public constant ADMIN_MAX_REBASE_APR_BPS = 1_000;           // 10% absolute ceiling
     uint256 public constant ADMIN_MAX_VALIDATOR_TASK_BATCH_SIZE = 100; // 50 Currently
-    uint256 public constant ADMIN_STALE_ORACLE_REPORT_BLOCK_WINDOW = 7200 * 7; // ~14 days @ 12s blocks
+    uint256 public constant ADMIN_STALE_ORACLE_REPORT_BLOCK_WINDOW = 7200 * 14; // ~14 days @ 12s blocks
     uint256 public constant ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY = 100_000 ether;
     uint256 public constant ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY = 1_000;
     uint256 public constant ADMIN_MAX_REQUESTS_TO_FINALIZE_PER_REPORT = 2_000;
@@ -89,13 +95,22 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
     uint256 public constant ORACLE_MIN_QUORUM_SIZE = 3; // enforces min 3/5 quorum for consensus
 
     // withdrawals — EtherFiRedemptionManager hardcoded ceilings (per spec §7.4.6 / §9)
-    uint256 public constant RM_MAX_EXIT_FEE_SPLIT_TO_BUYBACK_BPS = 10_000;
+    // NOTE: the contract field is named `maxExitFeeSplitToTreasuryInBps`, but the actual
+    // destination address (passed as `_treasury` in the constructor) is the buyback safe.
+    // We standardize the BPS constant name on "TREASURY" to match the contract field;
+    // the destination address is WITHDRAW_REQUEST_NFT_BUYBACK_SAFE in BOTH deploy and
+    // transactions/verify (see C2 in PR #420 review).
+    uint256 public constant RM_MAX_EXIT_FEE_SPLIT_TO_TREASURY_BPS = 10_000;
     uint256 public constant RM_MAX_EXIT_FEE_BPS = 500;                  // 5% hardcoded ceiling
     uint256 public constant RM_MAX_LOW_WATERMARK_BPS_OF_TVL = 2_000;    // 20% hardcoded ceiling
 
     // withdrawals — WithdrawRequestNFT share-rate acceptance band
-    uint256 public constant WNFT_MIN_ACCEPTABLE_SHARE_RATE = 1;
-    uint256 public constant WNFT_MAX_ACCEPTABLE_SHARE_RATE = 4 ether;
+    // Tightened band ~[0.9, 1.1] × the live LiquidityPool.amountPerShareCeil() snapshot
+    // at deploy time (~1.05 ether as of 2026-05-28). See H4 in PR #420 review.
+    // RE-VERIFY THESE BEFORE BROADCAST against the current `amountPerShareCeil()` —
+    // any drift > a few % suggests rate has moved and the band should be re-centered.
+    uint256 public constant WNFT_MIN_ACCEPTABLE_SHARE_RATE = 0.95 ether;
+    uint256 public constant WNFT_MAX_ACCEPTABLE_SHARE_RATE = 1.15 ether;
 
     // withdrawals — PriorityWithdrawalQueue — must match the constructor arg used at proxy genesis;
     // the proxy's existing impl was deployed with 1 hour, so the new impl must too.
@@ -145,6 +160,9 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
         console2.log("====== 26Q2 Security Upgrades - Deploy ========");
         console2.log("================================================");
         console2.log("");
+
+        _printPleaseEyeball();
+        _preflight();
 
         vm.startBroadcast();
 
@@ -227,7 +245,10 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
             });
             bytes memory args = abi.encode(lpAddrs, LP_MIN_AMOUNT_FOR_SHARE);
             bytes memory bc = abi.encodePacked(type(LiquidityPool).creationCode, args);
-            liquidityPoolImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+            // logging=false because Utils.formatStaticParam can't pretty-print the
+            // ConstructorAddresses struct (reverts "Unsupported static type"). Deployment
+            // still succeeds; only the JSON log is skipped for this contract.
+            liquidityPoolImpl = deploy(name, args, bc, commitHashSalt, false, factory);
         }
         {
             string memory name = "WeETH";
@@ -273,7 +294,7 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
                 LIQUIFIER_MAX_PRICE_DEVIATION_BPS
             );
             bytes memory bc = abi.encodePacked(type(Liquifier).creationCode, args);
-            liquifierImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+            liquifierImpl = deploy(name, args, bc, commitHashSalt, false, factory); // logging=false: struct arg
         }
 
         // governance (Blacklister / RevokeAdmin / RoleRegistry deployed in the prefix above)
@@ -334,7 +355,7 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
                 ADMIN_MAX_REQUESTS_TO_FINALIZE_PER_REPORT
             );
             bytes memory bc = abi.encodePacked(type(EtherFiAdmin).creationCode, args);
-            etherFiAdminImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+            etherFiAdminImpl = deploy(name, args, bc, commitHashSalt, false, factory); // logging=false: struct arg
         }
         {
             string memory name = "EtherFiOracle";
@@ -437,7 +458,7 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
                 ETHERFI_RESTAKER,
                 PRIORITY_WITHDRAWAL_QUEUE,
                 blacklisterProxy,
-                RM_MAX_EXIT_FEE_SPLIT_TO_BUYBACK_BPS,
+                RM_MAX_EXIT_FEE_SPLIT_TO_TREASURY_BPS,
                 RM_MAX_EXIT_FEE_BPS,
                 RM_MAX_LOW_WATERMARK_BPS_OF_TVL
             );
@@ -490,6 +511,49 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
         vm.stopBroadcast();
 
         _logSummary();
+    }
+
+    /// @dev Fail loudly the moment a deploy-time TBD constant is still unset.
+    function _preflight() internal pure {
+        require(GIT_COMMIT_SHA != bytes20(0), "preflight: GIT_COMMIT_SHA unset - set to first 20 bytes of release commit");
+        require(WNFT_MIN_ACCEPTABLE_SHARE_RATE > 0,                                    "preflight: WNFT_MIN_ACCEPTABLE_SHARE_RATE unset");
+        require(WNFT_MAX_ACCEPTABLE_SHARE_RATE > WNFT_MIN_ACCEPTABLE_SHARE_RATE,       "preflight: WNFT_MAX_ACCEPTABLE_SHARE_RATE <= MIN");
+    }
+
+    /// @dev Print every TBD/operational constant so the broadcaster can eyeball them before
+    ///      `vm.startBroadcast` runs. See H3 in PR #420 review.
+    function _printPleaseEyeball() internal pure {
+        console2.log("================================================");
+        console2.log("===== PLEASE EYEBALL - DEPLOY CONSTANTS ========");
+        console2.log("================================================");
+        console2.log("GIT_COMMIT_SHA (first 20B of commit, hex):", vm.toString(GIT_COMMIT_SHA));
+        console2.log("commitHashSalt:                           ", vm.toString(commitHashSalt));
+        console2.log("");
+        console2.log("LP_MIN_AMOUNT_FOR_SHARE (LP dust):        ", LP_MIN_AMOUNT_FOR_SHARE);
+        console2.log("");
+        console2.log("LIQUIFIER_MIN_DISCOUNT_BPS:               ", LIQUIFIER_MIN_DISCOUNT_BPS);
+        console2.log("LIQUIFIER_STALE_PRICE_WINDOW (sec):       ", LIQUIFIER_STALE_PRICE_WINDOW);
+        console2.log("LIQUIFIER_MAX_PRICE_DEVIATION_BPS:        ", LIQUIFIER_MAX_PRICE_DEVIATION_BPS);
+        console2.log("");
+        console2.log("ADMIN_MAX_REBASE_APR_BPS (ceiling):       ", uint256(int256(ADMIN_MAX_REBASE_APR_BPS)));
+        console2.log("ADMIN_MAX_VALIDATOR_TASK_BATCH_SIZE:      ", ADMIN_MAX_VALIDATOR_TASK_BATCH_SIZE);
+        console2.log("ADMIN_STALE_ORACLE_REPORT_BLOCK_WINDOW:   ", ADMIN_STALE_ORACLE_REPORT_BLOCK_WINDOW);
+        console2.log("ADMIN_MAX_FINALIZED_WITHDRAWAL_PER_DAY:   ", ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY);
+        console2.log("ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY:  ", ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY);
+        console2.log("ADMIN_MAX_REQUESTS_TO_FINALIZE_PER_REPORT:", ADMIN_MAX_REQUESTS_TO_FINALIZE_PER_REPORT);
+        console2.log("");
+        console2.log("ORACLE_MIN_QUORUM_SIZE:                   ", ORACLE_MIN_QUORUM_SIZE);
+        console2.log("");
+        console2.log("RM_MAX_EXIT_FEE_SPLIT_TO_TREASURY_BPS:    ", RM_MAX_EXIT_FEE_SPLIT_TO_TREASURY_BPS);
+        console2.log("RM_MAX_EXIT_FEE_BPS:                      ", RM_MAX_EXIT_FEE_BPS);
+        console2.log("RM_MAX_LOW_WATERMARK_BPS_OF_TVL:          ", RM_MAX_LOW_WATERMARK_BPS_OF_TVL);
+        console2.log("");
+        console2.log("WNFT_MIN_ACCEPTABLE_SHARE_RATE:           ", WNFT_MIN_ACCEPTABLE_SHARE_RATE);
+        console2.log("WNFT_MAX_ACCEPTABLE_SHARE_RATE:           ", WNFT_MAX_ACCEPTABLE_SHARE_RATE);
+        console2.log("");
+        console2.log("PWQ_MIN_DELAY (sec):                      ", PWQ_MIN_DELAY);
+        console2.log("================================================");
+        console2.log("");
     }
 
     function _logSummary() internal view {

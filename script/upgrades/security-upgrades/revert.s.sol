@@ -105,6 +105,13 @@ contract SecurityUpgradesRevertScript is Script, Deployed, Utils {
     uint256 constant UPGRADE_TIMELOCK_DELAY = 10 days;
     string constant OUT_DIR = "script/upgrades/security-upgrades";
 
+    // ─────────────────────────────────────────────────────────────────────
+    // GIT_COMMIT_SHA — MUST match deploy.s.sol's value. Used to derive
+    // a deterministic timelock salt (see PR #420 review C3 + C7).
+    // ─────────────────────────────────────────────────────────────────────
+    bytes20 constant GIT_COMMIT_SHA = bytes20(hex"0000000000000000000000000000000000000000"); // TBD
+    bytes32 constant commitHashSalt = bytes32(GIT_COMMIT_SHA);
+
     struct Snap { address owner; bool paused; }
     mapping(address => Snap) internal preRevertSnap;
 
@@ -122,6 +129,7 @@ contract SecurityUpgradesRevertScript is Script, Deployed, Utils {
 
     /// @dev Fail loudly the moment a required PRE_* constant is unset.
     function _preflight() internal pure {
+        require(GIT_COMMIT_SHA != bytes20(0), "preflight: GIT_COMMIT_SHA unset - set to first 20 bytes of release commit");
         // core
         require(PRE_EETH                                != address(0), "preflight: PRE_EETH unset");
         require(PRE_LIQUIDITY_POOL                      != address(0), "preflight: PRE_LIQUIDITY_POOL unset");
@@ -274,7 +282,7 @@ contract SecurityUpgradesRevertScript is Script, Deployed, Utils {
         // would lose their authorizer.
         (targets[i], data[i]) = (ROLE_REGISTRY,              _upgradeTo(PRE_ROLE_REGISTRY));                 i++;
 
-        bytes32 salt = keccak256(abi.encode("security-upgrades-v1-REVERT", block.number));
+        bytes32 salt = keccak256(abi.encode("batch-revert", commitHashSalt));
 
         bytes memory scheduleCalldata = abi.encodeWithSelector(
             upgradeTimelock.scheduleBatch.selector,
