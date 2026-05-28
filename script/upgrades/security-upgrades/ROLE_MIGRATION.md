@@ -229,6 +229,19 @@ Each of the 9 RolesLibrary roles gets exactly one grant in this script
 > from that multisig — separate from Batch A (upgrades) and Batch B (operating
 > config). The §2.1/§2.2/§2.3 split below is a logical grouping by tier only;
 > all nine are granted together.
+>
+> **Ordering: `role_grants.json` must be EXECUTED before `upgrade_execute.json`.**
+> Batch A finishes by calling the `onlyUpgradeTimelock` initializers
+> (`LiquidityPool.initializeOnUpgradeV2`,
+> `WithdrawRequestNFT.initializeShareRateFreezeUpgrade`), which revert unless
+> `UPGRADE_TIMELOCK` already holds `UPGRADE_TIMELOCK_ROLE` on the new registry
+> impl. Because the grant is owner-driven (not timelocked) while Batch A sits
+> behind a 10-day delay, the practical sequence is: schedule Batch A → grant the
+> roles any time during the delay → execute Batch A. The script's `run()`
+> dry-run mirrors this by calling `executeRoleGrants()` before `executeUpgrade()`.
+> In `executeRoleGrants` the role IDs are the hardcoded `keccak256` constants in
+> `transactions.s.sol` (mirroring `RoleRegistry.sol`), since the pre-upgrade
+> registry impl doesn't yet expose the `*_ROLE()` getters.
 
 The script does **not** revoke legacy holders. After running, audit
 `roleHolders(role)` on `RoleRegistry` and revoke any unwanted address with a
@@ -379,10 +392,13 @@ seeded by a Safe tx from `ETHERFI_OPERATING_ADMIN` (which is granted
    forge script script/upgrades/security-upgrades/transactions.s.sol:SecurityUpgradesScript \
        --fork-url $MAINNET_RPC_URL -vvvv
    ```
-6. Hand the emitted Safe JSONs to the corresponding signer:
-   - `upgrade_schedule.json` / `upgrade_execute.json` — Batch A, `UPGRADE_TIMELOCK` (10d), from `ETHERFI_UPGRADE_ADMIN`.
-   - `role_grants.json` — 9 role grants, from `ETHERFI_UPGRADE_ADMIN` (no timelock).
-   - `lp_withdraw_bounds.json` — LP min/max, from `ETHERFI_OPERATING_ADMIN` (no timelock).
+6. Hand the emitted Safe JSONs to the corresponding signer. Listed in execution
+   order — note `role_grants.json` is executed before `upgrade_execute.json` (see
+   the §2 ordering note):
+   - `upgrade_schedule.json` — Batch A schedule, `UPGRADE_TIMELOCK` (10d), from `ETHERFI_UPGRADE_ADMIN`.
+   - `role_grants.json` — 9 role grants, from `ETHERFI_UPGRADE_ADMIN` (no timelock). Execute during the 10-day delay, before `upgrade_execute.json`.
+   - `upgrade_execute.json` — Batch A execute, from `ETHERFI_UPGRADE_ADMIN`. Runs the `onlyUpgradeTimelock` initializers, so the grants above must already be in place.
+   - `lp_withdraw_bounds.json` — LP min/max, from `ETHERFI_OPERATING_ADMIN` (no timelock). Needs the LP upgrade live + `OPERATION_MULTISIG_ROLE` granted.
    - `ops_schedule.json` / `ops_execute.json` — Batch B, `OPERATING_TIMELOCK` (2d), from `ETHERFI_OPERATING_ADMIN`.
 
 ---

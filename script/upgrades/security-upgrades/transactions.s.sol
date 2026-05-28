@@ -55,12 +55,18 @@ import {Utils} from "@scripts/utils/utils.sol";
  * `run()` follows the standard upgrade-script pattern:
  *   1. verifyDeployedBytecode      — fresh deploys match the recorded impls
  *   2. takePreUpgradeSnapshots     — owners + paused, per upgraded proxy
- *   3. executeUpgrade              — Batch A (UPGRADE_TIMELOCK, 10d)
- *   4. verifyUpgrades              — ERC1967 implementation slot == new impl
- *   5. verifyImmutablePreservation — immutables on each new impl match wiring
- *   6. verifyAccessControlPreservation — owner + paused + init state unchanged
+ *   3. executeRoleGrants           — direct from ETHERFI_UPGRADE_ADMIN (RoleRegistry owner, no timelock).
+ *                                    Runs BEFORE the upgrade so UPGRADE_TIMELOCK already holds
+ *                                    UPGRADE_TIMELOCK_ROLE when Batch A invokes the onlyUpgradeTimelock
+ *                                    initializers (LiquidityPool.initializeOnUpgradeV2,
+ *                                    WithdrawRequestNFT.initializeShareRateFreezeUpgrade). Role IDs are
+ *                                    hardcoded (below) because the pre-upgrade registry impl doesn't
+ *                                    expose the *_ROLE() getters yet.
+ *   4. executeUpgrade              — Batch A (UPGRADE_TIMELOCK, 10d)
+ *   5. verifyUpgrades              — ERC1967 implementation slot == new impl
+ *   6. verifyImmutablePreservation — immutables on each new impl match wiring
+ *   7. verifyAccessControlPreservation — owner + paused + init state unchanged
  *
- *   7. executeRoleGrants           — direct from ETHERFI_UPGRADE_ADMIN (RoleRegistry owner, no timelock)
  *   8. executeLpWithdrawBounds     — direct from ETHERFI_OPERATING_ADMIN (operating multisig, no timelock)
  *   9. executeOperatingConfig      — Batch B (OPERATING_TIMELOCK, 2d)
  *  10. verifyOperatingConfig       — rate-limiter buckets + pause durations set + roles granted + LP withdraw bounds
@@ -165,6 +171,23 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     address constant HOLDER_EIGENPOD_OPERATIONS_ROLE     = address(0);
 
     // ─────────────────────────────────────────────────────────────────────
+    // ROLE IDs — hardcoded keccak256 of the role name. Mirror the constants in
+    // src/governance/RoleRegistry.sol EXACTLY. Hardcoded (not read via
+    // roleRegistry.<ROLE>()) because executeRoleGrants runs BEFORE the registry
+    // upgrade, and the pre-upgrade impl doesn't expose these getters. Resolved
+    // hex shown for `cast` cross-checks.
+    // ─────────────────────────────────────────────────────────────────────
+    bytes32 constant UPGRADE_TIMELOCK_ROLE        = keccak256("UPGRADE_TIMELOCK_ROLE");        // 0x5ba17a247620ef8426ae0fffc28eee4ee4b18eb3b8bcfa95664565c35371dfb5
+    bytes32 constant OPERATION_TIMELOCK_ROLE      = keccak256("OPERATION_TIMELOCK_ROLE");      // 0xe6bda0fc5c63b525e475d178ed9c7fa9913b3429ade866197b11eb0f2c18c673
+    bytes32 constant OPERATION_MULTISIG_ROLE      = keccak256("OPERATION_MULTISIG_ROLE");      // 0x9e4e6873d7e5b4630066665503d42d0314a7e21ea9ee5a05704b5b8c7148d3fb
+    bytes32 constant SUPER_GUARDIAN_ROLE          = keccak256("SUPER_GUARDIAN_ROLE");          // 0xd79525443f4852b5f09ad4110de858f17068636090fc71aac61dd76a51bc2d1a
+    bytes32 constant GUARDIAN_ROLE                = keccak256("GUARDIAN_ROLE");                // 0x55435dd261a4b9b3364963f7738a7a662ad9c84396d64be3365284bb7f0a5041
+    bytes32 constant ORACLE_OPERATIONS_ROLE       = keccak256("ORACLE_OPERATIONS_ROLE");       // 0xe04627ac7a10b0a9db5fa2746383dd87425afe4c7fe0a07b97e3996bc31be8cf
+    bytes32 constant HOUSEKEEPING_OPERATIONS_ROLE = keccak256("HOUSEKEEPING_OPERATIONS_ROLE"); // 0x6a220c67787309b57c3b5be766e6a2ee58f627b61610a5769482ab82dd198c87
+    bytes32 constant EXECUTOR_OPERATIONS_ROLE     = keccak256("EXECUTOR_OPERATIONS_ROLE");     // 0x8d94a233c9c242689a785911ca9060f0c5e06f317a3ec55d9a79ce4f7991d669
+    bytes32 constant EIGENPOD_OPERATIONS_ROLE     = keccak256("EIGENPOD_OPERATIONS_ROLE");     // 0x1d35f3653d06c44a47eae771269a6fec1babec5f5c25127bb524f5fefc5673e7
+
+    // ─────────────────────────────────────────────────────────────────────
     // OPERATIONAL PARAMETERS
     // ─────────────────────────────────────────────────────────────────────
     // core — Token-side global buckets (consumeToken on eETH/weETH paths).
@@ -267,12 +290,20 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
 
         verifyDeployedBytecode();
         takePreUpgradeSnapshots();
+
+        // Grants run BEFORE the upgrade: Batch A ends with the onlyUpgradeTimelock
+        // initializers (LiquidityPool.initializeOnUpgradeV2,
+        // WithdrawRequestNFT.initializeShareRateFreezeUpgrade), which require
+        // UPGRADE_TIMELOCK to already hold UPGRADE_TIMELOCK_ROLE on the new
+        // RoleRegistry impl. grantRole is onlyOwner (ETHERFI_UPGRADE_ADMIN), so it
+        // is independent of the timelock batch and can be applied first.
+        executeRoleGrants();
+
         executeUpgrade();
         verifyUpgrades();
         verifyImmutablePreservation();
         verifyAccessControlPreservation();
 
-        executeRoleGrants();
         executeLpWithdrawBounds();
 
         executeOperatingConfig();
@@ -879,10 +910,10 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     }
 
     //--------------------------------------------------------------------------------------
-    // STEP 3: executeUpgrade - Batch A
+    // STEP 4: executeUpgrade - Batch A
     //--------------------------------------------------------------------------------------
     function executeUpgrade() public {
-        console2.log("=== Step 3: Executing Upgrade (Batch A, UPGRADE_TIMELOCK, 10d) ===");
+        console2.log("=== Step 4: Executing Upgrade (Batch A, UPGRADE_TIMELOCK, 10d) ===");
 
         address[] memory targets = new address[](50);
         bytes[]   memory data    = new bytes[](50);
@@ -942,7 +973,9 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
             abi.encodeWithSelector(WithdrawRequestNFT.initializeShareRateFreezeUpgrade.selector));    i++;
 
         // Role grants live in executeRoleGrants() — they originate from the
-        // RoleRegistry owner (ETHERFI_UPGRADE_ADMIN), not from any timelock.
+        // RoleRegistry owner (ETHERFI_UPGRADE_ADMIN), not from any timelock, and
+        // already ran (Step 3) so UPGRADE_TIMELOCK holds UPGRADE_TIMELOCK_ROLE by
+        // the time the two initializers below execute.
 
         _shrinkAndEmit(
             BatchEmit({
@@ -960,10 +993,10 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     }
 
     //--------------------------------------------------------------------------------------
-    // STEP 4: verifyUpgrades
+    // STEP 5: verifyUpgrades
     //--------------------------------------------------------------------------------------
     function verifyUpgrades() public view {
-        console2.log("=== Step 4: Verifying Upgrades ===");
+        console2.log("=== Step 5: Verifying Upgrades ===");
         // core
         _assertImpl(EETH,                       eEthImpl,                     "EETH");
         _assertImpl(LIQUIDITY_POOL,             liquidityPoolImpl,            "LiquidityPool");
@@ -1009,7 +1042,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     }
 
     //--------------------------------------------------------------------------------------
-    // STEP 5: verifyImmutablePreservation
+    // STEP 6: verifyImmutablePreservation
     //
     // Two complementary checks per contract:
     //
@@ -1026,7 +1059,7 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     //       this PR.
     //--------------------------------------------------------------------------------------
     function verifyImmutablePreservation() public view {
-        console2.log("=== Step 5: Verifying Immutable Preservation ===");
+        console2.log("=== Step 6: Verifying Immutable Preservation ===");
 
         // (a) pre/post diff for surviving selectors
         // core
@@ -1283,10 +1316,10 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     }
 
     //--------------------------------------------------------------------------------------
-    // STEP 6: verifyAccessControlPreservation
+    // STEP 7: verifyAccessControlPreservation
     //--------------------------------------------------------------------------------------
     function verifyAccessControlPreservation() public view {
-        console2.log("=== Step 6: Verifying Access Control Preservation ===");
+        console2.log("=== Step 7: Verifying Access Control Preservation ===");
         address[22] memory proxies = _upgradedProxies();
         for (uint256 k = 0; k < proxies.length; k++) {
             address p = proxies[k];
@@ -1331,30 +1364,41 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     }
 
     //--------------------------------------------------------------------------------------
-    // STEP 7: executeRoleGrants
+    // STEP 3: executeRoleGrants
+    //
+    // Runs BEFORE executeUpgrade. Batch A ends by calling the onlyUpgradeTimelock
+    // initializers (LiquidityPool.initializeOnUpgradeV2,
+    // WithdrawRequestNFT.initializeShareRateFreezeUpgrade); those revert unless
+    // UPGRADE_TIMELOCK already holds UPGRADE_TIMELOCK_ROLE on the new RoleRegistry
+    // impl. So the grants must land first.
     //
     // RoleRegistry.grantRole is gated by `onlyOwner` on the registry — the
-    // registry's owner is ETHERFI_UPGRADE_ADMIN (the upgrade multisig), NOT
-    // any timelock. So every role grant is emitted as one Safe transaction
-    // directly from that multisig, with no timelock wrapping.
+    // registry's owner is ETHERFI_UPGRADE_ADMIN (the upgrade multisig), NOT any
+    // timelock — so this grant is independent of Batch A and emitted as one Safe
+    // transaction directly from that multisig, with no timelock wrapping.
+    //
+    // Role IDs are the hardcoded keccak256 constants above (mirroring
+    // RoleRegistry.sol), NOT roleRegistry.<ROLE>() calls: at this point the
+    // registry is still on its pre-upgrade impl, which doesn't expose those
+    // getters.
     //--------------------------------------------------------------------------------------
     function executeRoleGrants() public {
-        console2.log("=== Step 7: Executing Role Grants (ETHERFI_UPGRADE_ADMIN, no timelock) ===");
+        console2.log("=== Step 3: Executing Role Grants (ETHERFI_UPGRADE_ADMIN, no timelock) ===");
 
         address[] memory targets    = new address[](9);
         uint256[] memory values     = new uint256[](9);
         bytes[]   memory calldatas  = new bytes[](9);
 
         bytes32[9] memory roles = [
-            roleRegistry.UPGRADE_TIMELOCK_ROLE(),
-            roleRegistry.OPERATION_TIMELOCK_ROLE(),
-            roleRegistry.OPERATION_MULTISIG_ROLE(),
-            roleRegistry.SUPER_GUARDIAN_ROLE(),
-            roleRegistry.GUARDIAN_ROLE(),
-            roleRegistry.ORACLE_OPERATIONS_ROLE(),
-            roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(),
-            roleRegistry.EXECUTOR_OPERATIONS_ROLE(),
-            roleRegistry.EIGENPOD_OPERATIONS_ROLE()
+            UPGRADE_TIMELOCK_ROLE,
+            OPERATION_TIMELOCK_ROLE,
+            OPERATION_MULTISIG_ROLE,
+            SUPER_GUARDIAN_ROLE,
+            GUARDIAN_ROLE,
+            ORACLE_OPERATIONS_ROLE,
+            HOUSEKEEPING_OPERATIONS_ROLE,
+            EXECUTOR_OPERATIONS_ROLE,
+            EIGENPOD_OPERATIONS_ROLE
         ];
         address[9] memory holders = [
             HOLDER_UPGRADE_TIMELOCK_ROLE,
@@ -1534,15 +1578,29 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         require(WeETHWithdrawAdapter(payable(WEETH_WITHDRAW_ADAPTER)).pauseUntilDuration()                     == PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER,               "WeETHWA pause duration mismatch");
         require(WithdrawRequestNFT(payable(WITHDRAW_REQUEST_NFT)).pauseUntilDuration()== PAUSE_UNTIL_WITHDRAW_REQUEST_NFT,  "NFT pause duration mismatch");
 
-        require(roleRegistry.hasRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(),    HOLDER_UPGRADE_TIMELOCK_ROLE),   "UPGRADE_TIMELOCK_ROLE not granted");
-        require(roleRegistry.hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE(),  HOLDER_OPERATION_TIMELOCK_ROLE), "OPERATION_TIMELOCK_ROLE not granted");
-        require(roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(),  HOLDER_OPERATION_MULTISIG_ROLE), "OPERATION_MULTISIG_ROLE not granted");
-        require(roleRegistry.hasRole(roleRegistry.SUPER_GUARDIAN_ROLE(),          HOLDER_SUPER_GUARDIAN_ROLE),          "SUPER_GUARDIAN_ROLE not granted");
-        require(roleRegistry.hasRole(roleRegistry.GUARDIAN_ROLE(),                HOLDER_GUARDIAN_ROLE),                "GUARDIAN_ROLE not granted");
-        require(roleRegistry.hasRole(roleRegistry.ORACLE_OPERATIONS_ROLE(),       HOLDER_ORACLE_OPERATIONS_ROLE),       "ORACLE_OPERATIONS_ROLE not granted");
-        require(roleRegistry.hasRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), HOLDER_HOUSEKEEPING_OPERATIONS_ROLE), "HOUSEKEEPING_OPERATIONS_ROLE not granted");
-        require(roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(),     HOLDER_EXECUTOR_OPERATIONS_ROLE),     "EXECUTOR_OPERATIONS_ROLE not granted");
-        require(roleRegistry.hasRole(roleRegistry.EIGENPOD_OPERATIONS_ROLE(),     HOLDER_EIGENPOD_OPERATIONS_ROLE),     "EIGENPOD_OPERATIONS_ROLE not granted");
+        // Cross-check the hardcoded role IDs (used by executeRoleGrants, before the
+        // getters existed) against the now-upgraded registry. This is the only guard
+        // that catches a typo in the 8 non-upgrade role strings — the Batch A dry-run
+        // only exercises UPGRADE_TIMELOCK_ROLE.
+        require(roleRegistry.UPGRADE_TIMELOCK_ROLE()        == UPGRADE_TIMELOCK_ROLE,        "UPGRADE_TIMELOCK_ROLE id mismatch");
+        require(roleRegistry.OPERATION_TIMELOCK_ROLE()      == OPERATION_TIMELOCK_ROLE,      "OPERATION_TIMELOCK_ROLE id mismatch");
+        require(roleRegistry.OPERATION_MULTISIG_ROLE()      == OPERATION_MULTISIG_ROLE,      "OPERATION_MULTISIG_ROLE id mismatch");
+        require(roleRegistry.SUPER_GUARDIAN_ROLE()          == SUPER_GUARDIAN_ROLE,          "SUPER_GUARDIAN_ROLE id mismatch");
+        require(roleRegistry.GUARDIAN_ROLE()                == GUARDIAN_ROLE,                "GUARDIAN_ROLE id mismatch");
+        require(roleRegistry.ORACLE_OPERATIONS_ROLE()       == ORACLE_OPERATIONS_ROLE,       "ORACLE_OPERATIONS_ROLE id mismatch");
+        require(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE() == HOUSEKEEPING_OPERATIONS_ROLE, "HOUSEKEEPING_OPERATIONS_ROLE id mismatch");
+        require(roleRegistry.EXECUTOR_OPERATIONS_ROLE()     == EXECUTOR_OPERATIONS_ROLE,     "EXECUTOR_OPERATIONS_ROLE id mismatch");
+        require(roleRegistry.EIGENPOD_OPERATIONS_ROLE()     == EIGENPOD_OPERATIONS_ROLE,     "EIGENPOD_OPERATIONS_ROLE id mismatch");
+
+        require(roleRegistry.hasRole(UPGRADE_TIMELOCK_ROLE,        HOLDER_UPGRADE_TIMELOCK_ROLE),       "UPGRADE_TIMELOCK_ROLE not granted");
+        require(roleRegistry.hasRole(OPERATION_TIMELOCK_ROLE,      HOLDER_OPERATION_TIMELOCK_ROLE),     "OPERATION_TIMELOCK_ROLE not granted");
+        require(roleRegistry.hasRole(OPERATION_MULTISIG_ROLE,      HOLDER_OPERATION_MULTISIG_ROLE),     "OPERATION_MULTISIG_ROLE not granted");
+        require(roleRegistry.hasRole(SUPER_GUARDIAN_ROLE,          HOLDER_SUPER_GUARDIAN_ROLE),          "SUPER_GUARDIAN_ROLE not granted");
+        require(roleRegistry.hasRole(GUARDIAN_ROLE,                HOLDER_GUARDIAN_ROLE),                "GUARDIAN_ROLE not granted");
+        require(roleRegistry.hasRole(ORACLE_OPERATIONS_ROLE,       HOLDER_ORACLE_OPERATIONS_ROLE),       "ORACLE_OPERATIONS_ROLE not granted");
+        require(roleRegistry.hasRole(HOUSEKEEPING_OPERATIONS_ROLE, HOLDER_HOUSEKEEPING_OPERATIONS_ROLE), "HOUSEKEEPING_OPERATIONS_ROLE not granted");
+        require(roleRegistry.hasRole(EXECUTOR_OPERATIONS_ROLE,     HOLDER_EXECUTOR_OPERATIONS_ROLE),     "EXECUTOR_OPERATIONS_ROLE not granted");
+        require(roleRegistry.hasRole(EIGENPOD_OPERATIONS_ROLE,     HOLDER_EIGENPOD_OPERATIONS_ROLE),     "EIGENPOD_OPERATIONS_ROLE not granted");
 
         require(LiquidityPool(payable(LIQUIDITY_POOL)).maxWithdrawAmount() == LP_MAX_WITHDRAW_AMOUNT, "LP.maxWithdrawAmount mismatch");
         require(LiquidityPool(payable(LIQUIDITY_POOL)).minWithdrawAmount() == LP_MIN_WITHDRAW_AMOUNT, "LP.minWithdrawAmount mismatch");
