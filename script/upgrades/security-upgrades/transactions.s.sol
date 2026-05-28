@@ -266,6 +266,17 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     uint64 constant CONSOLIDATION_REQUEST_CAPACITY  = 0;
     uint64 constant CONSOLIDATION_REQUEST_REFILL_RATE = 0;
 
+    // oracle — EtherFiAdmin daily finalized-withdrawal cap (operational setpoint).
+    // Set post-upgrade via updateMaxFinalizedWithdrawalAmountPerDay, which is
+    // onlyAdmin = OPERATION_TIMELOCK_ROLE — so it rides the operating-timelock batch
+    // (Batch B), NOT the upgrade batch with the LP/WRN initializers (those are
+    // onlyUpgradeTimelock; the upgrade timelock can't satisfy onlyAdmin).
+    // The storage var maxFinalizedWithdrawalAmountPerDay defaults to 0, which makes
+    // _validateReport reject EVERY finalized withdrawal, so it must be seeded.
+    // Must satisfy 0 < value <= ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY
+    // (the immutable acceptable ceiling baked into the EtherFiAdmin impl).
+    uint256 constant ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT = 0;
+
     // PAUSE_UNTIL_* targets are gated to contracts that mix in PausableUntil. The
     // four ex-targets (EtherFiAdmin, MembershipManager, MembershipNFT, NodeOperatorManager)
     // have no setPauseUntilDuration and were dropped.
@@ -441,6 +452,9 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         require(PAUSE_UNTIL_PRIORITY_WITHDRAWAL_QUEUE != 0,             "preflight: PAUSE_UNTIL_PRIORITY_WITHDRAWAL_QUEUE unset");
         require(PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER != 0,                "preflight: PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER unset");
         require(PAUSE_UNTIL_WITHDRAW_REQUEST_NFT != 0,   "preflight: PAUSE_UNTIL_WITHDRAW_REQUEST_NFT unset");
+
+        require(ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT != 0, "preflight: ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT unset");
+        require(ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT <= ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY, "preflight: ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT exceeds acceptable ceiling");
 
         require(HOLDER_SUPER_GUARDIAN_ROLE          != address(0), "preflight: HOLDER_SUPER_GUARDIAN_ROLE unset");
         require(HOLDER_GUARDIAN_ROLE                != address(0), "preflight: HOLDER_GUARDIAN_ROLE unset");
@@ -1578,6 +1592,13 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(EXIT_REQUEST_LIMIT_ID,          ETHERFI_NODES_MANAGER)); i++;
         (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(CONSOLIDATION_REQUEST_LIMIT_ID, ETHERFI_NODES_MANAGER)); i++;
 
+        // ───────── oracle — EtherFiAdmin daily finalized-withdrawal cap (onlyAdmin) ─────────
+        // Seeds maxFinalizedWithdrawalAmountPerDay (defaults to 0, which rejects all
+        // finalized withdrawals). onlyAdmin = OPERATION_TIMELOCK_ROLE, so it belongs in
+        // this operating-timelock batch, not the upgrade batch with the initializers.
+        (targets[i], data[i]) = (ETHERFI_ADMIN,
+            abi.encodeWithSelector(EtherFiAdmin.updateMaxFinalizedWithdrawalAmountPerDay.selector, ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT)); i++;
+
         // core
         (targets[i], data[i]) = (EETH,                       _pauseDur(PAUSE_UNTIL_EETH));                   i++;
         (targets[i], data[i]) = (LIQUIDITY_POOL,             _pauseDur(PAUSE_UNTIL_LIQUIDITY_POOL));         i++;
@@ -1677,7 +1698,9 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
         require(LiquidityPool(payable(LIQUIDITY_POOL)).maxWithdrawAmount() == LP_MAX_WITHDRAW_AMOUNT, "LP.maxWithdrawAmount mismatch");
         require(LiquidityPool(payable(LIQUIDITY_POOL)).minWithdrawAmount() == LP_MIN_WITHDRAW_AMOUNT, "LP.minWithdrawAmount mismatch");
 
-        console2.log("[OK] rate-limiter buckets + pause durations + role grants + LP withdraw bounds verified");
+        require(EtherFiAdmin(ETHERFI_ADMIN).maxFinalizedWithdrawalAmountPerDay() == ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT, "EFAdmin.maxFinalizedWithdrawalAmountPerDay mismatch");
+
+        console2.log("[OK] rate-limiter buckets + pause durations + role grants + LP withdraw bounds + finalized-withdrawal cap verified");
         console2.log("");
     }
 

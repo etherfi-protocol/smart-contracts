@@ -367,6 +367,19 @@ seeded by a Safe tx from `ETHERFI_OPERATING_ADMIN` (which is granted
 | `LP_MAX_WITHDRAW_AMOUNT` | `setMaxWithdrawAmount` | Must be set **first** — `setMinWithdrawAmount` requires `_min ≤ maxWithdrawAmount`. |
 | `LP_MIN_WITHDRAW_AMOUNT` | `setMinWithdrawAmount` | Set after max. |
 
+### 3.4 EtherFiAdmin daily finalized-withdrawal cap (`executeOperatingConfig`)
+
+`EtherFiAdmin.maxFinalizedWithdrawalAmountPerDay` is storage that defaults to `0`,
+which makes `_validateReport` reject every finalized withdrawal. Seed it via
+`updateMaxFinalizedWithdrawalAmountPerDay`, which is `onlyAdmin` →
+`OPERATION_TIMELOCK_ROLE`, so it rides the **operating-timelock batch (Batch B)** —
+NOT the upgrade batch with the LP/WRN initializers (those are `onlyUpgradeTimelock`;
+the upgrade timelock can't satisfy `onlyAdmin`).
+
+| Constant | Function (`onlyAdmin`) | Notes |
+|---|---|---|
+| `ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT` | `updateMaxFinalizedWithdrawalAmountPerDay` | Must satisfy `0 < value ≤ ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY` (the immutable acceptable ceiling, `100_000 ether`). `_preflight` reverts otherwise. |
+
 ---
 
 ## 4. Workflow
