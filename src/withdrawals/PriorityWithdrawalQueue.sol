@@ -11,6 +11,7 @@ import "@etherfi/withdrawals/interfaces/IPriorityWithdrawalQueue.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
 import "@etherfi/core/interfaces/IeETH.sol";
 import "@etherfi/core/interfaces/IWeETH.sol";
+import "@etherfi/governance/interfaces/IBlacklister.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
 
@@ -46,6 +47,7 @@ contract PriorityWithdrawalQueue is
     ILiquidityPool public immutable liquidityPool;
     IeETH public immutable eETH;
     IWeETH public immutable weETH;
+    IBlacklister public immutable blacklister;
     address public immutable treasury;
     uint32 public immutable minDelay;
 
@@ -142,14 +144,15 @@ contract PriorityWithdrawalQueue is
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _liquidityPool, address _eETH, address _weETH, address _roleRegistry, address _treasury, uint32 _minDelay) RolesLibrary(_roleRegistry) {
-        if (_liquidityPool == address(0) || _eETH == address(0) || _weETH == address(0) || _treasury == address(0)) {
+    constructor(address _liquidityPool, address _eETH, address _weETH, address _blacklister, address _roleRegistry, address _treasury, uint32 _minDelay) RolesLibrary(_roleRegistry) {
+        if (_liquidityPool == address(0) || _eETH == address(0) || _weETH == address(0) || _blacklister == address(0) || _treasury == address(0)) {
             revert AddressZero();
         }
-        
+
         liquidityPool = ILiquidityPool(_liquidityPool);
         eETH = IeETH(_eETH);
         weETH = IWeETH(_weETH);
+        blacklister = IBlacklister(_blacklister);
         treasury = _treasury;
         minDelay = _minDelay;
 
@@ -581,9 +584,14 @@ contract PriorityWithdrawalQueue is
     }
 
     /// @dev Pays the user from this contract's own ETH balance (escrowed at fulfillRequests time). LP only does share burn + accounting on the segregated path.
+    ///      Anyone may call claim on behalf of `request.user`, but the recipient itself must
+    ///      not be blacklisted at claim time — sanctioned addresses cannot receive proceeds
+    ///      via a non-blacklisted accomplice.
     function _claimWithdraw(WithdrawRequest calldata request) internal {
+        blacklister.nonBlacklisted(request.user);
+
         bytes32 requestId = keccak256(abi.encode(request));
-        
+
         if (!_finalizedRequests.contains(requestId)) revert RequestNotFinalized();
 
         uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);

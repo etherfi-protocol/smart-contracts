@@ -270,8 +270,11 @@ contract PriorityQueueTransactions is Script, Utils {
             }),
             0
         );
+        // blacklister immutable added to PWQ; placeholder address(0) here mirrors the
+        // pattern used elsewhere in this script — the operator must substitute the
+        // deployed Blacklister address before running the bytecode-match verification.
         PriorityWithdrawalQueue newPWQImpl = new PriorityWithdrawalQueue(
-            LIQUIDITY_POOL, EETH, WEETH, ROLE_REGISTRY, WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, PWQ_minDelay
+            LIQUIDITY_POOL, EETH, WEETH, address(0), ROLE_REGISTRY, WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, PWQ_minDelay
         );
         EtherFiRedemptionManager newRedemptionManagerImpl = new EtherFiRedemptionManager(
             LIQUIDITY_POOL, EETH, WEETH, WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, ROLE_REGISTRY, ETHERFI_RESTAKER, priorityWithdrawalQueueProxy, address(0), 10_000, 100, 10_000
