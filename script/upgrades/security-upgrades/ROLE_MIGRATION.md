@@ -116,7 +116,7 @@ upgraded by PR #385, with the exact function name and the role that gates it.
 
 Beyond every contract's internal `_authorizeUpgrade`, these external functions
 are also `onlyUpgradeTimelock`. The one-shot `initialize*` / beacon-upgrade
-functions are run from Batch A (see `transactions.s.sol`).
+functions run inside the upgrade-timelock batch (Batch 1, see `transactions.s.sol`).
 
 | Contract | Function |
 |---|---|
@@ -218,36 +218,37 @@ cast call $ROLE_REGISTRY "roleHolders(bytes32)(address[])" $(cast keccak GUARDIA
 
 ## 2. Role holder worksheet
 
-Each of the 9 RolesLibrary roles gets exactly one grant in this script
-(`executeRoleGrants`). 3 are prefilled with the protocol-fixed addresses;
-**fill in the other 6** (the `HOLDER_*` constants in `transactions.s.sol`).
+Each of the 9 RolesLibrary roles gets exactly one grant in this script. 3 are
+prefilled with the protocol-fixed addresses; **fill in the other 6** (the
+`HOLDER_*` constants in `transactions.s.sol`).
 
-> **All 9 grants are a UPGRADE_TIMELOCK batch (Batch G, 10d).**
+> **All 9 grants ride the single UPGRADE_TIMELOCK batch (Batch 1, 10d).**
 > `RoleRegistry.grantRole` is owner-gated (Solady `setRole` → contract owner),
 > and the registry's `owner()` is the **`UPGRADE_TIMELOCK`** (0x9f26…) — the same
-> authority whose `onlyOwner` gate lets Batch A swap the registry impl — **not**
-> the `ETHERFI_UPGRADE_ADMIN` multisig. So `executeRoleGrants` emits its own
-> timelock batch (`role_grants_schedule.json` / `role_grants_execute.json`),
-> proposed and executed by `ETHERFI_UPGRADE_ADMIN` (the timelock's admin), exactly
-> like Batch A. The §2.1/§2.2/§2.3 split below is a logical grouping by tier only;
-> all nine are granted in the one batch.
+> authority whose `onlyOwner` gate lets the batch swap the registry impl — **not**
+> the `ETHERFI_UPGRADE_ADMIN` multisig. So the grants are the FIRST operations in
+> the upgrade-timelock batch (built by `_appendGrantCalls`), proposed and executed
+> by `ETHERFI_UPGRADE_ADMIN` (the timelock's admin). The §2.1/§2.2/§2.3 split below
+> is a logical grouping by tier only; all nine are granted in that one batch.
 >
-> **Ordering: Batch G must be EXECUTED before Batch A (`upgrade_execute.json`).**
-> Batch A finishes by calling the `onlyUpgradeTimelock` initializers
-> (`LiquidityPool.initializeOnUpgradeV2`,
+> **Why grants come first in the batch.** The batch also runs the
+> `onlyUpgradeTimelock` initializers (`LiquidityPool.initializeOnUpgradeV2`,
 > `WithdrawRequestNFT.initializeShareRateFreezeUpgrade`), which revert unless
-> `UPGRADE_TIMELOCK` already holds `UPGRADE_TIMELOCK_ROLE`. Since both batches sit
-> behind the same 10-day delay, schedule both up front, then execute Batch G
-> before Batch A. The grant calldata runs against the pre-upgrade registry impl,
-> which shares Solady's role storage, so the grants are visible to the new impl
-> after Batch A swaps it in. The `run()` dry-run mirrors this by calling
-> `executeRoleGrants()` before `executeUpgrade()`. Role IDs are the hardcoded
+> `UPGRADE_TIMELOCK` already holds `UPGRADE_TIMELOCK_ROLE`. Within the batch the
+> order is: grants → upgrades → initializers → legacy revokes, so the role is in
+> place before the initializers run. The grant calldata executes against the
+> pre-upgrade registry impl (grants precede the RoleRegistry swap), which shares
+> Solady's role storage, so the grants survive the swap. Role IDs are the hardcoded
 > `keccak256` constants in `transactions.s.sol` (mirroring `RoleRegistry.sol`),
 > since the pre-upgrade registry impl doesn't yet expose the `*_ROLE()` getters.
+>
+> **Precondition:** `_appendGrantCalls` asserts each of the 9 roles has zero holders
+> before granting (they're new in this upgrade), failing loudly on a stale grant.
 
-Legacy (pre-upgrade) granular roles ARE revoked automatically — see §5 and
-`executeLegacyRoleRevocations` (Batch R). Stale holders of the **new 9** roles are
-still out of scope: audit `roleHolders(role)` for each after running and revoke
+Legacy (pre-upgrade) granular roles ARE revoked automatically — see §5; they are
+the LAST operations in the same upgrade-timelock batch. Stale holders of the
+**new 9** roles are still out of scope: audit `roleHolders(role)` for each after
+running and revoke
 any unwanted address with a separate ops transaction.
 
 ### 2.1 Tier roles (prefilled)
@@ -360,7 +361,7 @@ Seconds: `7 days = 604800`. `30 days = 2_592_000` (absolute max). `8 hours = 28_
 `LP.requestWithdraw` (the queued NFT-mint path) is bounded by min/max amounts
 that default to `0/0` in fresh storage — which bricks the path. These are
 seeded by a Safe tx from `ETHERFI_OPERATING_ADMIN` (which is granted
-`OPERATION_MULTISIG_ROLE` in `executeRoleGrants`), with **no timelock**.
+`OPERATION_MULTISIG_ROLE` by Batch 1), with **no timelock** (Batch 3).
 
 | Constant | Function (`onlyOperatingMultisig`) | Notes |
 |---|---|---|
@@ -372,7 +373,7 @@ seeded by a Safe tx from `ETHERFI_OPERATING_ADMIN` (which is granted
 `EtherFiAdmin.maxFinalizedWithdrawalAmountPerDay` is storage that defaults to `0`,
 which makes `_validateReport` reject every finalized withdrawal. Seed it via
 `updateMaxFinalizedWithdrawalAmountPerDay`, which is `onlyAdmin` →
-`OPERATION_TIMELOCK_ROLE`, so it rides the **operating-timelock batch (Batch B)** —
+`OPERATION_TIMELOCK_ROLE`, so it rides the **operating-timelock batch (Batch 2)** —
 NOT the upgrade batch with the LP/WRN initializers (those are `onlyUpgradeTimelock`;
 the upgrade timelock can't satisfy `onlyAdmin`).
 
@@ -408,32 +409,34 @@ the upgrade timelock can't satisfy `onlyAdmin`).
    forge script script/upgrades/security-upgrades/transactions.s.sol:SecurityUpgradesScript \
        --fork-url $MAINNET_RPC_URL -vvvv
    ```
-6. Hand the emitted Safe JSONs to the corresponding signer. Listed in execution
-   order — note Batch G (`role_grants_execute.json`) is executed before Batch A
-   (`upgrade_execute.json`) (see the §2 ordering note). All UPGRADE_TIMELOCK
-   batches are scheduled/executed by `ETHERFI_UPGRADE_ADMIN` (the timelock admin):
-   - `role_grants_schedule.json` — Batch G schedule, `UPGRADE_TIMELOCK` (10d).
-   - `upgrade_schedule.json` — Batch A schedule, `UPGRADE_TIMELOCK` (10d).
-   - `role_grants_execute.json` — Batch G execute. Must run before `upgrade_execute.json`.
-   - `upgrade_execute.json` — Batch A execute. Runs the `onlyUpgradeTimelock` initializers, so Batch G must already be executed.
-   - `lp_withdraw_bounds.json` — LP min/max, from `ETHERFI_OPERATING_ADMIN` (no timelock). Needs the LP upgrade live + `OPERATION_MULTISIG_ROLE` granted.
-   - `ops_schedule.json` / `ops_execute.json` — Batch B, `OPERATING_TIMELOCK` (2d), from `ETHERFI_OPERATING_ADMIN`.
-   - `legacy_role_revokes_schedule.json` / `legacy_role_revokes_execute.json` — Batch R, `UPGRADE_TIMELOCK` (10d), from `ETHERFI_UPGRADE_ADMIN`. Schedule/execute LAST, after the upgrade is live (see §5).
+6. Hand the emitted Safe JSONs to the corresponding signer. The script emits
+   exactly **5 files across 3 batches**:
+
+   | # | File(s) | Batch | Signer | Contents |
+   |---|---|---|---|---|
+   | 1 | `upgrade_schedule.json` / `upgrade_execute.json` | UPGRADE_TIMELOCK (10d) | `ETHERFI_UPGRADE_ADMIN` | grants → proxy/beacon upgrades → onlyUpgradeTimelock initializers → legacy role revocations |
+   | 2 | `ops_schedule.json` / `ops_execute.json` | OPERATING_TIMELOCK (2d) | `ETHERFI_OPERATING_ADMIN` | rate-limiter buckets, pause durations, EtherFiAdmin daily finalized-withdrawal cap |
+   | 3 | `lp_withdraw_bounds.json` | OPERATION_MULTISIG (instant) | `ETHERFI_OPERATING_ADMIN` | LP min/max withdraw bounds |
+
+   **Execution sequence:** schedule both timelock batches up front (Batch 1 and
+   Batch 2 at the same time); after the 10-day delay, execute `upgrade_execute.json`,
+   then `ops_execute.json`, then the instant `lp_withdraw_bounds.json`. Batch 3 needs
+   the LP upgrade live + `OPERATION_MULTISIG_ROLE`, both delivered by Batch 1.
 
 ---
 
 ## 5. Notes & caveats
 
-- **Legacy granular roles are revoked automatically (Batch R).**
-  `executeLegacyRoleRevocations` (step 11) enumerates the 31 pre-upgrade
-  granular roles (every `keccak256("..._ROLE")` / `PROTOCOL_PAUSER` /
-  `PROTOCOL_UNPAUSER` declared across master `src/`), reads each role's live
-  holders via `roleHolders(role)`, and emits a `revokeRole(role, holder)` per
-  holder as one `UPGRADE_TIMELOCK` batch (`legacy_role_revokes_*.json`). This is
-  safe because every master contract that checked a legacy role is in the upgrade
-  set and now routes gating through the 9 RolesLibrary roles — the legacy roles
-  are orphaned post-upgrade, so no live flow depends on them. `revokeRole` is
-  owner-gated and the registry owner is the `UPGRADE_TIMELOCK`. Solady
+- **Legacy granular roles are revoked automatically — last in the upgrade batch.**
+  `_appendLegacyRevokeCalls` (the tail of Batch 1, built in `executeUpgrade`)
+  enumerates the 31 pre-upgrade granular roles (every `keccak256("..._ROLE")` /
+  `PROTOCOL_PAUSER` / `PROTOCOL_UNPAUSER` declared across master `src/`), reads each
+  role's live holders via `roleHolders(role)`, and appends a `revokeRole(role, holder)`
+  per holder. They run after the upgrades + initializers in the same `UPGRADE_TIMELOCK`
+  batch (`upgrade_*.json`). This is safe because every master contract that checked a
+  legacy role is in the upgrade set and now routes gating through the 9 RolesLibrary
+  roles — the legacy roles are orphaned post-upgrade, so no live flow depends on them.
+  `revokeRole` is owner-gated and the registry owner is the `UPGRADE_TIMELOCK`. Solady
   `_setRole(active=false)` no-ops on a non-holder, so the batch tolerates holder
   drift; regenerate if a legacy role gains a new holder before execution.
 - **Stale holders of the NEW 9 roles are NOT auto-revoked.** After running, query
