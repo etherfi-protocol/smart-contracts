@@ -161,8 +161,8 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
         console2.log("================================================");
         console2.log("");
 
-        _preflight();
         _printPleaseEyeball();
+        _preflight();
 
         vm.startBroadcast();
 
