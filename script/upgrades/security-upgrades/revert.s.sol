@@ -4,11 +4,10 @@ pragma solidity ^0.8.27;
 import "forge-std/Script.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
-import {EtherFiTimelock} from "@etherfi/governance/EtherFiTimelock.sol";
 import {StakingManager} from "@etherfi/staking/StakingManager.sol";
 
-import {Deployed} from "@scripts/deploys/Deployed.s.sol";
 import {Utils} from "@scripts/utils/utils.sol";
+import {SecurityUpgradesConstants} from "./Constants.s.sol";
 
 /**
  * 26Q2 Security Upgrades - REVERT Script
@@ -55,7 +54,7 @@ import {Utils} from "@scripts/utils/utils.sol";
  *   forge script script/upgrades/security-upgrades/revert.s.sol:SecurityUpgradesRevertScript \
  *       --fork-url $MAINNET_RPC_URL -vvvv
  */
-contract SecurityUpgradesRevertScript is Script, Deployed, Utils {
+contract SecurityUpgradesRevertScript is Script, SecurityUpgradesConstants, Utils {
     // ─────────────────────────────────────────────────────────────────────
     // PRE-UPGRADE IMPLEMENTATIONS — fill from a fresh mainnet snapshot.
     // Source: ERC1967 impl slot read via UUPSProxy's custom slot:
@@ -101,16 +100,8 @@ contract SecurityUpgradesRevertScript is Script, Deployed, Utils {
     address constant PRE_WEETH_WITHDRAW_ADAPTER              = address(0);
     address constant PRE_WITHDRAW_REQUEST_NFT                = address(0);
 
-    EtherFiTimelock constant upgradeTimelock = EtherFiTimelock(payable(UPGRADE_TIMELOCK));
-    uint256 constant UPGRADE_TIMELOCK_DELAY = 10 days;
-    string constant OUT_DIR = "script/upgrades/security-upgrades";
-
-    // ─────────────────────────────────────────────────────────────────────
-    // GIT_COMMIT_SHA — MUST match deploy.s.sol's value. Used to derive
-    // a deterministic timelock salt (see PR #420 review C3 + C7).
-    // ─────────────────────────────────────────────────────────────────────
-    bytes20 constant GIT_COMMIT_SHA = bytes20(hex"0000000000000000000000000000000000000000"); // TBD
-    bytes32 constant commitHashSalt = bytes32(GIT_COMMIT_SHA);
+    // upgradeTimelock, UPGRADE_TIMELOCK_DELAY, OUT_DIR, GIT_COMMIT_SHA and
+    // commitHashSalt all come from Constants.s.sol (SecurityUpgradesConstants).
 
     struct Snap { address owner; bool paused; }
     mapping(address => Snap) internal preRevertSnap;
