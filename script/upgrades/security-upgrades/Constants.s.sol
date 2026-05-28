@@ -35,7 +35,7 @@ abstract contract SecurityUpgradesConstants is Deployed {
     // (transactions / revert), so every script must agree on it. Each script's
     // _preflight() rejects bytes20(0).
     // ─────────────────────────────────────────────────────────────────────
-    bytes20 internal constant GIT_COMMIT_SHA = bytes20(hex"0000000000000000000000000000000000000000"); // TBD
+    bytes20 internal constant GIT_COMMIT_SHA = bytes20(hex"87bc3d6783bf9b0278e3ffb98b6eba7f8f0e1769");
     bytes32 internal constant commitHashSalt = bytes32(GIT_COMMIT_SHA);
 
     // ─────────────────────────────────────────────────────────────────────
@@ -51,19 +51,30 @@ abstract contract SecurityUpgradesConstants is Deployed {
     // deposits — Liquifier
     address internal constant STETH_PRICE_FEED = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812; // Chainlink stETH/ETH
     address internal constant STETH_ETH_CURVE_POOL = 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022;
-    uint256 internal constant LIQUIFIER_MIN_DISCOUNT_BPS = 100;          // 1% floor
-    uint256 internal constant LIQUIFIER_STALE_PRICE_WINDOW = 7 days;
-    uint256 internal constant LIQUIFIER_MAX_PRICE_DEVIATION_BPS = 500;   // 5%
+    uint256 internal constant LIQUIFIER_MIN_DISCOUNT_BPS = 1;
+    uint256 internal constant LIQUIFIER_STALE_PRICE_WINDOW = 2 days; // 2 days (heartbeat to updated stETH price feed is 1 days)
+    uint256 internal constant LIQUIFIER_MAX_PRICE_DEVIATION_BPS = 200;   // 2%
 
     // oracle — EtherFiAdmin immutable params
     int256  internal constant ADMIN_MAX_REBASE_APR_BPS = 1_000;           // 10% absolute ceiling
     uint256 internal constant ADMIN_MAX_VALIDATOR_TASK_BATCH_SIZE = 100; // 50 Currently
     uint256 internal constant ADMIN_STALE_ORACLE_REPORT_BLOCK_WINDOW = 7200 * 14; // ~14 days @ 12s blocks
     uint256 internal constant ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY = 100_000 ether;
-    uint256 internal constant ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY = 1_000;
+    uint256 internal constant ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY = 100;
     uint256 internal constant ADMIN_MAX_REQUESTS_TO_FINALIZE_PER_REPORT = 2_000;
 
     // oracle — EtherFiOracle immutable params
+    /**
+      * @dev for current setup, we have 2 of 3 set on oracle out of which 2 are internal and 1 is external.
+      * We need to rmeove one internal and one external and replace those with 2 external nodes with 3 of 3
+      * setup. We will do the following executions:
+      * 1. Add new external member 1 with quorum size 3
+      * 2. Add new external member 2 with quorum size 3
+      * 3. Remove existing internal member 1 with quorum size 3
+      * 4. Remove existing external member 1 with quorum size 3
+      * This way, we replace the keys to the 3 operators: ether.fi, nonce and distrust
+      * After this is successful we add two extra parties (member 3 and member 4 with quorum 3) to reach desired 3 of 5 setup.
+     */
     uint32  internal constant ORACLE_MIN_QUORUM_SIZE = 3; // enforces min 3/5 quorum for consensus
 
     // withdrawals — EtherFiRedemptionManager hardcoded ceilings (per spec §7.4.6 / §9)
@@ -74,15 +85,15 @@ abstract contract SecurityUpgradesConstants is Deployed {
     // transactions/verify (see C2 in PR #420 review).
     uint256 internal constant RM_MAX_EXIT_FEE_SPLIT_TO_TREASURY_BPS = 10_000;
     uint256 internal constant RM_MAX_EXIT_FEE_BPS = 500;                  // 5% hardcoded ceiling
-    uint256 internal constant RM_MAX_LOW_WATERMARK_BPS_OF_TVL = 2_000;    // 20% hardcoded ceiling
+    uint256 internal constant RM_MAX_LOW_WATERMARK_BPS_OF_TVL = 500;    // 5% hardcoded ceiling
 
     // withdrawals — WithdrawRequestNFT share-rate acceptance band
     // Tightened band ~[0.9, 1.1] × the live LiquidityPool.amountPerShareCeil() snapshot
     // at deploy time (~1.05 ether as of 2026-05-28). See H4 in PR #420 review.
     // RE-VERIFY THESE BEFORE BROADCAST against the current `amountPerShareCeil()` —
     // any drift > a few % suggests rate has moved and the band should be re-centered.
-    uint256 internal constant WNFT_MIN_ACCEPTABLE_SHARE_RATE = 0.95 ether;
-    uint256 internal constant WNFT_MAX_ACCEPTABLE_SHARE_RATE = 1.15 ether;
+    uint256 internal constant WNFT_MIN_ACCEPTABLE_SHARE_RATE = 1.05 ether;
+    uint256 internal constant WNFT_MAX_ACCEPTABLE_SHARE_RATE = 1.25 ether;
 
     // withdrawals — PriorityWithdrawalQueue — must match the constructor arg used at proxy genesis;
     // the proxy's existing impl was deployed with 1 hour, so the new impl must too.
@@ -107,7 +118,7 @@ abstract contract SecurityUpgradesConstants is Deployed {
     // _validateReport reject EVERY finalized withdrawal, so it must be seeded.
     // Must satisfy 0 < value <= ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY
     // (the immutable acceptable ceiling baked into the EtherFiAdmin impl).
-    uint256 internal constant ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT = 0;
+    uint256 internal constant ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT = 20_000 ether;
 
     // ─────────────────────────────────────────────────────────────────────
     // ROLE HOLDERS - 3 fixed + 6 user-set.
@@ -221,21 +232,21 @@ abstract contract SecurityUpgradesConstants is Deployed {
     // MembershipNFT, NodeOperatorManager) have no setPauseUntilDuration and were dropped.
     // ─────────────────────────────────────────────────────────────────────
     // core
-    uint256 internal constant PAUSE_UNTIL_EETH                                 = 0;
-    uint256 internal constant PAUSE_UNTIL_LIQUIDITY_POOL                       = 0;
-    uint256 internal constant PAUSE_UNTIL_WEETH                                = 0;
+    uint256 internal constant PAUSE_UNTIL_EETH                                  = 8 hours;
+    uint256 internal constant PAUSE_UNTIL_LIQUIDITY_POOL                        = 1 days;
+    uint256 internal constant PAUSE_UNTIL_WEETH                                 = 8 hours;
     // deposits
-    uint256 internal constant PAUSE_UNTIL_LIQUIFIER                            = 0;
+    uint256 internal constant PAUSE_UNTIL_LIQUIFIER                             = 1 days;
     // rewards
-    uint256 internal constant PAUSE_UNTIL_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR = 0;
+    uint256 internal constant PAUSE_UNTIL_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR = 2 days;
     // staking
-    uint256 internal constant PAUSE_UNTIL_AUCTION_MANAGER                      = 0;
-    uint256 internal constant PAUSE_UNTIL_ETHERFI_NODES_MANAGER                = 0;
+    uint256 internal constant PAUSE_UNTIL_AUCTION_MANAGER                       = 2 days;
+    uint256 internal constant PAUSE_UNTIL_ETHERFI_NODES_MANAGER                 = 2 days;
     // withdrawals
-    uint256 internal constant PAUSE_UNTIL_ETHERFI_REDEMPTION_MGR               = 0;
-    uint256 internal constant PAUSE_UNTIL_PRIORITY_WITHDRAWAL_QUEUE             = 0;
-    uint256 internal constant PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER               = 0;
-    uint256 internal constant PAUSE_UNTIL_WITHDRAW_REQUEST_NFT                 = 0;
+    uint256 internal constant PAUSE_UNTIL_ETHERFI_REDEMPTION_MGR                = 1 days;
+    uint256 internal constant PAUSE_UNTIL_PRIORITY_WITHDRAWAL_QUEUE             = 1 days;
+    uint256 internal constant PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER                = 1 days;
+    uint256 internal constant PAUSE_UNTIL_WITHDRAW_REQUEST_NFT                  = 1 days;
 
     // ─────────────────────────────────────────────────────────────────────
     // Bucket IDs — must match the constants declared in the source contracts.
