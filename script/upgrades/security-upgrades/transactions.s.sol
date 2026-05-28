@@ -1467,6 +1467,19 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
             HOLDER_EXECUTOR_OPERATIONS_ROLE,
             HOLDER_EIGENPOD_OPERATIONS_ROLE
         ];
+
+        // These 9 roles are introduced by this upgrade, so nobody should hold them
+        // yet. Assert zero current holders before granting — a pre-existing holder
+        // would mean a stale grant (or a role-ID collision) and we want to fail
+        // loudly rather than grant on top of unexpected state. Read against the
+        // pre-upgrade registry impl, which already exposes roleHolders().
+        for (uint256 k = 0; k < 9; k++) {
+            require(
+                roleRegistry.roleHolders(roles[k]).length == 0,
+                "executeRoleGrants: new role already has holder(s) before grant"
+            );
+        }
+
         for (uint256 k = 0; k < 9; k++) {
             targets[k] = ROLE_REGISTRY;
             data[k]    = abi.encodeWithSelector(RoleRegistry.grantRole.selector, roles[k], holders[k]);
