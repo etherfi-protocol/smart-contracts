@@ -1145,6 +1145,37 @@ contract LiquidityPoolTest is TestSetup {
         assertEq(totalPooledAfter, totalPooledBefore + 5 ether);
     }
 
+    // PR #385 (Yash review): the positive (reward) rebase upper bound is enforced inside
+    // LiquidityPool.rebase, at the share-rate chokepoint, regardless of caller.
+    function test_positiveRebaseCap_enforced() public {
+        vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+
+        // reset the override so the default (25 bps) applies (TestSetup set it to 100%)
+        vm.prank(alice); // alice holds OPERATION_TIMELOCK
+        liquidityPoolInstance.setMaxPositiveRebaseBps(0);
+        assertEq(liquidityPoolInstance.effectiveMaxPositiveRebaseBps(), 25);
+
+        uint256 tvl = liquidityPoolInstance.getTotalPooledEther();
+        uint256 cap = (tvl * 25) / 10_000;
+
+        // one wei over the cap reverts
+        vm.prank(address(membershipManagerInstance));
+        vm.expectRevert(LiquidityPool.RebaseExceedsPositiveCap.selector);
+        liquidityPoolInstance.rebase(int128(uint128(cap + 1)));
+
+        // exactly at the cap succeeds
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(int128(uint128(cap)));
+
+        // a configured higher bound lets a larger rebase through
+        vm.prank(alice);
+        liquidityPoolInstance.setMaxPositiveRebaseBps(10_000);
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(int128(uint128(tvl / 2)));
+    }
+
     function test_RebaseFailsIfNotMembershipManager() public {
         vm.startPrank(alice);
         vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
