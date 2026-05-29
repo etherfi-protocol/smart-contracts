@@ -193,13 +193,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         escrowMigrationCompleted = true;
     }
 
-    receive() external payable {
-        if (msg.value > type(uint128).max) revert InvalidAmount();
-        totalValueOutOfLp -= uint128(msg.value);
-        totalValueInLp += uint128(msg.value);
-        _checkInvariants();
-    }
-
     //--------------------------------------------------------------------------------------
     //----------------------------  DEPOSIT FUNCTIONS  -------------------------------------
     //--------------------------------------------------------------------------------------
@@ -581,6 +574,16 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         eETH.burnShares(msg.sender, _amountSharesToBurn);
         _checkMinAmountForShare();
         emit EEthSharesBurnedForNonETHWithdrawal(_amountSharesToBurn, _withdrawalValueInETH);
+    }
+
+    /**
+     * @notice Receive ETH
+     */
+    receive() external payable {
+        if (msg.value > type(uint128).max) revert InvalidAmount();
+        totalValueOutOfLp -= uint128(msg.value);
+        totalValueInLp += uint128(msg.value);
+        _checkInvariants();
     }
 
     //--------------------------------------------------------------------------------------
