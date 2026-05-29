@@ -19,11 +19,25 @@ import "@etherfi/governance/rate-limiting/RateLimitedToken.sol";
 contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, ERC20PermitUpgradeable, IRateProvider, AssetRecovery, RolesLibrary, RateLimitedToken {
     using SafeERC20 for IERC20;
 
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  STORAGE  ----------------------------------
+    //--------------------------------------------------------------------------------------
+    // deprecated storage slots
+    uint160 private __gap_0;
+    uint160 private __gap_1;
+
+    bool public paused;
+
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  IMMUTABLES  ---------------------------------------
+    //--------------------------------------------------------------------------------------
     IeETH public immutable eETH;
     ILiquidityPool public immutable liquidityPool;
     IBlacklister public immutable blacklister;
-    // `roleRegistry` is inherited from RolesLibrary; `rateLimiter` from RateLimitedToken.
 
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  CONSTANTS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
     /// @dev Protocol-wide circuit breakers on supply changes.
     ///      These globals fire on supply changes that are NOT a wrap/unwrap.
     ///      wrap/unwrap is a value-neutral share swap (eETH↔weETH at the live rate);
@@ -47,43 +61,53 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     ///      clear-after pattern; otherwise its mints WILL trip the global bucket.
     bytes32 private constant _WRAP_CTX_SLOT = keccak256("etherfi.weeth.wrap_ctx");
 
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  EVENTS  ------------------------------------------
+    //--------------------------------------------------------------------------------------
     event Paused();
     event Unpaused();
 
-    error CannotRecoverEETH();
-    error AddressZero();
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  ERRORS  ------------------------------------------
+    //--------------------------------------------------------------------------------------
     error ZeroAmount();
+    error ZeroAddress();
     error ContractPaused();
+    error CannotRecoverEETH();
     error WeETHUnderbacked(uint256 weETHSupply, uint256 proxyShares);
 
     //--------------------------------------------------------------------------------------
-    //---------------------------------  STORAGE  ----------------------------------
+    //----------------------------------  CONSTRUCTOR  -------------------------------------
     //--------------------------------------------------------------------------------------
-
-    // deprecated storage slots
-    uint160 private __gap_0;
-    uint160 private __gap_1;
-
-    bool public paused;
-
-    //--------------------------------------------------------------------------------------
-    //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
-    //--------------------------------------------------------------------------------------
-
-    /// @custom:oz-upgrades-unsafe-allow constructor
+    /**
+     * @notice Constructor for WeETH contract
+     * @param _eETH The address of the eETH contract
+     * @param _liquidityPool The address of the liquidity pool contract
+     * @param _roleRegistry The address of the role registry contract
+     * @param _blacklister The address of the blacklister contract
+     * @param _rateLimiter The address of the rate limiter contract
+     */
     constructor(address _eETH, address _liquidityPool, address _roleRegistry, address _blacklister, address _rateLimiter)
         RolesLibrary(_roleRegistry)
         RateLimitedToken(_rateLimiter)
     {
-        if(_eETH == address(0) || _liquidityPool == address(0) || _blacklister == address(0) || _rateLimiter == address(0)) revert AddressZero();
+        if(_eETH == address(0) || _liquidityPool == address(0) || _blacklister == address(0) || _rateLimiter == address(0)) revert ZeroAddress();
         eETH = IeETH(_eETH);
         liquidityPool = ILiquidityPool(_liquidityPool);
         blacklister = IBlacklister(_blacklister);
         _disableInitializers();
     }
 
+    //--------------------------------------------------------------------------------------
+    //--------------------------------  INITIALIZERS  --------------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Initialize the WeETH contract
+     * @param _liquidityPool The address of the liquidity pool contract
+     * @param _eETH The address of the eETH contract
+     */
     function initialize(address _liquidityPool, address _eETH) external initializer {
-        if (_liquidityPool == address(0) || _eETH == address(0)) revert AddressZero();
+        if (_liquidityPool == address(0) || _eETH == address(0)) revert ZeroAddress();
 
         __ERC20_init("Wrapped eETH", "weETH");
         __ERC20Permit_init("Wrapped eETH");
@@ -96,21 +120,26 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         return "Wrapped eETH";
     }
 
-    /// @notice Wraps eEth
-    /// @param _eETHAmount the amount of eEth to wrap
-    /// @return returns the amount of weEth the user receives
-    /// @dev Order is deposit-then-mint:
-    ///        1. Pull eETH from user → proxy. eETH.shares(proxy) increases by
-    ///           sharesForAmount(_eETHAmount).
-    ///        2. _mint(weETH) increases weETH.totalSupply by the same number.
-    ///           The `_afterTokenTransfer` hook runs at the end of _mint and
-    ///           asserts the backing invariant
-    ///           (weETH.totalSupply <= eETH.shares(proxy)); the deposit-first
-    ///           ordering means the proxy's share balance is already raised
-    ///           when the check fires, so the invariant holds with equality.
-    ///      `_WRAP_CTX_SLOT` flags the mint so `_beforeTokenTransfer` skips
-    ///      the global WEETH_MINT bucket on this value-neutral path; that's
-    ///      a separate concern from the backing invariant.
+    //--------------------------------------------------------------------------------------
+    //-----------------------------  WRAP/UNWRAP FUNCTIONS  --------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Wraps eEth
+     * @param _eETHAmount the amount of eEth to wrap
+     * @return returns the amount of weEth the user receives
+     * @dev Order is deposit-then-mint:
+     *      1. Pull eETH from user → proxy. eETH.shares(proxy) increases by
+     *         sharesForAmount(_eETHAmount).
+     *      2. _mint(weETH) increases weETH.totalSupply by the same number.
+     *         The `_afterTokenTransfer` hook runs at the end of _mint and
+     *         asserts the backing invariant
+     *         (weETH.totalSupply <= eETH.shares(proxy)); the deposit-first
+     *         ordering means the proxy's share balance is already raised
+     *         when the check fires, so the invariant holds with equality.
+     *      `_WRAP_CTX_SLOT` flags the mint so `_beforeTokenTransfer` skips
+     *      the global WEETH_MINT bucket on this value-neutral path; that's
+     *      a separate concern from the backing invariant.
+     */
     function wrap(uint256 _eETHAmount) public returns (uint256) {
         if (_eETHAmount == 0) revert ZeroAmount();
         uint256 weEthAmount = liquidityPool.sharesForAmount(_eETHAmount);
@@ -122,9 +151,12 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         return weEthAmount;
     }
 
-    /// @notice Wraps eEth with PermitInput struct so user does not have to call approve on eeth contract
-    /// @param _eETHAmount the amount of eEth to wrap
-    /// @return returns the amount of weEth the user receives
+    /**
+     * @notice Wraps eEth with PermitInput struct so user does not have to call approve on eeth contract
+     * @param _eETHAmount the amount of eEth to wrap
+     * @param _permit the PermitInput struct
+     * @return returns the amount of weEth the user receives
+     */
     function wrapWithPermit(uint256 _eETHAmount, ILiquidityPool.PermitInput calldata _permit)
         external
         returns (uint256)
@@ -133,11 +165,13 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         return wrap(_eETHAmount);
     }
 
-    /// @notice Unwraps weETH
-    /// @param _weETHAmount the amount of weETH to unwrap
-    /// @return returns the amount of eEth the user receives
-    /// @dev Sets `_WRAP_CTX_SLOT = 1` around `_burn` for the same reason wrap()
-    ///      does — see the doc comment on `wrap` and `_WRAP_CTX_SLOT`.
+    /**
+     * @notice Unwraps weETH
+     * @param _weETHAmount the amount of weETH to unwrap
+     * @return returns the amount of eEth the user receives
+     * @dev Sets `_WRAP_CTX_SLOT = 1` around `_burn` for the same reason wrap()
+     *      does — see the doc comment on `wrap` and `_WRAP_CTX_SLOT`.
+     */
     function unwrap(uint256 _weETHAmount) external returns (uint256) {
         if (_weETHAmount == 0) revert ZeroAmount();
         uint256 eETHAmount = liquidityPool.amountForShare(_weETHAmount);
@@ -155,6 +189,13 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     // Thin role-gated wrappers around the internal helpers in RateLimitedToken.
     // For a single user, pass a length-1 array.
 
+    /**
+     * @notice Tightens the address rate limits
+     * @param users the addresses of the users
+     * @param capacities the capacities of the users
+     * @param refillRates the refill rates of the users
+     * @dev Only callable by the guardian
+     */
     function tightenAddressRateLimits(
         address[] calldata users,
         uint64[] calldata capacities,
@@ -163,6 +204,13 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         _tightenAddressRateLimits(users, capacities, refillRates);
     }
 
+    /**
+     * @notice Sets the address rate limits
+     * @param users the addresses of the users
+     * @param capacities the capacities of the users
+     * @param refillRates the refill rates of the users
+     * @dev Only callable by the operating multisig
+     */
     function setAddressRateLimits(
         address[] calldata users,
         uint64[] calldata capacities,
@@ -171,41 +219,93 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         _setAddressRateLimits(users, capacities, refillRates);
     }
 
+    /**
+     * @notice Deletes the address rate limits
+     * @param users the addresses of the users
+     * @dev Only callable by the operating multisig
+     */
     function deleteAddressRateLimits(address[] calldata users) external onlyOperatingMultisig {
         _deleteAddressRateLimits(users);
     }
 
+    //--------------------------------------------------------------------------------------
+    //--------------------------------  PAUSING FUNCTIONS  ---------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Pauses the contract
+     * @dev Only callable by the operating multisig
+     */
     function pause() external onlyOperatingMultisig {
         paused = true;
         emit Paused();
     }
 
+    /**
+     * @notice Unpauses the contract
+     * @dev Only callable by the operating multisig
+     */
     function unpause() external onlyOperatingMultisig {
         paused = false;
         emit Unpaused();
     }
 
+    /**
+     * @notice Pauses the contract until the pauseUntilDuration
+     * @dev Only callable by the super guardian
+     */
     function pauseContractUntil() external onlySuperGuardian {
         _pauseUntil();
     }
 
+    /**
+     * @notice Unpauses the contract from pauseUntil
+     * @dev Only callable by the operating multisig
+     */
     function unpauseContractUntil() external onlyOperatingMultisig {
         _unpauseUntil();
     }
 
+    /**
+     * @notice Sets the pause duration for the contract
+     * @param _pauseUntilDuration The new pause duration
+     * @dev Only callable by the admin
+     */
     function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
+    //--------------------------------------------------------------------------------------
+    //--------------------------------  RECOVERY FUNCTIONS  --------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Recover ETH from the contract
+     * @param to The address to recover the ETH to
+     * @param amount The amount of ETH to recover
+     * @dev Only callable by the admin
+     */
     function recoverETH(address payable to, uint256 amount) external onlyAdmin {
         _recoverETH(to, amount);
     }
 
+    /**
+     * @notice Recover ERC20 tokens from the contract
+     * @param token The address of the ERC20 token
+     * @param to The address to recover the tokens to
+     * @param amount The amount of tokens to recover
+     * @dev Only callable by the admin
+     */
     function recoverERC20(address token, address to, uint256 amount) external onlyAdmin {
         if (token == address(eETH)) revert CannotRecoverEETH();
         _recoverERC20(token, to, amount);
     }
 
+    /**
+     * @notice Recover ERC721 tokens from the contract
+     * @param token The address of the ERC721 token
+     * @param to The address to recover the tokens to
+     * @param tokenId The ID of the token to recover
+     * @dev Only callable by the admin
+     */
     function recoverERC721(address token, address to, uint256 tokenId) external onlyAdmin {
         _recoverERC721(token, to, tokenId);
     }
@@ -213,9 +313,16 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     //--------------------------------------------------------------------------------------
     //-------------------------------  INTERNAL FUNCTIONS  ---------------------------------
     //--------------------------------------------------------------------------------------
-
-    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
-
+    /**
+     * @notice Before token transfer
+     * @param from The address of the from
+     * @param to The address of the to
+     * @param amount The amount of the transfer
+     * @dev Only callable when the contract is not paused
+     * Only callable when the from is not blacklisted
+     * Only callable when the to is not blacklisted
+     * Only callable when the sender is not blacklisted
+     */
     function _beforeTokenTransfer(
         address from,
         address to,
@@ -248,26 +355,31 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         }
     }
 
-    /// @notice Invariant — weETH supply is at-least-fully-backed by eETH shares
-    ///         held in this contract (the weETH proxy).
-    /// @dev    `weETH.totalSupply <= eETH.shares(address(this))`. Runs after
-    ///         every mint/burn (skipped on transfers — they don't change
-    ///         totalSupply). The `<=` form permits benign over-collateralization
-    ///         from accidental eETH transfers to the proxy.
-    ///
-    ///         Why this holds today:
-    ///           wrap(X eETH) → safeTransferFrom moves sharesForAmount(X)
-    ///           eETH shares to the proxy AND _mint adds sharesForAmount(X)
-    ///           weETH supply. Both sides increment by the same number.
-    ///           unwrap is the symmetric decrement (_burn first, then
-    ///           transfer eETH out — the invariant trivially holds at the
-    ///           hook because supply just dropped and proxy balance is
-    ///           still high).
-    ///
-    ///         What it catches:
-    ///           Any future code path that mints weETH without pulling in
-    ///           proportional eETH shares (bridge integration, new mint
-    ///           authority, exploited path) trips the revert.
+    /**
+     * @notice Invariant — weETH supply is at-least-fully-backed by eETH shares
+     * @param from The address of the from
+     * @param to The address of the to
+     * @dev Invariant — weETH supply is at-least-fully-backed by eETH shares
+     * `weETH.totalSupply <= eETH.shares(address(this))`. Runs after
+     * every mint/burn (skipped on transfers — they don't change
+     * totalSupply). The `<=` form permits benign over-collateralization
+     * from accidental eETH transfers to the proxy.
+     *
+     * Why this holds today:
+     *           wrap(X eETH) → safeTransferFrom moves sharesForAmount(X)
+     *           eETH shares to the proxy AND _mint adds sharesForAmount(X)
+     *           weETH supply. Both sides increment by the same number.
+     *           unwrap is the symmetric decrement (_burn first, then
+     *           transfer eETH out — the invariant trivially holds at the
+     *           hook because supply just dropped and proxy balance is
+     *           still high).
+     *
+     * What it catches:
+     *           Any future code path that mints weETH without pulling in
+     *           proportional eETH shares (bridge integration, new mint
+     *           authority, exploited path) trips the revert.
+     *
+     */
     function _afterTokenTransfer(address from, address to, uint256 /*amount*/) internal virtual override {
         if (from != address(0) && to != address(0)) return;     // transfers don't change supply
         uint256 supply = totalSupply();
@@ -275,32 +387,48 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         if (supply > proxyShares) revert WeETHUnderbacked(supply, proxyShares);
     }
 
+    /**
+     * @notice Authorizes the upgrade of the contract
+     * @param newImplementation The new implementation address
+     * @dev Only callable by the upgrade timelock
+     */
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
+
     //--------------------------------------------------------------------------------------
     //------------------------------------  GETTERS  ---------------------------------------
     //--------------------------------------------------------------------------------------
 
-    /// @notice Fetches the amount of weEth respective to the amount of eEth sent in
-    /// @param _eETHAmount amount sent in
-    /// @return The total number of shares for the specified amount
+    /**
+     * @notice Fetches the amount of weEth respective to the amount of eEth sent in
+     * @param _eETHAmount amount sent in
+     * @return The total number of shares for the specified amount
+     */
     function getWeETHByeETH(uint256 _eETHAmount) external view returns (uint256) {
         return liquidityPool.sharesForAmount(_eETHAmount);
     }
 
-    /// @notice Fetches the amount of eEth respective to the amount of weEth sent in
-    /// @param _weETHAmount amount sent in
-    /// @return The total amount for the number of shares sent in
+    /**
+     * @notice Fetches the amount of eEth respective to the amount of weEth sent in
+     * @param _weETHAmount amount sent in
+     * @return The total amount for the number of shares sent in
+     */
     function getEETHByWeETH(uint256 _weETHAmount) public view returns (uint256) {
         return liquidityPool.amountForShare(_weETHAmount);
     }
 
-    // Amount of eETH for 1 weETH
+    /**
+     * @notice Fetches the amount of eETH for 1 weETH
+     * @return The amount of eETH for 1 weETH
+     */
     function getRate() external view returns (uint256) {
         return getEETHByWeETH(1 ether);
     }
 
+    /**
+     * @notice Fetches the implementation address
+     * @return The implementation address
+     */
     function getImplementation() external view returns (address) {
         return _getImplementation();
     }
-    // Role modifiers (`onlyAdmin`, `onlyOperatingMultisig`, `onlyGuardian`, `onlySuperGuardian`,
-    // `onlyUpgradeTimelock`, ...) are inherited from RolesLibrary.
 }
