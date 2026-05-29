@@ -319,6 +319,12 @@ contract EtherFiRestakerTest is TestSetup {
         vm.expectRevert("Pausable: paused");
         etherFiRestakerInstance.withdrawEther();
 
+        // undelegate (owner holds OPERATION_MULTISIG) queues withdrawal of ALL restaked
+        // assets — same fund-flow category, so it must also be halted by the pause.
+        vm.prank(owner);
+        vm.expectRevert("Pausable: paused");
+        etherFiRestakerInstance.undelegate();
+
         // a non-guardian cannot fire the guardian halt
         vm.prank(alice);
         vm.expectRevert(RoleRegistry.OnlyGuardian.selector);

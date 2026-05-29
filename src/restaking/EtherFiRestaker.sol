@@ -230,7 +230,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     }
 
     // undelegate from the current AVS operator & un-restake all
-    function undelegate() external onlyOperatingMultisig returns (bytes32[] memory) {
+    function undelegate() external onlyOperatingMultisig whenNotPaused returns (bytes32[] memory) {
         bytes32[] memory withdrawalRoots = eigenLayerDelegationManager.undelegate(address(this));
 
         for (uint256 i = 0; i < withdrawalRoots.length; i++) {
