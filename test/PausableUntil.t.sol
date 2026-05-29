@@ -29,7 +29,7 @@ contract PausableUntilTest is Test {
     function setUp() public {
         harness = new PausableUntilHarness();
         // warp past MAX_PAUSE_DURATION + PAUSER_UNTIL_COOLDOWN so the initial cooldown check
-        // (which treats the contract-wide lastContractPauseTimestamp = 0 as literally "last paused at unix 0")
+        // (which treats lastPauseTimestamp[pauser] = 0 as literally "last paused at unix 0")
         // does not block the first pause in tests. On mainnet this is a non-issue.
         vm.warp(1_700_000_000);
         harness.setPauseUntilDuration(harness.MAX_PAUSE_DURATION());
@@ -133,8 +133,7 @@ contract PausableUntilTest is Test {
         harness.pauseUntil();
 
         assertEq(harness.pausedUntil(), expectedUntil);
-        assertEq(harness.lastContractPauseTimestamp(), block.timestamp);
-        assertEq(harness.lastPauseTimestamp(pauserA), block.timestamp); // per-pauser record kept
+        assertEq(harness.lastPauseTimestamp(pauserA), block.timestamp);
     }
 
     function test_pauseUntil_blocksGatedFunction() public {
@@ -181,29 +180,18 @@ contract PausableUntilTest is Test {
         harness.pauseUntil();
     }
 
-    function test_pauseUntil_differentPauser_blockedByContractCooldown() public {
-        // F5 regression: a second pauser key must NOT be able to bypass the cooldown.
-        // The cooldown is scoped to the contract, so once pauserA pauses, pauserB is
-        // blocked until the full MAX_PAUSE_DURATION + PAUSER_UNTIL_COOLDOWN window passes.
+    function test_pauseUntil_differentPauser_canPauseAfterExpiry() public {
         vm.prank(pauserA);
         harness.pauseUntil();
         uint256 firstPauseStart = block.timestamp;
 
-        // pause has lifted but the contract-wide cooldown has not
         vm.warp(firstPauseStart + harness.MAX_PAUSE_DURATION() + 1);
 
         vm.prank(pauserB);
-        vm.expectRevert(PausableUntil.PauserCooldownStillActive.selector);
-        harness.pauseUntil();
-
-        // once the full cooldown window elapses, any pauser can pause again
-        vm.warp(firstPauseStart + harness.MAX_PAUSE_DURATION() + harness.PAUSER_UNTIL_COOLDOWN());
-        vm.prank(pauserB);
-        harness.pauseUntil();
+        harness.pauseUntil(); // pauserB has no cooldown
         assertEq(harness.pausedUntil(), block.timestamp + harness.MAX_PAUSE_DURATION());
-        assertEq(harness.lastContractPauseTimestamp(), block.timestamp);
-        // per-pauser records retained independently: A from the first pause, B from this one
         assertEq(harness.lastPauseTimestamp(pauserB), block.timestamp);
+        // pauserA's cooldown is still tracked independently
         assertEq(harness.lastPauseTimestamp(pauserA), firstPauseStart);
     }
 
@@ -265,21 +253,12 @@ contract PausableUntilTest is Test {
         harness.pauseUntil();
     }
 
-    function test_unpauseUntil_newPauserStillBlockedByContractCooldown() public {
-        // F5 regression for the exact attack chain: pauserA pauses, an unpauser lifts it,
-        // then a *different* pauser key tries to immediately re-pause. The contract-wide
-        // cooldown (which unpause does not clear) must block the second key.
+    function test_unpauseUntil_newPauserCanPauseImmediately() public {
         vm.prank(pauserA);
         harness.pauseUntil();
-        uint256 pauseStart = block.timestamp;
         harness.unpauseUntil();
 
-        vm.prank(pauserB);
-        vm.expectRevert(PausableUntil.PauserCooldownStillActive.selector);
-        harness.pauseUntil();
-
-        // only after the full cooldown window may any key pause again
-        vm.warp(pauseStart + harness.MAX_PAUSE_DURATION() + harness.PAUSER_UNTIL_COOLDOWN());
+        // pauserB hasn't paused before, so no cooldown applies
         vm.prank(pauserB);
         harness.pauseUntil();
         assertGt(harness.pausedUntil(), 0);
@@ -367,24 +346,22 @@ contract PausableUntilTest is Test {
         vm.warp(pauseStart + required + extra);
         vm.prank(pauserA);
         harness.pauseUntil();
-        assertEq(harness.lastContractPauseTimestamp(), block.timestamp);
         assertEq(harness.lastPauseTimestamp(pauserA), block.timestamp);
     }
 
-    function testFuzz_secondPauser_blockedWithinContractCooldown(uint256 delay) public {
-        // F5 regression (fuzzed): for any time after the pause lifts but before the
-        // contract-wide cooldown ends, a second pauser key must be blocked.
+    function testFuzz_secondPauser_independentCooldown(uint256 delay) public {
         vm.prank(pauserA);
         harness.pauseUntil();
         uint256 firstStart = block.timestamp;
-        uint256 required = harness.MAX_PAUSE_DURATION() + harness.PAUSER_UNTIL_COOLDOWN();
 
-        // pause lifted (> MAX_PAUSE_DURATION) but strictly before the cooldown ends
-        delay = bound(delay, harness.MAX_PAUSE_DURATION() + 1, required - 1);
+        // wait for pause-until to lift, then a different pauser pauses
+        delay = bound(delay, harness.MAX_PAUSE_DURATION() + 1, harness.MAX_PAUSE_DURATION() + 365 days);
         vm.warp(firstStart + delay);
 
         vm.prank(pauserB);
-        vm.expectRevert(PausableUntil.PauserCooldownStillActive.selector);
         harness.pauseUntil();
+        assertEq(harness.lastPauseTimestamp(pauserB), block.timestamp);
+        // pauserA's cooldown is unchanged
+        assertEq(harness.lastPauseTimestamp(pauserA), firstStart);
     }
 }

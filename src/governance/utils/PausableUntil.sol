@@ -7,15 +7,7 @@ abstract contract PausableUntil {
     struct PausableUntilStorage {
         uint256 pausedUntil;
         uint256 pauseUntilDuration;
-        // Per-pauser record of when each pauser last paused (kept for forensics/monitoring).
-        // This is a RECORD ONLY — it does not gate the cooldown. Gating the cooldown per
-        // pauser let a second key leapfrog it and keep the contract paused indefinitely
-        // (a "pause war" between rotating keys).
         mapping(address => uint256) lastPauseTimestamp;
-        // Contract-wide anchor that drives the re-pause cooldown. Updated on every pause
-        // regardless of which key paused, so the cooldown applies to the contract (the
-        // pause target) rather than to the individual pauser.
-        uint256 lastContractPauseTimestamp;
     }
 
     bytes32 private constant PAUSABLE_UNTIL_STORAGE_SLOT = 0x2c7e4bc092c2002f0baaf2f47367bc442b098266b43d189dafe4cb25f1e1fea2; // keccak256("pausableUntil.storage")
@@ -45,10 +37,6 @@ abstract contract PausableUntil {
         return _getPausableUntilStorage().lastPauseTimestamp[pauser];
     }
 
-    function lastContractPauseTimestamp() external view returns (uint256) {
-        return _getPausableUntilStorage().lastContractPauseTimestamp;
-    }
-
     function _getPausableUntilStorage() internal pure returns (PausableUntilStorage storage $) {
         assembly {
             $.slot := PAUSABLE_UNTIL_STORAGE_SLOT
@@ -69,12 +57,9 @@ abstract contract PausableUntil {
         _requireNotPausedUntil();
         PausableUntilStorage storage $ = _getPausableUntilStorage();
         uint256 pauseUntilDuration = $.pauseUntilDuration;
-        // Cooldown is enforced against the contract-wide anchor so a second pauser key
-        // cannot bypass it (F5).
-        if ($.lastContractPauseTimestamp + pauseUntilDuration + PAUSER_UNTIL_COOLDOWN > block.timestamp) revert PauserCooldownStillActive();
+        if ($.lastPauseTimestamp[msg.sender] + pauseUntilDuration + PAUSER_UNTIL_COOLDOWN > block.timestamp) revert PauserCooldownStillActive();
         $.pausedUntil = block.timestamp + pauseUntilDuration;
-        $.lastContractPauseTimestamp = block.timestamp;
-        $.lastPauseTimestamp[msg.sender] = block.timestamp; // per-pauser record (not used for gating)
+        $.lastPauseTimestamp[msg.sender] = block.timestamp;
         emit PausedUntil($.pausedUntil);
     }
 
