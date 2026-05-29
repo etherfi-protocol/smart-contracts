@@ -23,7 +23,6 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
-
     // deprecated storage slot
     uint160 private __gap_0;
 
@@ -36,7 +35,6 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     //--------------------------------------------------------------------------------------
     //---------------------------------  IMMUTABLES  --------------------------------------
     //--------------------------------------------------------------------------------------
-
     // Cache the domain separator as an immutable value, but also store the chain id that it corresponds to, in order to
     // invalidate the cached domain separator if the chain id changes.
     bytes32 private immutable _CACHED_DOMAIN_SEPARATOR;
@@ -70,7 +68,6 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-
     event Paused();
     event Unpaused();
     event TransferShares( address indexed from, address indexed to, uint256 sharesValue);
@@ -78,7 +75,6 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ERRORS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-
     error AddressZero();
     error IncorrectCaller();
     error BurnAmountExceedsBalance();
@@ -92,7 +88,13 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     //--------------------------------------------------------------------------------------
     //-------------------------------------  CONSTRUCTOR  ----------------------------------
     //--------------------------------------------------------------------------------------
-
+    /**
+     * @notice Constructor for EETH contract
+     * @param _liquidityPool The address of the liquidity pool contract
+     * @param _roleRegistry The address of the role registry contract
+     * @param _blacklister The address of the blacklister contract
+     * @param _rateLimiter The address of the rate limiter contract
+     */
     constructor(address _liquidityPool, address _roleRegistry, address _blacklister, address _rateLimiter)
         RolesLibrary(_roleRegistry)
         RateLimitedToken(_rateLimiter)
@@ -115,9 +117,12 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     }
 
     //--------------------------------------------------------------------------------------
-    //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
+    //---------------------------------  INITIALIZERS  -------------------------------------
     //--------------------------------------------------------------------------------------
-
+    /**
+     * @notice Initialize the EETH contract
+     * @param _liquidityPool The address of the liquidity pool contract
+     */
     function initialize(address _liquidityPool) external initializer {
         if (_liquidityPool == address(0)) revert AddressZero();
 
@@ -125,6 +130,18 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         __Ownable_init();
     }
 
+    //--------------------------------------------------------------------------------------
+    //----------------------------  MINT/BURN FUNCTIONS  ------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Mint shares to a user
+     * @param _user The address of the user to mint shares to
+     * @param _share The amount of shares to mint
+     * @dev Rate Limited for mint bucket and per-address bucket
+     * Only callable by the liquidity pool contract
+     * Only callable when the contract is not paused
+     * Only callable when the user is not blacklisted
+     */
     function mintShares(address _user, uint256 _share) external onlyPoolContract whenNotPaused {
         blacklister.nonBlacklisted(_user);
         shares[_user] += _share;
@@ -139,6 +156,15 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         emit TransferShares(address(0), _user, _share);
     }
 
+    /**
+     * @notice Burn shares from a user
+     * @param _user The address of the user to burn shares from
+     * @param _share The amount of shares to burn
+     * @dev Rate Limited for burn bucket and per-address bucket
+     * Only callable by the liquidity pool contract
+     * Only callable when the contract is not paused
+     * Only callable when the user is not blacklisted
+     */
     function burnShares(address _user, uint256 _share) external whenNotPaused {
         if (msg.sender != address(liquidityPool)) revert IncorrectCaller();
         blacklister.nonBlacklisted(_user);
@@ -163,6 +189,13 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     // declares the access split (Guardian = tighten, Operating Multisig = set + delete).
     // For a single user, pass a length-1 array.
 
+    /**
+     * @notice Tighten the address rate limits
+     * @param users The addresses of the users to tighten the rate limits for
+     * @param capacities The capacities of the rate limits
+     * @param refillRates The refill rates of the rate limits
+     * @dev Only callable by the guardian
+     */
     function tightenAddressRateLimits(
         address[] calldata users,
         uint64[] calldata capacities,
@@ -171,6 +204,13 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         _tightenAddressRateLimits(users, capacities, refillRates);
     }
 
+    /**
+     * @notice Set the address rate limits
+     * @param users The addresses of the users to set the rate limits for
+     * @param capacities The capacities of the rate limits
+     * @param refillRates The refill rates of the rate limits
+     * @dev Only callable by the operating multisig
+     */
     function setAddressRateLimits(
         address[] calldata users,
         uint64[] calldata capacities,
@@ -179,24 +219,56 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         _setAddressRateLimits(users, capacities, refillRates);
     }
 
+    /**
+     * @notice Delete the address rate limits
+     * @param users The addresses of the users to delete the rate limits for
+     * @dev Only callable by the operating multisig
+     */
     function deleteAddressRateLimits(address[] calldata users) external onlyOperatingMultisig {
         _deleteAddressRateLimits(users);
     }
 
+    //--------------------------------------------------------------------------------------
+    //------------------------------  ERC20 FUNCTIONS  -------------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Transfer eETH to a recipient
+     * @param _recipient The address of the recipient
+     * @param _amount The amount of eETH to transfer
+     * @return bool True if the transfer is successful
+     */
     function transfer(address _recipient, uint256 _amount) external override(IeETH, IERC20Upgradeable) returns (bool) {
         _transfer(msg.sender, _recipient, _amount);
         return true;
     }
 
+    /**
+     * @notice Get the allowance for a spender
+     * @param _owner The address of the owner
+     * @param _spender The address of the spender
+     * @return uint256 The allowance
+     */
     function allowance(address _owner, address _spender) public view returns (uint256) {
         return allowances[_owner][_spender];
     }
 
+    /**
+     * @notice Approve a spender to spend eETH
+     * @param _spender The address of the spender
+     * @param _amount The amount of eETH to approve
+     * @return bool True if the approval is successful
+     */
     function approve(address _spender, uint256 _amount) external override(IeETH, IERC20Upgradeable) returns (bool) {
         _approve(msg.sender, _spender, _amount);
         return true;
     }
 
+    /**
+     * @notice Increase the allowance for a spender
+     * @param _spender The address of the spender
+     * @param _increaseAmount The amount of eETH to increase the allowance by
+     * @return bool True if the allowance is increased successfully
+     */
     function increaseAllowance(address _spender, uint256 _increaseAmount) external returns (bool) {
         address owner = msg.sender;
         uint256 currentAllowance = allowance(owner, _spender);
@@ -204,6 +276,12 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         return true;
     }
 
+    /**
+     * @notice Decrease the allowance for a spender
+     * @param _spender The address of the spender
+     * @param _decreaseAmount The amount of eETH to decrease the allowance by
+     * @return bool True if the allowance is decreased successfully
+     */
     function decreaseAllowance(address _spender, uint256 _decreaseAmount) external returns (bool) {
         address owner = msg.sender;
         uint256 currentAllowance = allowance(owner, _spender);
@@ -214,6 +292,13 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         return true;
     }
 
+    /**
+     * @notice Transfer eETH from a sender to a recipient
+     * @param _sender The address of the sender
+     * @param _recipient The address of the recipient
+     * @param _amount The amount of eETH to transfer
+     * @return bool True if the transfer is successful
+     */
     function transferFrom(address _sender, address _recipient, uint256 _amount) external override(IeETH, IERC20Upgradeable) returns (bool) {
         uint256 currentAllowance = allowances[_sender][msg.sender];
         if (currentAllowance < _amount) revert TransferAmountExceedsAllowance();
@@ -224,28 +309,16 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         return true;
     }
 
-    function pause() external onlyOperatingMultisig {
-        paused = true;
-        emit Paused();
-    }
-
-    function unpause() external onlyOperatingMultisig {
-        paused = false;
-        emit Unpaused();
-    }
-
-    function pauseContractUntil() external onlySuperGuardian {
-        _pauseUntil();
-    }
-
-    function unpauseContractUntil() external onlyOperatingMultisig {
-        _unpauseUntil();
-    }
-
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
-        _setPauseUntilDuration(_pauseUntilDuration);
-    }
-
+    /**
+     * @notice Permit a spender to spend eETH
+     * @param owner The address of the owner
+     * @param spender The address of the spender
+     * @param value The amount of eETH to permit
+     * @param deadline The deadline for the permit
+     * @param v The v signature
+     * @param r The r signature
+     * @param s The s signature
+    */
     function permit(
         address owner,
         address spender,
@@ -267,25 +340,105 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         _approve(owner, spender, value);
     }
 
+    //--------------------------------------------------------------------------------------
+    //--------------------------------  PAUSING FUNCTIONS  ---------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Pauses the contract indefinitely
+     * @dev Only callable by the operating multisig
+     */
+    function pause() external onlyOperatingMultisig {
+        paused = true;
+        emit Paused();
+    }
+
+    /**
+     * @notice Unpauses the contract
+     * @dev Only callable by the operating multisig
+     */
+    function unpause() external onlyOperatingMultisig {
+        paused = false;
+        emit Unpaused();
+    }
+
+    /**
+     * @notice Pauses the contract until the pauseUntilDuration
+     * @dev Only callable by the super guardian
+     */
+    function pauseContractUntil() external onlySuperGuardian {
+        _pauseUntil();
+    }
+
+    /**
+     * @notice Unpauses the contract from pauseUntil
+     * @dev Only callable by the operating multisig
+     */
+    function unpauseContractUntil() external onlyOperatingMultisig {
+        _unpauseUntil();
+    }
+
+    /**
+     * @notice Sets the pause duration for the contract
+     * @param _pauseUntilDuration The new pause duration
+     * @dev Only callable by the admin
+     */
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
+        _setPauseUntilDuration(_pauseUntilDuration);
+    }
+
+    //--------------------------------------------------------------------------------------
+    //--------------------------------  RECOVERY FUNCTIONS  --------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Recover ETH from the contract
+     * @param to The address to recover the ETH to
+     * @param amount The amount of ETH to recover
+     * @dev Only callable by the admin
+     */
     function recoverETH(address payable to, uint256 amount) external onlyAdmin {
         _recoverETH(to, amount);
     }
 
+    /**
+     * @notice Recover ERC20 tokens from the contract
+     * @param token The address of the ERC20 token
+     * @param to The address to recover the tokens to
+     * @param amount The amount of tokens to recover
+     * @dev Only callable by the admin
+     */
     function recoverERC20(address token, address to, uint256 amount) external onlyAdmin{
         _recoverERC20(token, to, amount);
     }
 
+    /**
+     * @notice Recover ERC721 tokens from the contract
+     * @param token The address of the ERC721 token
+     * @param to The address to recover the tokens to
+     * @param tokenId The ID of the token to recover
+     * @dev Only callable by the admin
+     */
     function recoverERC721(address token, address to, uint256 tokenId) external onlyAdmin {
         _recoverERC721(token, to, tokenId);
     }
 
-    // [INTERNAL FUNCTIONS]
-    /// @dev Order mirrors `WeETH._beforeTokenTransfer`: pause + blacklist checks
-    ///      run BEFORE the rate-limit consume so a paused/blacklisted call doesn't
-    ///      bother the external rate limiter, and so blacklist / pause states
-    ///      cannot be silently observed via rate-limit state changes (atomic revert
-    ///      makes this safe either way, but consistent ordering removes the
-    ///      duplicate-check footprint that previously lived in `_transferShares`).
+    //--------------------------------------------------------------------------------------
+    //-------------------------------  INTERNAL FUNCTIONS  ---------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Transfer eETH from a sender to a recipient
+     * @param _sender The address of the sender
+     * @param _recipient The address of the recipient
+     * @param _amount The amount of eETH to transfer
+     * @dev Order mirrors `WeETH._beforeTokenTransfer`: pause + blacklist checks
+     * Run BEFORE the rate-limit consume so a paused/blacklisted call doesn't
+     * bother the external rate limiter, and so blacklist / pause states
+     * cannot be silently observed via rate-limit state changes (atomic revert
+     * makes this safe either way, but consistent ordering removes the
+     * duplicate-check footprint that previously lived in `_transferShares`).
+     * Only callable when the contract is not paused
+     * Only callable when the sender is not blacklisted
+     * Only callable when the recipient is not blacklisted
+     */
     function _transfer(address _sender, address _recipient, uint256 _amount) internal whenNotPaused {
         blacklister.nonBlacklisted(_sender);
         blacklister.nonBlacklisted(_recipient);
@@ -301,6 +454,12 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         emit Transfer(_sender, _recipient, _amount);
     }
 
+    /**
+     * @notice Approve a spender to spend eETH
+     * @param _owner The address of the owner
+     * @param _spender The address of the spender
+     * @param _amount The amount of eETH to approve
+     */
     function _approve(address _owner, address _spender, uint256 _amount) internal {
         if (_owner == address(0) || _spender == address(0)) revert AddressZero();
 
@@ -308,8 +467,12 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         emit Approval(_owner, _spender, _amount);
     }
 
-    /// @dev Pure share-accounting; pause / blacklist / address-zero gates live
-    ///      in the caller (`_transfer`). Internal-only; not callable elsewhere.
+    /**
+     * @notice Transfer shares from a sender to a recipient
+     * @param _sender The address of the sender
+     * @param _recipient The address of the recipient
+     * @param _sharesAmount The amount of shares to transfer
+     */
     function _transferShares(address _sender, address _recipient, uint256 _sharesAmount) internal {
         if (_sharesAmount > shares[_sender]) revert TransferAmountExceedsBalance();
 
@@ -319,47 +482,24 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         emit TransferShares(_sender, _recipient, _sharesAmount);
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
-
+    /**
+     * @notice Use the nonce for the owner
+     * @param owner The address of the owner
+     * @return current The current nonce
+     */
     function _useNonce(address owner) internal virtual returns (uint256 current) {
         CountersUpgradeable.Counter storage nonce = _nonces[owner];
         current = nonce.current();
         nonce.increment();
     }
 
-    // [GETTERS]
-    function name() public pure returns (string memory) { return "ether.fi ETH"; }
-    function symbol() public pure returns (string memory) { return "eETH"; }
-    function decimals() public pure returns (uint8) { return 18; }
-
-    function totalSupply() public view returns (uint256) {
-        return liquidityPool.getTotalPooledEther();
-    }
-
-    function balanceOf(address _user) public view override(IeETH, IERC20Upgradeable) returns (uint256) {
-        return liquidityPool.getTotalEtherClaimOf(_user);
-    }
-
-    function getImplementation() external view returns (address) {
-        return _getImplementation();
-    }
-
-    function nonces(address owner) public view virtual override returns (uint256) {
-        return _nonces[owner].current();
-    }
-
-    function DOMAIN_SEPARATOR() external view override returns (bytes32) {
-        return _domainSeparatorV4();
-    }
-
-    function _domainSeparatorV4() internal view returns (bytes32) {
-        if (address(this) == _CACHED_THIS && block.chainid == _CACHED_CHAIN_ID) {
-            return _CACHED_DOMAIN_SEPARATOR;
-        } else {
-            return _buildDomainSeparator(_TYPE_HASH, _HASHED_NAME, _HASHED_VERSION);
-        }
-    }
-
+    /**
+     * @notice Build the domain separator
+     * @param typeHash The type hash
+     * @param nameHash The name hash
+     * @param versionHash The version hash
+     * @return bytes32 The domain separator
+     */
     function _buildDomainSeparator(
         bytes32 typeHash,
         bytes32 nameHash,
@@ -368,18 +508,120 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         return keccak256(abi.encode(typeHash, nameHash, versionHash, block.chainid, address(this)));
     }
 
+    /**
+     * @notice Hash the typed data
+     * @param structHash The struct hash
+     * @return bytes32 The hashed typed data
+     */
     function _hashTypedDataV4(bytes32 structHash) internal view virtual returns (bytes32) {
         return ECDSAUpgradeable.toTypedDataHash(_domainSeparatorV4(), structHash);
     }
 
-    // [MODIFIERS]
-    // Role modifiers (`onlyAdmin`, `onlyOperatingMultisig`, `onlyGuardian`, `onlySuperGuardian`,
-    // `onlyUpgradeTimelock`, ...) are inherited from RolesLibrary.
+    /**
+     * @notice Get the domain separator
+     * @return bytes32 The domain separator
+     */
+    function _domainSeparatorV4() internal view returns (bytes32) {
+        if (address(this) == _CACHED_THIS && block.chainid == _CACHED_CHAIN_ID) {
+            return _CACHED_DOMAIN_SEPARATOR;
+        } else {
+            return _buildDomainSeparator(_TYPE_HASH, _HASHED_NAME, _HASHED_VERSION);
+        }
+    }
+
+    /**
+     * @notice Authorize the upgrade
+     * @param newImplementation The address of the new implementation
+     * @dev Only callable by the upgrade timelock
+     */
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------  GETTERS  --------------------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Get the name of the token
+     * @return string The name of the token
+     */
+    function name() public pure returns (string memory) { 
+        return "ether.fi ETH"; 
+    }
+
+    /**
+     * @notice Get the symbol of the token
+     * @return string The symbol of the token
+     */
+    function symbol() public pure returns (string memory) { 
+        return "eETH"; 
+    }
+
+    /**
+     * @notice Get the decimals of the token
+     * @return uint8 The decimals of the token
+     */
+    function decimals() public pure returns (uint8) { 
+        return 18; 
+    }
+
+    /**
+     * @notice Get the total supply of the token
+     * @return uint256 The total supply of the token
+     */
+    function totalSupply() public view returns (uint256) {
+        return liquidityPool.getTotalPooledEther();
+    }
+
+    /**
+     * @notice Get the balance of a user
+     * @param _user The address of the user
+     * @return uint256 The balance of the user
+     */
+    function balanceOf(address _user) public view override(IeETH, IERC20Upgradeable) returns (uint256) {
+        return liquidityPool.getTotalEtherClaimOf(_user);
+    }
+
+    /**
+     * @notice Get the implementation address
+     * @return address The implementation address
+     */
+    function getImplementation() external view returns (address) {
+        return _getImplementation();
+    }
+
+    /**
+     * @notice Get the nonce for an owner
+     * @param owner The address of the owner
+     * @return uint256 The nonce for the owner
+     */
+    function nonces(address owner) public view virtual override returns (uint256) {
+        return _nonces[owner].current();
+    }
+
+    /**
+     * @notice Get the domain separator
+     * @return bytes32 The domain separator
+     */
+    function DOMAIN_SEPARATOR() external view override returns (bytes32) {
+        return _domainSeparatorV4();
+    }
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------  MODIFIERS  --------------------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Modifier to check if the caller is the liquidity pool contract
+     * @dev Only callable by the liquidity pool contract
+     */
     modifier onlyPoolContract() {
         if (msg.sender != address(liquidityPool)) revert IncorrectCaller();
         _;
     }
 
+    /**
+     * @notice Modifier to check if the contract is not paused
+     * @dev Only callable when the contract is not paused and not paused until 
+     * the pauseUntilDuration
+     */
     modifier whenNotPaused() {
         if (paused) revert ContractPaused();
         _requireNotPausedUntil();

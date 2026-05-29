@@ -122,20 +122,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     error AlreadyPaused();
     error NotPaused();
 
-    struct ConstructorAddresses {
-        address stakingManager;
-        address nodesManager;
-        address eETH;
-        address withdrawRequestNFT;
-        address liquifier;
-        address etherFiRedemptionManager;
-        address roleRegistry;
-        address priorityWithdrawalQueue;
-        address blacklister;
-        address etherFiAdminContract;
-        address membershipManager;
-    }
-
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
     //--------------------------------------------------------------------------------------
