@@ -432,4 +432,30 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
         vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         cumulativeMerkleRewardsDistributorInstance.recoverERC20(address(rETH), bob, 1 ether);
     }
+
+    // PR #385 M9: cumulative payout under a single claimable root is bounded by a
+    // timelock-set ceiling, so a compromised EXECUTOR's malicious root cannot drain
+    // beyond the approved cap.
+    function test_perRootClaimCap_bounds_total_payout() public {
+        vm.prank(admin); // admin holds OPERATION_TIMELOCK in TestSetup
+        cumulativeMerkleRewardsDistributorInstance.setMaxClaimablePerRoot(address(eETHInstance), 150 ether);
+
+        setMerkleRoot(address(eETHInstance));
+
+        // first claim (100) is under the cap
+        cumulativeMerkleRewardsDistributorInstance.claim(address(eETHInstance), accounts[0], 100 ether, merkleRoot, proofs[0]);
+        assertEq(cumulativeMerkleRewardsDistributorInstance.claimedPerRoot(address(eETHInstance), merkleRoot), 100 ether);
+
+        // second claim (200) would push the root's cumulative payout to 300 > 150 → revert
+        vm.expectRevert(CumulativeMerkleRewardsDistributor.RootClaimCapExceeded.selector);
+        cumulativeMerkleRewardsDistributorInstance.claim(address(eETHInstance), accounts[1], 200 ether, merkleRoot, proofs[1]);
+    }
+
+    function test_perRootClaimCap_zero_is_uncapped() public {
+        // default cap of 0 preserves existing behavior — all claims succeed
+        setMerkleRoot(address(eETHInstance));
+        cumulativeMerkleRewardsDistributorInstance.claim(address(eETHInstance), accounts[0], 100 ether, merkleRoot, proofs[0]);
+        cumulativeMerkleRewardsDistributorInstance.claim(address(eETHInstance), accounts[3], 400 ether, merkleRoot, proofs[3]);
+        assertEq(eETHInstance.balanceOf(accounts[3]), 400 ether);
+    }
 }

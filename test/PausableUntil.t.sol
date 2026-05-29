@@ -196,6 +196,46 @@ contract PausableUntilTest is Test {
     }
 
     // --------------------------------------------------------
+    //  Cooldown snapshot (PR #385 M1) + zero-baseline (M2)
+    // --------------------------------------------------------
+
+    // M1: a pauser's cooldown is fixed at the duration in force when they paused; a later
+    // setPauseUntilDuration must NOT retroactively shrink it. Pause at MAX, expire the
+    // pause, drop the duration to MIN, and confirm the same pauser is STILL on cooldown
+    // (the cooldown is anchored to the original MAX duration, not the new MIN).
+    function test_cooldown_immuneToDurationChange() public {
+        vm.prank(pauserA);
+        harness.pauseUntil();
+        uint256 start = block.timestamp;
+        assertEq(harness.cooldownUntil(pauserA), start + harness.MAX_PAUSE_DURATION() + harness.PAUSER_UNTIL_COOLDOWN());
+
+        // pause expires; still within the original cooldown window
+        vm.warp(start + harness.MAX_PAUSE_DURATION() + 1);
+
+        // shrink the duration — must not move pauserA's already-snapshotted cooldown
+        harness.setPauseUntilDuration(harness.MIN_PAUSE_DURATION());
+
+        vm.prank(pauserA);
+        vm.expectRevert(PausableUntil.PauserCooldownStillActive.selector);
+        harness.pauseUntil();
+    }
+
+    // M2: a never-paused pauser (cooldownUntil == 0) can always fire the first pause,
+    // even on a chain with a low block.timestamp. Under the old recompute-based check
+    // (0 + duration + COOLDOWN > now) this spuriously reverted for the first ~37 days of
+    // unix time.
+    function test_firstPause_worksAtLowTimestamp() public {
+        PausableUntilHarness fresh = new PausableUntilHarness();
+        fresh.setPauseUntilDuration(fresh.MAX_PAUSE_DURATION());
+        vm.warp(100); // low genesis-like timestamp
+        assertEq(fresh.cooldownUntil(pauserA), 0);
+
+        vm.prank(pauserA);
+        fresh.pauseUntil(); // must not revert
+        assertEq(fresh.pausedUntil(), 100 + fresh.MAX_PAUSE_DURATION());
+    }
+
+    // --------------------------------------------------------
     //  _unpauseUntil
     // --------------------------------------------------------
 

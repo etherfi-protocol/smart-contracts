@@ -27,6 +27,20 @@ using SafeERC20 for IERC20;
     uint256 public claimDelay;
     bool public paused;
 
+    // --- Per-root payout ceiling (security review PR #385, M9) ---
+    // `setPendingMerkleRoot` / `finalizeMerkleRoot` are EXECUTOR_OPERATIONS-gated; a
+    // compromised executor could publish a root that pays out the whole contract balance
+    // after only `claimDelay`. This ceiling, set by the 2-day Operation Timelock
+    // (`onlyAdmin`), caps cumulative payout per (token, claimable-root). A value of 0 is
+    // "uncapped" (opt-in per token) so existing flows are unaffected until governance
+    // sets a bound; once set, `claim` reverts when a root would pay out beyond it,
+    // bounding a compromised executor to the timelock-approved ceiling.
+    mapping(address token => uint256 cap) public maxClaimablePerRoot;
+    mapping(address token => mapping(bytes32 root => uint256 claimed)) public claimedPerRoot;
+
+    error RootClaimCapExceeded();
+    event MaxClaimablePerRootUpdated(address indexed token, uint256 cap);
+
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  CONSTANTS  -------------------------------------
@@ -54,6 +68,14 @@ using SafeERC20 for IERC20;
     function setClaimDelay(uint256 _claimDelay) external onlyAdmin {
         claimDelay = _claimDelay;
         emit ClaimDelayUpdated(claimDelay);
+    }
+
+    /// @notice Sets the cumulative payout ceiling per claimable Merkle root for `_token`.
+    /// @dev Operation-Timelock-gated (`onlyAdmin`). 0 = uncapped (default). Bounds the
+    ///      blast radius of a compromised EXECUTOR_OPERATIONS key publishing a malicious root.
+    function setMaxClaimablePerRoot(address _token, uint256 _cap) external onlyAdmin {
+        maxClaimablePerRoot[_token] = _cap;
+        emit MaxClaimablePerRootUpdated(_token, _cap);
     }
 /**
 * @notice Sets a new pending Merkle root for token rewards distribution
@@ -115,6 +137,17 @@ using SafeERC20 for IERC20;
 
 
         uint256 amount = cumulativeAmount - preclaimed;
+
+        // Enforce the per-root payout ceiling (0 = uncapped). Bounds total payout under a
+        // single claimable root so a compromised executor's malicious root cannot drain
+        // beyond the timelock-approved cap.
+        uint256 cap = maxClaimablePerRoot[token];
+        if (cap != 0) {
+            uint256 newRootTotal = claimedPerRoot[token][expectedMerkleRoot] + amount;
+            if (newRootTotal > cap) revert RootClaimCapExceeded();
+            claimedPerRoot[token][expectedMerkleRoot] = newRootTotal;
+        }
+
         // Send the token
         if(token == ETH_ADDRESS){
             (bool success, ) = account.call{value: amount}("");
