@@ -11,11 +11,11 @@ import "@etherfi/interfaces/IwstETH.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
 import "@etherfi/core/interfaces/IeETH.sol";
 import "@etherfi/core/interfaces/IWeETH.sol";
-import "@etherfi/deposits/interfaces/ILiquifier.sol";
+import "@etherfi/deposits/interfaces/IDepositAdapter.sol";
 import "@etherfi/governance/interfaces/IBlacklister.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
 
-contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable, RolesLibrary {
+contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable, RolesLibrary, IDepositAdapter {
     using SafeERC20 for IERC20;
 
     //--------------------------------------------------------------------------------------
@@ -29,13 +29,6 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable, RolesLibrary {
     IERC20Upgradeable public immutable stETH;
     IwstETH public immutable wstETH;
     IBlacklister public immutable blacklister;
-
-    enum SourceOfFunds {
-        ETH,
-        WETH,
-        STETH,
-        WSTETH
-    }
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  EVENTS  ---------------------------------------
@@ -57,25 +50,17 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable, RolesLibrary {
     //--------------------------------------------------------------------------------------
     /**
      * @notice Constructor
-     * @param _liquidityPool The address of the liquidity pool
-     * @param _liquifier The address of the liquifier
-     * @param _weETH The address of the weETH contract
-     * @param _eETH The address of the eETH contract
-     * @param _wETH The address of the wETH contract
-     * @param _stETH The address of the stETH contract
-     * @param _wstETH The address of the wstETH contract
-     * @param _roleRegistry The address of the role registry
-     * @param _blacklister The address of the blacklister
+     * @param _constructorAddresses The addresses of the constructor addresses
      */
-    constructor(address _liquidityPool, address _liquifier, address _weETH, address _eETH, address _wETH, address _stETH, address _wstETH, address _roleRegistry, address _blacklister) RolesLibrary(_roleRegistry) {
-        liquidityPool = ILiquidityPool(_liquidityPool);
-        liquifier = ILiquifier(_liquifier);
-        eETH = IeETH(_eETH);
-        weETH = IWeETH(_weETH);
-        wETH = IWETH(_wETH);
-        stETH = IERC20Upgradeable(_stETH);
-        wstETH = IwstETH(_wstETH);
-        blacklister = IBlacklister(_blacklister);
+    constructor(ConstructorAddresses memory _constructorAddresses) RolesLibrary(_constructorAddresses.roleRegistry) {
+        liquidityPool = ILiquidityPool(_constructorAddresses.liquidityPool);
+        liquifier = ILiquifier(_constructorAddresses.liquifier);
+        eETH = IeETH(_constructorAddresses.eETH);
+        weETH = IWeETH(_constructorAddresses.weETH);
+        wETH = IWETH(_constructorAddresses.wETH);
+        stETH = IERC20Upgradeable(_constructorAddresses.stETH);
+        wstETH = IwstETH(_constructorAddresses.wstETH);
+        blacklister = IBlacklister(_constructorAddresses.blacklister);
 
         _disableInitializers();
     }
