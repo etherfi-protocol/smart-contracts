@@ -7,7 +7,11 @@ abstract contract PausableUntil {
     struct PausableUntilStorage {
         uint256 pausedUntil;
         uint256 pauseUntilDuration;
-        mapping(address => uint256) lastPauseTimestamp;
+        // Cooldown is scoped to this contract (the pause target), NOT to the pauser.
+        // Per-pauser scoping let a second pauser key bypass the cooldown and keep the
+        // contract paused indefinitely (a "pause war" between rotating keys). A single
+        // contract-wide timestamp makes the cooldown apply regardless of who paused.
+        uint256 lastPauseTimestamp;
     }
 
     bytes32 private constant PAUSABLE_UNTIL_STORAGE_SLOT = 0x2c7e4bc092c2002f0baaf2f47367bc442b098266b43d189dafe4cb25f1e1fea2; // keccak256("pausableUntil.storage")
@@ -33,8 +37,8 @@ abstract contract PausableUntil {
         return _getPausableUntilStorage().pauseUntilDuration;
     }
 
-    function lastPauseTimestamp(address pauser) external view returns (uint256) {
-        return _getPausableUntilStorage().lastPauseTimestamp[pauser];
+    function lastPauseTimestamp() external view returns (uint256) {
+        return _getPausableUntilStorage().lastPauseTimestamp;
     }
 
     function _getPausableUntilStorage() internal pure returns (PausableUntilStorage storage $) {
@@ -57,9 +61,9 @@ abstract contract PausableUntil {
         _requireNotPausedUntil();
         PausableUntilStorage storage $ = _getPausableUntilStorage();
         uint256 pauseUntilDuration = $.pauseUntilDuration;
-        if ($.lastPauseTimestamp[msg.sender] + pauseUntilDuration + PAUSER_UNTIL_COOLDOWN > block.timestamp) revert PauserCooldownStillActive();
+        if ($.lastPauseTimestamp + pauseUntilDuration + PAUSER_UNTIL_COOLDOWN > block.timestamp) revert PauserCooldownStillActive();
         $.pausedUntil = block.timestamp + pauseUntilDuration;
-        $.lastPauseTimestamp[msg.sender] = block.timestamp;
+        $.lastPauseTimestamp = block.timestamp;
         emit PausedUntil($.pausedUntil);
     }
 
