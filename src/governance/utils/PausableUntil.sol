@@ -7,11 +7,15 @@ abstract contract PausableUntil {
     struct PausableUntilStorage {
         uint256 pausedUntil;
         uint256 pauseUntilDuration;
-        // Cooldown is scoped to this contract (the pause target), NOT to the pauser.
-        // Per-pauser scoping let a second pauser key bypass the cooldown and keep the
-        // contract paused indefinitely (a "pause war" between rotating keys). A single
-        // contract-wide timestamp makes the cooldown apply regardless of who paused.
-        uint256 lastPauseTimestamp;
+        // Per-pauser record of when each pauser last paused (kept for forensics/monitoring).
+        // This is a RECORD ONLY — it does not gate the cooldown. Gating the cooldown per
+        // pauser let a second key leapfrog it and keep the contract paused indefinitely
+        // (a "pause war" between rotating keys).
+        mapping(address => uint256) lastPauseTimestamp;
+        // Contract-wide anchor that drives the re-pause cooldown. Updated on every pause
+        // regardless of which key paused, so the cooldown applies to the contract (the
+        // pause target) rather than to the individual pauser.
+        uint256 lastContractPauseTimestamp;
     }
 
     bytes32 private constant PAUSABLE_UNTIL_STORAGE_SLOT = 0x2c7e4bc092c2002f0baaf2f47367bc442b098266b43d189dafe4cb25f1e1fea2; // keccak256("pausableUntil.storage")
@@ -37,8 +41,12 @@ abstract contract PausableUntil {
         return _getPausableUntilStorage().pauseUntilDuration;
     }
 
-    function lastPauseTimestamp() external view returns (uint256) {
-        return _getPausableUntilStorage().lastPauseTimestamp;
+    function lastPauseTimestamp(address pauser) external view returns (uint256) {
+        return _getPausableUntilStorage().lastPauseTimestamp[pauser];
+    }
+
+    function lastContractPauseTimestamp() external view returns (uint256) {
+        return _getPausableUntilStorage().lastContractPauseTimestamp;
     }
 
     function _getPausableUntilStorage() internal pure returns (PausableUntilStorage storage $) {
@@ -61,9 +69,12 @@ abstract contract PausableUntil {
         _requireNotPausedUntil();
         PausableUntilStorage storage $ = _getPausableUntilStorage();
         uint256 pauseUntilDuration = $.pauseUntilDuration;
-        if ($.lastPauseTimestamp + pauseUntilDuration + PAUSER_UNTIL_COOLDOWN > block.timestamp) revert PauserCooldownStillActive();
+        // Cooldown is enforced against the contract-wide anchor so a second pauser key
+        // cannot bypass it (F5).
+        if ($.lastContractPauseTimestamp + pauseUntilDuration + PAUSER_UNTIL_COOLDOWN > block.timestamp) revert PauserCooldownStillActive();
         $.pausedUntil = block.timestamp + pauseUntilDuration;
-        $.lastPauseTimestamp = block.timestamp;
+        $.lastContractPauseTimestamp = block.timestamp;
+        $.lastPauseTimestamp[msg.sender] = block.timestamp; // per-pauser record (not used for gating)
         emit PausedUntil($.pausedUntil);
     }
 

@@ -29,7 +29,7 @@ contract PausableUntilTest is Test {
     function setUp() public {
         harness = new PausableUntilHarness();
         // warp past MAX_PAUSE_DURATION + PAUSER_UNTIL_COOLDOWN so the initial cooldown check
-        // (which treats the contract-wide lastPauseTimestamp = 0 as literally "last paused at unix 0")
+        // (which treats the contract-wide lastContractPauseTimestamp = 0 as literally "last paused at unix 0")
         // does not block the first pause in tests. On mainnet this is a non-issue.
         vm.warp(1_700_000_000);
         harness.setPauseUntilDuration(harness.MAX_PAUSE_DURATION());
@@ -133,7 +133,8 @@ contract PausableUntilTest is Test {
         harness.pauseUntil();
 
         assertEq(harness.pausedUntil(), expectedUntil);
-        assertEq(harness.lastPauseTimestamp(), block.timestamp);
+        assertEq(harness.lastContractPauseTimestamp(), block.timestamp);
+        assertEq(harness.lastPauseTimestamp(pauserA), block.timestamp); // per-pauser record kept
     }
 
     function test_pauseUntil_blocksGatedFunction() public {
@@ -200,7 +201,10 @@ contract PausableUntilTest is Test {
         vm.prank(pauserB);
         harness.pauseUntil();
         assertEq(harness.pausedUntil(), block.timestamp + harness.MAX_PAUSE_DURATION());
-        assertEq(harness.lastPauseTimestamp(), block.timestamp);
+        assertEq(harness.lastContractPauseTimestamp(), block.timestamp);
+        // per-pauser records retained independently: A from the first pause, B from this one
+        assertEq(harness.lastPauseTimestamp(pauserB), block.timestamp);
+        assertEq(harness.lastPauseTimestamp(pauserA), firstPauseStart);
     }
 
     // --------------------------------------------------------
@@ -363,7 +367,8 @@ contract PausableUntilTest is Test {
         vm.warp(pauseStart + required + extra);
         vm.prank(pauserA);
         harness.pauseUntil();
-        assertEq(harness.lastPauseTimestamp(), block.timestamp);
+        assertEq(harness.lastContractPauseTimestamp(), block.timestamp);
+        assertEq(harness.lastPauseTimestamp(pauserA), block.timestamp);
     }
 
     function testFuzz_secondPauser_blockedWithinContractCooldown(uint256 delay) public {
