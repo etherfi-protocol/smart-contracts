@@ -758,7 +758,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // PR #385: disable the new per-rebase caps for generic fork tests (some rebase a
         // few % of TVL, above the 25bps default). Dedicated tests set explicit values.
         vm.startPrank(admin);
-        liquidityPoolInstance.setMaxPositiveRebaseBps(10_000);
         etherFiAdminInstance.setMaxNegativeRebaseBps(10_000);
         vm.stopPrank();
 
@@ -1450,7 +1449,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // would reject the large artificial rebases many generic tests perform on a small
         // fresh-deploy TVL. Disable them here (100% = effectively no bound); dedicated
         // tests set explicit values to exercise enforcement.
-        liquidityPoolInstance.setMaxPositiveRebaseBps(10_000);
         etherFiAdminInstance.setMaxNegativeRebaseBps(10_000);
         // Pause WithdrawRequestNFT so existing tests that unPauseContract in their
         // own setUp continue to find it paused (initializeOnUpgrade used to set this).

@@ -344,7 +344,7 @@ contract EtherFiRestakerTest is TestSetup {
         etherFiRestakerInstance.transferStETH(bob, 1);
 
         vm.prank(owner);
-        etherFiRestakerInstance.unPauseContract();
+        etherFiRestakerInstance.unpauseContract();
         assertFalse(etherFiRestakerInstance.paused());
     }
 

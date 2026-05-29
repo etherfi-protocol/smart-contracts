@@ -52,10 +52,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     uint256 public minWithdrawAmount;
     bool public escrowMigrationCompleted;
 
-    // Override for the per-rebase positive (reward) cap, in bps of TVL.
-    // 0 = use DEFAULT_MAX_POSITIVE_REBASE_BPS. Settable behind the operating timelock.
-    uint256 public maxPositiveRebaseBps;
-
     //--------------------------------------------------------------------------------------
     //-------------------------------------  IMMUTABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
@@ -77,11 +73,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     //--------------------------------------------------------------------------------------
     uint256 public constant SHARE_UNIT = 1e18;
 
-    // Default cap on how far a single rebase may INCREASE TVL (rewards), in bps of TVL.
-    // 25 bps ≈ 1 month of reward accrual at 3% APR — generous for a normal report,
-    // tight enough that a buggy/compromised rebase caller cannot inflate the share rate
-    // arbitrarily. Overridable via `maxPositiveRebaseBps` behind the operating timelock.
-    uint256 public constant DEFAULT_MAX_POSITIVE_REBASE_BPS = 25;
+    // Hard cap on how far a single rebase may INCREASE TVL (rewards), in bps of TVL.
+    // 25 bps ≈ 1 month of reward accrual at 3% APR — there is no legitimate reason for a
+    // single report to raise the rate by more than this, so it is a fixed invariant (not
+    // governance-configurable). Bounds a buggy/compromised rebase caller at the share-rate
+    // chokepoint regardless of the oracle-side checks.
+    uint256 public constant MAX_POSITIVE_REBASE_BPS = 25;
     uint256 private constant REBASE_BPS_DENOMINATOR = 10_000;
 
     //--------------------------------------------------------------------------------------
@@ -105,7 +102,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     event ValidatorApproved(uint256 indexed validatorId);
     event ValidatorRegistrationCanceled(uint256 indexed validatorId);
     event Rebase(uint256 totalEthLocked, uint256 totalEEthShares);
-    event MaxPositiveRebaseBpsUpdated(uint256 bps);
     event ProtocolFeePaid(uint128 protocolFees);
     event WhitelistStatusUpdated(bool value);
     event MinWithdrawAmountSet(uint256 minWithdrawAmount);
@@ -126,7 +122,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     error InvalidAmountForShare();
     error InvalidRate();
     error RebaseExceedsPositiveCap();
-    error InvalidMaxPositiveRebaseBps();
     error AlreadyMigrated();
     error MigrationNotComplete();
     error AlreadyRegistered();
@@ -455,11 +450,11 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
         // Positive (reward) upper bound, enforced at the share-rate chokepoint regardless
         // of who calls rebase. A single rebase cannot increase TVL by more than
-        // effectiveMaxPositiveRebaseBps() of pre-rebase TVL. Defense-in-depth alongside the
+        // MAX_POSITIVE_REBASE_BPS of pre-rebase TVL. Defense-in-depth alongside the
         // oracle-side negative cap in EtherFiAdmin; the negative side is intentionally not
         // re-checked here (the oracle path owns it and bounds it tighter).
         if (_accruedRewards > 0) {
-            uint256 maxIncrease = (getTotalPooledEther() * effectiveMaxPositiveRebaseBps()) / REBASE_BPS_DENOMINATOR;
+            uint256 maxIncrease = (getTotalPooledEther() * MAX_POSITIVE_REBASE_BPS) / REBASE_BPS_DENOMINATOR;
             if (uint256(uint128(_accruedRewards)) > maxIncrease) revert RebaseExceedsPositiveCap();
         }
 
@@ -468,19 +463,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         _checkMinAmountForShare();
 
         emit Rebase(getTotalPooledEther(), eETH.totalShares());
-    }
-
-    /// @notice Override the per-rebase positive (reward) cap, in bps of TVL.
-    /// @dev Operation-Timelock-gated. 0 resets to DEFAULT_MAX_POSITIVE_REBASE_BPS.
-    function setMaxPositiveRebaseBps(uint256 _bps) external onlyAdmin {
-        if (_bps > REBASE_BPS_DENOMINATOR) revert InvalidMaxPositiveRebaseBps();
-        maxPositiveRebaseBps = _bps;
-        emit MaxPositiveRebaseBpsUpdated(_bps);
-    }
-
-    function effectiveMaxPositiveRebaseBps() public view returns (uint256) {
-        uint256 v = maxPositiveRebaseBps;
-        return v == 0 ? DEFAULT_MAX_POSITIVE_REBASE_BPS : v;
     }
 
     /// @notice pay protocol fees including 5% to treaury, 5% to node operator and ethfund bnft holders

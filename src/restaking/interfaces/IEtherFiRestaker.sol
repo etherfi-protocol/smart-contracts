@@ -12,5 +12,5 @@ interface IEtherFiRestaker {
     function transferStETH(address recipient, uint256 amount) external;
     function lido() external view returns (ILido);
     function pauseContract() external;
-    function unPauseContract() external;
+    function unpauseContract() external;
 }
