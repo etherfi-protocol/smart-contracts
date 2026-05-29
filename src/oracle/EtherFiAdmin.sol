@@ -89,6 +89,18 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
     uint256 public constant STALE_REPORT_FINALIZATION_COOLDOWN = 7200; // 1 day
     uint256 public constant BASIS_POINTS_DENOMINATOR = 10_000;
 
+    // Absolute single-report rebase cap, in bps of current TVL, independent of how
+    // long the report spans. `acceptableRebaseAprInBps` is annualized over elapsedTime,
+    // so a report covering a long window (e.g. a stale-report catch-up, or a maliciously
+    // back-dated `refSlotFrom`) permits a proportionally larger ABSOLUTE move while still
+    // passing the APR check. This hard ceiling bounds the per-report share-rate delta
+    // regardless of elapsedTime: a single report can never move TVL by more than this,
+    // so a compromised oracle quorum cannot inflate/deflate the exchange rate arbitrarily
+    // in one report. A legitimate move beyond this requires deliberate governance action.
+    // 200 bps = 2% of TVL; normal daily reports move ~1-3 bps, so this only trips on
+    // anomalous reports while still leaving generous headroom for multi-week catch-ups.
+    int256 public constant SINGLE_REPORT_REBASE_DELTA_CAP_BPS = 200;
+
     struct ConstructorAddresses {
         address etherFiOracle;
         address stakingManager;
@@ -410,6 +422,16 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
         }
         int256 absApr = (apr > 0) ? apr : - apr;
         if (absApr > acceptableRebaseAprInBps) return (false, "EtherFiAdmin: TVL changed too much");
+
+        // Absolute per-report cap, independent of elapsedTime. The APR check above is
+        // annualized, so a long-spanning report can pass it while still moving an
+        // outsized absolute amount of TVL in a single rebase. Bound the absolute move
+        // to SINGLE_REPORT_REBASE_DELTA_CAP_BPS of current TVL so no single report can
+        // shift the exchange rate beyond this, regardless of the window it covers.
+        int256 absRewards = (_report.accruedRewards > 0) ? int256(_report.accruedRewards) : -int256(_report.accruedRewards);
+        if (currentTVL > 0 && absRewards * int256(BASIS_POINTS_DENOMINATOR) > currentTVL * SINGLE_REPORT_REBASE_DELTA_CAP_BPS) {
+            return (false, "EtherFiAdmin: rebase delta exceeds absolute cap");
+        }
         return (true, "");
     }
 

@@ -143,7 +143,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// @notice Transfer stETH to a recipient for instant withdrawal
     /// @param recipient The address to receive stETH
     /// @param amount The amount of stETH to transfer
-    function transferStETH(address recipient, uint256 amount) external {
+    function transferStETH(address recipient, uint256 amount) external whenNotPaused {
         if(msg.sender != etherFiRedemptionManager) revert IncorrectCaller();
         if (amount > lido.balanceOf(address(this))) revert InsufficientBalance();
         IERC20(address(lido)).safeTransfer(recipient, amount);
@@ -158,7 +158,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
 
     /// @notice Request for a specific amount of stETH holdings
     /// @param _amount the amount of stETH to request
-    function stEthRequestWithdrawal(uint256 _amount) public onlyExecutorOperations returns (uint256[] memory) {
+    function stEthRequestWithdrawal(uint256 _amount) public onlyExecutorOperations whenNotPaused returns (uint256[] memory) {
         rateLimiter.consume(STETH_REQUEST_WITHDRAWAL_LIMIT_ID, _amountToGwei(_amount));
 
         uint256 minAmount = lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT();
@@ -192,7 +192,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// @notice Claim a batch of withdrawal requests if they are finalized sending the ETH to the this contract back
     /// @param _requestIds array of request ids to claim
     /// @param _hints checkpoint hint for each id. Can be obtained with `findCheckpointHints()`
-    function stEthClaimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints) external onlyHousekeepingOperations {
+    function stEthClaimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints) external onlyHousekeepingOperations whenNotPaused {
         lidoWithdrawalQueue.claimWithdrawals(_requestIds, _hints);
 
         _withdrawEther();
@@ -201,7 +201,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     }
 
     // Send the ETH back to the liquidity pool
-    function withdrawEther() public onlyHousekeepingOperations {
+    function withdrawEther() public onlyHousekeepingOperations whenNotPaused {
         _withdrawEther();
     }
 
@@ -245,7 +245,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     }
 
     // deposit the token in holding into the restaking strategy
-    function depositIntoStrategy(address token, uint256 amount) external onlyExecutorOperations returns (uint256) {
+    function depositIntoStrategy(address token, uint256 amount) external onlyExecutorOperations whenNotPaused returns (uint256) {
         rateLimiter.consume(DEPOSIT_INTO_STRATEGY_LIMIT_ID, _amountToGwei(amount));
 
         IERC20(token).safeIncreaseAllowance(address(eigenLayerStrategyManager), amount);
@@ -260,7 +260,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// Made easy for operators
     /// @param token the token to withdraw
     /// @param amount the amount of token to withdraw
-    function queueWithdrawals(address token, uint256 amount) public onlyExecutorOperations returns (bytes32[] memory) {
+    function queueWithdrawals(address token, uint256 amount) public onlyExecutorOperations whenNotPaused returns (bytes32[] memory) {
         rateLimiter.consume(QUEUE_WITHDRAWALS_LIMIT_ID, _amountToGwei(amount));
 
         uint256 shares = getEigenLayerRestakingStrategy(token).underlyingToSharesView(amount);
@@ -280,7 +280,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     function completeQueuedWithdrawals(
         IDelegationManager.Withdrawal[] memory _queuedWithdrawals,
         IERC20[][] memory _tokens
-    ) external onlyHousekeepingOperations {
+    ) external onlyHousekeepingOperations whenNotPaused {
         uint256 num = _queuedWithdrawals.length;
         bool[] memory receiveAsTokens = new bool[](num);
         for (uint256 i = 0; i < num; i++) {
@@ -397,12 +397,21 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         return total;
     }
 
-    // Pauses the contract
+    // Pauses the contract (multisig path)
     function pauseContract() external onlyOperatingMultisig {
         _pause();
     }
 
-    // Unpauses the contract
+    /// @notice Fast emergency halt callable by the Guardian (Hypernative / EOA keys).
+    /// @dev Pillar 2 (halt is cheap, redundant, parallel): the Guardian can stop fund
+    ///      movement immediately without assembling the multisig. Resume stays deliberate
+    ///      (multisig-only `unPauseContract`). This mirrors the token/LP halt model where
+    ///      the Guardian can pause but only the Operating Multisig can unpause.
+    function guardianPause() external onlyGuardian {
+        _pause();
+    }
+
+    // Unpauses the contract (deliberate, multisig-only)
     function unPauseContract() external onlyOperatingMultisig {
         _unpause();
     }

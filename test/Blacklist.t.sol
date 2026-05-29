@@ -72,6 +72,25 @@ contract BlacklistTest is TestSetup {
         blacklisterInstance.blacklistUser(rando);
     }
 
+    // PR #385 security review: the instant multisig `setBlacklistUntil` path is bounded
+    // to MAX_MULTISIG_BLACKLIST_DURATION so a compromised multisig cannot set an
+    // arbitrarily long (effectively permanent) blacklist via the custom-duration path.
+    function test_setBlacklistUntil_rejects_over_max() public {
+        address u = vm.addr(0xD00D);
+        uint256 maxDur = blacklisterInstance.MAX_MULTISIG_BLACKLIST_DURATION();
+        vm.prank(owner);
+        vm.expectRevert(Blacklister.BlacklistDurationTooLong.selector);
+        blacklisterInstance.setBlacklistUntil(u, maxDur + 1);
+    }
+
+    function test_setBlacklistUntil_allows_up_to_max() public {
+        address u = vm.addr(0xD00D);
+        uint256 maxDur = blacklisterInstance.MAX_MULTISIG_BLACKLIST_DURATION();
+        vm.prank(owner);
+        blacklisterInstance.setBlacklistUntil(u, maxDur);
+        assertEq(blacklisterInstance.blacklistedUntil(u), block.timestamp + maxDur);
+    }
+
     // -------------------------------------------------------------------------
     // AuctionManager
     // -------------------------------------------------------------------------

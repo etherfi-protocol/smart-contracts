@@ -292,4 +292,42 @@ contract EtherFiRestakerTest is TestSetup {
         etherFiRestakerInstance.getTotalPooledEther();
     }
 
+    // PR #385 security review (H1): the restaker's pause previously gated nothing —
+    // pauseContract() called _pause() but no money-movement function carried
+    // whenNotPaused. This asserts the pause now actually halts fund movement, and that
+    // the Guardian (HN/EOA keys) can fire it for a fast, redundant halt (Pillar 2).
+    function test_guardianPause_halts_fund_movement() public {
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), bob);
+        vm.stopPrank();
+
+        assertFalse(etherFiRestakerInstance.paused());
+
+        // Guardian fast-halt
+        vm.prank(bob);
+        etherFiRestakerInstance.guardianPause();
+        assertTrue(etherFiRestakerInstance.paused());
+
+        // whenNotPaused is the first gate on transferStETH, so the pause check fires
+        // before the caller check — proves fund movement is actually halted.
+        vm.expectRevert("Pausable: paused");
+        etherFiRestakerInstance.transferStETH(bob, 1);
+
+        // withdrawEther (owner holds HOUSEKEEPING_OPERATIONS) passes the role gate then
+        // reverts on the pause gate.
+        vm.prank(owner);
+        vm.expectRevert("Pausable: paused");
+        etherFiRestakerInstance.withdrawEther();
+
+        // a non-guardian cannot fire the guardian halt
+        vm.prank(alice);
+        vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
+        etherFiRestakerInstance.guardianPause();
+
+        // resume is deliberate / multisig-only (owner holds OPERATION_MULTISIG)
+        vm.prank(owner);
+        etherFiRestakerInstance.unPauseContract();
+        assertFalse(etherFiRestakerInstance.paused());
+    }
+
 }
