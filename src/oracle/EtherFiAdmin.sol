@@ -60,6 +60,10 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
     uint256 public maxFinalizedWithdrawalAmountPerDay;
     uint256 public maxNumValidatorsToApprovePerDay;
 
+    // Override for the per-report negative (slashing) rebase cap, in bps of TVL.
+    // 0 = use DEFAULT_MAX_NEGATIVE_REBASE_BPS. Settable behind the operating timelock.
+    uint256 public maxNegativeRebaseBps;
+
     //--------------------------------------------------------------------------------------
     //---------------------------------  IMMUTABLES  --------------------------------------
     //--------------------------------------------------------------------------------------
@@ -89,17 +93,16 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
     uint256 public constant STALE_REPORT_FINALIZATION_COOLDOWN = 7200; // 1 day
     uint256 public constant BASIS_POINTS_DENOMINATOR = 10_000;
 
-    // Absolute single-report rebase cap, in bps of current TVL, independent of how
-    // long the report spans. `acceptableRebaseAprInBps` is annualized over elapsedTime,
-    // so a report covering a long window (e.g. a stale-report catch-up, or a maliciously
-    // back-dated `refSlotFrom`) permits a proportionally larger ABSOLUTE move while still
-    // passing the APR check. This hard ceiling bounds the per-report share-rate delta
-    // regardless of elapsedTime: a single report can never move TVL by more than this,
-    // so a compromised oracle quorum cannot inflate/deflate the exchange rate arbitrarily
-    // in one report. A legitimate move beyond this requires deliberate governance action.
-    // 200 bps = 2% of TVL; normal daily reports move ~1-3 bps, so this only trips on
-    // anomalous reports while still leaving generous headroom for multi-week catch-ups.
-    int256 public constant SINGLE_REPORT_REBASE_DELTA_CAP_BPS = 200;
+    // Default cap on how far a single report may DECREASE TVL (slashing), in bps of TVL,
+    // independent of elapsedTime. `acceptableRebaseAprInBps` is annualized over elapsedTime,
+    // so a long-spanning report could pass it while still dropping an outsized absolute
+    // amount in one rebase. The max *initial* slashing penalty is maxEffBalance/4096 ≈
+    // 2.44 bps of TVL even if every validator is slashed at once, so 3 bps is the tight
+    // default. `maxNegativeRebaseBps` (settable behind the operating timelock) overrides
+    // it — raised only if a correlated/mid-term slashing event is detected (visible well
+    // before a 2-day timelock matters). The positive/reward upper bound lives in
+    // LiquidityPool.rebase (the share-rate-increasing chokepoint).
+    uint256 public constant DEFAULT_MAX_NEGATIVE_REBASE_BPS = 3;
 
     struct ConstructorAddresses {
         address etherFiOracle;
@@ -118,6 +121,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
     //--------------------------------------------------------------------------------------
 
     event AdminUpdated(address _address, bool _isAdmin);
+    event MaxNegativeRebaseBpsUpdated(uint256 bps);
     event AdminOperationsExecuted(address indexed _address, bytes32 indexed _reportHash);
 
     event ValidatorApprovalTaskCreated(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators);
@@ -133,6 +137,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
     error InvalidMaxFinalizedWithdrawalAmountPerDay();
     error InvalidMaxNumValidatorsToApprovePerDay();
     error InvalidAcceptableRebaseApr();
+    error InvalidMaxNegativeRebaseBps();
     error InvalidValidatorTaskBatchSize();
     error InvalidMaxAcceptableRebaseApr();
     error InvalidStaleOracleReportBlockWindow();
@@ -423,14 +428,17 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
         int256 absApr = (apr > 0) ? apr : - apr;
         if (absApr > acceptableRebaseAprInBps) return (false, "EtherFiAdmin: TVL changed too much");
 
-        // Absolute per-report cap, independent of elapsedTime. The APR check above is
-        // annualized, so a long-spanning report can pass it while still moving an
-        // outsized absolute amount of TVL in a single rebase. Bound the absolute move
-        // to SINGLE_REPORT_REBASE_DELTA_CAP_BPS of current TVL so no single report can
-        // shift the exchange rate beyond this, regardless of the window it covers.
-        int256 absRewards = (_report.accruedRewards > 0) ? int256(_report.accruedRewards) : -int256(_report.accruedRewards);
-        if (currentTVL > 0 && absRewards * int256(BASIS_POINTS_DENOMINATOR) > currentTVL * SINGLE_REPORT_REBASE_DELTA_CAP_BPS) {
-            return (false, "EtherFiAdmin: rebase delta exceeds absolute cap");
+        // Negative (slashing) cap, independent of elapsedTime. The APR check above is
+        // annualized, so a long-spanning report could pass it while still dropping an
+        // outsized absolute amount in one rebase. A single report can only legitimately
+        // DECREASE TVL by at most the max initial slashing penalty (~2.44 bps if every
+        // validator is slashed at once), so bound the drop to effectiveMaxNegativeRebaseBps.
+        // The positive/reward upper bound is enforced in LiquidityPool.rebase.
+        if (_report.accruedRewards < 0 && currentTVL > 0) {
+            int256 drop = -int256(_report.accruedRewards);
+            if (drop * int256(BASIS_POINTS_DENOMINATOR) > currentTVL * int256(effectiveMaxNegativeRebaseBps())) {
+                return (false, "EtherFiAdmin: negative rebase exceeds cap");
+            }
         }
         return (true, "");
     }
@@ -467,6 +475,21 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
         }
         if (sumOfRequests != _report.finalizedWithdrawalAmount) return (false, "EtherFiAdmin: sum of requests does not match finalized withdrawal amount");
         return (true, "");
+    }
+
+    /// @notice Override the per-report negative (slashing) rebase cap, in bps of TVL.
+    /// @dev Operation-Timelock-gated. 0 resets to DEFAULT_MAX_NEGATIVE_REBASE_BPS. Capped
+    ///      at 100% so it can be raised during a real correlated-slashing event but never
+    ///      set to a nonsensical value.
+    function setMaxNegativeRebaseBps(uint256 _bps) external onlyAdmin {
+        if (_bps > BASIS_POINTS_DENOMINATOR) revert InvalidMaxNegativeRebaseBps();
+        maxNegativeRebaseBps = _bps;
+        emit MaxNegativeRebaseBpsUpdated(_bps);
+    }
+
+    function effectiveMaxNegativeRebaseBps() public view returns (uint256) {
+        uint256 v = maxNegativeRebaseBps;
+        return v == 0 ? DEFAULT_MAX_NEGATIVE_REBASE_BPS : v;
     }
 
     function slotForNextReportToProcess() public view returns (uint32) {

@@ -755,6 +755,13 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         liquidityPoolInstance.setMinWithdrawAmount(0.001 ether);
         vm.stopPrank();
 
+        // PR #385: disable the new per-rebase caps for generic fork tests (some rebase a
+        // few % of TVL, above the 25bps default). Dedicated tests set explicit values.
+        vm.startPrank(admin);
+        liquidityPoolInstance.setMaxPositiveRebaseBps(10_000);
+        etherFiAdminInstance.setMaxNegativeRebaseBps(10_000);
+        vm.stopPrank();
+
         // Run the one-shot escrow migration so `requestWithdraw` / `withdraw`
         // (both gated by `escrowMigrationCompleted`) function on the upgraded
         // LP. Idempotent: skip if already complete.
@@ -1439,6 +1446,12 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         liquidityPoolInstance.setValidatorSizeWei(32 ether);
         liquidityPoolInstance.setMaxWithdrawAmount(1000 ether);
         liquidityPoolInstance.setMinWithdrawAmount(0.001 ether);
+        // PR #385: the new per-rebase caps (positive in LP, negative in EtherFiAdmin)
+        // would reject the large artificial rebases many generic tests perform on a small
+        // fresh-deploy TVL. Disable them here (100% = effectively no bound); dedicated
+        // tests set explicit values to exercise enforcement.
+        liquidityPoolInstance.setMaxPositiveRebaseBps(10_000);
+        etherFiAdminInstance.setMaxNegativeRebaseBps(10_000);
         // Pause WithdrawRequestNFT so existing tests that unPauseContract in their
         // own setUp continue to find it paused (initializeOnUpgrade used to set this).
         withdrawRequestNFTInstance.pauseContract();

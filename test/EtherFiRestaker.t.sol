@@ -7,6 +7,7 @@ import "forge-std/Test.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20BurnableUpgradeable.sol";
 
 import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
 import "@etherfi/eigenlayer-interfaces/IStrategyManager.sol";
 import "@etherfi/eigenlayer-interfaces/ISignatureUtils.sol";
 
@@ -292,45 +293,56 @@ contract EtherFiRestakerTest is TestSetup {
         etherFiRestakerInstance.getTotalPooledEther();
     }
 
-    // PR #385 security review (H1): the restaker's pause previously gated nothing —
-    // pauseContract() called _pause() but no money-movement function carried
-    // whenNotPaused. This asserts the pause now actually halts fund movement, and that
-    // the Guardian (HN/EOA keys) can fire it for a fast, redundant halt (Pillar 2).
-    function test_guardianPause_halts_fund_movement() public {
+    // PR #385 security review (H1 + Yash's review): the restaker's pause previously gated
+    // nothing — pauseContract() flipped a flag but no money-movement function checked it.
+    // It now uses the protocol-wide PausableUntil model: the Guardian (HN/EOA keys) fires
+    // an auto-expiring halt, the multisig has a boolean pause, and both stop fund movement.
+    function test_guardianPauseUntil_halts_fund_movement() public {
         vm.startPrank(roleRegistryInstance.owner());
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), bob);
         vm.stopPrank();
 
-        assertFalse(etherFiRestakerInstance.paused());
+        // operating timelock (owner) sets the auto-expiry duration
+        vm.prank(owner);
+        etherFiRestakerInstance.setPauseUntilDuration(8 hours);
 
-        // Guardian fast-halt
+        // Guardian fast-halt (auto-expiring)
         vm.prank(bob);
-        etherFiRestakerInstance.guardianPause();
+        etherFiRestakerInstance.pauseContractUntil();
+        uint256 until = etherFiRestakerInstance.pausedUntil();
+        assertGt(until, block.timestamp);
+
+        // whenNotHalted is the first gate on transferStETH, so the halt fires before the
+        // caller check — proves fund movement is actually stopped.
+        vm.expectRevert(abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, until));
+        etherFiRestakerInstance.transferStETH(bob, 1);
+
+        // undelegate (owner holds OPERATION_MULTISIG) queues withdrawal of ALL restaked
+        // assets — same fund-flow category, so it must also be halted.
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, until));
+        etherFiRestakerInstance.undelegate();
+
+        // a non-guardian cannot fire the auto-expiring halt
+        vm.prank(alice);
+        vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
+        etherFiRestakerInstance.pauseContractUntil();
+
+        // resume is deliberate / multisig-only
+        vm.prank(owner);
+        etherFiRestakerInstance.unpauseContractUntil();
+        assertEq(etherFiRestakerInstance.pausedUntil(), 0);
+    }
+
+    // The boolean multisig pause also halts fund movement (reverts via OZ Pausable).
+    function test_booleanPause_also_halts_fund_movement() public {
+        vm.prank(owner); // owner holds OPERATION_MULTISIG
+        etherFiRestakerInstance.pauseContract();
         assertTrue(etherFiRestakerInstance.paused());
 
-        // whenNotPaused is the first gate on transferStETH, so the pause check fires
-        // before the caller check — proves fund movement is actually halted.
         vm.expectRevert("Pausable: paused");
         etherFiRestakerInstance.transferStETH(bob, 1);
 
-        // withdrawEther (owner holds HOUSEKEEPING_OPERATIONS) passes the role gate then
-        // reverts on the pause gate.
-        vm.prank(owner);
-        vm.expectRevert("Pausable: paused");
-        etherFiRestakerInstance.withdrawEther();
-
-        // undelegate (owner holds OPERATION_MULTISIG) queues withdrawal of ALL restaked
-        // assets — same fund-flow category, so it must also be halted by the pause.
-        vm.prank(owner);
-        vm.expectRevert("Pausable: paused");
-        etherFiRestakerInstance.undelegate();
-
-        // a non-guardian cannot fire the guardian halt
-        vm.prank(alice);
-        vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
-        etherFiRestakerInstance.guardianPause();
-
-        // resume is deliberate / multisig-only (owner holds OPERATION_MULTISIG)
         vm.prank(owner);
         etherFiRestakerInstance.unPauseContract();
         assertFalse(etherFiRestakerInstance.paused());
