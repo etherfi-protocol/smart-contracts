@@ -12,6 +12,9 @@ pragma solidity ^0.8.13;
 ///         This namespaced variant keeps `_status` at a deterministic slot so it can be
 ///         safely mixed into existing UUPS contracts without disturbing their layout.
 abstract contract ReentrancyGuardNamespaced {
+    //--------------------------------------------------------------------------------------
+    //-----------------------------------  CONSTANTS  --------------------------------------
+    //--------------------------------------------------------------------------------------
     // keccak256("etherfi.storage.ReentrancyGuard.v1")
     bytes32 private constant REENTRANCY_GUARD_SLOT =
         0xcd24049d7dcc1fde21494dba8ad7a067afb6b8f14dfe804abeeec84903344e97;
@@ -19,14 +22,17 @@ abstract contract ReentrancyGuardNamespaced {
     uint256 private constant NOT_ENTERED = 1;
     uint256 private constant ENTERED = 2;
 
+    //--------------------------------------------------------------------------------------
+    //-----------------------------------  ERRORS  -----------------------------------------
+    //--------------------------------------------------------------------------------------
     error ReentrancyGuardReentrantCall();
 
-    modifier nonReentrant() {
-        _nonReentrantBefore();
-        _;
-        _nonReentrantAfter();
-    }
-
+    //--------------------------------------------------------------------------------------
+    //----------------------------  INTERNAL FUNCTIONS  -------------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Require the contract to be not reentrant
+     */
     function _nonReentrantBefore() private {
         bytes32 slot = REENTRANCY_GUARD_SLOT;
         uint256 status;
@@ -36,8 +42,24 @@ abstract contract ReentrancyGuardNamespaced {
         assembly { sstore(slot, ENTERED) }
     }
 
+    /**
+     * @notice reset the reentrancy guard
+     */
     function _nonReentrantAfter() private {
         bytes32 slot = REENTRANCY_GUARD_SLOT;
         assembly { sstore(slot, NOT_ENTERED) }
+    }
+
+    //--------------------------------------------------------------------------------------
+    //-----------------------------------  MODIFIERS  --------------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Modifier to check if the contract is not reentrant
+     * @dev Only callable when the contract is not reentrant
+     */
+    modifier nonReentrant() {
+        _nonReentrantBefore();
+        _;
+        _nonReentrantAfter();
     }
 }
