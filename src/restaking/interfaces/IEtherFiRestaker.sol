@@ -4,6 +4,11 @@ pragma solidity ^0.8.13;
 import "@etherfi/deposits/interfaces/ILiquifier.sol";
 
 interface IEtherFiRestaker {
+    struct TokenInfo {
+        // EigenLayer
+        IStrategy elStrategy;
+    }
+
     function stEthRequestWithdrawal(uint256 _amount) external returns (uint256[] memory);
     function stEthClaimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints) external;
     function depositIntoStrategy(address token, uint256 amount) external returns (uint256);
