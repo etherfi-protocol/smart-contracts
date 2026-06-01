@@ -105,9 +105,9 @@ abstract contract SecurityUpgradesConstants is Deployed {
 
     // core — LiquidityPool.requestWithdraw bounds (queued NFT-mint path). Default storage
     // is 0/0, which bricks the path; seeded via the OPERATION_MULTISIG Safe tx (Batch 3)
-    // after the upgrade batch grants it OPERATION_MULTISIG_ROLE. Dummy values for now.
+    // after the upgrade batch grants it OPERATION_MULTISIG_ROLE.
     uint256 internal constant LP_MIN_WITHDRAW_AMOUNT = 100_000 gwei; // 0.0001 ether
-    uint256 internal constant LP_MAX_WITHDRAW_AMOUNT = 1_000 ether;
+    uint256 internal constant LP_MAX_WITHDRAW_AMOUNT = 3_000 ether;
 
     // oracle — EtherFiAdmin daily finalized-withdrawal cap (operational setpoint).
     // Set post-upgrade via updateMaxFinalizedWithdrawalAmountPerDay, which is
