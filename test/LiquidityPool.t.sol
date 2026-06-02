@@ -2549,4 +2549,40 @@ contract LiquidityPoolTest is TestSetup {
         vm.expectRevert(LiquidityPool.InvalidAmount.selector);
         liquidityPoolInstance.withdraw(amount, amount, rate, shareOfEEth);
     }
+
+    /// @dev Regression for PR #454: `withdraw` must debit `totalValueOutOfLp` by
+    ///      `_amountOfEEth` (the value credited at fulfill/lock), NOT by `_amount` (the
+    ///      ETH actually paid). On a down-rebase between finalize and claim the two diverge
+    ///      (`_amount < _amountOfEEth`); the pre-fix code debited `_amount`, leaving a
+    ///      permanent upward drift in `totalValueOutOfLp` and over-counting
+    ///      `getTotalPooledEther`. Every other `withdraw` test passes the two args equal,
+    ///      so none distinguishes the fix — this one pins the divergent case at the LP
+    ///      boundary where the bug lived. With the old code this asserts a debit of
+    ///      `amountPaid` (the bug) and fails on the second assertion below.
+    function test_withdraw_debitsAmountOfEEth_notAmountPaid() public {
+        // `_seedNftEscrow` locks `amountOfEEth` into totalValueOutOfLp, mirroring the
+        // fulfill-time `addEthAmountLockedForWithdrawal(request.amountOfEEth)` credit.
+        uint128 amountOfEEth = 100 ether;
+        _seedNftEscrow(1000 ether, amountOfEEth);
+
+        // Simulate a down-rebase: the finalized claim pays out less ETH than was locked.
+        uint256 amountPaid  = 80 ether;   // < amountOfEEth
+        uint256 shareOfEEth = 100 ether;  // generous; Guard 3 does not bind
+        uint256 rate        = 1e18;       // Guard 1 admits amountPaid <= shareOfEEth*rate/1e18
+        assertTrue(amountPaid != uint256(amountOfEEth), "setup must exercise the divergent case");
+
+        uint256 outLpBefore = liquidityPoolInstance.totalValueOutOfLp();
+
+        vm.prank(address(withdrawRequestNFTInstance));
+        liquidityPoolInstance.withdraw(amountPaid, uint256(amountOfEEth), rate, shareOfEEth);
+
+        uint256 debit = outLpBefore - liquidityPoolInstance.totalValueOutOfLp();
+
+        // The debit unwinds exactly the fulfill-time credit, restoring the baseline...
+        assertEq(debit, uint256(amountOfEEth),
+            "withdraw must debit totalValueOutOfLp by _amountOfEEth (the fulfill credit)");
+        // ...and must NOT track the smaller ETH amount paid out (the pre-fix bug).
+        assertTrue(debit != amountPaid,
+            "regression: debit must not follow _amount when it diverges from _amountOfEEth");
+    }
 }

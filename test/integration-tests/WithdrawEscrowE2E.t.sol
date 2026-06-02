@@ -365,8 +365,13 @@ contract WithdrawEscrowE2ETest is TestSetup {
             "step4: LP raw ETH unchanged at claim");
         assertEq(liquidityPoolInstance.totalValueInLp(), preLp.inLp,
             "step4: totalValueInLp unchanged at claim");
-        // totalValueOutOfLp decrements by claimable (the actual ETH paid), not raw withdrawAmt
-        // — share-rate round-trip can drift by 2 wei at the live mainnet share rate
+        // totalValueOutOfLp decrements by request.amountOfEEth (the value credited at
+        // fulfill), not by the ETH actually paid. Here that credit == withdrawAmt
+        // (step2 asserts request.amountOfEEth == withdrawAmt) and there is no rebase between
+        // finalize and claim, so the two coincide. The 5-wei tolerance absorbs the share-rate
+        // round-trip drift in withdrawAmt itself. The down-rebase case, where the credit and
+        // the paid amount diverge, is pinned at the LP boundary in
+        // LiquidityPool.t.sol:test_withdraw_debitsAmountOfEEth_notAmountPaid.
         assertApproxEqAbs(liquidityPoolInstance.totalValueOutOfLp(),
             preLp.outLp - uint128(withdrawAmt), 5,
             "step4: totalValueOutOfLp after claim");
