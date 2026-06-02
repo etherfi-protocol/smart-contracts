@@ -246,42 +246,45 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_WithdrawLiquidityPoolAccrueStakingRewardsWithoutPartialWithdrawal() public {
-        vm.deal(alice, 3 ether);
+        // Deposits scaled to 400 each (TVL 800) so the 2 ETH rebase stays within the
+        // 25 bps cap (0.25% of 800 = 2 ETH). The rebase still adds exactly 2 ETH of
+        // out-of-LP headroom, so the fallback-funding pattern below is unchanged.
+        vm.deal(alice, 401 ether);
         vm.startPrank(alice);
-        liquidityPoolInstance.deposit{value: 2 ether}();
+        liquidityPoolInstance.deposit{value: 400 ether}();
         assertEq(alice.balance, 1 ether);
-        assertEq(eETHInstance.balanceOf(alice), 2 ether);
+        assertEq(eETHInstance.balanceOf(alice), 400 ether);
         assertEq(eETHInstance.balanceOf(bob), 0);
         vm.stopPrank();
 
-        vm.deal(bob, 3 ether);
+        vm.deal(bob, 401 ether);
         vm.startPrank(bob);
-        liquidityPoolInstance.deposit{value: 2 ether}();
+        liquidityPoolInstance.deposit{value: 400 ether}();
         assertEq(bob.balance, 1 ether);
-        assertEq(eETHInstance.balanceOf(alice), 2 ether);
-        assertEq(eETHInstance.balanceOf(bob), 2 ether);
+        assertEq(eETHInstance.balanceOf(alice), 400 ether);
+        assertEq(eETHInstance.balanceOf(bob), 400 ether);
         vm.stopPrank();
 
         vm.deal(owner, 100 ether);
         vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(2 ether);
-        assertEq(eETHInstance.balanceOf(alice), 3 ether);
-        assertEq(eETHInstance.balanceOf(bob), 3 ether);
+        liquidityPoolInstance.rebase(2 ether); // 0.25% of 800 ETH TVL — exactly at the cap
+        assertEq(eETHInstance.balanceOf(alice), 401 ether);
+        assertEq(eETHInstance.balanceOf(bob), 401 ether);
 
         (bool sent, ) = address(liquidityPoolInstance).call{value: 1 ether}("");
         assertEq(sent, true);
-        assertEq(eETHInstance.balanceOf(alice), 3 ether);
-        assertEq(eETHInstance.balanceOf(bob), 3 ether);
+        assertEq(eETHInstance.balanceOf(alice), 401 ether);
+        assertEq(eETHInstance.balanceOf(bob), 401 ether);
 
         (sent, ) = address(liquidityPoolInstance).call{value: 1 ether}("");
         assertEq(sent, true);
-        assertEq(eETHInstance.balanceOf(alice), 3 ether);
-        assertEq(eETHInstance.balanceOf(bob), 3 ether);
+        assertEq(eETHInstance.balanceOf(alice), 401 ether);
+        assertEq(eETHInstance.balanceOf(bob), 401 ether);
 
         (sent, ) = address(liquidityPoolInstance).call{value: 1 ether}("");
         assertEq(sent, false);
-        assertEq(eETHInstance.balanceOf(alice), 3 ether);
-        assertEq(eETHInstance.balanceOf(bob), 3 ether);
+        assertEq(eETHInstance.balanceOf(alice), 401 ether);
+        assertEq(eETHInstance.balanceOf(bob), 401 ether);
     }
 
 
@@ -290,23 +293,26 @@ contract LiquidityPoolTest is TestSetup {
     function test_fallback() public {
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 0 ether);
 
-        vm.deal(bob, 100 ether);
+        // Deposit 400 ETH so a 1 ETH rebase is within the 25 bps cap (0.25% of 400 = 1 ETH).
+        // The raw fallback send below is only accepted up to totalValueOutOfLp (= the
+        // rebased amount), so out-of-LP must be >= 1 ETH for the 1 ETH send to land.
+        vm.deal(bob, 400 ether);
         vm.startPrank(bob);
-        liquidityPoolInstance.deposit{value: 100 ether}();
+        liquidityPoolInstance.deposit{value: 400 ether}();
         vm.stopPrank();
 
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 100 ether);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 400 ether);
         vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(3 ether);
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 103 ether);
+        liquidityPoolInstance.rebase(1 ether); // 0.25% of 400 ETH — exactly at the cap
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 401 ether);
 
         vm.deal(alice, 3 ether);
         vm.prank(alice);
         (bool sent, ) = address(liquidityPoolInstance).call{value: 1 ether}("");
-        assertEq(address(liquidityPoolInstance).balance, 100 ether + 1 ether);
+        assertEq(address(liquidityPoolInstance).balance, 400 ether + 1 ether);
         assertEq(sent, true);
 
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 103 ether);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 401 ether);
     }
 
     function test_RegisterAsBnftHolder() public {
@@ -1137,12 +1143,41 @@ contract LiquidityPoolTest is TestSetup {
         vm.stopPrank();
 
         uint256 totalPooledBefore = liquidityPoolInstance.getTotalPooledEther();
-        
+
+        // rebase within the 25 bps per-report cap (0.25% of 100 ETH TVL = 0.25 ETH)
         vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(5 ether);
-        
+        liquidityPoolInstance.rebase(0.25 ether);
+
         uint256 totalPooledAfter = liquidityPoolInstance.getTotalPooledEther();
-        assertEq(totalPooledAfter, totalPooledBefore + 5 ether);
+        assertEq(totalPooledAfter, totalPooledBefore + 0.25 ether);
+    }
+
+    // PR #385 (Yash review): the positive (reward) rebase upper bound is a hard 25 bps
+    // constant enforced inside LiquidityPool.rebase, at the share-rate chokepoint,
+    // regardless of caller. Not governance-configurable.
+    function test_positiveRebaseCap_enforced() public {
+        vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+
+        assertEq(liquidityPoolInstance.MAX_POSITIVE_REBASE_BPS(), 25);
+
+        uint256 tvl = liquidityPoolInstance.getTotalPooledEther();
+        uint256 cap = (tvl * 25) / 10_000;
+
+        // one wei over the cap reverts
+        vm.prank(address(membershipManagerInstance));
+        vm.expectRevert(LiquidityPool.RebaseExceedsPositiveCap.selector);
+        liquidityPoolInstance.rebase(int128(uint128(cap + 1)));
+
+        // exactly at the cap succeeds
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(int128(uint128(cap)));
+
+        // a negative rebase (slashing) is not bounded by this LP-side cap — the oracle
+        // path (EtherFiAdmin negative cap) owns that direction
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(-int128(uint128(cap)));
     }
 
     function test_RebaseFailsIfNotMembershipManager() public {
@@ -1323,7 +1358,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.stopPrank();
 
         vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(10 ether);
+        liquidityPoolInstance.rebase(0.25 ether); // within 25 bps cap
 
         uint256 claim = liquidityPoolInstance.getTotalEtherClaimOf(alice);
         assertGt(claim, 100 ether);
@@ -1508,9 +1543,9 @@ contract LiquidityPoolTest is TestSetup {
         vm.stopPrank();
 
         vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(10 ether);
+        liquidityPoolInstance.rebase(0.25 ether); // within 25 bps cap
 
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 110 ether);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 100.25 ether);
     }
 
     //--------------------------------------------------------------------------------------
@@ -2101,22 +2136,23 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_minAmountForShare_subsequent_deposit_succeeds_above_min() public {
-        // Establish ratio = 1.1 ether per share (positive rebase), then upgrade with MIN below it.
+        // Establish ratio = 1.0025 ether per share via a within-cap positive rebase
+        // (0.25% of 100 ETH), then upgrade with MIN below it.
         vm.deal(alice, 100 ether);
         vm.prank(alice);
         liquidityPoolInstance.deposit{value: 100 ether}();
         vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(10 ether);
-        assertEq(liquidityPoolInstance.amountForShare(1 ether), 1.1 ether);
+        liquidityPoolInstance.rebase(0.25 ether);
+        assertEq(liquidityPoolInstance.amountForShare(1 ether), 1.0025 ether);
 
-        _upgradeLpWithMinAmount(1.05 ether);
+        _upgradeLpWithMinAmount(1.001 ether);
 
         vm.deal(bob, 5 ether);
         vm.prank(bob);
         uint256 shares = liquidityPoolInstance.deposit{value: 5 ether}();
         assertGt(shares, 0);
         // Proportional minting preserves ratio.
-        assertEq(liquidityPoolInstance.amountForShare(1 ether), 1.1 ether);
+        assertEq(liquidityPoolInstance.amountForShare(1 ether), 1.0025 ether);
     }
 
     // --- rebase flow ---
@@ -2128,9 +2164,11 @@ contract LiquidityPoolTest is TestSetup {
 
         _upgradeLpWithMinAmount(1 ether);
 
+        // rebase within the 25 bps cap (0.25% of 100 ETH = 0.25 ETH) → ratio 1.0025,
+        // still above the 1 ETH min-amount-per-share floor.
         vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(20 ether);
-        assertEq(liquidityPoolInstance.amountForShare(1 ether), 1.2 ether);
+        liquidityPoolInstance.rebase(0.25 ether);
+        assertEq(liquidityPoolInstance.amountForShare(1 ether), 1.0025 ether);
     }
 
     function test_minAmountForShare_negative_rebase_above_min_succeeds() public {
@@ -2259,8 +2297,10 @@ contract LiquidityPoolTest is TestSetup {
         _setLpAccounting(50 ether, 50 ether);
 
         // Bound rebase to keep totalValueOutOfLp in [0, type(uint128).max] after the update.
-        // Pre-rebase totalValueOutOfLp == 50e18.
-        rebaseAmount = int128(bound(int256(rebaseAmount), -50 ether, 50 ether));
+        // Pre-rebase totalValueOutOfLp == 50e18. The positive side is bounded to the 25 bps
+        // per-report cap (0.25% of the 100 ETH TVL = 0.25 ETH); the negative side (the
+        // minAmountForShare-underflow boundary this test exercises) is not capped.
+        rebaseAmount = int128(bound(int256(rebaseAmount), -50 ether, 0.25 ether));
 
         uint256 minAmount = 0.5 ether;
         _upgradeLpWithMinAmount(minAmount);
