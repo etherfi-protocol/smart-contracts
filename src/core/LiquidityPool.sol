@@ -16,11 +16,11 @@ import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
 import "@etherfi/withdrawals/interfaces/IEtherFiRedemptionManager.sol";
 import "@etherfi/withdrawals/interfaces/IPriorityWithdrawalQueue.sol";
 import "@etherfi/governance/interfaces/IBlacklister.sol";
-import "@etherfi/governance/utils/ReentrancyGuardNamespaced.sol";
+import {ReentrancyGuardTransient} from "solady/utils/ReentrancyGuardTransient.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 
-contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardNamespaced, PausableUntil, ILiquidityPool {
+contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardTransient, PausableUntil, ILiquidityPool {
     using SafeERC20 for IERC20;
 
     //--------------------------------------------------------------------------------------

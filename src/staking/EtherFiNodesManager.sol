@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
+import {ReentrancyGuardTransient} from "solady/utils/ReentrancyGuardTransient.sol";
 import "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 import "@etherfi/staking/interfaces/IAuctionManager.sol";
 import "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
@@ -15,6 +15,7 @@ import "@etherfi/governance/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
 import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
+import "@etherfi/governance/utils/DeprecatedOZReentrancyGuard.sol";
 
 contract EtherFiNodesManager is
     Initializable,
@@ -22,7 +23,8 @@ contract EtherFiNodesManager is
     OwnableUpgradeable,
     DeprecatedOZPausable,
     PausableUntil,
-    ReentrancyGuardUpgradeable,
+    DeprecatedOZReentrancyGuard,
+    ReentrancyGuardTransient,
     UUPSUpgradeable
 {
 

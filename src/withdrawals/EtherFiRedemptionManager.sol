@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
+import {ReentrancyGuardTransient} from "solady/utils/ReentrancyGuardTransient.sol";
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
@@ -19,6 +19,7 @@ import "@etherfi/restaking/interfaces/IEtherFiRestaker.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
 import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
+import "@etherfi/governance/utils/DeprecatedOZReentrancyGuard.sol";
 
 import "@etherfi/governance/rate-limiting/libraries/BucketLimiter.sol";
 
@@ -32,7 +33,7 @@ import "@etherfi/governance/interfaces/IBlacklister.sol";
     - It has a rate limiter to limit the total amount that can be redeemed in a given time period.
 */
 
-contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, PausableUntil, ReentrancyGuardUpgradeable, UUPSUpgradeable, IEtherFiRedemptionManager {
+contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, PausableUntil, DeprecatedOZReentrancyGuard, ReentrancyGuardTransient, UUPSUpgradeable, IEtherFiRedemptionManager {
     using SafeERC20 for IERC20;
     using Math for uint256;
 
@@ -146,7 +147,6 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
         if (_exitFeeInBps > BASIS_POINT_SCALE || _exitFeeSplitToTreasuryInBps > BASIS_POINT_SCALE || _lowWatermarkInBpsOfTvl > BASIS_POINT_SCALE) revert InvalidBps();
 
         __UUPSUpgradeable_init();
-        __ReentrancyGuard_init();
     }
 
     function initializeTokenParameters(address[] memory _tokens, uint16[] memory _exitFeeSplitToTreasuryInBps, uint16[] memory _exitFeeInBps, uint16[] memory _lowWatermarkInBpsOfTvl, uint256[] memory _bucketCapacity, uint256[] memory _bucketRefillRate)  external onlyAdmin {

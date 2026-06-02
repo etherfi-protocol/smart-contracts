@@ -3,7 +3,7 @@ pragma solidity ^0.8.23;
 
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
+import {ReentrancyGuardTransient} from "solady/utils/ReentrancyGuardTransient.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
@@ -14,12 +14,13 @@ import "@etherfi/governance/interfaces/IBlacklister.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
 import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
+import "@etherfi/governance/utils/DeprecatedOZReentrancyGuard.sol";
 
 import "@etherfi/eigenlayer-interfaces/IStrategyManager.sol";
 import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
 
 /// Go wild, spread eETH/weETH to the world
-contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, DeprecatedOZPausable, PausableUntil, ReentrancyGuardUpgradeable, ILiquifier {
+contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, DeprecatedOZPausable, PausableUntil, DeprecatedOZReentrancyGuard, ReentrancyGuardTransient, ILiquifier {
     using SafeERC20 for IERC20;
     using Math for uint256;
 
@@ -167,7 +168,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Deprec
                         uint32 _timeBoundCapRefreshInterval) initializer external {
         __Ownable_init();
         __UUPSUpgradeable_init();
-        __ReentrancyGuard_init();
 
         timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
     }
