@@ -158,6 +158,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
      * @param _etherFiAdmin The address of the etherFi admin.
      * @param _minAcceptableShareRate The minimum acceptable share rate.
      * @param _maxAcceptableShareRate The maximum acceptable share rate.
+     * @custom:oz-upgrades-unsafe-allow constructor
      */
     constructor(address _treasury, address _eETH, address _liquidityPool, address _membershipManager, address _roleRegistry, address _blacklister,  address _etherFiAdmin, uint256 _minAcceptableShareRate, uint256 _maxAcceptableShareRate) RolesLibrary(_roleRegistry) {
         if (_minAcceptableShareRate == 0) revert InvalidMinAcceptableShareRate();

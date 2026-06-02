@@ -102,6 +102,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param _liquidityPool The address of the liquidity pool
      * @param _eEth The address of the eETH token
      * @param _weEth The address of the weETH token
+     * @custom:oz-upgrades-unsafe-allow constructor
      */
     constructor(
         address _liquidityPool, 

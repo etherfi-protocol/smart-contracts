@@ -86,6 +86,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
      * @param _roleRegistry The address of the role registry contract
      * @param _blacklister The address of the blacklister contract
      * @param _rateLimiter The address of the rate limiter contract
+     * @custom:oz-upgrades-unsafe-allow constructor
      */
     constructor(address _eETH, address _liquidityPool, address _roleRegistry, address _blacklister, address _rateLimiter)
         RolesLibrary(_roleRegistry)

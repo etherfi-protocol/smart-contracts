@@ -127,6 +127,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
      * @notice Constructor
      * @param _constructorAddresses The addresses of the contracts to use
      * @param _minAmountForShare The minimum amount for a share
+     * @custom:oz-upgrades-unsafe-allow constructor
      */
     constructor(ConstructorAddresses memory _constructorAddresses, uint256 _minAmountForShare) RolesLibrary(_constructorAddresses.roleRegistry) {
         stakingManager = IStakingManager(_constructorAddresses.stakingManager);
