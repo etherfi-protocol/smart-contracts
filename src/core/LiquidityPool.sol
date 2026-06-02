@@ -108,7 +108,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     error InsufficientLiquidity();
     error SendFail();
     error InvalidValidatorSize();
-    error InvalidAmountForShare();
     error InvalidRate();
     error AlreadyMigrated();
     error MigrationNotComplete();
