@@ -228,7 +228,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
                 membershipManager: MEMBERSHIP_MANAGER
             })
         ));
-        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), ETHERFI_ADMIN, 1, 4e18));
+        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), ETHERFI_ADMIN));
 
         // ------------------------------------------------------------------
         // 3. Upgrade the proxies in place
@@ -421,7 +421,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
                 membershipManager: MEMBERSHIP_MANAGER
             })
         ));
-        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), ETHERFI_ADMIN, 1, 4e18));
+        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), ETHERFI_ADMIN));
         address newPQ = address(new PriorityWithdrawalQueue(
             LIQUIDITY_POOL, EETH, WEETH, address(blacklisterInstance), ROLE_REGISTRY, TREASURY, 1 hours
         ));

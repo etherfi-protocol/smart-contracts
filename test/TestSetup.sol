@@ -619,9 +619,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(membershipManagerV1Instance),
             address(roleRegistryInstance),
             address(blacklisterInstance),
-            address(etherFiAdminInstance),
-            1,
-            4e18
+            address(etherFiAdminInstance)
         ));
         vm.prank(withdrawRequestNFTInstance.owner());
         withdrawRequestNFTInstance.upgradeTo(newWrnImpl);
@@ -759,6 +757,12 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.startPrank(_roleRegOwner);
         liquidityPoolInstance.setMaxWithdrawAmount(1000 ether);
         liquidityPoolInstance.setMinWithdrawAmount(0.001 ether);
+        vm.stopPrank();
+
+        // PR #385: disable the new per-rebase caps for generic fork tests (some rebase a
+        // few % of TVL, above the 25bps default). Dedicated tests set explicit values.
+        vm.startPrank(admin);
+        etherFiAdminInstance.setMaxNegativeRebaseBps(10_000);
         vm.stopPrank();
 
         // Run the one-shot escrow migration so `requestWithdraw` / `withdraw`
@@ -1213,8 +1217,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(membershipManagerProxy),
             address(roleRegistryInstance),
             address(blacklisterInstance),
-            address(etherFiAdminProxy),
-            1, 4e18
+            address(etherFiAdminProxy)
         );
         withdrawRequestNFTInstance.upgradeTo(address(withdrawRequestNFTImplementation));
 
@@ -1443,6 +1446,11 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         liquidityPoolInstance.setValidatorSizeWei(32 ether);
         liquidityPoolInstance.setMaxWithdrawAmount(1000 ether);
         liquidityPoolInstance.setMinWithdrawAmount(0.001 ether);
+        // PR #385: the new per-rebase caps (positive in LP, negative in EtherFiAdmin)
+        // would reject the large artificial rebases many generic tests perform on a small
+        // fresh-deploy TVL. Disable them here (100% = effectively no bound); dedicated
+        // tests set explicit values to exercise enforcement.
+        etherFiAdminInstance.setMaxNegativeRebaseBps(10_000);
         // Pause WithdrawRequestNFT so existing tests that unPauseContract in their
         // own setUp continue to find it paused (initializeOnUpgrade used to set this).
         withdrawRequestNFTInstance.pauseContract();
@@ -1871,6 +1879,33 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         vm.prank(alice);
         etherFiAdminInstance.executeTasks(_report);
+    }
+
+    /// @notice Applies a rebase that may exceed the per-report 25 bps positive cap
+    ///         (LiquidityPool.MAX_POSITIVE_REBASE_BPS) by splitting a positive rebase
+    ///         into sub-cap chunks. `rebase` is purely additive (totalValueOutOfLp += amount),
+    ///         so applying the chunks back-to-back leaves the final TVL and share rate
+    ///         identical to a single rebase of `_amount` — every post-rebase assertion holds.
+    ///         Negative/zero rebases are applied in a single call (no positive cap applies).
+    /// @dev Pranks the LP's registered membership manager, so it works in both the unit
+    ///      setup and mainnet-fork setups regardless of which instance is wired in.
+    function _rebaseUncapped(int128 _amount) internal {
+        address mm = liquidityPoolInstance.membershipManager();
+        if (_amount <= 0) {
+            vm.prank(mm);
+            liquidityPoolInstance.rebase(_amount);
+            return;
+        }
+        uint256 remaining = uint256(uint128(_amount));
+        while (remaining > 0) {
+            uint256 maxIncrease = (liquidityPoolInstance.getTotalPooledEther()
+                * liquidityPoolInstance.MAX_POSITIVE_REBASE_BPS()) / 10_000;
+            require(maxIncrease > 0, "_rebaseUncapped: TVL too small for a positive rebase");
+            uint256 chunk = remaining < maxIncrease ? remaining : maxIncrease;
+            vm.prank(mm);
+            liquidityPoolInstance.rebase(int128(uint128(chunk)));
+            remaining -= chunk;
+        }
     }
 
     function _emptyOracleReport() internal view returns (IEtherFiOracle.OracleReport memory report) {

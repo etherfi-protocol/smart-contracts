@@ -142,7 +142,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
             address(membershipManagerInstance),
             address(roleRegistryInstance),
             address(blacklisterInstance)
-        , address(etherFiAdminInstance), 1, 4e18));
+        , address(etherFiAdminInstance)));
         vm.prank(wrnOwner);
         withdrawRequestNFTInstance.upgradeTo(newWrnImpl);
     }

@@ -27,7 +27,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
     }
 
     function _newWrnImpl() internal returns (address) {
-        return address(new WithdrawRequestNFT(buybackWallet, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), address(etherFiAdminInstance), 1, 4e18));
+        return address(new WithdrawRequestNFT(buybackWallet, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), address(etherFiAdminInstance)));
     }
 
     function setUp() public {
@@ -166,8 +166,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
         // total_remainder ≈ bob_locked × p. With bob_locked = 200 ETH and p = 0.5%,
         // expected remainder ≈ 1 ETH, well above the 0.05 floor below.
         int128 rebaseAmount = int128(int256(liquidityPoolInstance.getTotalPooledEther() / 200));
-        vm.prank(address(membershipManagerV1Instance));
-        liquidityPoolInstance.rebase(rebaseAmount);
+        _rebaseUncapped(rebaseAmount);
 
         // Finalize and claim all requests
         for (uint256 i = 0; i < 20; i++) {

@@ -85,8 +85,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
                 address(membershipManagerInstance),
                 address(roleRegistryInstance),
                 address(blacklisterInstance),
-                address(etherFiAdminInstance),
-                1, 4e18
+                address(etherFiAdminInstance)
             );
         withdrawRequestNFTInstance.upgradeTo(address(newWrnImpl));
         vm.stopPrank();

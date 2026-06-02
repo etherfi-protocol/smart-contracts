@@ -44,7 +44,7 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         address wrnOwner = withdrawRequestNFTInstance.owner();
         // Deploy the impl BEFORE pranking — the inlined `new` is a CREATE that
         // would otherwise consume the single-shot vm.prank (OnlyUpgradeTimelock).
-        address newWrnImpl = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(eETHInstance), address(liquidityPoolInstance), address(membershipManagerInstance), address(roleRegistryInstance), address(blacklisterInstance), address(etherFiAdminInstance), 1, 4e18));
+        address newWrnImpl = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(eETHInstance), address(liquidityPoolInstance), address(membershipManagerInstance), address(roleRegistryInstance), address(blacklisterInstance), address(etherFiAdminInstance)));
         vm.prank(wrnOwner);
         withdrawRequestNFTInstance.upgradeTo(newWrnImpl);
 
