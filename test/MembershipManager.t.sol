@@ -1438,11 +1438,12 @@ contract MembershipManagerTest is TestSetup {
 
         // rebase must succeed (no division-by-zero) AND the underlying LP rebase must apply.
         uint256 tvolBefore = liquidityPoolInstance.totalValueOutOfLp();
+        // rebase within the 25 bps cap (0.25% of the 5 ETH pool = 0.0125 ETH)
         vm.prank(address(etherFiAdminInstance));
-        membershipManagerInstance.rebase(1 ether);
+        membershipManagerInstance.rebase(0.01 ether);
         assertEq(
             liquidityPoolInstance.totalValueOutOfLp(),
-            tvolBefore + 1 ether,
+            tvolBefore + 0.01 ether,
             "LP rebase still applied even on early-return"
         );
     }

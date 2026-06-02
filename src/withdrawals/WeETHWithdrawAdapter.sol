@@ -34,36 +34,44 @@ contract WeETHWithdrawAdapter is
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
+    bool public paused;
 
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  IMMUTABLES  ---------------------------------------
+    //--------------------------------------------------------------------------------------
     IWeETH public immutable weETH;
     IeETH public immutable eETH;
     ILiquidityPool public immutable liquidityPool;
     IWithdrawRequestNFT public immutable withdrawRequestNFT;
     IBlacklister public immutable blacklister;
 
-    bool public paused;
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  EVENTS  --------------------------------------
+    //--------------------------------------------------------------------------------------
+    event Paused(address account);
+    event Unpaused(address account);
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ERRORS  --------------------------------------
     //--------------------------------------------------------------------------------------
-
     error ZeroAmount();
     error ZeroAddress();
     error ContractPaused();
     error InvalidAmount();
 
     //--------------------------------------------------------------------------------------
-    //-------------------------------------  EVENTS  --------------------------------------
+    //---------------------------------  CONSTRUCTOR  ---------------------------------------
     //--------------------------------------------------------------------------------------
-
-    event Paused(address account);
-    event Unpaused(address account);
-
-    //--------------------------------------------------------------------------------------
-    //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
-    //--------------------------------------------------------------------------------------
-
-    /// @custom:oz-upgrades-unsafe-allow constructor
+    /**
+     * @notice Constructor
+     * @param _weETH The address of the weETH token.
+     * @param _eETH The address of the eETH token.
+     * @param _liquidityPool The address of the liquidity pool.
+     * @param _withdrawRequestNFT The address of the withdraw request NFT.
+     * @param _roleRegistry The address of the role registry.
+     * @param _blacklister The address of the blacklister.
+     * @custom:oz-upgrades-unsafe-allow constructor
+     */
     constructor(
         address _weETH,
         address _eETH,
@@ -89,6 +97,9 @@ contract WeETHWithdrawAdapter is
         _disableInitializers();
     }
 
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  INITIALIZERS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
     /**
      * @notice Initialize the adapter contract with initial owner
      * @param _initialOwner Address that will be set as the contract owner
@@ -101,6 +112,9 @@ contract WeETHWithdrawAdapter is
         paused = false;
     }
 
+    //--------------------------------------------------------------------------------------
+    //-----------------------------  WITHDRAW FUNCTIONS  -----------------------------------
+    //--------------------------------------------------------------------------------------
     /**
      * @notice Request withdrawal using weETH tokens
      * @param weETHAmount Amount of weETH to withdraw
@@ -158,12 +172,9 @@ contract WeETHWithdrawAdapter is
         return requestWithdraw(weETHAmount, recipient);
     }
 
-
-
     //--------------------------------------------------------------------------------------
-    //----------------------------------  ADMIN FUNCTIONS  --------------------------------
+    //--------------------------------  PAUSING FUNCTIONS  ---------------------------------
     //--------------------------------------------------------------------------------------
-
     /**
      * @notice Pause the contract
      */
@@ -207,9 +218,23 @@ contract WeETHWithdrawAdapter is
     }
 
     //--------------------------------------------------------------------------------------
+    //------------------------------  INTERNAL FUNCTIONS  ----------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Check if contract is not paused
+     */
+    function _requireNotPaused() internal view {
+        if (paused) revert ContractPaused();
+    }
+
+    /**
+     * @notice Authorize contract upgrades
+     */
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
+
+    //--------------------------------------------------------------------------------------
     //------------------------------------  GETTERS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-
     /**
      * @notice Get the current implementation address
      * @return The implementation contract address
@@ -228,31 +253,20 @@ contract WeETHWithdrawAdapter is
     }
 
     //--------------------------------------------------------------------------------------
-    //------------------------------  INTERNAL FUNCTIONS  ----------------------------------
-    //--------------------------------------------------------------------------------------
-
-    /**
-     * @notice Authorize contract upgrades
-     */
-    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
-
-    /**
-     * @notice Check if contract is not paused
-     */
-    function _requireNotPaused() internal view {
-        if (paused) revert ContractPaused();
-    }
-
-    //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
     //--------------------------------------------------------------------------------------
-
+    /**
+     * @notice Modifier to check if the contract is not paused
+     */
     modifier whenNotPaused() {
         _requireNotPaused();
         _requireNotPausedUntil();
         _;
     }
 
+    /**
+     * @notice Modifier to check if the caller is not blacklisted
+     */
     modifier nonBlacklisted() {
         blacklister.nonBlacklisted(msg.sender);
         _;

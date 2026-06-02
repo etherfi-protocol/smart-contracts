@@ -672,9 +672,9 @@ contract LiquifierTest is TestSetup {
     function _ctorAddrs(address roleRegistry_, address priceFeed_, address blacklister_)
         internal
         pure
-        returns (Liquifier.ConstructorAddresses memory)
+        returns (ILiquifier.ConstructorAddresses memory)
     {
-        return Liquifier.ConstructorAddresses({
+        return ILiquifier.ConstructorAddresses({
             liquidityPool: address(0xA1),
             lidoWithdrawalQueue: address(0xA2),
             lido: address(0xA3),

@@ -7,11 +7,13 @@ import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 import "@etherfi/deposits/Liquifier.sol";
 import "@etherfi/core/LiquidityPool.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
 
 import "@etherfi/eigenlayer-interfaces/IStrategyManager.sol";
 import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
@@ -20,15 +22,12 @@ import "@etherfi/eigenlayer-interfaces/IRewardsCoordinator.sol";
 import "@etherfi/deposits/interfaces/ILiquifier.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
 import "@etherfi/governance/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
+import "@etherfi/restaking/interfaces/IEtherFiRestaker.sol";
 
-contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable, RolesLibrary {
+contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable, PausableUntil, RolesLibrary, IEtherFiRestaker {
     using SafeERC20 for IERC20;
+    using Math for uint256;
     using EnumerableSet for EnumerableSet.Bytes32Set;
-
-    struct TokenInfo {
-        // EigenLayer
-        IStrategy elStrategy;
-    }
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
@@ -46,7 +45,6 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     //--------------------------------------------------------------------------------------
     //---------------------------------  IMMUTABLES  --------------------------------------
     //--------------------------------------------------------------------------------------
-
     IRewardsCoordinator public immutable rewardsCoordinator;
     ILiquidityPool public immutable liquidityPool;
     ILiquifier public immutable liquifier;
@@ -60,11 +58,9 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     //--------------------------------------------------------------------------------------
     //---------------------------------  CONSTANTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-
     bytes32 public constant STETH_REQUEST_WITHDRAWAL_LIMIT_ID = keccak256("STETH_REQUEST_WITHDRAWAL_LIMIT_ID");
     bytes32 public constant QUEUE_WITHDRAWALS_LIMIT_ID        = keccak256("QUEUE_WITHDRAWALS_LIMIT_ID");
     bytes32 public constant DEPOSIT_INTO_STRATEGY_LIMIT_ID    = keccak256("DEPOSIT_INTO_STRATEGY_LIMIT_ID");
-
     /// @dev Suggested gas stipend for contract receiving ETH to perform a few
     /// storage reads and writes, but low enough to prevent griefing.
     uint256 internal constant GAS_STIPEND_NO_GRIEF = 100_000;
@@ -72,7 +68,6 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-
     event QueuedStEthWithdrawals(uint256[] _reqIds);
     event CompletedStEthQueuedWithdrawals(uint256[] _reqIds);
     event CompletedQueuedWithdrawal(bytes32 _withdrawalRoot);
@@ -80,7 +75,6 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ERRORS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-
     error NotEnoughBalance();
     error IncorrectAmount();
     error EthTransferFailed();
@@ -94,8 +88,18 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  CONSTRUCTOR  ----------------------------------
     //--------------------------------------------------------------------------------------
-
-    /// @custom:oz-upgrades-unsafe-allow constructor
+    /**
+     * @notice Constructor
+     * @param _liquidityPool The address of the liquidity pool
+     * @param _liquifier The address of the liquifier
+     * @param _rewardsCoordinator The address of the rewards coordinator
+     * @param _etherFiRedemptionManager The address of the etherFi redemption manager
+     * @param _roleRegistry The address of the role registry
+     * @param _rateLimiter The address of the rate limiter
+     * @param _eigenLayerStrategyManager The address of the eigenLayer strategy manager
+     * @param _eigenLayerDelegationManager The address of the eigenLayer delegation manager
+     * @custom:oz-upgrades-unsafe-allow constructor
+     */
     constructor(
         address _liquidityPool,
         address _liquifier,
@@ -119,10 +123,13 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     }
 
     //--------------------------------------------------------------------------------------
-    //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
+    //----------------------------  INITIALIZERS  ------------------------------------------
     //--------------------------------------------------------------------------------------
-
-    /// @notice initialize to set variables on deployment
+    /**
+     * @notice Initialize the EtherFiRestaker
+     * @param _liquidityPool The address of the liquidity pool
+     * @param _liquifier The address of the liquifier
+     */
     function initialize(address _liquidityPool, address _liquifier) initializer external {
         __Ownable_init();
         __Pausable_init();
@@ -134,31 +141,43 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         });
     }
 
+    //--------------------------------------------------------------------------------------
+    //----------------------------  RECEIVE FUNCTIONS  -------------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Receive ETH
+     */
     receive() external payable {}
 
-    // |--------------------------------------------------------------------------------------------|
-    // |                                   Handling Lido's stETH                                    |
-    // |--------------------------------------------------------------------------------------------|
-
-    /// @notice Transfer stETH to a recipient for instant withdrawal
-    /// @param recipient The address to receive stETH
-    /// @param amount The amount of stETH to transfer
-    function transferStETH(address recipient, uint256 amount) external {
+    //--------------------------------------------------------------------------------------
+    //----------------------------  STETH MANAGEMENT FUNCTIONS  ----------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Transfer stETH to a recipient for instant withdrawal
+     * @param recipient The address to receive stETH
+     * @param amount The amount of stETH to transfer
+     */
+    function transferStETH(address recipient, uint256 amount) external whenNotPaused {
         if(msg.sender != etherFiRedemptionManager) revert IncorrectCaller();
         if (amount > lido.balanceOf(address(this))) revert InsufficientBalance();
         IERC20(address(lido)).safeTransfer(recipient, amount);
     }
 
-    /// Initiate the redemption of stETH for ETH
-    /// @notice Request for all stETH holdings
+    /**
+     * @notice Initiate the redemption of stETH for ETH
+     * @return The request ids
+     */
     function stEthRequestWithdrawal() external returns (uint256[] memory) {
         uint256 amount = lido.balanceOf(address(this));
         return stEthRequestWithdrawal(amount);
     }
 
-    /// @notice Request for a specific amount of stETH holdings
-    /// @param _amount the amount of stETH to request
-    function stEthRequestWithdrawal(uint256 _amount) public onlyExecutorOperations returns (uint256[] memory) {
+    /**
+     * @notice Request for a specific amount of stETH holdings
+     * @param _amount the amount of stETH to request
+     * @return The request ids
+     */
+    function stEthRequestWithdrawal(uint256 _amount) public onlyExecutorOperations whenNotPaused returns (uint256[] memory) {
         rateLimiter.consume(STETH_REQUEST_WITHDRAWAL_LIMIT_ID, _amountToGwei(_amount));
 
         uint256 minAmount = lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT();
@@ -189,10 +208,12 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         return reqIds;
     }
 
-    /// @notice Claim a batch of withdrawal requests if they are finalized sending the ETH to the this contract back
-    /// @param _requestIds array of request ids to claim
-    /// @param _hints checkpoint hint for each id. Can be obtained with `findCheckpointHints()`
-    function stEthClaimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints) external onlyHousekeepingOperations {
+    /**
+     * @notice Claim a batch of withdrawal requests if they are finalized sending the ETH to the this contract back
+     * @param _requestIds array of request ids to claim
+     * @param _hints checkpoint hint for each id. Can be obtained with `findCheckpointHints()`
+     */
+    function stEthClaimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints) external onlyHousekeepingOperations whenNotPaused {
         lidoWithdrawalQueue.claimWithdrawals(_requestIds, _hints);
 
         _withdrawEther();
@@ -200,27 +221,30 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         emit CompletedStEthQueuedWithdrawals(_requestIds);
     }
 
-    // Send the ETH back to the liquidity pool
-    function withdrawEther() public onlyHousekeepingOperations {
+    /**
+     * @notice Send the ETH back to the liquidity pool
+     */
+    function withdrawEther() public onlyHousekeepingOperations whenNotPaused {
         _withdrawEther();
     }
 
-    function _withdrawEther() internal {
-        uint256 amountToLiquidityPool = _min(address(this).balance, liquidityPool.totalValueOutOfLp());
-        (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: GAS_STIPEND_NO_GRIEF}("");
-        if (!sent) revert EthTransferFailed();
-    }
-
-    // |--------------------------------------------------------------------------------------------|
-    // |                                    EigenLayer Restaking                                    |
-    // |--------------------------------------------------------------------------------------------|
-
-    /// Set the claimer of the restaking rewards of this contract
+    //--------------------------------------------------------------------------------------
+    //------------------------------  RESTAKING FUNCTIONS  ---------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Set the claimer of the restaking rewards of this contract
+     * @param _claimer The address of the claimer
+     */
     function setRewardsClaimer(address _claimer) external onlyAdmin {
         rewardsCoordinator.setClaimerFor(_claimer);
     }
 
-    // delegate to an AVS operator
+    /**
+     * @notice Delegate to an AVS operator
+     * @param operator The address of the operator
+     * @param approverSignatureAndExpiry The signature and expiry of the approver
+     * @param approverSalt The salt of the approver
+     */
     function delegateTo(
         address operator,
         IDelegationManager.SignatureWithExpiry memory approverSignatureAndExpiry,
@@ -229,8 +253,11 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         eigenLayerDelegationManager.delegateTo(operator, approverSignatureAndExpiry, approverSalt);
     }
 
-    // undelegate from the current AVS operator & un-restake all
-    function undelegate() external onlyOperatingMultisig returns (bytes32[] memory) {
+    /**
+     * @notice Undelegate from the current AVS operator & un-restake all
+     * @return The withdrawal roots
+     */
+    function undelegate() external onlyOperatingMultisig whenNotPaused returns (bytes32[] memory) {
         bytes32[] memory withdrawalRoots = eigenLayerDelegationManager.undelegate(address(this));
 
         for (uint256 i = 0; i < withdrawalRoots.length; i++) {
@@ -240,12 +267,13 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         return withdrawalRoots;
     }
 
-    function isDelegated() external view returns (bool) {
-        return eigenLayerDelegationManager.isDelegated(address(this));
-    }
-
-    // deposit the token in holding into the restaking strategy
-    function depositIntoStrategy(address token, uint256 amount) external onlyExecutorOperations returns (uint256) {
+    /**
+     * @notice Deposit the token in holding into the restaking strategy
+     * @param token The address of the token
+     * @param amount The amount of token to deposit
+     * @return The shares deposited
+     */
+    function depositIntoStrategy(address token, uint256 amount) external onlyExecutorOperations whenNotPaused returns (uint256) {
         rateLimiter.consume(DEPOSIT_INTO_STRATEGY_LIMIT_ID, _amountToGwei(amount));
 
         IERC20(token).safeIncreaseAllowance(address(eigenLayerStrategyManager), amount);
@@ -256,11 +284,13 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         return shares;
     }
 
-    /// queue withdrawals for un-restaking the token
-    /// Made easy for operators
-    /// @param token the token to withdraw
-    /// @param amount the amount of token to withdraw
-    function queueWithdrawals(address token, uint256 amount) public onlyExecutorOperations returns (bytes32[] memory) {
+    /**
+     * @notice Queue withdrawals for un-restaking the token
+     * @param token The address of the token
+     * @param amount The amount of token to withdraw
+     * @return The withdrawal roots
+     */
+    function queueWithdrawals(address token, uint256 amount) public onlyExecutorOperations whenNotPaused returns (bytes32[] memory) {
         rateLimiter.consume(QUEUE_WITHDRAWALS_LIMIT_ID, _amountToGwei(amount));
 
         uint256 shares = getEigenLayerRestakingStrategy(token).underlyingToSharesView(amount);
@@ -273,14 +303,15 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         return withdrawalRoots;
     }
 
-    /// Advanced version
-    /// @notice Used to complete the specified `queuedWithdrawals`. The function caller must match `queuedWithdrawals[...].withdrawer`
-    /// @param _queuedWithdrawals The QueuedWithdrawals to complete.
-    /// @param _tokens Array of tokens for each QueuedWithdrawal. See `completeQueuedWithdrawal` for the usage of a single array.
+    /**
+     * @notice Complete the specified `queuedWithdrawals`
+     * @param _queuedWithdrawals The QueuedWithdrawals to complete
+     * @param _tokens Array of tokens for each QueuedWithdrawal
+     */
     function completeQueuedWithdrawals(
         IDelegationManager.Withdrawal[] memory _queuedWithdrawals,
         IERC20[][] memory _tokens
-    ) external onlyHousekeepingOperations {
+    ) external onlyHousekeepingOperations whenNotPaused {
         uint256 num = _queuedWithdrawals.length;
         bool[] memory receiveAsTokens = new bool[](num);
         for (uint256 i = 0; i < num; i++) {
@@ -296,28 +327,164 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         eigenLayerDelegationManager.completeQueuedWithdrawals(_queuedWithdrawals, _tokens, receiveAsTokens);
     }
 
-    /// Enumerate the pending withdrawal roots
+    //--------------------------------------------------------------------------------------
+    //------------------------------  PAUSING FUNCTIONS  -----------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Pause the contract
+     */
+    function pauseContract() external onlyOperatingMultisig {
+        _pause();
+    }
+
+    /**
+     * @notice Unpause the contract
+     */
+    function unpauseContract() external onlyOperatingMultisig {
+        _unpause();
+    }
+
+    /**
+     * @notice Pause the contract until the pauseUntilDuration
+     * @dev Only callable by the guardian
+     */
+    function pauseContractUntil() external onlyGuardian {
+        _pauseUntil();
+    }
+
+    /**
+     * @notice Unpause the contract from pauseUntil
+     * @dev Only callable by the operating multisig
+     */
+    function unpauseContractUntil() external onlyOperatingMultisig {
+        _unpauseUntil();
+    }
+
+    /**
+     * @notice Set the pause duration for the contract
+     * @param _pauseUntilDuration The pause duration for the contract
+     * @dev Only callable by the admin
+     */
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
+        _setPauseUntilDuration(_pauseUntilDuration);
+    }
+
+    //--------------------------------------------------------------------------------------
+    //------------------------------  INTERNAL FUNCTIONS  ----------------------------------
+    //--------------------------------------------------------------------------------------
+
+    /**
+     * @notice Convert wei to gwei for rate-limiter buckets, with overflow check.
+     * @param amountWei The amount of wei to convert
+     * @return The amount of gwei
+     * @dev Rounds up so that any non-zero wei amount consumes at least 1 gwei from
+     * the bucket — prevents sub-gwei dust from bypassing the rate limiter.
+     */
+    function _amountToGwei(uint256 amountWei) internal pure returns (uint64) {
+        uint256 amountGwei = (amountWei + 1e9 - 1) / 1e9;
+        if (amountGwei > type(uint64).max) revert AmountOverflowsUint64Gwei();
+        return uint64(amountGwei);
+    }
+
+    /**
+     * @notice Queue withdrawals for un-restaking the token
+     * @param _token The address of the token
+     * @param _shares The shares of the token to withdraw
+     * @return The withdrawal roots
+     */
+    function _queueWithdrawalsByShares(address _token, uint256 _shares) internal returns (bytes32[] memory) {
+        IDelegationManagerTypes.QueuedWithdrawalParams[] memory params = new IDelegationManagerTypes.QueuedWithdrawalParams[](1);
+        IStrategy[] memory strategies = new IStrategy[](1);
+        uint256[] memory shares = new uint256[](1);
+
+        strategies[0] = tokenInfos[_token].elStrategy;
+        shares[0] = _shares;
+        params[0] = IDelegationManagerTypes.QueuedWithdrawalParams({
+            strategies: strategies,
+            depositShares: shares,
+            __deprecated_withdrawer: address(this)
+        });
+
+        return eigenLayerDelegationManager.queueWithdrawals(params);
+    }
+
+    /**
+     * @notice Send the ETH back to the liquidity pool
+     */
+    function _withdrawEther() internal {
+        uint256 amountToLiquidityPool = Math.min(address(this).balance, liquidityPool.totalValueOutOfLp());
+        (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: GAS_STIPEND_NO_GRIEF}("");
+        if (!sent) revert EthTransferFailed();
+    }
+
+    /**
+     * @notice Fold the auto-expiring PausableUntil check into OZ's `_requireNotPaused`, so
+     *         the standard `whenNotPaused` modifier (used on every fund-flow fn) halts on
+     *         EITHER the boolean pause or the Guardian's auto-expiring pause — consistent
+     *         with the rest of the protocol, no bespoke modifier needed.
+     */
+    function _requireNotPaused() internal view override {
+        _requireNotPausedUntil();
+        super._requireNotPaused();
+    }
+
+    /**
+     * @notice Authorize the upgrade
+     * @param newImplementation The address of the new implementation
+     */
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
+
+    //--------------------------------------------------------------------------------------
+    //--------------------------------  GETTERS  -------------------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Enumerate the pending withdrawal roots
+     * @return The pending withdrawal roots
+     */
     function pendingWithdrawalRoots() external view returns (bytes32[] memory) {
         return withdrawalRootsSet.values();
     }
 
-    /// Check if a withdrawal is pending for a given withdrawal root
+    /**
+     * @notice Check if a withdrawal is pending for a given withdrawal root
+     * @param _withdrawalRoot The withdrawal root to check
+     * @return The boolean value indicating if the withdrawal is pending
+     */
     function isPendingWithdrawal(bytes32 _withdrawalRoot) external view returns (bool) {
         return withdrawalRootsSet.contains(_withdrawalRoot);
     }
 
-    // |--------------------------------------------------------------------------------------------|
-    // |                                    VIEW functions                                          |
-    // |--------------------------------------------------------------------------------------------|
+    /**
+     * @notice Check if the contract is delegated
+     * @return The boolean value indicating if the contract is delegated
+     */
+    function isDelegated() external view returns (bool) {
+        return eigenLayerDelegationManager.isDelegated(address(this));
+    }
+
+    /**
+     * @notice Get the total pooled ether
+     * @return total the total pooled ether
+     */
     function getTotalPooledEther() external view returns (uint256 total) {
         total = address(this).balance + getTotalPooledEther(address(lido));
     }
 
+    /**
+     * @notice Get the total pooled ether for a given token
+     * @param _token The address of the token
+     * @return The total pooled ether
+     */
     function getTotalPooledEther(address _token) public view returns (uint256) {
         (uint256 restaked, uint256 unrestaking, uint256 holding, uint256 pendingForWithdrawals) = getTotalPooledEtherSplits(_token);
         return restaked + unrestaking + holding + pendingForWithdrawals;
     }
 
+    /**
+     * @notice Get the restaked amount for a given token
+     * @param _token The address of the token
+     * @return The restaked amount
+     */
     function getRestakedAmount(address _token) public view returns (uint256) {
         TokenInfo memory info = tokenInfos[_token];
         IStrategy[] memory strategies = new IStrategy[](1);
@@ -333,14 +500,27 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         return restaked;
     }
 
+    /**
+     * @notice Get the EigenLayer restaking strategy for a given token
+     * @param _token The address of the token
+     * @return The EigenLayer restaking strategy
+     */
     function getEigenLayerRestakingStrategy(address _token) public view returns (IStrategy) {
         return tokenInfos[_token].elStrategy;
     }
 
-    /// each asset in holdings can have 3 states:
-    /// - in Eigenlayer, either restaked or pending for un-restaking
-    /// - non-restaked & held by this contract
-    /// - non-restaked & not held by this contract & pending in redemption for ETH
+    /**
+     * @notice Get the total pooled ether splits for a given token
+     * @param _token The address of the token
+     * @return restaked The amount of token restaked in EigenLayer
+     * @return unrestaking The amount of token restaked in EigenLayer pending for withdrawals
+     * @return holding The amount of token held by this contract
+     * @return pendingForWithdrawals The amount of token pending for withdrawal
+     * @dev Deposited (restaked) ETH can have 3 states:
+     * - restaked in EigenLayer & pending for withdrawals
+     * - non-restaked & held by this contract
+     * - non-restaked & not held by this contract & pending for withdrawals
+     */
     function getTotalPooledEtherSplits(address _token) public view returns (
         uint256 restaked,
         uint256 unrestaking,
@@ -358,7 +538,11 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         pendingForWithdrawals = liquifier.quoteByFairValue(_token, getAmountPendingForRedemption(_token));
     }
 
-    // get the amount of token restaked in EigenLayer pending for withdrawals
+    /**
+     * @notice Get the amount of token restaked in EigenLayer pending for withdrawals
+     * @param _token The address of the token
+     * @return The amount of token restaked in EigenLayer pending for withdrawals
+     */
     function getAmountInEigenLayerPendingForWithdrawals(address _token) public view returns (uint256) {
         TokenInfo memory info = tokenInfos[_token];
         if (info.elStrategy == IStrategy(address(0))) return 0;
@@ -382,7 +566,11 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         return info.elStrategy.sharesToUnderlyingView(totalShares);
     }
 
-    // get the amount of token pending for redemption. e.g., pending in Lido's withdrawal queue
+    /**
+     * @notice Get the amount of token pending for redemption. e.g., pending in Lido's withdrawal queue
+     * @param _token The address of the token
+     * @return The amount of token pending for redemption
+     */
     function getAmountPendingForRedemption(address _token) public view returns (uint256) {
         uint256 total = 0;
         if (_token == address(lido)) {
@@ -396,47 +584,4 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         }
         return total;
     }
-
-    // Pauses the contract
-    function pauseContract() external onlyOperatingMultisig {
-        _pause();
-    }
-
-    // Unpauses the contract
-    function unPauseContract() external onlyOperatingMultisig {
-        _unpause();
-    }
-
-    // INTERNAL functions
-
-    /// @dev Convert wei to gwei for rate-limiter buckets, with overflow check.
-    /// Rounds up so that any non-zero wei amount consumes at least 1 gwei from
-    /// the bucket — prevents sub-gwei dust from bypassing the rate limiter.
-    function _amountToGwei(uint256 amountWei) internal pure returns (uint64) {
-        uint256 amountGwei = (amountWei + 1e9 - 1) / 1e9;
-        if (amountGwei > type(uint64).max) revert AmountOverflowsUint64Gwei();
-        return uint64(amountGwei);
-    }
-
-    function _queueWithdrawalsByShares(address _token, uint256 _shares) internal returns (bytes32[] memory) {
-        IDelegationManagerTypes.QueuedWithdrawalParams[] memory params = new IDelegationManagerTypes.QueuedWithdrawalParams[](1);
-        IStrategy[] memory strategies = new IStrategy[](1);
-        uint256[] memory shares = new uint256[](1);
-
-        strategies[0] = tokenInfos[_token].elStrategy;
-        shares[0] = _shares;
-        params[0] = IDelegationManagerTypes.QueuedWithdrawalParams({
-            strategies: strategies,
-            depositShares: shares,
-            __deprecated_withdrawer: address(this)
-        });
-
-        return eigenLayerDelegationManager.queueWithdrawals(params);
-    }
-
-    function _min(uint256 _a, uint256 _b) internal pure returns (uint256) {
-        return (_a > _b) ? _b : _a;
-    }
-
-    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 }

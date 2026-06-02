@@ -5,6 +5,7 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
+import "@etherfi/oracle/interfaces/IEtherFiAdmin.sol";
 import "@etherfi/oracle/interfaces/IEtherFiOracle.sol";
 import "@etherfi/staking/interfaces/IStakingManager.sol";
 import "@etherfi/staking/interfaces/IAuctionManager.sol";
@@ -21,18 +22,12 @@ interface IEtherFiPausable {
     function paused() external view returns (bool);
 }
 
-contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, RolesLibrary {
+contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, RolesLibrary, IEtherFiAdmin {
     using Math for uint256;
-
-    struct TaskStatus {
-        bool completed;
-        bool exists;
-    }
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
-
     // deprecated storage slots
     uint256[8] private __gap_0;
 
@@ -60,10 +55,13 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
     uint256 public maxFinalizedWithdrawalAmountPerDay;
     uint256 public maxNumValidatorsToApprovePerDay;
 
+    // Override for the per-report negative (slashing) rebase cap, in bps of TVL.
+    // 0 = use DEFAULT_MAX_NEGATIVE_REBASE_BPS. Settable behind the operating timelock.
+    uint256 public maxNegativeRebaseBps;
+
     //--------------------------------------------------------------------------------------
     //---------------------------------  IMMUTABLES  --------------------------------------
     //--------------------------------------------------------------------------------------
-
     IEtherFiOracle public immutable etherFiOracle;
     IStakingManager public immutable stakingManager;
     IAuctionManager public immutable auctionManager;
@@ -83,31 +81,28 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
     //--------------------------------------------------------------------------------------
     //---------------------------------  CONSTANTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-
     // Protocol fees must not exceed 1/MAX_PROTOCOL_FEE_INV_RATIO of total rewards (currently 20%).
     uint256 public constant MAX_PROTOCOL_FEE_INV_RATIO = 5;
     uint256 public constant STALE_REPORT_FINALIZATION_COOLDOWN = 7200; // 1 day
     uint256 public constant BASIS_POINTS_DENOMINATOR = 10_000;
 
-    struct ConstructorAddresses {
-        address etherFiOracle;
-        address stakingManager;
-        address auctionManager;
-        address etherFiNodesManager;
-        address liquidityPool;
-        address membershipManager;
-        address withdrawRequestNft;
-        address roleRegistry;
-        address priorityWithdrawalQueue;
-    }
+    // Default cap on how far a single report may DECREASE TVL (slashing), in bps of TVL,
+    // independent of elapsedTime. `acceptableRebaseAprInBps` is annualized over elapsedTime,
+    // so a long-spanning report could pass it while still dropping an outsized absolute
+    // amount in one rebase. The max *initial* slashing penalty is maxEffBalance/4096 ≈
+    // 2.44 bps of TVL even if every validator is slashed at once, so 3 bps is the tight
+    // default. `maxNegativeRebaseBps` (settable behind the operating timelock) overrides
+    // it — raised only if a correlated/mid-term slashing event is detected (visible well
+    // before a 2-day timelock matters). The positive/reward upper bound lives in
+    // LiquidityPool.rebase (the share-rate-increasing chokepoint).
+    uint256 public constant DEFAULT_MAX_NEGATIVE_REBASE_BPS = 3;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-
     event AdminUpdated(address _address, bool _isAdmin);
+    event MaxNegativeRebaseBpsUpdated(uint256 bps);
     event AdminOperationsExecuted(address indexed _address, bytes32 indexed _reportHash);
-
     event ValidatorApprovalTaskCreated(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators);
     event ValidatorApprovalTaskCompleted(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators);
     event ValidatorApprovalTaskInvalidated(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators);
@@ -115,12 +110,12 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ERRORS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-
     error InvalidMaxAcceptableFinalizedWithdrawalAmount();
     error InvalidMaxNumberOfRequestsToFinalizePerReport();
     error InvalidMaxFinalizedWithdrawalAmountPerDay();
     error InvalidMaxNumValidatorsToApprovePerDay();
     error InvalidAcceptableRebaseApr();
+    error InvalidMaxNegativeRebaseBps();
     error InvalidValidatorTaskBatchSize();
     error InvalidMaxAcceptableRebaseApr();
     error InvalidStaleOracleReportBlockWindow();
@@ -138,8 +133,17 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
     //--------------------------------------------------------------------------------------
     //-------------------------------------  CONSTRUCTOR  ----------------------------------
     //--------------------------------------------------------------------------------------
-
-    /// @custom:oz-upgrades-unsafe-allow constructor
+    /**
+     * @notice Constructor
+     * @param _constructorAddresses The addresses of the constructor addresses
+     * @param _maxAcceptableRebaseAprInBps The maximum acceptable rebase APR in basis points
+     * @param _maxValidatorTaskBatchSize The maximum validator task batch size
+     * @param _staleOracleReportBlockWindow The stale oracle report block window
+     * @param _maxAcceptableFinalizedWithdrawalAmountPerDay The maximum acceptable finalized withdrawal amount per day
+     * @param _maxAcceptableNumValidatorsToApprovePerDay The maximum acceptable number of validators to approve per day
+     * @param _maxNumberOfRequestsToFinalizePerReport The maximum number of requests to finalize per report
+     * @custom:oz-upgrades-unsafe-allow constructor
+     */
     constructor(
         ConstructorAddresses memory _constructorAddresses,
         int256 _maxAcceptableRebaseAprInBps,
@@ -175,9 +179,20 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
     }
 
     //--------------------------------------------------------------------------------------
-    //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
+    //----------------------------  INITIALIZERS  ------------------------------------------
     //--------------------------------------------------------------------------------------
-
+    /**
+     * @notice Initialize the EtherFiAdmin
+     * @param _etherFiOracle The address of the etherFiOracle contract
+     * @param _stakingManager The address of the stakingManager contract
+     * @param _auctionManager The address of the auctionManager contract
+     * @param _etherFiNodesManager The address of the etherFiNodesManager contract
+     * @param _liquidityPool The address of the liquidityPool contract
+     * @param _membershipManager The address of the membershipManager contract
+     * @param _withdrawRequestNft The address of the withdrawRequestNFT contract
+     * @param _acceptableRebaseAprInBps The acceptable rebase APR in basis points
+     * @param _postReportWaitTimeInSlots The post report wait time in slots
+     */
     function initialize(
         address _etherFiOracle,
         address _stakingManager,
@@ -196,16 +211,86 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
         postReportWaitTimeInSlots = _postReportWaitTimeInSlots;
     }
 
+    //--------------------------------------------------------------------------------------
+    //----------------------------  ADMIN FUNCTIONS  --------------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Set the validator task batch size
+     * @param _batchSize The batch size
+     */
     function setValidatorTaskBatchSize(uint16 _batchSize) external onlyAdmin {
         if (_batchSize == 0 || _batchSize > maxValidatorTaskBatchSize) revert InvalidValidatorTaskBatchSize();
         validatorTaskBatchSize = _batchSize;
     }
 
-    function canExecuteTasks(IEtherFiOracle.OracleReport calldata _report) external view returns (bool _isValid) {
-        bytes32 reportHash = etherFiOracle.generateReportHash(_report);
-        (_isValid,) = _validateReport(_report, reportHash);
+    /**
+     * @notice Update the maximum finalized withdrawal amount per day
+     * @param _maxFinalizedWithdrawalAmountPerDay The maximum finalized withdrawal amount per day
+     */
+    function updateMaxFinalizedWithdrawalAmountPerDay(uint256 _maxFinalizedWithdrawalAmountPerDay) external onlyAdmin {
+        if (_maxFinalizedWithdrawalAmountPerDay == 0 || _maxFinalizedWithdrawalAmountPerDay > maxAcceptableFinalizedWithdrawalAmountPerDay) revert InvalidMaxFinalizedWithdrawalAmountPerDay();
+        maxFinalizedWithdrawalAmountPerDay = _maxFinalizedWithdrawalAmountPerDay;
     }
 
+    /**
+     * @notice Update the maximum number of validators to approve per day
+     * @param _maxNumValidatorsToApprovePerDay The maximum number of validators to approve per day
+     */
+    function updateMaxNumValidatorsToApprovePerDay(uint256 _maxNumValidatorsToApprovePerDay) external onlyAdmin {
+        if (_maxNumValidatorsToApprovePerDay > maxAcceptableNumValidatorsToApprovePerDay) revert InvalidMaxNumValidatorsToApprovePerDay();
+        maxNumValidatorsToApprovePerDay = _maxNumValidatorsToApprovePerDay;
+    }
+
+    /**
+     * @notice Update the acceptable rebase APR in basis points
+     * @param _acceptableRebaseAprInBps The acceptable rebase APR in basis points
+     */
+    function updateAcceptableRebaseApr(int32 _acceptableRebaseAprInBps) external onlyAdmin {
+        if (_acceptableRebaseAprInBps < 0 || _acceptableRebaseAprInBps > maxAcceptableRebaseAprInBps) revert InvalidAcceptableRebaseApr();
+        acceptableRebaseAprInBps = _acceptableRebaseAprInBps;
+    }
+
+    /**
+     * @notice Update the post report wait time in slots
+     * @param _postReportWaitTimeInSlots The post report wait time in slots
+     */
+    function updatePostReportWaitTimeInSlots(uint16 _postReportWaitTimeInSlots) external onlyAdmin {
+        postReportWaitTimeInSlots = _postReportWaitTimeInSlots;
+    }
+
+    /** 
+     * @notice Override the per-report negative (slashing) rebase cap, in bps of TVL.
+     * @param _bps The maximum negative rebase bps
+     * @dev Operation-Timelock-gated. 0 resets to DEFAULT_MAX_NEGATIVE_REBASE_BPS. Capped
+     *      at 100% so it can be raised during a real correlated-slashing event but never
+     *      set to a nonsensical value.
+     */
+    function setMaxNegativeRebaseBps(uint256 _bps) external onlyAdmin {
+        if (_bps > BASIS_POINTS_DENOMINATOR) revert InvalidMaxNegativeRebaseBps();
+        maxNegativeRebaseBps = _bps;
+        emit MaxNegativeRebaseBpsUpdated(_bps);
+    }
+
+    /**
+     * @notice Invalidate a validator approval task
+     * @param _reportHash The hash of the report
+     * @param _validators The validators to invalidate
+     */
+    function invalidateValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators) external onlyOperatingMultisig {
+        bytes32 taskHash = keccak256(abi.encode(_reportHash, _validators));
+        if (!validatorApprovalTaskStatus[taskHash].exists) revert TaskDoesNotExist();
+        if (validatorApprovalTaskStatus[taskHash].completed) revert TaskAlreadyCompleted();
+        validatorApprovalTaskStatus[taskHash].exists = false;
+        emit ValidatorApprovalTaskInvalidated(taskHash, _reportHash, _validators);
+    }
+
+    //--------------------------------------------------------------------------------------
+    //----------------------------  ORACLE OPERATIONS FUNCTIONS  ----------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Execute the tasks for a report
+     * @param _report The report
+     */
     function executeTasks(IEtherFiOracle.OracleReport calldata _report) external {
         bytes32 reportHash = etherFiOracle.generateReportHash(_report);
         (bool _isValid, string memory _error) = _validateReport(_report, reportHash);
@@ -213,8 +298,8 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
 
         _handleAccruedRewards(_report);
         _handleProtocolFees(_report);
-        _handleValidators(reportHash, _report);
-        _handleWithdrawals(_report);
+        _enqueueValidatorApprovalTask(reportHash, _report);
+        _finalizeWithdrawals(_report.lastFinalizedWithdrawalRequestId, _report.finalizedWithdrawalAmount);
 
         lastHandledReportRefSlot = _report.refSlotTo;
         lastHandledReportRefBlock = _report.refBlockTo;
@@ -223,6 +308,13 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
         emit AdminOperationsExecuted(msg.sender, reportHash);
     }
 
+    /**
+     * @notice Execute a validator approval task
+     * @param _reportHash The hash of the report
+     * @param _validators The validators to approve
+     * @param _pubKeys The public keys of the validators
+     * @param _signatures The signatures of the validators
+     */
     function executeValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators, bytes[] calldata _pubKeys, bytes[] calldata _signatures) external onlyOracleOperations {
         if (!etherFiOracle.isConsensusReached(_reportHash)) revert ConsensusNotReached();
         bytes32 taskHash = keccak256(abi.encode(_reportHash, _validators));
@@ -234,48 +326,15 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
         emit ValidatorApprovalTaskCompleted(taskHash, _reportHash, _validators);
     }
 
-    /// @dev Builds DepositData[] from (validatorIds, pubKeys, signatures) and forwards to
-    ///      LiquidityPool.confirmAndFundBeaconValidators. Previously this construction lived
-    ///      in LiquidityPool.batchApproveRegistration; moved here so LP stays under the
-    ///      EIP-170 24,576-byte cap.
-    function _approveValidators(uint256[] calldata _validatorIds, bytes[] calldata _pubKeys, bytes[] calldata _signatures) internal {
-        uint256 validatorSizeWei = liquidityPool.validatorSizeWei();
-        if (validatorSizeWei < stakingManager.MIN_VALIDATOR_SIZE_WEI() || validatorSizeWei > stakingManager.MAX_VALIDATOR_SIZE_WEI()) revert InvalidValidatorSize();
-        if (_validatorIds.length == 0 || _validatorIds.length != _pubKeys.length || _validatorIds.length != _signatures.length) revert InvalidArrayLengths();
-
-        uint256 remainingEthPerValidator = validatorSizeWei - stakingManager.INITIAL_DEPOSIT_AMOUNT();
-        IStakingManager.DepositData[] memory depositData = new IStakingManager.DepositData[](_validatorIds.length);
-
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            address eigenPod = address(IEtherFiNode(etherFiNodesManager.etherfiNodeAddress(_validatorIds[i])).getEigenPod());
-            bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod);
-            bytes32 depositDataRoot = stakingManager.generateDepositDataRoot(_pubKeys[i], _signatures[i], withdrawalCredentials, remainingEthPerValidator);
-
-            depositData[i] = IStakingManager.DepositData({
-                publicKey: _pubKeys[i],
-                signature: _signatures[i],
-                depositDataRoot: depositDataRoot,
-                ipfsHashForEncryptedValidatorKey: ""
-            });
-        }
-
-        liquidityPool.confirmAndFundBeaconValidators(depositData, validatorSizeWei);
-    }
-
-    function invalidateValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators) external onlyOperatingMultisig {
-        bytes32 taskHash = keccak256(abi.encode(_reportHash, _validators));
-        if (!validatorApprovalTaskStatus[taskHash].exists) revert TaskDoesNotExist();
-        if (validatorApprovalTaskStatus[taskHash].completed) revert TaskAlreadyCompleted();
-        validatorApprovalTaskStatus[taskHash].exists = false;
-        emit ValidatorApprovalTaskInvalidated(taskHash, _reportHash, _validators);
-    }
-
-    /// @notice Stale-oracle escape hatch. If oracle reports stop landing for staleOracleReportBlockWindow
-    ///         blocks past the last handled report, anyone can call this to finalize as many pending
-    ///         withdraw requests as the LP's current ETH balance can cover, in request-id order.
-    ///         Permissionless on purpose: a frozen oracle should not be able to freeze user redemptions.
-    /// @dev    Reverts with OracleReportNotStale if the window has not elapsed, or NoWithdrawalsToFinalize
-    ///         if no valid pending requests can be covered.
+    /**
+     * @notice Finalizes the withdrawals when the oracle is stale
+     * @dev Stale-oracle escape hatch. If oracle reports stop landing for staleOracleReportBlockWindow
+     *      blocks past the last handled report, anyone can call this to finalize as many pending
+     *      withdraw requests as the LP's current ETH balance can cover, in request-id order.
+     *      Permissionless on purpose: a frozen oracle should not be able to freeze user redemptions.
+     *      Reverts with OracleReportNotStale if the window has not elapsed, or NoWithdrawalsToFinalize
+     *      if no valid pending requests can be covered.
+     */
     function finalizeWithdrawalsWhenStale() external {
         if (block.number < etherFiOracle.lastPublishedReportRefBlock() + staleOracleReportBlockWindow) revert OracleReportNotStale();
         if (block.number < lastStaleReportFinalizationBlock + STALE_REPORT_FINALIZATION_COOLDOWN) revert StaleReportFinalizationCooldown();
@@ -305,7 +364,47 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
         lastStaleReportFinalizationBlock = block.number;
     }
 
-    //protocol owns the eth that was distributed to NO and treasury in eigenpods and etherfinodes 
+    //--------------------------------------------------------------------------------------
+    //----------------------------  INTERNAL FUNCTIONS  ------------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Approves the validators
+     * @param _validatorIds The validator ids
+     * @param _pubKeys The public keys of the validators
+     * @param _signatures The signatures of the validators
+     * @dev Builds DepositData[] from (validatorIds, pubKeys, signatures) and forwards to
+     *      LiquidityPool.confirmAndFundBeaconValidators. Previously this construction lived
+     *      in LiquidityPool.batchApproveRegistration; moved here so LP stays under the
+     *      EIP-170 24,576-byte cap.
+     */
+    function _approveValidators(uint256[] calldata _validatorIds, bytes[] calldata _pubKeys, bytes[] calldata _signatures) internal {
+        uint256 validatorSizeWei = liquidityPool.validatorSizeWei();
+        if (validatorSizeWei < stakingManager.MIN_VALIDATOR_SIZE_WEI() || validatorSizeWei > stakingManager.MAX_VALIDATOR_SIZE_WEI()) revert InvalidValidatorSize();
+        if (_validatorIds.length == 0 || _validatorIds.length != _pubKeys.length || _validatorIds.length != _signatures.length) revert InvalidArrayLengths();
+
+        uint256 remainingEthPerValidator = validatorSizeWei - stakingManager.INITIAL_DEPOSIT_AMOUNT();
+        IStakingManager.DepositData[] memory depositData = new IStakingManager.DepositData[](_validatorIds.length);
+
+        for (uint256 i = 0; i < _validatorIds.length; i++) {
+            address eigenPod = address(IEtherFiNode(etherFiNodesManager.etherfiNodeAddress(_validatorIds[i])).getEigenPod());
+            bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod);
+            bytes32 depositDataRoot = stakingManager.generateDepositDataRoot(_pubKeys[i], _signatures[i], withdrawalCredentials, remainingEthPerValidator);
+
+            depositData[i] = IStakingManager.DepositData({
+                publicKey: _pubKeys[i],
+                signature: _signatures[i],
+                depositDataRoot: depositDataRoot,
+                ipfsHashForEncryptedValidatorKey: ""
+            });
+        }
+
+        liquidityPool.confirmAndFundBeaconValidators(depositData, validatorSizeWei);
+    }
+
+    /**
+     * @notice Pays the protocol fees
+     * @param _report The report
+     */
     function _handleProtocolFees(IEtherFiOracle.OracleReport calldata _report) internal { 
         if(_report.protocolFees == 0) {
             return;
@@ -313,6 +412,10 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
         liquidityPool.payProtocolFees(uint128(_report.protocolFees));
     }
 
+    /**
+     * @notice Rebases the protocol
+     * @param _report The report
+     */
     function _handleAccruedRewards(IEtherFiOracle.OracleReport calldata _report) internal {
         if (_report.accruedRewards == 0) {
             return;
@@ -321,6 +424,11 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
         membershipManager.rebase(_report.accruedRewards);
     }
 
+    /**
+     * @notice Enqueues a validator approval task
+     * @param _reportHash The hash of the report
+     * @param _report The report
+     */
     function _enqueueValidatorApprovalTask(bytes32 _reportHash, IEtherFiOracle.OracleReport calldata _report) internal {
         if(_report.validatorsToApprove.length == 0) {
             return;
@@ -342,20 +450,24 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
             emit ValidatorApprovalTaskCreated(taskHash, _reportHash, batchValidators);
         }
     }
-
-    function _handleValidators(bytes32 _reportHash, IEtherFiOracle.OracleReport calldata _report) internal {
-        _enqueueValidatorApprovalTask(_reportHash, _report);
-    }
-
-    function _handleWithdrawals(IEtherFiOracle.OracleReport calldata _report) internal {
-        _finalizeWithdrawals(_report.lastFinalizedWithdrawalRequestId, _report.finalizedWithdrawalAmount);
-    }
     
+    /**
+     * @notice Finalizes the withdraw requests
+     * @param _lastFinalizedRequestId The last finalized request id
+     * @param _finalizedWithdrawalAmount The finalized withdrawal amount
+     */
     function _finalizeWithdrawals(uint32 _lastFinalizedRequestId, uint128 _finalizedWithdrawalAmount) internal {
         withdrawRequestNft.finalizeRequests(_lastFinalizedRequestId);
         liquidityPool.addEthAmountLockedForWithdrawal(_finalizedWithdrawalAmount);
     }
 
+    /**
+     * @notice Validates the report
+     * @param _report The report
+     * @param _reportHash The hash of the report
+     * @return _isValid True if the report is valid, false otherwise
+     * @return _error The error message
+     */
     function _validateReport(IEtherFiOracle.OracleReport calldata _report, bytes32 _reportHash) internal view returns (bool, string memory) {
         bool ok;
         string memory err;
@@ -388,6 +500,13 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
         return (true, "");
     }
 
+    /**
+     * @notice Validates the report freshness
+     * @param _report The report
+     * @param _reportHash The hash of the report
+     * @return _isValid True if the report freshness is valid, false otherwise
+     * @return _error The error message
+     */
     function _validateReportFreshness(IEtherFiOracle.OracleReport calldata _report, bytes32 _reportHash) internal view returns (bool, string memory) {
         uint32 current_slot = etherFiOracle.computeSlotAtTimestamp(block.timestamp);
         if (!etherFiOracle.isConsensusReached(_reportHash)) return (false, "EtherFiAdmin: report didn't reach consensus");
@@ -397,6 +516,13 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
         return (true, "");
     }
 
+    /**
+     * @notice Validates the rebase APR
+     * @param _report The report
+     * @param elapsedTime The elapsed time
+     * @return _isValid True if the rebase APR is valid, false otherwise
+     * @return _error The error message
+     */
     function _validateRebaseApr(IEtherFiOracle.OracleReport calldata _report, uint256 elapsedTime) internal view returns (bool, string memory) {
         int256 currentTVL = int128(uint128(liquidityPool.getTotalPooledEther()));
 
@@ -410,9 +536,28 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
         }
         int256 absApr = (apr > 0) ? apr : - apr;
         if (absApr > acceptableRebaseAprInBps) return (false, "EtherFiAdmin: TVL changed too much");
+
+        // Negative (slashing) cap, independent of elapsedTime. The APR check above is
+        // annualized, so a long-spanning report could pass it while still dropping an
+        // outsized absolute amount in one rebase. A single report can only legitimately
+        // DECREASE TVL by at most the max initial slashing penalty (~2.44 bps if every
+        // validator is slashed at once), so bound the drop to effectiveMaxNegativeRebaseBps.
+        // The positive/reward upper bound is enforced in LiquidityPool.rebase.
+        if (_report.accruedRewards < 0 && currentTVL > 0) {
+            int256 drop = -int256(_report.accruedRewards);
+            if (drop * int256(BASIS_POINTS_DENOMINATOR) > currentTVL * int256(effectiveMaxNegativeRebaseBps())) {
+                return (false, "EtherFiAdmin: negative rebase exceeds cap");
+            }
+        }
         return (true, "");
     }
 
+    /**
+     * @notice Validates the protocol fees
+     * @param _report The report
+     * @return _isValid True if the protocol fees are valid, false otherwise
+     * @return _error The error message
+     */
     function _validateProtocolFees(IEtherFiOracle.OracleReport calldata _report) internal pure returns (bool, string memory) {
         if (_report.protocolFees < 0) return (false, "EtherFiAdmin: protocol fees can't be negative");
         int128 totalRewards = _report.protocolFees + _report.accruedRewards;
@@ -421,12 +566,26 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
         return (true, "");
     }
 
+    /**
+     * @notice Validates the validator approvals
+     * @param _report The report
+     * @param elapsedTime The elapsed time
+     * @return _isValid True if the validator approvals are valid, false otherwise
+     * @return _error The error message
+     */
     function _validateValidatorApprovals(IEtherFiOracle.OracleReport calldata _report, uint256 elapsedTime) internal view returns (bool, string memory) {
         uint256 numValidatorsToApprovePerDay = _report.validatorsToApprove.length.mulDiv(1 days, elapsedTime);
         if (numValidatorsToApprovePerDay > maxNumValidatorsToApprovePerDay) return (false, "EtherFiAdmin: number of validators to approve exceeds max");
         return (true, "");
     }
 
+    /**
+     * @notice Validates the withdrawals
+     * @param _report The report
+     * @param elapsedTime The elapsed time
+     * @return _isValid True if the withdrawals are valid, false otherwise
+     * @return _error The error message
+     */
     function _validateWithdrawals(IEtherFiOracle.OracleReport calldata _report, uint256 elapsedTime) internal view returns (bool, string memory) {
         uint256 finalizedWithdrawalAmountPerDay = uint256(_report.finalizedWithdrawalAmount).mulDiv(1 days, elapsedTime);
         if (finalizedWithdrawalAmountPerDay > maxFinalizedWithdrawalAmountPerDay) return (false, "EtherFiAdmin: finalized withdrawal amount exceeds max");
@@ -447,36 +606,54 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
         return (true, "");
     }
 
+    /**
+     * @notice Authorizes the upgrade of the contract
+     * @param newImplementation The new implementation
+     */
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
+
+    //--------------------------------------------------------------------------------------
+    //----------------------------  VIEW FUNCTIONS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Checks if the report can be executed
+     * @param _report The report
+     * @return _isValid True if the report can be executed, false otherwise
+     */
+    function canExecuteTasks(IEtherFiOracle.OracleReport calldata _report) external view returns (bool _isValid) {
+        bytes32 reportHash = etherFiOracle.generateReportHash(_report);
+        (_isValid,) = _validateReport(_report, reportHash);
+    }
+
+    /**
+     * @notice Gets the slot for the next report to process
+     * @return The slot for the next report to process
+     */
     function slotForNextReportToProcess() public view returns (uint32) {
         return (lastHandledReportRefSlot == 0) ? 0 : lastHandledReportRefSlot + 1;
     }
 
+    /**
+     * @notice Gets the block for the next report to process
+     * @return The block for the next report to process
+     */
     function blockForNextReportToProcess() public view returns (uint32) {
         return (lastHandledReportRefBlock == 0) ? 0 : lastHandledReportRefBlock + 1;
     }
 
-    function updateMaxFinalizedWithdrawalAmountPerDay(uint256 _maxFinalizedWithdrawalAmountPerDay) external onlyAdmin {
-        if (_maxFinalizedWithdrawalAmountPerDay == 0 || _maxFinalizedWithdrawalAmountPerDay > maxAcceptableFinalizedWithdrawalAmountPerDay) revert InvalidMaxFinalizedWithdrawalAmountPerDay();
-        maxFinalizedWithdrawalAmountPerDay = _maxFinalizedWithdrawalAmountPerDay;
+  /**
+   * @notice Gets the effective maximum negative rebase bps
+   * @return The effective maximum negative rebase bps
+   */
+    function effectiveMaxNegativeRebaseBps() public view returns (uint256) {
+        return maxNegativeRebaseBps == 0 ? DEFAULT_MAX_NEGATIVE_REBASE_BPS : maxNegativeRebaseBps;
     }
 
-    function updateMaxNumValidatorsToApprovePerDay(uint256 _maxNumValidatorsToApprovePerDay) external onlyAdmin {
-        if (_maxNumValidatorsToApprovePerDay > maxAcceptableNumValidatorsToApprovePerDay) revert InvalidMaxNumValidatorsToApprovePerDay();
-        maxNumValidatorsToApprovePerDay = _maxNumValidatorsToApprovePerDay;
-    }
-
-    function updateAcceptableRebaseApr(int32 _acceptableRebaseAprInBps) external onlyAdmin {
-        if (_acceptableRebaseAprInBps < 0 || _acceptableRebaseAprInBps > maxAcceptableRebaseAprInBps) revert InvalidAcceptableRebaseApr();
-        acceptableRebaseAprInBps = _acceptableRebaseAprInBps;
-    }
-
-    function updatePostReportWaitTimeInSlots(uint16 _postReportWaitTimeInSlots) external onlyAdmin {
-        postReportWaitTimeInSlots = _postReportWaitTimeInSlots;
-    }
-
+    /**
+     * @notice Gets the implementation
+     * @return The implementation
+     */
     function getImplementation() external view returns (address) {
         return _getImplementation();
     }
-
-    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 }

@@ -338,8 +338,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         vm.stopPrank();
 
         // Apply rebase
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(int128(rebase));
+        _rebaseUncapped(int128(rebase));
 
         // Set fee and watermark configurations
         vm.prank(owner);
@@ -516,8 +515,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
         uint256 one_percent_of_tvl = liquidityPoolInstance.getTotalPooledEther() / 100;
 
-        vm.prank(address(membershipManagerV1Instance));
-        liquidityPoolInstance.rebase(int128(uint128(one_percent_of_tvl))); // 10 eETH earned 1 ETH
+        _rebaseUncapped(int128(uint128(one_percent_of_tvl))); // 10 eETH earned 1 ETH
 
         vm.startPrank(user);
         uint256 weEthAmount = weEthInstance.balanceOf(user);
@@ -686,8 +684,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
         uint256 one_percent_of_tvl = liquidityPoolInstance.getTotalPooledEther() / 100;
 
-        vm.prank(address(membershipManagerV1Instance));
-        liquidityPoolInstance.rebase(int128(uint128(one_percent_of_tvl))); // 10 eETH earned 1 ETH
+        _rebaseUncapped(int128(uint128(one_percent_of_tvl))); // 10 eETH earned 1 ETH
 
         vm.startPrank(user);
         uint256 weEthAmount = weEthInstance.balanceOf(user);
@@ -1621,8 +1618,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
         // Apply rebase
         uint256 one_percent_of_tvl = liquidityPoolInstance.getTotalPooledEther() / 100;
-        vm.prank(address(membershipManagerV1Instance));
-        liquidityPoolInstance.rebase(int128(uint128(one_percent_of_tvl)));
+        _rebaseUncapped(int128(uint128(one_percent_of_tvl)));
 
         vm.startPrank(user);
         uint256 weEthAmount = weEthInstance.balanceOf(user);

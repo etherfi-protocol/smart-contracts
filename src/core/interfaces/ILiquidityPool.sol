@@ -12,13 +12,6 @@ interface ILiquidityPool {
         uint8 v;
         bytes32 r;
         bytes32 s;
-    } 
-
-    enum SourceOfFunds {
-        UNDEFINED,
-        EETH,
-        ETHER_FAN,
-        DELEGATED_STAKING
     }
 
     struct FundStatistics {
@@ -39,6 +32,27 @@ interface ILiquidityPool {
 
     struct ValidatorSpawner {
         bool registered;
+    }
+
+    struct ConstructorAddresses {
+        address stakingManager;
+        address nodesManager;
+        address eETH;
+        address withdrawRequestNFT;
+        address liquifier;
+        address etherFiRedemptionManager;
+        address roleRegistry;
+        address priorityWithdrawalQueue;
+        address blacklister;
+        address etherFiAdminContract;
+        address membershipManager;
+    }
+
+    enum SourceOfFunds {
+        UNDEFINED,
+        EETH,
+        ETHER_FAN,
+        DELEGATED_STAKING
     }
 
     function totalValueOutOfLp() external view returns (uint128);

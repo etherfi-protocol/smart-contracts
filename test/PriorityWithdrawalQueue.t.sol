@@ -6,6 +6,7 @@ import "forge-std/console2.sol";
 
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
 import "@etherfi/withdrawals/PriorityWithdrawalQueue.sol";
 import "@etherfi/withdrawals/interfaces/IPriorityWithdrawalQueue.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
@@ -55,7 +56,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         // Upgrade LiquidityPool to latest version (needed for setPriorityWithdrawalQueue)
         vm.startPrank(owner);
         LiquidityPool newLpImpl = new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: address(stakingManagerInstance),
                 nodesManager: address(managerInstance),
                 eETH: address(eETHInstance),
@@ -85,8 +86,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
                 address(membershipManagerInstance),
                 address(roleRegistryInstance),
                 address(blacklisterInstance),
-                address(etherFiAdminInstance),
-                1, 4e18
+                address(etherFiAdminInstance)
             );
         withdrawRequestNFTInstance.upgradeTo(address(newWrnImpl));
         vm.stopPrank();

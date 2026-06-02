@@ -106,7 +106,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         // Wire LP immutables to the real mainnet proxy addresses so calls into
         // eETH / withdrawRequestNFT / etc. land on live contracts rather than 0x0.
         LiquidityPool liquidityPoolImpl = new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: address(stakingManager),
                 nodesManager: address(etherFiNodesManager),
                 eETH: 0x35fA164735182de50811E8e2E824cFb9B6118ac2,

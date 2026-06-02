@@ -13,7 +13,7 @@ contract WithdrawRequestNFTIntrusive is WithdrawRequestNFT {
 
     // roleRegistry must be non-zero — _authorizeUpgrade now defers to it for upgrade auth,
     // so a zero immutable would brick the swap-back step in updateParam.
-    constructor(address _roleRegistry) WithdrawRequestNFT(address(0), address(0), address(0), address(0), _roleRegistry, address(0), address(0), 1, 4e18) {}
+    constructor(address _roleRegistry) WithdrawRequestNFT(address(0), address(0), address(0), address(0), _roleRegistry, address(0), address(0)) {}
 
     /// @dev Test-only: advance `lastFinalizedRequestId` without going through `finalizeRequests`,
     ///      simulating the pre-upgrade state where no rate snapshot was captured.
@@ -182,8 +182,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Rebase with accrued_rewards = 10 ether for the deposited 10 ether
         // -> 1 ether eETH shares = 2 ether ETH
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(10 ether);
+        _rebaseUncapped(10 ether);
 
         assertEq(withdrawRequestNFTInstance.balanceOf(bob), 1, "Bobs balance should be 1");
         assertEq(withdrawRequestNFTInstance.ownerOf(requestId), bob, "Bobs should own the NFT");
@@ -210,8 +209,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // First, do a positive rebase to increase totalValueOutOfLp
         // This simulates validators earning rewards
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(60 ether);
+        _rebaseUncapped(60 ether);
 
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 10 ether + 60 ether);
 
@@ -282,8 +280,6 @@ contract WithdrawRequestNFTTest is TestSetup {
         liquidityPoolInstance.deposit{value: 9}();
         vm.stopPrank();
 
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(2);
 
         vm.startPrank(bob);
         uint256 balance = eETHInstance.balanceOf(bob);
@@ -361,8 +357,7 @@ contract WithdrawRequestNFTTest is TestSetup {
             address(membershipManagerInstance),
             address(roleRegistryInstance),
             address(blacklisterInstance),
-            address(etherFiAdminInstance),
-            1, 4e18
+            address(etherFiAdminInstance)
         )));
         // IMPLICIT_FEE_CLAIMER_ROLE consolidated into HOUSEKEEPING_OPERATIONS_ROLE.
         roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), alice);
@@ -467,8 +462,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(requestId);
 
         // Simulate rebase after request but before claim
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(int128(uint128(rebaseAmount)));
+        _rebaseUncapped(int128(uint128(rebaseAmount)));
 
         // Calculate expected withdrawal amounts after rebase
         uint256 sharesValue = liquidityPoolInstance.amountForShare(request.shareOfEEth);
@@ -1115,8 +1109,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
 
         // Rebase to create remainder
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(5 ether);
+        _rebaseUncapped(5 ether);
 
         _finalizeWithdrawalRequest(requestId);
 
@@ -1143,8 +1136,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // First positive rebase pumps TVOL so we have headroom to rebase negative later.
         // After: TPE=15, shares=10e18, rate=1.5
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(5 ether);
+        _rebaseUncapped(5 ether);
 
         // Request A — priced at rate=1.5; another positive rebase before finalize leaves share
         // remainder during claim (burnedShares = ceil(amountOfEEth/frozenRate) < shareOfEEth).
@@ -1154,8 +1146,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         uint256 reqA = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
 
         // Second positive rebase: rate climbs to ~2.0
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(5 ether);
+        _rebaseUncapped(5 ether);
 
         _finalizeWithdrawalRequest(reqA);
         vm.prank(bob);
@@ -1242,8 +1233,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.stopPrank();
 
         // Seed TVOL so the later negative rebase has headroom (rebase touches TVOL, not TVIL).
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(10 ether);
+        _rebaseUncapped(10 ether);
 
         // Two requests — finalize+claim one to generate remainder shares while the other
         // keeps `ethAmountLockedForWithdrawal` non-zero.
@@ -1354,8 +1344,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
 
         // Rebase to create remainder
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(5 ether);
+        _rebaseUncapped(5 ether);
 
         _finalizeWithdrawalRequest(requestId);
 
@@ -1902,8 +1891,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.stopPrank();
 
         // Positive rebase first so a subsequent negative rebase still leaves positive shares value.
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(10 ether); // 20 ether / 10 shares = 2 ether per share
+        _rebaseUncapped(10 ether); // 20 ether / 10 shares = 2 ether per share
 
         vm.prank(bob);
         eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
@@ -1949,8 +1937,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Positive rebase post-finalize — frozen rate is unchanged, and the `min(amount, shares*rate)` clamp
         // still keeps payout at the originally requested amount.
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(20 ether);
+        _rebaseUncapped(20 ether);
 
         uint256 claimable = withdrawRequestNFTInstance.getClaimableAmount(requestId);
         WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(requestId);
@@ -1979,14 +1966,12 @@ contract WithdrawRequestNFTTest is TestSetup {
         uint224 rateA = withdrawRequestNFTInstance.frozenRateFor(r1);
 
         // Rebase, then finalize r2 at rate B
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(15 ether);
+        _rebaseUncapped(15 ether);
         _finalizeWithdrawalRequest(r2);
         uint224 rateB = withdrawRequestNFTInstance.frozenRateFor(r2);
 
         // Rebase again, then finalize r3 at rate C
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(15 ether);
+        _rebaseUncapped(15 ether);
         _finalizeWithdrawalRequest(r3);
         uint224 rateC = withdrawRequestNFTInstance.frozenRateFor(r3);
 
@@ -2051,8 +2036,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.stopPrank();
 
         // Build up totalValueOutOfLp via a positive rebase so a later negative rebase doesn't underflow.
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(10 ether); // rate ≈ 2 ETH per share
+        _rebaseUncapped(10 ether); // rate ≈ 2 ETH per share
 
         vm.startPrank(bob);
         eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
@@ -2160,8 +2144,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.stopPrank();
 
         // Build up TPE so a later negative rebase has headroom and doesn't underflow.
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(20 ether); // 40 ETH TPE / 20 shares → ~2 ETH/share
+        _rebaseUncapped(20 ether); // 40 ETH TPE / 20 shares → ~2 ETH/share
 
         vm.prank(bob);
         eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
@@ -2177,8 +2160,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         assertGt(frozenRate, 0, "frozenRate must be set after finalize");
 
         // 4. apply positive rebase
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(10 ether);
+        _rebaseUncapped(10 ether);
 
         // 5. assert getClaimableAmount unchanged after positive rebase
         assertEq(
@@ -2262,8 +2244,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 10 ether}();
         vm.stopPrank();
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(10 ether);
+        _rebaseUncapped(10 ether);
 
         vm.startPrank(bob);
         eETHInstance.approve(address(liquidityPoolInstance), 1 ether);

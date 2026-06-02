@@ -114,7 +114,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
         );
         pQueue = PriorityWithdrawalQueue(payable(address(proxy)));
         liquidityPoolInstance.upgradeTo(address(new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: address(stakingManagerInstance),
                 nodesManager: address(managerInstance),
                 eETH: address(eETHInstance),
@@ -143,7 +143,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
             address(membershipManagerInstance),
             address(roleRegistryInstance),
             address(blacklisterInstance)
-        , address(etherFiAdminInstance), 1, 4e18));
+        , address(etherFiAdminInstance)));
         vm.prank(wrnOwner);
         withdrawRequestNFTInstance.upgradeTo(newWrnImpl);
     }
