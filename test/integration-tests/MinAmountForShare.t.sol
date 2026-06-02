@@ -39,7 +39,7 @@ contract MinAmountForShareForkTest is TestSetup, Deployed {
     /// preserve that so we don't introduce unrelated changes through the fork upgrade.
     function _upgradeLpWithMinAmount(uint256 minAmount) internal {
         LiquidityPool newImpl = new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: address(stakingManagerInstance),
                 nodesManager: address(managerInstance),
                 eETH: address(eETHInstance),

@@ -4,6 +4,7 @@ pragma solidity ^0.8.13;
 import "forge-std/Test.sol";
 import "@scripts/deploys/Deployed.s.sol";
 import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
 import "@etherfi/withdrawals/WithdrawRequestNFT.sol";
 import "@etherfi/withdrawals/PriorityWithdrawalQueue.sol";
 import "@etherfi/governance/utils/ReentrancyGuardNamespaced.sol";
@@ -213,7 +214,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         // 2. Deploy new implementation contracts (with the added guard)
         // ------------------------------------------------------------------
         address newLP  = address(new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: STAKING_MANAGER,
                 nodesManager: ETHERFI_NODES_MANAGER,
                 eETH: EETH,
@@ -407,7 +408,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
     ///      receive(); the master queue impl has no receive() and would revert.
     function _doUpgrade() internal {
         address newLP = address(new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: STAKING_MANAGER,
                 nodesManager: ETHERFI_NODES_MANAGER,
                 eETH: EETH,
@@ -462,7 +463,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
     ///      the modifier no-op.
     function test_postUpgrade_guardBlocksReentry() public {
         address newLP = address(new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: STAKING_MANAGER,
                 nodesManager: ETHERFI_NODES_MANAGER,
                 eETH: EETH,

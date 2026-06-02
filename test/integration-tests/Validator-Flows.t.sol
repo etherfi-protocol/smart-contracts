@@ -22,7 +22,7 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
 
         // Upgrade LiquidityPool to the consolidated role model — the on-chain impl
         // still checks LIQUIDITY_POOL_ADMIN_ROLE on registerValidatorSpawner.
-        LiquidityPool newLpImpl = new LiquidityPool(LiquidityPool.ConstructorAddresses({
+        LiquidityPool newLpImpl = new LiquidityPool(ILiquidityPool.ConstructorAddresses({
             stakingManager: address(stakingManagerInstance),
             nodesManager: address(managerInstance),
             eETH: address(eETHInstance),

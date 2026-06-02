@@ -55,7 +55,7 @@ contract LiquifierStEthPriceFeedTest is Test {
         feed = new MockChainlinkPriceFeed(int256(1 ether), block.timestamp);
         curve = new MockCurvePool();
 
-        Liquifier.ConstructorAddresses memory addrs = Liquifier.ConstructorAddresses({
+        ILiquifier.ConstructorAddresses memory addrs = ILiquifier.ConstructorAddresses({
             liquidityPool: address(0xA1),
             lidoWithdrawalQueue: address(0xA2),
             lido: stEth,

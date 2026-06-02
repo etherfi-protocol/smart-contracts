@@ -5,6 +5,7 @@ import "@tests/TestSetup.sol";
 import "forge-std/Test.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
 
 contract LiquidityPoolTest is TestSetup {
     using stdStorage for StdStorage;
@@ -30,8 +31,8 @@ contract LiquidityPoolTest is TestSetup {
     /// @dev Build LiquidityPool ConstructorAddresses overriding the priority queue and
     /// blacklister; other fields fall back to test setup addresses. Returns a struct
     /// suitable for `new LiquidityPool(...)`.
-    function _lpCtorAddrs(address pwq, address blacklister) internal view returns (LiquidityPool.ConstructorAddresses memory) {
-        return LiquidityPool.ConstructorAddresses({
+    function _lpCtorAddrs(address pwq, address blacklister) internal view returns (ILiquidityPool.ConstructorAddresses memory) {
+        return ILiquidityPool.ConstructorAddresses({
             stakingManager: address(stakingManagerInstance),
             nodesManager: address(managerInstance),
             eETH: address(eETHInstance),
