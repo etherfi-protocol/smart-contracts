@@ -256,10 +256,6 @@ contract WithdrawRemainderHandler is StdUtils {
         uint224 frozenRate = wrn.frozenRateFor(tokenId);
         if (frozenRate == 0) {
             uint256 live = lp.amountPerShareCeil();
-            if (live < wrn.minAcceptableShareRate() || live > wrn.maxAcceptableShareRate()) {
-                callCounts["wrn_claim_skipped"]++;
-                return;
-            }
             frozenRate = uint224(live);
         }
         uint256 independentForShares = Math.mulDiv(

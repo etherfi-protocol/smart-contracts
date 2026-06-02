@@ -620,9 +620,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(membershipManagerV1Instance),
             address(roleRegistryInstance),
             address(blacklisterInstance),
-            address(etherFiAdminInstance),
-            1,
-            4e18
+            address(etherFiAdminInstance)
         ));
         vm.prank(withdrawRequestNFTInstance.owner());
         withdrawRequestNFTInstance.upgradeTo(newWrnImpl);
@@ -1215,8 +1213,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(membershipManagerProxy),
             address(roleRegistryInstance),
             address(blacklisterInstance),
-            address(etherFiAdminProxy),
-            1, 4e18
+            address(etherFiAdminProxy)
         );
         withdrawRequestNFTInstance.upgradeTo(address(withdrawRequestNFTImplementation));
 
