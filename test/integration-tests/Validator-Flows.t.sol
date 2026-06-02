@@ -34,7 +34,7 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
             blacklister: address(blacklisterInstance),
             etherFiAdminContract: address(etherFiAdminInstance),
             membershipManager: address(membershipManagerInstance)
-        }), 0);
+        }));
         address lpOwner = liquidityPoolInstance.owner();
         vm.prank(lpOwner);
         liquidityPoolInstance.upgradeTo(address(newLpImpl));

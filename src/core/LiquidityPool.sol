@@ -66,7 +66,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     IBlacklister public immutable blacklister;
     address public immutable etherFiAdminContract;
     address public immutable membershipManager;
-    uint256 public immutable minAmountForShare;
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  CONSTANTS  ---------------------------------------
@@ -117,7 +116,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     error InsufficientLiquidity();
     error SendFail();
     error InvalidValidatorSize();
-    error InvalidAmountForShare();
     error InvalidRate();
     error RebaseExceedsPositiveCap();
     error AlreadyMigrated();
@@ -135,10 +133,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /**
      * @notice Constructor
      * @param _constructorAddresses The addresses of the contracts to use
-     * @param _minAmountForShare The minimum amount for a share
      * @custom:oz-upgrades-unsafe-allow constructor
      */
-    constructor(ConstructorAddresses memory _constructorAddresses, uint256 _minAmountForShare) RolesLibrary(_constructorAddresses.roleRegistry) {
+    constructor(ConstructorAddresses memory _constructorAddresses) RolesLibrary(_constructorAddresses.roleRegistry) {
         stakingManager = IStakingManager(_constructorAddresses.stakingManager);
         nodesManager = IEtherFiNodesManager(_constructorAddresses.nodesManager);
         eETH = IeETH(_constructorAddresses.eETH);
@@ -149,7 +146,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         blacklister = IBlacklister(_constructorAddresses.blacklister);
         etherFiAdminContract = _constructorAddresses.etherFiAdminContract;
         membershipManager = _constructorAddresses.membershipManager;
-        minAmountForShare = _minAmountForShare;
         _disableInitializers();
     }
 
@@ -199,7 +195,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
             if (queueLocked > 0) _sendFund(address(priorityWithdrawalQueue), queueLocked);
         }
 
-        _checkInvariants();
+        _checkTotalValueInLp();
         escrowMigrationCompleted = true;
     }
 
@@ -285,7 +281,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
         _sendFund(_recipient, _amount);
 
-        _checkInvariants();
+        _checkTotalValueInLp();
 
         return share;
     }
@@ -348,7 +344,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
         totalValueOutOfLp -= uint128(_amount);
         eETH.burnShares(msg.sender, share);
-        _checkMinAmountForShare();
 
         return share;
     }
@@ -515,8 +510,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
         totalValueOutOfLp = uint128(int128(totalValueOutOfLp) + _accruedRewards);
 
-        _checkMinAmountForShare();
-
         emit Rebase(getTotalPooledEther(), eETH.totalShares());
     }
 
@@ -562,7 +555,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         totalValueOutOfLp -= uint128(_amount);
         totalValueInLp    += uint128(_amount);
 
-        _checkInvariants();
+        _checkTotalValueInLp();
     }
 
     /**
@@ -573,7 +566,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     function burnEEthShares(uint256 shares) external nonDecreasingRate {
         if (msg.sender != address(etherFiRedemptionManager) && msg.sender != address(withdrawRequestNFT) && msg.sender != address(priorityWithdrawalQueue)) revert IncorrectCaller();
         eETH.burnShares(msg.sender, shares);
-        _checkMinAmountForShare();
     }
 
     /**
@@ -593,7 +585,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         totalValueOutOfLp -= uint128(_withdrawalValueInETH);
 
         eETH.burnShares(msg.sender, _amountSharesToBurn);
-        _checkMinAmountForShare();
         emit EEthSharesBurnedForNonETHWithdrawal(_amountSharesToBurn, _withdrawalValueInETH);
     }
 
@@ -604,7 +595,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         if (msg.value > type(uint128).max) revert InvalidAmount();
         totalValueOutOfLp -= uint128(msg.value);
         totalValueInLp += uint128(msg.value);
-        _checkInvariants();
+        _checkTotalValueInLp();
     }
 
     //--------------------------------------------------------------------------------------
@@ -722,7 +713,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
         eETH.mintShares(_recipient, share);
 
-        _checkInvariants();
+        _checkTotalValueInLp();
 
         return share;
     }
@@ -779,7 +770,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         totalValueInLp    -= _amount;
         totalValueOutOfLp += _amount;
         _sendFund(_dest, _amount);
-        _checkInvariants();
+        _checkTotalValueInLp();
     }
 
     /**
@@ -790,7 +781,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     function _accountForEthSentOut(uint256 _amount) internal {
         totalValueOutOfLp += uint128(_amount);
         totalValueInLp -= uint128(_amount);
-        _checkInvariants();
+        _checkTotalValueInLp();
     }
 
     /**
@@ -798,21 +789,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
      */
     function _checkTotalValueInLp() internal view {
         if (totalValueInLp > address(this).balance) revert InsufficientLiquidity();
-    }
-
-    /**
-     * @notice Checks if the minimum amount for a share is greater than the amount for a share
-     */
-    function _checkMinAmountForShare() internal view {
-        if (amountForShare(SHARE_UNIT) < minAmountForShare) revert InvalidAmountForShare();
-    }
-
-    /**
-     * @notice Checks if the invariants are met
-     */
-    function _checkInvariants() internal view {
-        _checkTotalValueInLp();
-        _checkMinAmountForShare();
     }
 
     /**
