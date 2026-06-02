@@ -84,9 +84,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     IeETH public immutable eETH;
     IMembershipManager public immutable membershipManager;
     IBlacklister public immutable blacklister;
-
-    uint256 public immutable minAcceptableShareRate;
-    uint256 public immutable maxAcceptableShareRate;
     // this treasury address is set to ethfi buyback wallet address
     address public immutable treasury;
     address public immutable etherFiAdmin;
@@ -130,17 +127,13 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     error CannotInvalidateFinalizedRequest();
     error RequestAmountGreaterThanAvailableLiquidity();
     error InvalidShareRemainderSplit();
-    error InvalidShareRate();
     error NotTheOwner();
     error InsufficientEscrow();
     error EthTransferFailed();
     error AlreadyClaimed();
     error RequestNotFinalized();
-    error InvalidMinAcceptableShareRate();
-    error InvalidMinMaxAcceptableShareRate();
     error AlreadyInitialized();
     error NotInitialized();
-    error InvalidLiveRate();
     error BurnExceedsShares();
     error InvalidEEthShares();
 
@@ -156,21 +149,15 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
      * @param _roleRegistry The address of the role registry.
      * @param _blacklister The address of the blacklister.
      * @param _etherFiAdmin The address of the etherFi admin.
-     * @param _minAcceptableShareRate The minimum acceptable share rate.
-     * @param _maxAcceptableShareRate The maximum acceptable share rate.
      * @custom:oz-upgrades-unsafe-allow constructor
      */
-    constructor(address _treasury, address _eETH, address _liquidityPool, address _membershipManager, address _roleRegistry, address _blacklister,  address _etherFiAdmin, uint256 _minAcceptableShareRate, uint256 _maxAcceptableShareRate) RolesLibrary(_roleRegistry) {
-        if (_minAcceptableShareRate == 0) revert InvalidMinAcceptableShareRate();
-        if (_maxAcceptableShareRate <= _minAcceptableShareRate) revert InvalidMinMaxAcceptableShareRate();
+    constructor(address _treasury, address _eETH, address _liquidityPool, address _membershipManager, address _roleRegistry, address _blacklister,  address _etherFiAdmin) RolesLibrary(_roleRegistry) {
         treasury = _treasury;
         eETH = IeETH(_eETH);
         liquidityPool = ILiquidityPool(_liquidityPool);
         membershipManager = IMembershipManager(_membershipManager);
         blacklister = IBlacklister(_blacklister);
         etherFiAdmin = _etherFiAdmin;
-        minAcceptableShareRate = _minAcceptableShareRate;
-        maxAcceptableShareRate = _maxAcceptableShareRate;
         _disableInitializers();
     }
 
@@ -307,7 +294,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         // Skip on no-op finalize so the checkpoint trace stays compact.
         if (requestId > lastFinalizedRequestId) {
             uint256 rate = liquidityPool.amountPerShareCeil();
-            if (rate < minAcceptableShareRate || rate > maxAcceptableShareRate) revert InvalidShareRate();
             _finalizationRates.push(uint32(requestId), uint224(rate));
         }
 
@@ -458,7 +444,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
             // Bounds-check the live rate before adopting it — this path is the only one where
             // `frozenRate` was not already gated by `finalizeRequests`'s write-time check.
             uint256 live = liquidityPool.amountPerShareCeil();
-            if (live < minAcceptableShareRate || live > maxAcceptableShareRate) revert InvalidLiveRate();
             frozenRate = uint224(live);
         }
 

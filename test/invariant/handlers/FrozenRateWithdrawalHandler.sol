@@ -106,9 +106,6 @@ contract FrozenRateWithdrawalHandler is StdUtils {
     ///         the edge.
     mapping(uint256 => bool) public ghost_wrnFrozenRateAtFinalizeRecorded;
 
-    /// @notice Set if any finalize-snapshotted rate fell outside [min, max].
-    bool public ghost_frozenRateOutOfBounds;
-
     /// @notice Set on any observed claim where `burnedShares > shareOfEEth`.
     bool public ghost_wrnBurnExceededShares;
 
@@ -217,14 +214,10 @@ contract FrozenRateWithdrawalHandler is StdUtils {
 
         vm.prank(etherFiAdminContract);
         try wrn.finalizeRequests(uint256(target)) {
-            // (F-003) Write-once snapshot of the frozen rate per id.
-            uint256 lo = wrn.minAcceptableShareRate();
-            uint256 hi = wrn.maxAcceptableShareRate();
             for (uint32 id = last + 1; id <= target; id++) {
                 uint256 t = uint256(id);
                 if (!ghost_wrnFrozenRateAtFinalizeRecorded[t]) {
                     uint256 frozen = uint256(wrn.frozenRateFor(t));
-                    if (frozen < lo || frozen > hi) ghost_frozenRateOutOfBounds = true;
                     ghost_wrnFrozenRateAtFinalize[t] = frozen;
                     ghost_wrnFrozenRateAtFinalizeRecorded[t] = true;
                 }
@@ -620,34 +613,6 @@ contract FrozenRateWithdrawalHandler is StdUtils {
                 return;
             }
         }
-    }
-
-    /// (F-005) Walk every checkpoint in WRN's finalization trace and
-    /// verify each rate is in bounds. The constructor's bounds check at
-    /// finalize is necessary but covers only the read-after-success; a
-    /// finalize that pushed an OOB value AND reverted would not surface
-    /// via the per-call read.
-    /// `Checkpoints.Trace224` exposes no direct iterator over the (key,
-    /// value) pairs, so we sample the trace via `lowerLookup(tokenId)`
-    /// for every tokenId the handler has tracked. Each tracked tokenId
-    /// belongs to exactly one finalize batch and every finalize batch
-    /// covers at least one tracked tokenId, so the per-tokenId loop is
-    /// equivalent to walking the trace.
-    function verifyAllFinalizationCheckpointsInBounds() external view returns (bool ok, uint256 firstOOB) {
-        uint256 lo = wrn.minAcceptableShareRate();
-        uint256 hi = wrn.maxAcceptableShareRate();
-        for (uint256 i = 0; i < wrnTokenIds.length; i++) {
-            uint256 t = wrnTokenIds[i];
-            if (!ghost_wrnFrozenRateAtFinalizeRecorded[t]) continue;
-            uint256 r = uint256(wrn.frozenRateFor(t));
-            // Legacy sentinel (= 0) is allowed for pre-upgrade IDs; we
-            // never push the sentinel in test setUp, so any 0 here is a
-            // real OOB.
-            if (r == 0 || r < lo || r > hi) {
-                return (false, t);
-            }
-        }
-        return (true, 0);
     }
 
     function pqSumFinalizedAmount() external view returns (uint256 acc) {

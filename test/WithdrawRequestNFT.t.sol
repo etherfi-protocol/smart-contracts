@@ -13,7 +13,7 @@ contract WithdrawRequestNFTIntrusive is WithdrawRequestNFT {
 
     // roleRegistry must be non-zero — _authorizeUpgrade now defers to it for upgrade auth,
     // so a zero immutable would brick the swap-back step in updateParam.
-    constructor(address _roleRegistry) WithdrawRequestNFT(address(0), address(0), address(0), address(0), _roleRegistry, address(0), address(0), 1, 4e18) {}
+    constructor(address _roleRegistry) WithdrawRequestNFT(address(0), address(0), address(0), address(0), _roleRegistry, address(0), address(0)) {}
 
     /// @dev Test-only: advance `lastFinalizedRequestId` without going through `finalizeRequests`,
     ///      simulating the pre-upgrade state where no rate snapshot was captured.
@@ -357,8 +357,7 @@ contract WithdrawRequestNFTTest is TestSetup {
             address(membershipManagerInstance),
             address(roleRegistryInstance),
             address(blacklisterInstance),
-            address(etherFiAdminInstance),
-            1, 4e18
+            address(etherFiAdminInstance)
         )));
         // IMPLICIT_FEE_CLAIMER_ROLE consolidated into HOUSEKEEPING_OPERATIONS_ROLE.
         roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), alice);
