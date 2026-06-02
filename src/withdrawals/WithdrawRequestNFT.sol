@@ -272,7 +272,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         if (ethAmountLockedForWithdrawal < amountToWithdraw) revert InsufficientEscrow();
         ethAmountLockedForWithdrawal -= uint128(request.amountOfEEth);
 
-        uint256 burnedShares = liquidityPool.withdraw(amountToWithdraw, uint256(frozenRate), request.shareOfEEth);
+        uint256 burnedShares = liquidityPool.withdraw(amountToWithdraw, uint256(request.amountOfEEth), uint256(frozenRate), request.shareOfEEth);
         // LP caps `burnedShares <= request.shareOfEEth` (Guard 3). Defensive duplication.
         if (burnedShares > request.shareOfEEth) revert BurnExceedsShares();
         totalRemainderEEthShares += request.shareOfEEth - burnedShares;

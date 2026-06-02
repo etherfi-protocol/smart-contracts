@@ -960,7 +960,7 @@ contract LiquidityPoolTest is TestSetup {
             uint256 liveRate = liquidityPoolInstance.amountPerShareCeil();
             vm.startPrank(address(withdrawRequestNFTInstance));
             vm.expectRevert(LiquidityPool.InsufficientLiquidity.selector);
-            liquidityPoolInstance.withdraw(withdrawAmount * 2, liveRate, withdrawAmount * 2);
+            liquidityPoolInstance.withdraw(withdrawAmount * 2, withdrawAmount * 2, liveRate, withdrawAmount * 2);
             vm.stopPrank();
         } else {
             vm.stopPrank();
@@ -1887,7 +1887,7 @@ contract LiquidityPoolTest is TestSetup {
         // consumers. `rate=0` is no longer accepted; consumers resolve legacy snapshots locally.
         uint256 liveRate = liquidityPoolInstance.amountPerShareCeil();
         vm.prank(address(withdrawRequestNFTInstance));
-        liquidityPoolInstance.withdraw(amount, liveRate, amount);
+        liquidityPoolInstance.withdraw(amount, amount, liveRate, amount);
 
         assertEq(address(liquidityPoolInstance).balance, lpEthBefore, "LP ETH should not change on segregated withdraw");
         assertEq(address(withdrawRequestNFTInstance).balance, nftEthBefore, "NFT ETH unchanged by LP withdraw(amount, rate) alone");
@@ -1959,7 +1959,7 @@ contract LiquidityPoolTest is TestSetup {
 
         vm.prank(address(withdrawRequestNFTInstance));
         vm.expectRevert(LiquidityPool.InvalidRate.selector);
-        liquidityPoolInstance.withdraw(uint256(1 ether), uint256(0), uint256(1 ether));
+        liquidityPoolInstance.withdraw(uint256(1 ether), uint256(1 ether), uint256(0), uint256(1 ether));
     }
 
     function test_initializeOnUpgradeV2_sweepsLockedEth() public {
@@ -2470,7 +2470,7 @@ contract LiquidityPoolTest is TestSetup {
         // Pass a large `_shareOfEEth` (100 ether worth of shares) so Guard 1/3 don't cap and
         // we observe the raw burn computation. Guard 1 admits any `_amount <= 100e18*rate/1e18`.
         vm.prank(address(withdrawRequestNFTInstance));
-        uint256 burned = liquidityPoolInstance.withdraw(uint256(amount), rate, 100 ether);
+        uint256 burned = liquidityPoolInstance.withdraw(uint256(amount), uint256(amount), rate, 100 ether);
 
         assertEq(burned, expectedBurn, "burned shares must equal mulDiv(amount, 1e18, rate, Up)");
         assertEq(
@@ -2507,7 +2507,7 @@ contract LiquidityPoolTest is TestSetup {
 
         // Pass `_shareOfEEth = 1 ether` so Guard 1/3 admit and we observe the raw 1-wei burn.
         vm.prank(address(withdrawRequestNFTInstance));
-        uint256 burned = liquidityPoolInstance.withdraw(amount, rate, 1 ether);
+        uint256 burned = liquidityPoolInstance.withdraw(amount, amount, rate, 1 ether);
 
         assertEq(burned, 1, "1 wei at rate 1.5e18 must burn exactly 1 share (ceiling)");
         assertEq(
@@ -2536,14 +2536,14 @@ contract LiquidityPoolTest is TestSetup {
         // Pass `_shareOfEEth = amount` so Guard 1/3 admit; we want to hit the solvency revert.
         vm.prank(address(withdrawRequestNFTInstance));
         vm.expectRevert(LiquidityPool.InsufficientLiquidity.selector);
-        liquidityPoolInstance.withdraw(uint256(amount), 1e18, uint256(amount));
+        liquidityPoolInstance.withdraw(uint256(amount), uint256(amount), 1e18, uint256(amount));
     }
 
     /// @dev Random EOA must not be able to call the (amount, rate) overload.
     function test_withdrawWithRate_randomEoaReverts_IncorrectCaller() public {
         vm.prank(bob);
         vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
-        liquidityPoolInstance.withdraw(uint256(1 ether), uint256(1e18), uint256(1 ether));
+        liquidityPoolInstance.withdraw(uint256(1 ether), uint256(1 ether), uint256(1e18), uint256(1 ether));
     }
 
     /// @dev Random EOA must not be able to call the (recipient, amount) overload.
@@ -2568,7 +2568,7 @@ contract LiquidityPoolTest is TestSetup {
     function test_withdrawWithRate_membershipManagerReverts_IncorrectCaller() public {
         vm.prank(address(membershipManagerInstance));
         vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
-        liquidityPoolInstance.withdraw(uint256(1 ether), uint256(1e18), uint256(1 ether));
+        liquidityPoolInstance.withdraw(uint256(1 ether), uint256(1 ether), uint256(1e18), uint256(1 ether));
     }
 
     // ───────────────────────────────────────────────────────────────────────────
@@ -2591,7 +2591,7 @@ contract LiquidityPoolTest is TestSetup {
         _seedNftEscrow(10 ether, 1 ether);
         vm.prank(address(withdrawRequestNFTInstance));
         vm.expectRevert(LiquidityPool.InvalidAmount.selector);
-        liquidityPoolInstance.withdraw(uint256(1 ether) + 1, uint256(1e18), uint256(1 ether));
+        liquidityPoolInstance.withdraw(uint256(1 ether) + 1, uint256(1 ether) + 1, uint256(1e18), uint256(1 ether));
     }
 
     /// @dev Guard 1 boundary: `_amount` exactly equal to the rate-implied entitlement passes.
@@ -2599,7 +2599,7 @@ contract LiquidityPoolTest is TestSetup {
         _seedNftEscrow(10 ether, 1 ether);
         vm.prank(address(withdrawRequestNFTInstance));
         // _amount == 1e18 == _shareOfEEth * rate / 1e18 — boundary admits.
-        uint256 burned = liquidityPoolInstance.withdraw(uint256(1 ether), uint256(1e18), uint256(1 ether));
+        uint256 burned = liquidityPoolInstance.withdraw(uint256(1 ether), uint256(1 ether), uint256(1e18), uint256(1 ether));
         assertGt(burned, 0, "boundary _amount must succeed");
     }
 
@@ -2619,7 +2619,7 @@ contract LiquidityPoolTest is TestSetup {
         uint256 expectedShareAtLive = Math.mulDiv(amount, 1e18, liveRate, Math.Rounding.Up);
 
         vm.prank(address(withdrawRequestNFTInstance));
-        uint256 burned = liquidityPoolInstance.withdraw(uint256(amount), inflatedRate, looseShare);
+        uint256 burned = liquidityPoolInstance.withdraw(uint256(amount), uint256(amount), inflatedRate, looseShare);
 
         assertEq(burned, expectedShareAtLive, "burn must equal shareAtLive when _rate > live");
     }
@@ -2636,7 +2636,7 @@ contract LiquidityPoolTest is TestSetup {
         uint256 expectedShareAtFrozen = Math.mulDiv(amount, 1e18, frozenRate, Math.Rounding.Up);
 
         vm.prank(address(withdrawRequestNFTInstance));
-        uint256 burned = liquidityPoolInstance.withdraw(uint256(amount), frozenRate, 10 ether);
+        uint256 burned = liquidityPoolInstance.withdraw(uint256(amount), uint256(amount), frozenRate, 10 ether);
 
         assertEq(burned, expectedShareAtFrozen, "burn must equal shareAtFrozen when _rate < live");
     }
@@ -2670,7 +2670,7 @@ contract LiquidityPoolTest is TestSetup {
         // tightShare > shareAtFrozen = ceil(amount/frozenRate), this holds.
 
         vm.prank(address(withdrawRequestNFTInstance));
-        uint256 burned = liquidityPoolInstance.withdraw(uint256(amount), frozenRate, tightShare);
+        uint256 burned = liquidityPoolInstance.withdraw(uint256(amount), uint256(amount), frozenRate, tightShare);
 
         assertEq(burned, tightShare, "burn must be capped at _shareOfEEth");
     }
@@ -2707,7 +2707,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.assume(eETHInstance.shares(address(withdrawRequestNFTInstance)) >= expectedBurn);
 
         vm.prank(address(withdrawRequestNFTInstance));
-        uint256 burned = liquidityPoolInstance.withdraw(amount, rate, shareOfEEth);
+        uint256 burned = liquidityPoolInstance.withdraw(amount, amount, rate, shareOfEEth);
         assertEq(burned, expectedBurn, "burn must match three-guard spec");
 
         // Differential oracle for the up-rebase case (`rate >= liveRate`): the burn must
@@ -2749,7 +2749,7 @@ contract LiquidityPoolTest is TestSetup {
 
         // The call must succeed.
         vm.prank(address(withdrawRequestNFTInstance));
-        uint256 burned = liquidityPoolInstance.withdraw(amountWithFee, derivedRate, shareOfEEth);
+        uint256 burned = liquidityPoolInstance.withdraw(amountWithFee, amountWithFee, derivedRate, shareOfEEth);
         assertGt(burned, 0, "claim must succeed with derived rate");
         assertLe(burned, shareOfEEth, "Guard 3 must cap burn at shareOfEEth");
     }
@@ -2773,6 +2773,6 @@ contract LiquidityPoolTest is TestSetup {
 
         vm.prank(address(withdrawRequestNFTInstance));
         vm.expectRevert(LiquidityPool.InvalidAmount.selector);
-        liquidityPoolInstance.withdraw(amount, rate, shareOfEEth);
+        liquidityPoolInstance.withdraw(amount, amount, rate, shareOfEEth);
     }
 }

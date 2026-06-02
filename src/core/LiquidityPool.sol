@@ -281,7 +281,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     ///         ETH was already segregated to the caller at finalize/fulfill via
     ///         `addEthAmountLockedForWithdrawal` / `transferLockedEthForPriority`; LP only
     ///         performs accounting (burn + `totalValueOutOfLp -=`).
-    function withdraw(uint256 _amount, uint256 _rate, uint256 _shareOfEEth) external nonReentrant returns (uint256) {
+    function withdraw(uint256 _amount, uint256 _amountOfEEth, uint256 _rate, uint256 _shareOfEEth) external nonReentrant returns (uint256) {
         if (msg.sender != address(withdrawRequestNFT) && msg.sender != address(priorityWithdrawalQueue)) {
             revert IncorrectCaller();
         }
@@ -303,7 +303,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         if (share == 0) revert InvalidAmount();
         if (eETH.shares(msg.sender) < share) revert InsufficientLiquidity();
 
-        totalValueOutOfLp -= uint128(_amount);
+        totalValueOutOfLp -= uint128(_amountOfEEth);
         eETH.burnShares(msg.sender, share);
         _checkMinAmountForShare();
 
