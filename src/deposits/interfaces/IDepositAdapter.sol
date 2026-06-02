@@ -12,8 +12,8 @@ interface IDepositAdapter {
         address wETH;
         address stETH;
         address wstETH;
-        address blacklister;
         address roleRegistry;
+        address blacklister;
     }
 
     enum SourceOfFunds {
