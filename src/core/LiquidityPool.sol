@@ -38,15 +38,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     uint256[10] private __gap_2;
 
     mapping(address => ValidatorSpawner) public validatorSpawner;
-
-    // deprecated storage slots
-    uint8 private __gap_3;
-    uint128 private DEPRECATED_ethAmountLockedForWithdrawal;
-    // deprecated storage slot — pause state migrated to the namespaced {Pausable} storage
-    bool private __deprecated_paused;
-
-    // deprecated storage slots
-    uint256[4] private __gap_4;
+    
+    //deprecated storage slots
+    uint256[5] private __gap_3;
 
     uint256 public validatorSizeWei;
     uint256 public maxWithdrawAmount;
@@ -171,7 +165,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     function initializeOnUpgradeV2() external onlyUpgradeTimelock {
         if (escrowMigrationCompleted) revert AlreadyMigrated();
 
-        uint128 nftLocked   = DEPRECATED_ethAmountLockedForWithdrawal;
+        // Legacy `ethAmountLockedForWithdrawal` was a uint128 packed at bit offset 8
+        // (byte 1) of __gap_3[0]; read it out directly from that slot.
+        uint128 nftLocked;
+        assembly {
+            nftLocked := and(shr(8, sload(__gap_3.slot)), 0xffffffffffffffffffffffffffffffff)
+        }
         uint128 queueLocked = address(priorityWithdrawalQueue) != address(0)
             ? uint128(priorityWithdrawalQueue.ethAmountLockedForPriorityWithdrawal())
             : 0;
@@ -183,7 +182,11 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
             totalValueOutOfLp += totalLocked;
 
             if (nftLocked > 0) {
-                DEPRECATED_ethAmountLockedForWithdrawal = 0;
+                // zero the legacy uint128 (bits 8..135 of __gap_3[0]), preserving its slot neighbours
+                assembly {
+                    let slot := __gap_3.slot
+                    sstore(slot, and(sload(slot), not(shl(8, 0xffffffffffffffffffffffffffffffff))))
+                }
                 _sendFund(address(withdrawRequestNFT), nftLocked);
             }
             if (queueLocked > 0) _sendFund(address(priorityWithdrawalQueue), queueLocked);
