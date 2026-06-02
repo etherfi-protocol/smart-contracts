@@ -13,6 +13,7 @@ import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@etherfi/deposits/Liquifier.sol";
 import "@etherfi/core/LiquidityPool.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
 
 import "@etherfi/eigenlayer-interfaces/IStrategyManager.sol";
 import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
@@ -23,7 +24,7 @@ import "@etherfi/core/interfaces/ILiquidityPool.sol";
 import "@etherfi/governance/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
 import "@etherfi/restaking/interfaces/IEtherFiRestaker.sol";
 
-contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable, RolesLibrary, IEtherFiRestaker {
+contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable, PausableUntil, RolesLibrary, IEtherFiRestaker {
     using SafeERC20 for IERC20;
     using Math for uint256;
     using EnumerableSet for EnumerableSet.Bytes32Set;
@@ -156,7 +157,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
      * @param recipient The address to receive stETH
      * @param amount The amount of stETH to transfer
      */
-    function transferStETH(address recipient, uint256 amount) external {
+    function transferStETH(address recipient, uint256 amount) external whenNotPaused {
         if(msg.sender != etherFiRedemptionManager) revert IncorrectCaller();
         if (amount > lido.balanceOf(address(this))) revert InsufficientBalance();
         IERC20(address(lido)).safeTransfer(recipient, amount);
@@ -176,7 +177,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
      * @param _amount the amount of stETH to request
      * @return The request ids
      */
-    function stEthRequestWithdrawal(uint256 _amount) public onlyExecutorOperations returns (uint256[] memory) {
+    function stEthRequestWithdrawal(uint256 _amount) public onlyExecutorOperations whenNotPaused returns (uint256[] memory) {
         rateLimiter.consume(STETH_REQUEST_WITHDRAWAL_LIMIT_ID, _amountToGwei(_amount));
 
         uint256 minAmount = lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT();
@@ -212,7 +213,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
      * @param _requestIds array of request ids to claim
      * @param _hints checkpoint hint for each id. Can be obtained with `findCheckpointHints()`
      */
-    function stEthClaimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints) external onlyHousekeepingOperations {
+    function stEthClaimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints) external onlyHousekeepingOperations whenNotPaused {
         lidoWithdrawalQueue.claimWithdrawals(_requestIds, _hints);
 
         _withdrawEther();
@@ -223,7 +224,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /**
      * @notice Send the ETH back to the liquidity pool
      */
-    function withdrawEther() public onlyHousekeepingOperations {
+    function withdrawEther() public onlyHousekeepingOperations whenNotPaused {
         _withdrawEther();
     }
 
@@ -256,7 +257,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
      * @notice Undelegate from the current AVS operator & un-restake all
      * @return The withdrawal roots
      */
-    function undelegate() external onlyOperatingMultisig returns (bytes32[] memory) {
+    function undelegate() external onlyOperatingMultisig whenNotPaused returns (bytes32[] memory) {
         bytes32[] memory withdrawalRoots = eigenLayerDelegationManager.undelegate(address(this));
 
         for (uint256 i = 0; i < withdrawalRoots.length; i++) {
@@ -272,7 +273,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
      * @param amount The amount of token to deposit
      * @return The shares deposited
      */
-    function depositIntoStrategy(address token, uint256 amount) external onlyExecutorOperations returns (uint256) {
+    function depositIntoStrategy(address token, uint256 amount) external onlyExecutorOperations whenNotPaused returns (uint256) {
         rateLimiter.consume(DEPOSIT_INTO_STRATEGY_LIMIT_ID, _amountToGwei(amount));
 
         IERC20(token).safeIncreaseAllowance(address(eigenLayerStrategyManager), amount);
@@ -289,7 +290,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
      * @param amount The amount of token to withdraw
      * @return The withdrawal roots
      */
-    function queueWithdrawals(address token, uint256 amount) public onlyExecutorOperations returns (bytes32[] memory) {
+    function queueWithdrawals(address token, uint256 amount) public onlyExecutorOperations whenNotPaused returns (bytes32[] memory) {
         rateLimiter.consume(QUEUE_WITHDRAWALS_LIMIT_ID, _amountToGwei(amount));
 
         uint256 shares = getEigenLayerRestakingStrategy(token).underlyingToSharesView(amount);
@@ -310,7 +311,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     function completeQueuedWithdrawals(
         IDelegationManager.Withdrawal[] memory _queuedWithdrawals,
         IERC20[][] memory _tokens
-    ) external onlyHousekeepingOperations {
+    ) external onlyHousekeepingOperations whenNotPaused {
         uint256 num = _queuedWithdrawals.length;
         bool[] memory receiveAsTokens = new bool[](num);
         for (uint256 i = 0; i < num; i++) {
@@ -339,8 +340,33 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /**
      * @notice Unpause the contract
      */
-    function unPauseContract() external onlyOperatingMultisig {
+    function unpauseContract() external onlyOperatingMultisig {
         _unpause();
+    }
+
+    /**
+     * @notice Pause the contract until the pauseUntilDuration
+     * @dev Only callable by the guardian
+     */
+    function pauseContractUntil() external onlyGuardian {
+        _pauseUntil();
+    }
+
+    /**
+     * @notice Unpause the contract from pauseUntil
+     * @dev Only callable by the operating multisig
+     */
+    function unpauseContractUntil() external onlyOperatingMultisig {
+        _unpauseUntil();
+    }
+
+    /**
+     * @notice Set the pause duration for the contract
+     * @param _pauseUntilDuration The pause duration for the contract
+     * @dev Only callable by the admin
+     */
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
+        _setPauseUntilDuration(_pauseUntilDuration);
     }
 
     //--------------------------------------------------------------------------------------
@@ -389,6 +415,17 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         uint256 amountToLiquidityPool = Math.min(address(this).balance, liquidityPool.totalValueOutOfLp());
         (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: GAS_STIPEND_NO_GRIEF}("");
         if (!sent) revert EthTransferFailed();
+    }
+
+    /**
+     * @notice Fold the auto-expiring PausableUntil check into OZ's `_requireNotPaused`, so
+     *         the standard `whenNotPaused` modifier (used on every fund-flow fn) halts on
+     *         EITHER the boolean pause or the Guardian's auto-expiring pause — consistent
+     *         with the rest of the protocol, no bespoke modifier needed.
+     */
+    function _requireNotPaused() internal view override {
+        _requireNotPausedUntil();
+        super._requireNotPaused();
     }
 
     /**

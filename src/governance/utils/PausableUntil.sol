@@ -81,6 +81,12 @@ abstract contract PausableUntil {
         _requireNotPausedUntil();
         PausableUntilStorage storage $ = _getPausableUntilStorage();
         uint256 _pauseUntilDuration = $.pauseUntilDuration;
+        // If the duration was never configured (0 — e.g. a fresh proxy or a just-upgraded
+        // contract before setPauseUntilDuration is called), fall back to MIN_PAUSE_DURATION
+        // so the emergency pause is always effective. Without this, `pausedUntil` would be
+        // `block.timestamp + 0` (expires the same block) — a silent no-op that still burns
+        // the pauser's cooldown.
+        if (_pauseUntilDuration == 0) _pauseUntilDuration = MIN_PAUSE_DURATION;
         if ($.lastPauseTimestamp[msg.sender] + _pauseUntilDuration + PAUSER_UNTIL_COOLDOWN > block.timestamp) revert PauserCooldownStillActive();
         $.pausedUntil = block.timestamp + _pauseUntilDuration;
         $.lastPauseTimestamp[msg.sender] = block.timestamp;

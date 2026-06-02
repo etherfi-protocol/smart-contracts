@@ -73,6 +73,14 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     //--------------------------------------------------------------------------------------
     uint256 public constant SHARE_UNIT = 1e18;
 
+    // Hard cap on how far a single rebase may INCREASE TVL (rewards), in bps of TVL.
+    // 25 bps ≈ 1 month of reward accrual at 3% APR — there is no legitimate reason for a
+    // single report to raise the rate by more than this, so it is a fixed invariant (not
+    // governance-configurable). Bounds a buggy/compromised rebase caller at the share-rate
+    // chokepoint regardless of the oracle-side checks.
+    uint256 public constant MAX_POSITIVE_REBASE_BPS = 25;
+    uint256 private constant REBASE_BPS_DENOMINATOR = 10_000;
+
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
@@ -111,6 +119,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     error InvalidValidatorSize();
     error InvalidAmountForShare();
     error InvalidRate();
+    error RebaseExceedsPositiveCap();
     error AlreadyMigrated();
     error MigrationNotComplete();
     error AlreadyRegistered();
@@ -493,6 +502,17 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
      */
     function rebase(int128 _accruedRewards) public {
         if (msg.sender != address(membershipManager)) revert IncorrectCaller();
+
+        // Positive (reward) upper bound, enforced at the share-rate chokepoint regardless
+        // of who calls rebase. A single rebase cannot increase TVL by more than
+        // MAX_POSITIVE_REBASE_BPS of pre-rebase TVL. Defense-in-depth alongside the
+        // oracle-side negative cap in EtherFiAdmin; the negative side is intentionally not
+        // re-checked here (the oracle path owns it and bounds it tighter).
+        if (_accruedRewards > 0) {
+            uint256 maxIncrease = (getTotalPooledEther() * MAX_POSITIVE_REBASE_BPS) / REBASE_BPS_DENOMINATOR;
+            if (uint256(uint128(_accruedRewards)) > maxIncrease) revert RebaseExceedsPositiveCap();
+        }
+
         totalValueOutOfLp = uint128(int128(totalValueOutOfLp) + _accruedRewards);
 
         _checkMinAmountForShare();

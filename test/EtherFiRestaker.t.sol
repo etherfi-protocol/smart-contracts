@@ -7,6 +7,7 @@ import "forge-std/Test.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20BurnableUpgradeable.sol";
 
 import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
 import "@etherfi/eigenlayer-interfaces/IStrategyManager.sol";
 import "@etherfi/eigenlayer-interfaces/ISignatureUtils.sol";
 
@@ -290,6 +291,61 @@ contract EtherFiRestakerTest is TestSetup {
     function test_updatePendingSharesState_after_upgrade() public {
         etherFiRestakerInstance.getAmountInEigenLayerPendingForWithdrawals(address(stEth));
         etherFiRestakerInstance.getTotalPooledEther();
+    }
+
+    // PR #385 security review (H1 + Yash's review): the restaker's pause previously gated
+    // nothing — pauseContract() flipped a flag but no money-movement function checked it.
+    // It now uses the protocol-wide PausableUntil model: the Guardian (HN/EOA keys) fires
+    // an auto-expiring halt, the multisig has a boolean pause, and both stop fund movement.
+    function test_guardianPauseUntil_halts_fund_movement() public {
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), bob);
+        vm.stopPrank();
+
+        // operating timelock (owner) sets the auto-expiry duration
+        vm.prank(owner);
+        etherFiRestakerInstance.setPauseUntilDuration(8 hours);
+
+        // Guardian fast-halt (auto-expiring)
+        vm.prank(bob);
+        etherFiRestakerInstance.pauseContractUntil();
+        uint256 until = etherFiRestakerInstance.pausedUntil();
+        assertGt(until, block.timestamp);
+
+        // whenNotHalted is the first gate on transferStETH, so the halt fires before the
+        // caller check — proves fund movement is actually stopped.
+        vm.expectRevert(abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, until));
+        etherFiRestakerInstance.transferStETH(bob, 1);
+
+        // undelegate (owner holds OPERATION_MULTISIG) queues withdrawal of ALL restaked
+        // assets — same fund-flow category, so it must also be halted.
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, until));
+        etherFiRestakerInstance.undelegate();
+
+        // a non-guardian cannot fire the auto-expiring halt
+        vm.prank(alice);
+        vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
+        etherFiRestakerInstance.pauseContractUntil();
+
+        // resume is deliberate / multisig-only
+        vm.prank(owner);
+        etherFiRestakerInstance.unpauseContractUntil();
+        assertEq(etherFiRestakerInstance.pausedUntil(), 0);
+    }
+
+    // The boolean multisig pause also halts fund movement (reverts via OZ Pausable).
+    function test_booleanPause_also_halts_fund_movement() public {
+        vm.prank(owner); // owner holds OPERATION_MULTISIG
+        etherFiRestakerInstance.pauseContract();
+        assertTrue(etherFiRestakerInstance.paused());
+
+        vm.expectRevert("Pausable: paused");
+        etherFiRestakerInstance.transferStETH(bob, 1);
+
+        vm.prank(owner);
+        etherFiRestakerInstance.unpauseContract();
+        assertFalse(etherFiRestakerInstance.paused());
     }
 
 }

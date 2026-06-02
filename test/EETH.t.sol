@@ -84,72 +84,62 @@ contract EETHTest is TestSetup {
     function test_EEthRebase() public {
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 0 ether);
 
-        // Total pooled ether = 10
+        // Amounts scaled so each rebase stays within the 25 bps per-report cap (0.25% of
+        // TVL) while preserving clean share math. Total pooled ether = 10000
         startHoax(alice);
-        liquidityPoolInstance.deposit{value: 10 ether}();
+        liquidityPoolInstance.deposit{value: 10000 ether}();
         vm.stopPrank();
 
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 10 ether);
-        assertEq(eETHInstance.totalSupply(), 10 ether);
-        assertEq(eETHInstance.totalShares(), 10 ether);
-        assertEq(eETHInstance.shares(alice), 10 ether);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 10000 ether);
+        assertEq(eETHInstance.totalSupply(), 10000 ether);
+        assertEq(eETHInstance.totalShares(), 10000 ether);
+        assertEq(eETHInstance.shares(alice), 10000 ether);
 
-        // Total pooled ether = 20
+        // +25 ether reward = 0.25% of 10000 (exactly at the cap). Pooled = 10025
         vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(10 ether);
-        _transferTo(address(liquidityPoolInstance), 10 ether);
+        liquidityPoolInstance.rebase(25 ether);
+        _transferTo(address(liquidityPoolInstance), 25 ether);
 
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 20 ether);
-        assertEq(eETHInstance.totalSupply(), 20 ether);
-        assertEq(eETHInstance.totalShares(), 10 ether);
-        assertEq(eETHInstance.shares(alice), 10 ether);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 10025 ether);
+        assertEq(eETHInstance.totalSupply(), 10025 ether);
+        assertEq(eETHInstance.totalShares(), 10000 ether);
+        assertEq(eETHInstance.shares(alice), 10000 ether);
 
-        // ALice total claimable Ether
-        /// (20 * 10) / 10
-        assertEq(liquidityPoolInstance.getTotalEtherClaimOf(alice), 20 ether);
+        // Alice total claimable Ether: (10025 * 10000) / 10000 = 10025
+        assertEq(liquidityPoolInstance.getTotalEtherClaimOf(alice), 10025 ether);
 
         startHoax(bob);
-        liquidityPoolInstance.deposit{value: 5 ether}();
+        liquidityPoolInstance.deposit{value: 10025 ether}();
         vm.stopPrank();
 
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 25 ether);
-        assertEq(eETHInstance.totalSupply(), 25 ether);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 20050 ether);
+        assertEq(eETHInstance.totalSupply(), 20050 ether);
 
-        // Bob Shares = (5 * 10) / (25 - 5) = 2,5
-        assertEq(eETHInstance.shares(bob), 2.5 ether);
-        assertEq(eETHInstance.totalShares(), 12.5 ether);
+        // Bob Shares = (10025 * 10000) / (20050 - 10025) = 10000
+        assertEq(eETHInstance.shares(bob), 10000 ether);
+        assertEq(eETHInstance.totalShares(), 20000 ether);
 
-        // Bob claimable Ether
-        /// (25 * 2,5) / 12,5 = 5 ether
+        // claimable: (20050 * 10000) / 20000 = 10025 each
+        assertEq(liquidityPoolInstance.getTotalEtherClaimOf(alice), 10025 ether);
+        assertEq(liquidityPoolInstance.getTotalEtherClaimOf(bob), 10025 ether);
 
-        //ALice Claimable Ether
-        /// (25 * 10) / 12,5 = 20 ether
-        assertEq(liquidityPoolInstance.getTotalEtherClaimOf(alice), 20 ether);
-        assertEq(liquidityPoolInstance.getTotalEtherClaimOf(bob), 5 ether);
+        assertEq(eETHInstance.balanceOf(alice), 10025 ether);
+        assertEq(eETHInstance.balanceOf(bob), 10025 ether);
 
-        assertEq(eETHInstance.balanceOf(alice), 20 ether);
-        assertEq(eETHInstance.balanceOf(bob), 5 ether);
-
-        // Staking Rewards sent to liquidity pool
-        /// vm.deal sets the balance of whoever its called on
-        /// In this case 10 ether is added as reward 
+        // +50 ether reward = ~0.25% of 20050 (within cap). Pooled = 20100
         vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(10 ether);
-        _transferTo(address(liquidityPoolInstance), 10 ether);
+        liquidityPoolInstance.rebase(50 ether);
+        _transferTo(address(liquidityPoolInstance), 50 ether);
 
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 35 ether);
-        assertEq(eETHInstance.totalSupply(), 35 ether);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 20100 ether);
+        assertEq(eETHInstance.totalSupply(), 20100 ether);
 
-        // Bob claimable Ether
-        /// (35 * 2,5) / 12,5 = 7 ether
-        assertEq(liquidityPoolInstance.getTotalEtherClaimOf(bob), 7 ether);
+        // claimable: (20100 * 10000) / 20000 = 10050 each
+        assertEq(liquidityPoolInstance.getTotalEtherClaimOf(bob), 10050 ether);
+        assertEq(liquidityPoolInstance.getTotalEtherClaimOf(alice), 10050 ether);
 
-        // Alice Claimable Ether
-        /// (35 * 10) / 12,5 = 20 ether
-        assertEq(liquidityPoolInstance.getTotalEtherClaimOf(alice), 28 ether);
-
-        assertEq(eETHInstance.balanceOf(alice), 28 ether);
-        assertEq(eETHInstance.balanceOf(bob), 7 ether);
+        assertEq(eETHInstance.balanceOf(alice), 10050 ether);
+        assertEq(eETHInstance.balanceOf(bob), 10050 ether);
     }
 
     function test_TransferWithAmount() public {
