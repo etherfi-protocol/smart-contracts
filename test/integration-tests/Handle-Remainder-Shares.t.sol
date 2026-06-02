@@ -10,7 +10,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
 
     function _newLpImpl() internal returns (address) {
         return address(new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: STAKING_MANAGER,
                 nodesManager: ETHERFI_NODES_MANAGER,
                 eETH: EETH,

@@ -1015,8 +1015,8 @@ contract EtherFiOracleTest is TestSetup {
         etherFiAdminInstance.updateAcceptableRebaseApr(int32(maxApr + 1));
     }
 
-    function _defaultEtherFiAdminCtorAddrs() internal view returns (EtherFiAdmin.ConstructorAddresses memory) {
-        return EtherFiAdmin.ConstructorAddresses({
+    function _defaultEtherFiAdminCtorAddrs() internal view returns (IEtherFiAdmin.ConstructorAddresses memory) {
+        return IEtherFiAdmin.ConstructorAddresses({
             etherFiOracle: address(etherFiOracleInstance),
             stakingManager: address(stakingManagerInstance),
             auctionManager: address(auctionInstance),

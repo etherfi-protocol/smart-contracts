@@ -52,7 +52,7 @@ contract RestakingRewardsRouterTest is Test {
 
         // Deploy LiquidityPool
         liquidityPoolImpl = new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: address(0),
                 nodesManager: address(0),
                 eETH: address(0),

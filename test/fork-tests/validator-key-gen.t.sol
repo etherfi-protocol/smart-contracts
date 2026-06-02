@@ -13,6 +13,7 @@ import "@etherfi/staking/interfaces/IEtherFiNode.sol";
 
 import "@etherfi/staking/StakingManager.sol";
 import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
 import "@etherfi/staking/EtherFiNodesManager.sol";
 import "@etherfi/staking/EtherFiNode.sol";
 import "@etherfi/staking/NodeOperatorManager.sol";
@@ -68,7 +69,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         // Wire LP immutables to real mainnet proxy addresses so calls into
         // eETH / withdrawRequestNFT / etc. land on live contracts.
         LiquidityPool liquidityPoolImpl = new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: address(stakingManager),
                 nodesManager: address(etherFiNodesManager),
                 eETH: 0x35fA164735182de50811E8e2E824cFb9B6118ac2,

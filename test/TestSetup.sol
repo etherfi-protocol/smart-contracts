@@ -17,6 +17,7 @@ import "@tests/common/ArrayTestHelper.sol";
 import "@etherfi/staking/interfaces/IStakingManager.sol";
 import "@etherfi/staking/interfaces/IEtherFiNode.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/deposits/interfaces/IDepositAdapter.sol";
 import "@etherfi/deposits/interfaces/ILiquifier.sol";
 import "@etherfi/staking/EtherFiNodesManager.sol";
 import "@etherfi/staking/StakingManager.sol";
@@ -47,6 +48,7 @@ import "@tests/TestERC20.sol";
 import "@etherfi/archive/MembershipManagerV0.sol";
 import "@etherfi/oracle/EtherFiOracle.sol";
 import "@etherfi/oracle/EtherFiAdmin.sol";
+import "@etherfi/oracle/interfaces/IEtherFiAdmin.sol";
 import "@etherfi/governance/EtherFiTimelock.sol";
 
 import "@etherfi/archive/BucketRateLimiter.sol";
@@ -565,16 +567,21 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         // Upgrade DepositAdapter on the fork so tests exercise the post-refactor
         // custom-error reverts instead of the still-deployed string-revert impl.
+        // Preserve the live token immutables (wETH/stETH/wstETH) by reading them
+        // off the deployed proxy — these are needed by the deposit paths, and the
+        // values differ per fork (mainnet vs testnet).
         address newDepositAdapterImpl = address(new DepositAdapter(
-            address(liquidityPoolInstance),
-            address(liquifierInstance),
-            address(weEthInstance),
-            address(eETHInstance),
-            0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2,
-            address(stEth),
-            0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0,
-            address(roleRegistryInstance),
-            address(blacklisterInstance)
+            IDepositAdapter.ConstructorAddresses({
+                liquidityPool: address(liquidityPoolInstance),
+                liquifier: address(liquifierInstance),
+                weETH: address(weEthInstance),
+                eETH: address(eETHInstance),
+                wETH: address(depositAdapterInstance.wETH()),
+                stETH: address(depositAdapterInstance.stETH()),
+                wstETH: address(depositAdapterInstance.wstETH()),
+                blacklister: address(blacklisterInstance),
+                roleRegistry: address(roleRegistryInstance)
+            })
         ));
         vm.prank(depositAdapterInstance.owner());
         depositAdapterInstance.upgradeTo(newDepositAdapterImpl);
@@ -585,7 +592,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // afterwards the new impl's `onlyUpgradeTimelock` takes over (and we
         // grant the role to relevant addresses below).
         address newLpImpl = address(new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: address(stakingManagerInstance),
                 nodesManager: address(managerInstance),
                 eETH: address(eETHInstance),
@@ -634,7 +641,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // route through the new impl's `onlyUpgradeTimelock`, which we grant
         // below.
         address newAdminImpl = address(new EtherFiAdmin(
-            EtherFiAdmin.ConstructorAddresses({
+            IEtherFiAdmin.ConstructorAddresses({
                 etherFiOracle: address(etherFiOracleInstance),
                 stakingManager: address(stakingManagerInstance),
                 auctionManager: address(auctionInstance),
@@ -673,7 +680,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             stEthChainlinkFeed = address(new MockChainlinkPriceFeed(int256(1 ether), 0));
         }
         address newLiquifierImpl = address(new Liquifier(
-            Liquifier.ConstructorAddresses({
+            ILiquifier.ConstructorAddresses({
                 liquidityPool: address(liquidityPoolInstance),
                 lidoWithdrawalQueue: address(lidoWithdrawalQueue),
                 lido: address(stEth),
@@ -797,7 +804,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
             // Deploy the new impl BEFORE pranking — see note above; the inlined
             // `new` would otherwise consume the single-shot vm.prank.
-            address newLiquifierImpl = address(new Liquifier(Liquifier.ConstructorAddresses({
+            address newLiquifierImpl = address(new Liquifier(ILiquifier.ConstructorAddresses({
                 liquidityPool: address(liquidityPoolInstance),
                 lidoWithdrawalQueue: address(lidoWithdrawalQueue),
                 lido: address(stEth),
@@ -997,7 +1004,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // =====================================================================
 
         // Liquifier first — EtherFiRestaker's constructor reads from it.
-        liquifierImplementation = new Liquifier(Liquifier.ConstructorAddresses({
+        liquifierImplementation = new Liquifier(ILiquifier.ConstructorAddresses({
             liquidityPool: address(liquidityPoolProxy),
             lidoWithdrawalQueue: address(lidoWithdrawalQueue),
             lido: address(stEth),
@@ -1107,7 +1114,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         addressProviderInstance = new AddressProvider(address(owner));
 
         liquidityPoolImplementation = new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: address(0x0),
                 nodesManager: address(0x0),
                 eETH: address(0x0),
@@ -1143,7 +1150,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // Re-deploy the impl now that etherFiRestakerProxy is known and upgrade the
         // already-initialized proxy in place. Creating a fresh proxy here would drop
         // the initialized owner set in Phase 3 and break later upgradeTo calls.
-        liquifierImplementation = new Liquifier(Liquifier.ConstructorAddresses({
+        liquifierImplementation = new Liquifier(ILiquifier.ConstructorAddresses({
             liquidityPool: address(liquidityPoolProxy),
             lidoWithdrawalQueue: address(lidoWithdrawalQueue),
             lido: address(stEth),
@@ -1170,9 +1177,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.expectRevert("Initializable: contract is already initialized");
         weEthImplementation.initialize(payable(address(liquidityPoolProxy)), address(eETHProxy));
         weEthInstance.upgradeTo(address(weEthImplementation));
-        vm.expectRevert(WeETH.AddressZero.selector);
+        vm.expectRevert(WeETH.ZeroAddress.selector);
         weEthInstance.initialize(address(0), address(eETHProxy));
-        vm.expectRevert(WeETH.AddressZero.selector);
+        vm.expectRevert(WeETH.ZeroAddress.selector);
         weEthInstance.initialize(payable(address(liquidityPoolProxy)), address(0));
         weEthInstance.initialize(payable(address(liquidityPoolProxy)), address(eETHProxy));
 
@@ -1234,7 +1241,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         // EtherFiAdmin
         etherFiAdminImplementation = new EtherFiAdmin(
-            EtherFiAdmin.ConstructorAddresses({
+            IEtherFiAdmin.ConstructorAddresses({
                 etherFiOracle: address(etherFiOracleProxy),
                 stakingManager: address(stakingManagerProxy),
                 auctionManager: address(auctionManagerProxy),
@@ -1292,7 +1299,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         // LiquidityPool — every dep is now a known proxy address
         liquidityPoolImplementation = new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: address(stakingManagerProxy),
                 nodesManager: address(etherFiNodeManagerProxy),
                 eETH: address(eETHProxy),
@@ -1534,7 +1541,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
     function _upgrade_etherfiAdmin() internal {
         address newAdminImpl = address(new EtherFiAdmin(
-            EtherFiAdmin.ConstructorAddresses({
+            IEtherFiAdmin.ConstructorAddresses({
                 etherFiOracle: address(etherFiOracleInstance),
                 stakingManager: address(stakingManagerInstance),
                 auctionManager: address(auctionInstance),
@@ -1557,7 +1564,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         etherFiOracleInstance.upgradeTo(newOracleImpl);
 
         address newAdminImpl = address(new EtherFiAdmin(
-            EtherFiAdmin.ConstructorAddresses({
+            IEtherFiAdmin.ConstructorAddresses({
                 etherFiOracle: address(etherFiOracleInstance),
                 stakingManager: address(stakingManagerInstance),
                 auctionManager: address(auctionInstance),
@@ -2254,7 +2261,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
     function _upgrade_liquidity_pool_contract() internal {
         address newImpl = address(new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: address(stakingManagerInstance),
                 nodesManager: address(managerInstance),
                 eETH: address(eETHInstance),
@@ -2275,7 +2282,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function _upgrade_liquifier() internal {
-        address newImpl = address(new Liquifier(Liquifier.ConstructorAddresses({
+        address newImpl = address(new Liquifier(ILiquifier.ConstructorAddresses({
             liquidityPool: address(liquidityPoolInstance),
             lidoWithdrawalQueue: address(lidoWithdrawalQueue),
             lido: address(stEth),
