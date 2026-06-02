@@ -9,7 +9,7 @@ import "@etherfi/governance/utils/Pausable.sol";
 import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
 import "@etherfi/governance/rate-limiting/libraries/BucketLimiter.sol";
 
-contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeable, DeprecatedOZPausable, RolesLibrary, Pausable {
+contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeable, DeprecatedOZPausable, Pausable {
 
     /// @dev Hardcoded callers for the per-address bucket API. Only the eETH and weETH
     ///      proxies can create/update/delete/consume per-address buckets; gating is

@@ -20,7 +20,7 @@ import "@etherfi/membership/libraries/GlobalIndexLibrary.sol";
 
 import "forge-std/console.sol";
 
-contract MembershipManager is Initializable, OwnableUpgradeable, DeprecatedOZPausable, UUPSUpgradeable, IMembershipManager, RolesLibrary, Pausable {
+contract MembershipManager is Initializable, OwnableUpgradeable, DeprecatedOZPausable, UUPSUpgradeable, IMembershipManager, Pausable {
     using SafeERC20 for IERC20;
 
     //--------------------------------------------------------------------------------------

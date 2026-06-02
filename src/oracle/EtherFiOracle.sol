@@ -11,7 +11,7 @@ import "@etherfi/governance/utils/Pausable.sol";
 import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
 
 
-contract EtherFiOracle is Initializable, OwnableUpgradeable, DeprecatedOZPausable, UUPSUpgradeable, IEtherFiOracle, RolesLibrary, Pausable {
+contract EtherFiOracle is Initializable, OwnableUpgradeable, DeprecatedOZPausable, UUPSUpgradeable, IEtherFiOracle, Pausable {
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------

@@ -12,7 +12,7 @@ import "@etherfi/governance/utils/Pausable.sol";
 import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
 
 /// Contract which helps us control our node operators and their permissions in different aspects of the protocol
-contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgradeable, DeprecatedOZPausable, OwnableUpgradeable, RolesLibrary, Pausable {
+contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgradeable, DeprecatedOZPausable, OwnableUpgradeable, Pausable {
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
