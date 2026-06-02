@@ -234,6 +234,11 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         return _claimWithdraw(tokenId, ownerOf(tokenId));
     }
 
+    /**
+     * @notice Claims multiple withdraw requests
+     * @param tokenIds The IDs of the withdrawal requests
+     * @dev burns the NFTs and transfers ETH from the liquidity pool to the owners, withdraw requests must be valid and finalized
+     */
     function batchClaimWithdraw(uint256[] calldata tokenIds) external nonReentrant nonBlacklisted {
         for (uint256 i = 0; i < tokenIds.length; i++) {
             _claimWithdraw(tokenIds[i], ownerOf(tokenIds[i]));
