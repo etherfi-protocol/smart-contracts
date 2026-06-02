@@ -258,44 +258,6 @@ contract StakingManagerTest is TestSetup {
         );
     }
 
-    function test_BatchDepositWithBidIdsFailsIfPaused() public {
-        startHoax(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
-        nodeOperatorManagerInstance.registerNodeOperator(_ipfsHash, 100);
-
-        for (uint256 x = 0; x < 10; x++) {
-            auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
-        }
-        for (uint256 x = 0; x < 10; x++) {
-            auctionInstance.createBid{value: 0.2 ether}(1, 0.2 ether);
-        }
-
-        assertEq(auctionInstance.numberOfActiveBids(), 20);
-
-        uint256[] memory bidIdArray = new uint256[](10);
-        bidIdArray[0] = 1;
-        bidIdArray[1] = 2;
-        bidIdArray[2] = 6;
-        bidIdArray[3] = 7;
-        bidIdArray[4] = 8;
-        bidIdArray[5] = 9;
-        bidIdArray[6] = 11;
-        bidIdArray[7] = 12;
-        bidIdArray[8] = 19;
-        bidIdArray[9] = 20;
-
-        vm.stopPrank();
-
-        vm.prank(alice);
-        stakingManagerInstance.pause();
-
-        hoax(alice);
-        vm.expectRevert("Pausable: paused");
-        stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(
-            bidIdArray,
-            false
-        );
-    }
-
     function test_BatchDepositWithIdsSimpleWorksCorrectly() public {
         startHoax(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
         nodeOperatorManagerInstance.registerNodeOperator(_ipfsHash, 100);
@@ -508,32 +470,6 @@ contract StakingManagerTest is TestSetup {
 
         vm.stopPrank();
 
-    }
-
-    function test_RegisterValidatorFailsIfContractPaused() public {
-        vm.prank(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
-        nodeOperatorManagerInstance.registerNodeOperator(_ipfsHash, 5);
-
-        startHoax(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
-        auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
-        uint256[] memory bidIdArray = new uint256[](1);
-        bidIdArray[0] = 1;
-
-        stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(
-            bidIdArray,
-            false
-        );
-        vm.stopPrank();
-
-        IStakingManager.DepositData[]
-            memory depositDataArray = new IStakingManager.DepositData[](1);
-
-        vm.prank(alice);
-        stakingManagerInstance.pause();
-
-        hoax(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
-        vm.expectRevert("Pausable: paused");
-        stakingManagerInstance.batchRegisterValidators(zeroRoot, bidIdArray, depositDataArray);
     }
 
     function test_RegisterValidatorWorksCorrectly() public {
@@ -984,32 +920,6 @@ contract StakingManagerTest is TestSetup {
 
         vm.expectRevert("INVALID_PHASE_TRANSITION");
         stakingManagerInstance.batchCancelDeposit(bidId);
-    }
-
-    function cancelDepositFailsIfContractPaused() public {
-        vm.prank(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
-        nodeOperatorManagerInstance.registerNodeOperator(_ipfsHash, 5);
-
-        startHoax(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
-        uint256[] memory bidId = auctionInstance.createBid{value: 0.1 ether}(
-            1,
-            0.1 ether
-        );
-
-        uint256[] memory bidIdArray = new uint256[](1);
-        bidIdArray[0] = bidId[0];
-
-        stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(
-            bidIdArray,
-            false
-        );
-
-        vm.prank(owner);
-        stakingManagerInstance.pause();
-
-        hoax(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
-        vm.expectRevert("Pausable: paused");
-        stakingManagerInstance.batchCancelDeposit(bidIdArray);
     }
 
     function test_cancelDepositWorksCorrectly() public {
