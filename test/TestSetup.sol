@@ -604,8 +604,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: address(etherFiAdminInstance),
                 membershipManager: address(membershipManagerV1Instance)
-            }),
-            0
+            })
         ));
         vm.prank(liquidityPoolInstance.owner());
         liquidityPoolInstance.upgradeTo(newLpImpl);
@@ -1126,8 +1125,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 blacklister: address(0x0),
                 etherFiAdminContract: address(0x0),
                 membershipManager: address(0x0)
-            }),
-            0
+            })
         );
 
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), admin);
@@ -1311,8 +1309,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: address(etherFiAdminProxy),
                 membershipManager: address(membershipManagerProxy)
-            }),
-            0
+            })
         );
         liquidityPoolInstance.upgradeTo(address(liquidityPoolImplementation));
 
@@ -2273,8 +2270,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: address(etherFiAdminInstance),
                 membershipManager: address(membershipManagerInstance)
-            }),
-            0
+            })
         ));
         vm.startPrank(liquidityPoolInstance.owner());
         liquidityPoolInstance.upgradeTo(newImpl);

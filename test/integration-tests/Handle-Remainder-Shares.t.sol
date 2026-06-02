@@ -22,8 +22,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: ETHERFI_ADMIN,
                 membershipManager: MEMBERSHIP_MANAGER
-            }),
-            0
+            })
         ));
     }
 

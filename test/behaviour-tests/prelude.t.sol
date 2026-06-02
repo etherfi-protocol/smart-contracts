@@ -118,8 +118,7 @@ contract PreludeTest is Test, ArrayTestHelper {
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: 0x0EF8fa4760Db8f5Cd4d993f3e3416f30f942D705,
                 membershipManager: 0x3d320286E014C3e1ce99Af6d6B00f0C1D63E3000
-            }),
-            0
+            })
         );
         vm.prank(LiquidityPool(payable(address(liquidityPool))).owner());
         LiquidityPool(payable(address(liquidityPool))).upgradeTo(address(liquidityPoolImpl));
