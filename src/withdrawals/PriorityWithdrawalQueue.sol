@@ -691,7 +691,11 @@ contract PriorityWithdrawalQueue is
         // `shareAtLive` if live dropped, and Guard 3 caps at `shareOfEEth` — the request's
         // own allocation, which is also the existing PWQ-side expectation.
         uint256 rate = Math.mulDiv(amountToWithdraw, SHARE_UNIT, request.shareOfEEth, Math.Rounding.Up);
-        uint256 burnedShares = liquidityPool.withdraw(amountToWithdraw, rate, request.shareOfEEth);
+        // `withdraw` unwinds only its share of the fulfill-time `totalValueOutOfLp` credit
+        // (`amountToWithdraw`); the remaining `feeEth` is unwound below by `returnLockedEth`.
+        // Together they sum to `request.amountOfEEth` — the amount credited at fulfill. Passing
+        // the full `amountOfEEth` here would double-count `feeEth` (once here, once in returnLockedEth).
+        uint256 burnedShares = liquidityPool.withdraw(amountToWithdraw, amountToWithdraw, rate, request.shareOfEEth);
 
         uint256 remainder = request.shareOfEEth > burnedShares 
             ? request.shareOfEEth - burnedShares 

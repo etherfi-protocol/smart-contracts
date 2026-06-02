@@ -794,7 +794,7 @@ contract ProtocolInvariantsHandler is StdUtils {
         // Pass `_shareOfEEth = sharesToBurn` so the new guards are no-ops and the handler
         // reproduces the pre-Option-5 burn behavior exactly.
         vm.prank(wrn);
-        try lp.withdraw(amount, rate, sharesToBurn) {
+        try lp.withdraw(amount, amount, rate, sharesToBurn) {
             ghost_ledgerTPE -= int256(amount);   // ETH leaves LP accounting
             callCounts["segClaim"]++;
         } catch (bytes memory err) {

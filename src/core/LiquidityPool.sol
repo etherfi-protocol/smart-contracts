@@ -288,7 +288,10 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     /**
      * @notice Settles a finalized claim for withdrawRequestNFT or priorityWithdrawalQueue.
-     * @param _amount The amount of ETH to withdraw
+     * @param _amount The amount of ETH paid to the claimer
+     * @param _amountOfEEth The fulfill-time credit to remove from `totalValueOutOfLp`. Must
+     *        equal what was credited at fulfill/lock, not `_amount` (the two diverge on a
+     *        down-rebase). See the trust-model note below.
      * @param _rate The rate of the withdraw
      * @param _shareOfEEth The share of eETH to withdraw
      * @return uint256 The amount of eETH burned
@@ -319,8 +322,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
      * ETH was already segregated to the caller at finalize/fulfill via
      * `addEthAmountLockedForWithdrawal` / `transferLockedEthForPriority`; LP only
      * performs accounting (burn + `totalValueOutOfLp -=`).
+     * `_amountOfEEth` is trusted caller state, not bounded by Guards 1-3; the checked
+     * `totalValueOutOfLp -= _amountOfEEth` is the only backstop (reverts on over-assertion).
+     * A negative rebase that drops `totalValueOutOfLp` below it reverts the claim
+     * (finalized-withdrawal DoS, bounded by EtherFiAdmin's rebase-APR cap).
     */
-    function withdraw(uint256 _amount, uint256 _rate, uint256 _shareOfEEth) external nonReentrant returns (uint256) {
+    function withdraw(uint256 _amount, uint256 _amountOfEEth, uint256 _rate, uint256 _shareOfEEth) external nonReentrant returns (uint256) {
         if (msg.sender != address(withdrawRequestNFT) && msg.sender != address(priorityWithdrawalQueue)) {
             revert IncorrectCaller();
         }
@@ -342,7 +349,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         if (share == 0) revert InvalidAmount();
         if (eETH.shares(msg.sender) < share) revert InsufficientLiquidity();
 
-        totalValueOutOfLp -= uint128(_amount);
+        totalValueOutOfLp -= uint128(_amountOfEEth);
         eETH.burnShares(msg.sender, share);
 
         return share;
