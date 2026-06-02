@@ -205,6 +205,12 @@ contract EtherFiOracleTest is TestSetup {
     }
 
     function test_consensus() public {
+        // Seed TVL so the report's positive accruedRewards stays within the 25 bps
+        // LiquidityPool positive rebase cap (a zero-TVL pool rejects any positive rebase).
+        vm.deal(alice, 1000 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 1000 ether}();
+
         // Now it's period 2!
         _moveClock(1024 + 2 * slotsPerEpoch);
 
@@ -442,22 +448,28 @@ contract EtherFiOracleTest is TestSetup {
     }
 
     function test_huge_positive_rebaes() public {
-        // TVL after `launch_validator` is 60 ETH
-        // EtherFIAdmin limits the APR per rebase as 100 % == 10000 bps
-        // launch_validator();
+        // Seed a realistic TVL so the APR formula is non-trivial. EtherFiAdmin still
+        // limits the per-report APR (acceptableRebaseAprInBps == 10000 bps == 100%);
+        // note that LiquidityPool independently caps a single positive rebase at 25 bps
+        // of TVL, so the "below 100% APR" leg also has to stay under that cap.
+        vm.deal(alice, 1000 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 1000 ether}();
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
 
         _moveClock(1 days / 12);
 
-        // Change in APR is below 100%
-        report.accruedRewards = int128(64 ether - 1 ether) / int128(365);
+        // 1 ETH on 1000 ETH TVL: 10 bps (< the 25 bps LP cap) and ~36% annualized
+        // (< the 100% APR cap) — accepted.
+        report.accruedRewards = 1 ether;
         _executeAdminTasks(report);
 
         _moveClock(1 days / 12);
 
-        // Change in APR is above 100%, which reverts
-        report.accruedRewards = int128(64 ether + 1 ether) / int128(365);
+        // A huge positive rebase blows past the acceptable APR and is rejected by the
+        // oracle TVL-change guard before it ever reaches the LiquidityPool rebase.
+        report.accruedRewards = 10 ether;
         _executeAdminTasks(report, "EtherFiAdmin: TVL changed too much");
     }
 
@@ -467,22 +479,26 @@ contract EtherFiOracleTest is TestSetup {
 
     // Note: Working with MembershipManager which is to be deprecated
     function test_huge_negative_rebaes() public {
-        // TVL after `launch_validator` is 60 ETH
-        // EtherFIAdmin limits the APR per rebase as 100 % == 10000 bps
-        // launch_validator();
+        // Seed a realistic TVL so the APR formula is non-trivial. The negative
+        // (slashing) direction is NOT bounded by the LiquidityPool positive cap — it is
+        // governed by the oracle's APR guard (acceptableRebaseAprInBps == 100%).
+        vm.deal(alice, 1000 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 1000 ether}();
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
 
         _moveClock(1 days / 12);
 
-        // Change in APR is below 100%
-        report.accruedRewards = int128(63 ether) / int128(365);
+        // Small positive rebase within both caps to advance the handled slot.
+        report.accruedRewards = 1 ether;
         _executeAdminTasks(report);
 
         _moveClock(1 days / 12);
 
-        // Change in APR is above 100%, which reverts
-        report.accruedRewards = int128(-65 ether) / int128(365);
+        // A huge negative rebase exceeds the acceptable APR (in absolute terms) and is
+        // rejected by the oracle TVL-change guard.
+        report.accruedRewards = -10 ether;
         _executeAdminTasks(report, "EtherFiAdmin: TVL changed too much");
     }
 
@@ -527,6 +543,12 @@ contract EtherFiOracleTest is TestSetup {
     }
 
     function test_postReportWaitTimeInSlots() public {
+        // Seed TVL so the report's positive accruedRewards stays within the 25 bps
+        // LiquidityPool positive rebase cap (a zero-TVL pool rejects any positive rebase).
+        vm.deal(alice, 1000 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 1000 ether}();
+
         bytes[] memory emptyBytes = new bytes[](0);
         vm.prank(owner);
         etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
@@ -809,6 +831,12 @@ contract EtherFiOracleTest is TestSetup {
     }
 
     function test_slotForNextReport_edgeCases() public {
+        // Seed TVL so the report's positive accruedRewards stays within the 25 bps
+        // LiquidityPool positive rebase cap (a zero-TVL pool rejects any positive rebase).
+        vm.deal(alice, 1000 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 1000 ether}();
+
         vm.prank(owner);
         etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
@@ -828,6 +856,12 @@ contract EtherFiOracleTest is TestSetup {
     }
 
     function test_blockStampForNextReport() public {
+        // Seed TVL so the report's positive accruedRewards stays within the 25 bps
+        // LiquidityPool positive rebase cap (a zero-TVL pool rejects any positive rebase).
+        vm.deal(alice, 1000 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 1000 ether}();
+
         vm.prank(owner);
         etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 

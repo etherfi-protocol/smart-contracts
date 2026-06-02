@@ -49,8 +49,7 @@ contract ProtocolInvariantsTest is TestSetup {
         // without this seed, the three "after rebase" fuzz tests below
         // would silently degenerate into plain wrap/deposit tests because
         // their `outOfLp / 3` bound would be zero.
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(int128(int256(uint256(10 ether))));
+        _rebaseUncapped(int128(int256(uint256(10 ether))));
     }
 
     // =====================================================================
@@ -335,8 +334,7 @@ contract ProtocolInvariantsTest is TestSetup {
         int256 cap = int256(outOfLp / 3);
         if (cap < 1) cap = 1;
         rebaseDelta = int128(bound(int256(rebaseDelta), -cap, cap));
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(rebaseDelta);
+        _rebaseUncapped(rebaseDelta);
 
         uint256 aliceEEth = eETHInstance.balanceOf(alice);
         if (aliceEEth < 4) return; // nothing meaningful to wrap; skip the case
@@ -534,8 +532,7 @@ contract ProtocolInvariantsTest is TestSetup {
         uint256 cap = outOfLp / 3;
         if (cap < 1) cap = 1;
         rebaseGain = uint128(bound(uint256(rebaseGain), 1, cap));
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(int128(rebaseGain));
+        _rebaseUncapped(int128(rebaseGain));
         depositAmt = uint128(bound(uint256(depositAmt), 1 gwei, 100_000 ether));
 
         address user = _actor(uint64(uint256(keccak256(abi.encode(rebaseGain, depositAmt)))));
@@ -561,8 +558,7 @@ contract ProtocolInvariantsTest is TestSetup {
         uint256 cap = outOfLp / 3;
         if (cap < 1) cap = 1;
         rebaseLoss = uint128(bound(uint256(rebaseLoss), 1, cap));
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(-int128(rebaseLoss));
+        _rebaseUncapped(-int128(rebaseLoss));
         depositAmt = uint128(bound(uint256(depositAmt), 1 gwei, 100_000 ether));
 
         address user = _actor(uint64(uint256(keccak256(abi.encode(rebaseLoss, depositAmt)))));
@@ -645,8 +641,7 @@ contract ProtocolInvariantsTest is TestSetup {
         // packed (uint128 totalValueOutOfLp | uint128 totalValueInLp) at slot
         // for `totalValueOutOfLp` declared first.
         // Avoid storage poking — instead drive totalValueOutOfLp via rebase.
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(int128(50 ether));
+        _rebaseUncapped(int128(50 ether));
 
         // ERM's stock and the OutOfLp budget are now > 0; fuzz a reasonable
         // value to burn against.
@@ -686,8 +681,7 @@ contract ProtocolInvariantsTest is TestSetup {
         liquidityPoolInstance.deposit{value: 200 ether}();
         vm.prank(alice);
         eETHInstance.transfer(address(etherFiRedemptionManagerInstance), 100 ether);
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(int128(50 ether));
+        _rebaseUncapped(int128(50 ether));
 
         valueETH = uint128(bound(uint256(valueETH), 1 ether, 10 ether));
         uint256 minShares = liquidityPoolInstance.sharesForWithdrawalAmount(valueETH);

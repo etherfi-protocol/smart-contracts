@@ -1887,6 +1887,33 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         etherFiAdminInstance.executeTasks(_report);
     }
 
+    /// @notice Applies a rebase that may exceed the per-report 25 bps positive cap
+    ///         (LiquidityPool.MAX_POSITIVE_REBASE_BPS) by splitting a positive rebase
+    ///         into sub-cap chunks. `rebase` is purely additive (totalValueOutOfLp += amount),
+    ///         so applying the chunks back-to-back leaves the final TVL and share rate
+    ///         identical to a single rebase of `_amount` — every post-rebase assertion holds.
+    ///         Negative/zero rebases are applied in a single call (no positive cap applies).
+    /// @dev Pranks the LP's registered membership manager, so it works in both the unit
+    ///      setup and mainnet-fork setups regardless of which instance is wired in.
+    function _rebaseUncapped(int128 _amount) internal {
+        address mm = liquidityPoolInstance.membershipManager();
+        if (_amount <= 0) {
+            vm.prank(mm);
+            liquidityPoolInstance.rebase(_amount);
+            return;
+        }
+        uint256 remaining = uint256(uint128(_amount));
+        while (remaining > 0) {
+            uint256 maxIncrease = (liquidityPoolInstance.getTotalPooledEther()
+                * liquidityPoolInstance.MAX_POSITIVE_REBASE_BPS()) / 10_000;
+            require(maxIncrease > 0, "_rebaseUncapped: TVL too small for a positive rebase");
+            uint256 chunk = remaining < maxIncrease ? remaining : maxIncrease;
+            vm.prank(mm);
+            liquidityPoolInstance.rebase(int128(uint128(chunk)));
+            remaining -= chunk;
+        }
+    }
+
     function _emptyOracleReport() internal view returns (IEtherFiOracle.OracleReport memory report) {
         uint256[] memory emptyVals = new uint256[](0);
         uint32[] memory emptyVals32 = new uint32[](0);

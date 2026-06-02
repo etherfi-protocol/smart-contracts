@@ -85,8 +85,7 @@ contract WithdrawRemainderInvariantTest is TestSetup {
         // request -> negative-rebase -> finalize -> claim chain that
         // produces a positive stranded-ETH delta (the property the suite
         // is built to assert).
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(int128(int256(uint256(200 ether))));
+        _rebaseUncapped(int128(int256(uint256(200 ether))));
 
         handler = new WithdrawRemainderHandler(
             liquidityPoolInstance,
