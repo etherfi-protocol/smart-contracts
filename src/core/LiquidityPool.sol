@@ -20,7 +20,7 @@ import "@etherfi/governance/utils/ReentrancyGuardNamespaced.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 
-contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardNamespaced, PausableUntil, RolesLibrary, ILiquidityPool {
+contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardNamespaced, PausableUntil, ILiquidityPool {
     using SafeERC20 for IERC20;
 
     //--------------------------------------------------------------------------------------
@@ -42,7 +42,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     // deprecated storage slots
     uint8 private __gap_3;
     uint128 private DEPRECATED_ethAmountLockedForWithdrawal;
-    bool public paused;
+    // deprecated storage slot — pause state migrated to the namespaced {Pausable} storage
+    bool private __deprecated_paused;
 
     // deprecated storage slots
     uint256[4] private __gap_4;
@@ -83,9 +84,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-    event Paused();
-    event Unpaused();
-
     event Deposit(address indexed sender, uint256 amount, SourceOfFunds source, address referral);
     event Withdraw(address indexed sender, address recipient, uint256 amount, SourceOfFunds source);
     event EEthSharesBurnedForNonETHWithdrawal(uint256 amountSharesToBurn, uint256 withdrawalValueInETH);
@@ -122,10 +120,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     error MigrationNotComplete();
     error AlreadyRegistered();
     error NotRegistered();
-    error ContractPaused();
     error EETHRateDeflation();
-    error AlreadyPaused();
-    error NotPaused();
 
     //--------------------------------------------------------------------------------------
     //----------------------------  CONSTRUCTOR  ------------------------------
@@ -167,7 +162,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         
         __Ownable_init();
         __UUPSUpgradeable_init();
-        paused = true;
     }
 
     /**
@@ -606,56 +600,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     //--------------------------------------------------------------------------------------
-    //------------------------------  PAUSING FUNCTIONS  -----------------------------------
-    //--------------------------------------------------------------------------------------
-    /**
-     * @notice Pauses the contract
-     * @dev Only callable by the operating multisig
-     */
-    function pauseContract() external onlyOperatingMultisig {
-        if (paused) revert AlreadyPaused();
-
-        paused = true;
-        emit Paused();
-    }
-
-    /**
-     * @notice Unpauses the contract
-     * @dev Only callable by the operating multisig
-     */
-    function unPauseContract() external onlyOperatingMultisig {
-        if (!paused) revert NotPaused();
-
-        paused = false;
-        emit Unpaused();
-    }
-
-    /**
-     * @notice Pauses contract until pasuUntilDuration
-     * @dev Only callable by the guardian
-     */
-    function pauseContractUntil() external onlyGuardian {
-        _pauseUntil();
-    }
-
-    /**
-     * @notice Unpauses contract from pauseUntil
-     * @dev Only callable by the operating multisig
-     */
-    function unpauseContractUntil() external onlyOperatingMultisig {
-        _unpauseUntil();
-    }
-
-    /**
-     * @notice Sets the pause duration for the contract
-     * @param _pauseUntilDuration The new pause duration
-     * @dev Only callable by the admin
-     */
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
-        _setPauseUntilDuration(_pauseUntilDuration);
-    }
-
-    //--------------------------------------------------------------------------------------
     //------------------------------  SETTER FUNCTIONS  ------------------------------------
     //--------------------------------------------------------------------------------------
     /**
@@ -828,13 +772,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     /**
-     * @notice Checks if the contract is paused
-     */
-    function _requireNotPaused() internal view virtual {
-        if (paused) revert ContractPaused();
-    }
-
-    /**
      * @notice Authorizes the upgrade of the contract
      * @param newImplementation The new implementation address
      * @dev Only callable by the upgrade timelock
@@ -933,17 +870,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
     //--------------------------------------------------------------------------------------
-    /**
-     * @notice Modifier to check if the contract is not paused
-     * @dev Only callable when the contract is not paused and not paused until 
-     * the pauseUntilDuration
-     */
-    modifier whenNotPaused() {
-        _requireNotPaused();
-        _requireNotPausedUntil();
-        _;
-    }
-
     /**
      * @notice Modifier to check if the caller is not blacklisted
      * @dev Only callable by the blacklister

@@ -2,16 +2,17 @@
 pragma solidity ^0.8.13;
 
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 import "@etherfi/staking/interfaces/INodeOperatorManager.sol";
 import "@etherfi/staking/interfaces/IAuctionManager.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
+import "@etherfi/governance/utils/Pausable.sol";
+import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
 
 /// Contract which helps us control our node operators and their permissions in different aspects of the protocol
-contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgradeable, PausableUpgradeable, OwnableUpgradeable, RolesLibrary {
+contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgradeable, DeprecatedOZPausable, OwnableUpgradeable, RolesLibrary, Pausable {
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -71,7 +72,6 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
 
     /// @notice initializes contract
     function initialize() external initializer {
-        __Pausable_init();
         __Ownable_init();
         __UUPSUpgradeable_init();
     }
@@ -152,16 +152,6 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
         whitelistedAddresses[_address] = false;
 
         emit RemovedFromWhitelist(_address);
-    }
-
-    //Pauses the contract
-    function pauseContract() external onlyOperatingMultisig {
-        _pause();
-    }
-
-    //Unpauses the contract
-    function unPauseContract() external onlyOperatingMultisig {
-        _unpause();
     }
 
     /// @notice Function to check whether an operator is approved for a specified source of funds

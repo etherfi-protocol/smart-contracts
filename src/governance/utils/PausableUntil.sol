@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import "@etherfi/governance/interfaces/IRoleRegistry.sol";
+import "@etherfi/governance/utils/Pausable.sol";
 
-abstract contract PausableUntil {
+abstract contract PausableUntil is Pausable {
     //--------------------------------------------------------------------------------------
     //------------------------------  STORAGE STRUCT  --------------------------------------
     //--------------------------------------------------------------------------------------
@@ -43,6 +43,39 @@ abstract contract PausableUntil {
     error ContractNotPausedUntil();
     error PauserCooldownStillActive();
     error InvalidPauseUntilDuration();
+
+    //--------------------------------------------------------------------------------------
+    //----------------------------  PAUSING FUNCTIONS  -------------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Pause the contract for the configured duration
+     * @dev gated to the guardian; `virtual` so contracts requiring stricter gating (e.g. the
+     *      super guardian for eETH/weETH) can override the access control
+     */
+    function pauseUntil() external virtual onlyGuardian {
+        _pauseUntil();
+    }
+
+    /**
+     * @notice Lift a timed pause early
+     * @dev gated to the operating multisig
+     */
+    function unpauseUntil() external virtual onlyOperatingMultisig {
+        _requirePausedUntil();
+        PausableUntilStorage storage $ = _getPausableUntilStorage();
+        $.pausedUntil = 0;
+        emit UnpausedUntil();
+    }
+
+    /**
+     * @notice Set the duration applied by {pauseUntil}
+     * @dev gated to the operating timelock (admin)
+     */
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external virtual onlyAdmin {
+        if (_pauseUntilDuration < MIN_PAUSE_DURATION || _pauseUntilDuration > MAX_PAUSE_DURATION) revert InvalidPauseUntilDuration();
+        _getPausableUntilStorage().pauseUntilDuration = _pauseUntilDuration;
+        emit PauseUntilDurationSet(_pauseUntilDuration);
+    }
 
     //--------------------------------------------------------------------------------------
     //----------------------------  INTERNAL FUNCTIONS  -------------------------------------
@@ -93,26 +126,6 @@ abstract contract PausableUntil {
         emit PausedUntil($.pausedUntil);
     }
 
-    /**
-     * @notice Unpause the contract until
-     */
-    function _unpauseUntil() internal {
-        _requirePausedUntil();
-        PausableUntilStorage storage $ = _getPausableUntilStorage();
-        $.pausedUntil = 0;
-        emit UnpausedUntil();
-    }
-
-    /**
-     * @notice Set the pause duration for the contract
-     * @param _pauseUntilDuration The new pause duration
-     */
-    function _setPauseUntilDuration(uint256 _pauseUntilDuration) internal {
-        if (_pauseUntilDuration < MIN_PAUSE_DURATION || _pauseUntilDuration > MAX_PAUSE_DURATION) revert InvalidPauseUntilDuration();
-        _getPausableUntilStorage().pauseUntilDuration = _pauseUntilDuration;
-        emit PauseUntilDurationSet(_pauseUntilDuration);
-    }
-
     //--------------------------------------------------------------------------------------
     //-----------------------------------  GETTERS  ----------------------------------------
     //--------------------------------------------------------------------------------------
@@ -149,6 +162,18 @@ abstract contract PausableUntil {
      * @dev Only callable when the contract is not paused until
      */
     modifier whenNotPausedUntil() {
+        _requireNotPausedUntil();
+        _;
+    }
+
+    /**
+     * @notice Modifier enforcing both the indefinite pause and the timed pause
+     * @dev overrides {Pausable-whenNotPaused} so any function gated by `whenNotPaused` is
+     *      blocked during a timed pause too — without needing a per-contract
+     *      `_requireNotPaused` override
+     */
+    modifier whenNotPaused() override {
+        _requireNotPaused();
         _requireNotPausedUntil();
         _;
     }

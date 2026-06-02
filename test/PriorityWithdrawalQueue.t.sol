@@ -1315,41 +1315,41 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         assertFalse(priorityQueue.paused(), "Should not be paused initially");
 
         vm.prank(alice);
-        priorityQueue.pauseContract();
+        priorityQueue.pause();
 
         assertTrue(priorityQueue.paused(), "Should be paused after pauseContract");
 
         // Cannot request withdraw when paused
         vm.startPrank(vipUser);
         eETHInstance.approve(address(priorityQueue), 1 ether);
-        vm.expectRevert(PriorityWithdrawalQueue.ContractPaused.selector);
+        vm.expectRevert(Pausable.ContractPaused.selector);
         priorityQueue.requestWithdraw(1 ether, 0);
         vm.stopPrank();
     }
 
     function test_unPauseContract() public {
         vm.prank(alice);
-        priorityQueue.pauseContract();
+        priorityQueue.pause();
         assertTrue(priorityQueue.paused(), "Should be paused");
 
         vm.prank(alice);
-        priorityQueue.unPauseContract();
+        priorityQueue.unpause();
         assertFalse(priorityQueue.paused(), "Should be unpaused");
     }
 
     function test_revert_pauseWhenAlreadyPaused() public {
         vm.prank(alice);
-        priorityQueue.pauseContract();
+        priorityQueue.pause();
 
         vm.prank(alice);
-        vm.expectRevert(PriorityWithdrawalQueue.ContractPaused.selector);
-        priorityQueue.pauseContract();
+        vm.expectRevert(Pausable.AlreadyPaused.selector);
+        priorityQueue.pause();
     }
 
     function test_revert_unpauseWhenNotPaused() public {
         vm.prank(alice);
-        vm.expectRevert(PriorityWithdrawalQueue.ContractNotPaused.selector);
-        priorityQueue.unPauseContract();
+        vm.expectRevert(Pausable.NotPaused.selector);
+        priorityQueue.unpause();
     }
 
     function test_claimWithdraw_succeedsWhenPaused() public {
@@ -1365,7 +1365,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         // Pause AFTER fulfill so the request is finalized but the queue is paused at claim time.
         vm.prank(alice);
-        priorityQueue.pauseContract();
+        priorityQueue.pause();
         assertTrue(priorityQueue.paused(), "precondition: queue must be paused");
 
         uint256 userEthBefore = vipUser.balance;
@@ -1391,7 +1391,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         priorityQueue.fulfillRequests(requests);
 
         vm.prank(alice);
-        priorityQueue.pauseContract();
+        priorityQueue.pause();
 
         uint256 ethBefore = vipUser.balance;
         vm.prank(vipUser);
@@ -1413,9 +1413,9 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         // Pause both contracts (the audit's worst-case "everything paused at once" scenario).
         vm.prank(alice);
-        priorityQueue.pauseContract();
+        priorityQueue.pause();
         vm.prank(admin);
-        liquidityPoolInstance.pauseContract();
+        liquidityPoolInstance.pause();
         assertTrue(priorityQueue.paused(), "precondition: queue must be paused");
         assertTrue(liquidityPoolInstance.paused(), "precondition: LP must be paused");
 
@@ -1463,33 +1463,33 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         _grantPauseUntilRoles();
         vm.prank(regularUser);
         vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
-        priorityQueue.pauseContractUntil();
+        priorityQueue.pauseUntil();
     }
 
     function test_pauseContractUntil_setsState() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        priorityQueue.pauseContractUntil();
+        priorityQueue.pauseUntil();
         assertEq(_pausedUntil(), block.timestamp + priorityQueue.MAX_PAUSE_DURATION());
     }
 
     function test_unpauseContractUntil_requiresRole() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        priorityQueue.pauseContractUntil();
+        priorityQueue.pauseUntil();
 
         vm.prank(regularUser);
         vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
-        priorityQueue.unpauseContractUntil();
+        priorityQueue.unpauseUntil();
     }
 
     function test_unpauseContractUntil_clearsState() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        priorityQueue.pauseContractUntil();
+        priorityQueue.pauseUntil();
 
         vm.prank(unpauseUntilUnpauser);
-        priorityQueue.unpauseContractUntil();
+        priorityQueue.unpauseUntil();
         assertEq(_pausedUntil(), 0);
     }
 
@@ -1497,7 +1497,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         _grantPauseUntilRoles();
         vm.prank(unpauseUntilUnpauser);
         vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
-        priorityQueue.unpauseContractUntil();
+        priorityQueue.unpauseUntil();
     }
 
     // --- setPauseUntilDuration ---
@@ -1524,7 +1524,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         priorityQueue.setPauseUntilDuration(d);
 
         vm.prank(pauseUntilPauser);
-        priorityQueue.pauseContractUntil();
+        priorityQueue.pauseUntil();
         assertEq(_pausedUntil(), block.timestamp + d);
     }
 
@@ -1547,7 +1547,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     function test_requestWithdraw_blockedByPauseContractUntil() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        priorityQueue.pauseContractUntil();
+        priorityQueue.pauseUntil();
 
         vm.startPrank(vipUser);
         eETHInstance.approve(address(priorityQueue), 1 ether);
@@ -1561,7 +1561,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     function test_requestWithdrawWithPermit_blockedByPauseContractUntil() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        priorityQueue.pauseContractUntil();
+        priorityQueue.pauseUntil();
 
         IPriorityWithdrawalQueue.PermitInput memory emptyPermit;
         vm.prank(vipUser);
@@ -1574,7 +1574,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     function test_requestWithdrawWithWeETH_blockedByPauseContractUntil() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        priorityQueue.pauseContractUntil();
+        priorityQueue.pauseUntil();
 
         vm.prank(vipUser);
         vm.expectRevert(
@@ -1586,7 +1586,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     function test_requestWithdrawWithWeETHAndPermit_blockedByPauseContractUntil() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        priorityQueue.pauseContractUntil();
+        priorityQueue.pauseUntil();
 
         IPriorityWithdrawalQueue.PermitInput memory emptyPermit;
         vm.prank(vipUser);
@@ -1602,7 +1602,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        priorityQueue.pauseContractUntil();
+        priorityQueue.pauseUntil();
 
         vm.prank(vipUser);
         vm.expectRevert(
@@ -1619,7 +1619,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        priorityQueue.pauseContractUntil();
+        priorityQueue.pauseUntil();
 
         vm.prank(requestManager);
         vm.expectRevert(
@@ -1631,7 +1631,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     function test_requestWithdraw_unblockedAfterPauseExpires() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        priorityQueue.pauseContractUntil();
+        priorityQueue.pauseUntil();
 
         vm.warp(block.timestamp + priorityQueue.MAX_PAUSE_DURATION() + 1);
 

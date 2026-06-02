@@ -418,13 +418,13 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
         // Pauser pauses the contract
         vm.startPrank(pauser);
-        etherFiRedemptionManagerInstance.pauseContract();
+        etherFiRedemptionManagerInstance.pause();
         assertTrue(etherFiRedemptionManagerInstance.paused());
         vm.stopPrank();
 
         // Unpauser unpauses the contract
         vm.startPrank(unpauser);
-        etherFiRedemptionManagerInstance.unPauseContract();
+        etherFiRedemptionManagerInstance.unpause();
         assertFalse(etherFiRedemptionManagerInstance.paused());
         vm.stopPrank();
 
@@ -1222,15 +1222,15 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         roleRegistryInstance.grantRole(PAUSER_ROLE, pauser);
 
         vm.prank(pauser);
-        etherFiRedemptionManagerInstance.pauseContract();
+        etherFiRedemptionManagerInstance.pause();
         assertTrue(etherFiRedemptionManagerInstance.paused());
 
         // Should not be able to redeem when paused
         vm.startPrank(user);
         eETHInstance.approve(address(etherFiRedemptionManagerInstance), 10 ether);
-        vm.expectRevert("Pausable: paused");
+        vm.expectRevert(Pausable.ContractPaused.selector);
         etherFiRedemptionManagerInstance.redeemEEth(10 ether, user, ETH_ADDRESS);
-        vm.expectRevert("Pausable: paused");
+        vm.expectRevert(Pausable.ContractPaused.selector);
         etherFiRedemptionManagerInstance.redeemWeEth(10 ether, user, ETH_ADDRESS);
         vm.stopPrank();
 
@@ -1241,7 +1241,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         roleRegistryInstance.grantRole(UNPAUSER_ROLE, unpauser);
 
         vm.prank(unpauser);
-        etherFiRedemptionManagerInstance.unPauseContract();
+        etherFiRedemptionManagerInstance.unpause();
         assertFalse(etherFiRedemptionManagerInstance.paused());
 
         // Should be able to redeem after unpause
@@ -1787,33 +1787,33 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         _grantRmPauseUntilRoles();
         vm.prank(bob);
         vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
-        etherFiRedemptionManagerInstance.pauseContractUntil();
+        etherFiRedemptionManagerInstance.pauseUntil();
     }
 
     function test_pauseContractUntil_setsState() public {
         _grantRmPauseUntilRoles();
         vm.prank(rmPauseUntilPauser);
-        etherFiRedemptionManagerInstance.pauseContractUntil();
+        etherFiRedemptionManagerInstance.pauseUntil();
         assertEq(_rmPausedUntil(), block.timestamp + etherFiRedemptionManagerInstance.MAX_PAUSE_DURATION());
     }
 
     function test_unpauseContractUntil_requiresRole() public {
         _grantRmPauseUntilRoles();
         vm.prank(rmPauseUntilPauser);
-        etherFiRedemptionManagerInstance.pauseContractUntil();
+        etherFiRedemptionManagerInstance.pauseUntil();
 
         vm.prank(bob);
         vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
-        etherFiRedemptionManagerInstance.unpauseContractUntil();
+        etherFiRedemptionManagerInstance.unpauseUntil();
     }
 
     function test_unpauseContractUntil_clearsState() public {
         _grantRmPauseUntilRoles();
         vm.prank(rmPauseUntilPauser);
-        etherFiRedemptionManagerInstance.pauseContractUntil();
+        etherFiRedemptionManagerInstance.pauseUntil();
 
         vm.prank(rmUnpauseUntilUnpauser);
-        etherFiRedemptionManagerInstance.unpauseContractUntil();
+        etherFiRedemptionManagerInstance.unpauseUntil();
         assertEq(_rmPausedUntil(), 0);
     }
 
@@ -1821,7 +1821,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         _grantRmPauseUntilRoles();
         vm.prank(rmUnpauseUntilUnpauser);
         vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
-        etherFiRedemptionManagerInstance.unpauseContractUntil();
+        etherFiRedemptionManagerInstance.unpauseUntil();
     }
 
     // --- setPauseUntilDuration ---
@@ -1848,7 +1848,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         etherFiRedemptionManagerInstance.setPauseUntilDuration(d);
 
         vm.prank(rmPauseUntilPauser);
-        etherFiRedemptionManagerInstance.pauseContractUntil();
+        etherFiRedemptionManagerInstance.pauseUntil();
         assertEq(_rmPausedUntil(), block.timestamp + d);
     }
 
@@ -1872,7 +1872,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         _setupRedeemScenario();
         _grantRmPauseUntilRoles();
         vm.prank(rmPauseUntilPauser);
-        etherFiRedemptionManagerInstance.pauseContractUntil();
+        etherFiRedemptionManagerInstance.pauseUntil();
 
         vm.prank(user);
         vm.expectRevert(
@@ -1892,7 +1892,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
         _grantRmPauseUntilRoles();
         vm.prank(rmPauseUntilPauser);
-        etherFiRedemptionManagerInstance.pauseContractUntil();
+        etherFiRedemptionManagerInstance.pauseUntil();
 
         vm.prank(user);
         vm.expectRevert(
@@ -1905,7 +1905,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         _setupRedeemScenario();
         _grantRmPauseUntilRoles();
         vm.prank(rmPauseUntilPauser);
-        etherFiRedemptionManagerInstance.pauseContractUntil();
+        etherFiRedemptionManagerInstance.pauseUntil();
 
         IeETH.PermitInput memory emptyPermit;
         vm.prank(user);
@@ -1919,7 +1919,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         _setupRedeemScenario();
         _grantRmPauseUntilRoles();
         vm.prank(rmPauseUntilPauser);
-        etherFiRedemptionManagerInstance.pauseContractUntil();
+        etherFiRedemptionManagerInstance.pauseUntil();
 
         IWeETH.PermitInput memory emptyPermit;
         vm.prank(user);
@@ -1933,7 +1933,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         _setupRedeemScenario();
         _grantRmPauseUntilRoles();
         vm.prank(rmPauseUntilPauser);
-        etherFiRedemptionManagerInstance.pauseContractUntil();
+        etherFiRedemptionManagerInstance.pauseUntil();
 
         vm.warp(block.timestamp + etherFiRedemptionManagerInstance.MAX_PAUSE_DURATION() + 1);
 
@@ -1945,9 +1945,9 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         _setupRedeemScenario();
         _grantRmPauseUntilRoles();
         vm.prank(rmPauseUntilPauser);
-        etherFiRedemptionManagerInstance.pauseContractUntil();
+        etherFiRedemptionManagerInstance.pauseUntil();
         vm.prank(rmUnpauseUntilUnpauser);
-        etherFiRedemptionManagerInstance.unpauseContractUntil();
+        etherFiRedemptionManagerInstance.unpauseUntil();
 
         vm.prank(user);
         etherFiRedemptionManagerInstance.redeemEEth(1 ether, user, ETH_ADDRESS);

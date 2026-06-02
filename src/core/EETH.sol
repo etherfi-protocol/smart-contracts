@@ -17,7 +17,7 @@ import "@etherfi/governance/interfaces/IBlacklister.sol";
 import "@etherfi/governance/rate-limiting/RateLimitedToken.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 
-contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, IERC20PermitUpgradeable, IeETH, AssetRecovery, RolesLibrary, RateLimitedToken {
+contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, IERC20PermitUpgradeable, IeETH, AssetRecovery, RateLimitedToken {
     using CountersUpgradeable for CountersUpgradeable.Counter;
 
     //--------------------------------------------------------------------------------------
@@ -30,7 +30,6 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     mapping (address => uint256) public shares;
     mapping (address => mapping (address => uint256)) public allowances;
     mapping (address => CountersUpgradeable.Counter) private _nonces;
-    bool public paused;
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  IMMUTABLES  --------------------------------------
@@ -68,8 +67,6 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-    event Paused();
-    event Unpaused();
     event TransferShares( address indexed from, address indexed to, uint256 sharesValue);
 
     //--------------------------------------------------------------------------------------
@@ -83,7 +80,6 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     error ExpiredDeadline();
     error InvalidSignature();
     error TransferAmountExceedsBalance();
-    error ContractPaused();
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  CONSTRUCTOR  ----------------------------------
@@ -344,46 +340,12 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     //--------------------------------  PAUSING FUNCTIONS  ---------------------------------
     //--------------------------------------------------------------------------------------
     /**
-     * @notice Pauses the contract indefinitely
-     * @dev Only callable by the operating multisig
-     */
-    function pause() external onlyOperatingMultisig {
-        paused = true;
-        emit Paused();
-    }
-
-    /**
-     * @notice Unpauses the contract
-     * @dev Only callable by the operating multisig
-     */
-    function unpause() external onlyOperatingMultisig {
-        paused = false;
-        emit Unpaused();
-    }
-
-    /**
      * @notice Pauses the contract until the pauseUntilDuration
-     * @dev Only callable by the super guardian
+     * @dev Overrides {PausableUntil-pauseUntil} to require the stricter super guardian role
+     *      for eETH token-transfer pausing
      */
-    function pauseContractUntil() external onlySuperGuardian {
+    function pauseUntil() external override onlySuperGuardian {
         _pauseUntil();
-    }
-
-    /**
-     * @notice Unpauses the contract from pauseUntil
-     * @dev Only callable by the operating multisig
-     */
-    function unpauseContractUntil() external onlyOperatingMultisig {
-        _unpauseUntil();
-    }
-
-    /**
-     * @notice Sets the pause duration for the contract
-     * @param _pauseUntilDuration The new pause duration
-     * @dev Only callable by the admin
-     */
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
-        _setPauseUntilDuration(_pauseUntilDuration);
     }
 
     //--------------------------------------------------------------------------------------
@@ -614,17 +576,6 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
      */
     modifier onlyPoolContract() {
         if (msg.sender != address(liquidityPool)) revert IncorrectCaller();
-        _;
-    }
-
-    /**
-     * @notice Modifier to check if the contract is not paused
-     * @dev Only callable when the contract is not paused and not paused until 
-     * the pauseUntilDuration
-     */
-    modifier whenNotPaused() {
-        if (paused) revert ContractPaused();
-        _requireNotPausedUntil();
         _;
     }
 }

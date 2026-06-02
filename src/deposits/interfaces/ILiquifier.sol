@@ -172,8 +172,4 @@ interface ILiquifier {
 
     function depositWithERC20(address _token, uint256 _amount, address _referral) external returns (uint256);
     function quoteByFairValue(address _token, uint256 _amount) external view returns (uint256);
-
-    function pauseContractUntil() external;
-    function unpauseContractUntil() external;
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external;
 }

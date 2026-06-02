@@ -9,7 +9,7 @@ import {PausableUntil} from "@etherfi/governance/utils/PausableUntil.sol";
 import {RolesLibrary} from "@etherfi/governance/utils/RolesLibrary.sol";
 import {ICumulativeMerkleRewardsDistributor}  from "@etherfi/rewards/interfaces/ICumulativeMerkleRewardsDistributor.sol";
 
-contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistributor, OwnableUpgradeable, UUPSUpgradeable, PausableUntil, AssetRecovery, RolesLibrary {
+contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistributor, OwnableUpgradeable, UUPSUpgradeable, PausableUntil, AssetRecovery {
     using SafeERC20 for IERC20;
 
     //--------------------------------------------------------------------------------------
@@ -23,7 +23,8 @@ contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistribut
     mapping(address user => bool isWhitelisted) public whitelistedRecipient;
 
     uint256 public claimDelay;
-    bool public paused;
+    // deprecated storage slot — pause state migrated to the namespaced {Pausable} storage
+    uint8 private __gap_0;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  CONSTANTS  -------------------------------------
@@ -50,7 +51,6 @@ contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistribut
     function initialize() external initializer {
         __Ownable_init();
         __UUPSUpgradeable_init();
-        paused = false;
         claimDelay = 2 days; // 48 hours
     }
 
@@ -163,47 +163,6 @@ contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistribut
     }
 
     //--------------------------------------------------------------------------------------
-    //-------------------------------  PAUSING FUNCTIONS  ----------------------------------
-    //--------------------------------------------------------------------------------------
-    /**
-     * @notice Pause the contract
-     */
-    function pause() external onlyOperatingMultisig {
-        paused = true;
-        emit Paused(msg.sender);
-    }
-
-    /**
-     * @notice Unpause the contract
-     */
-    function unpause() external onlyOperatingMultisig {
-        paused = false;
-        emit UnPaused(msg.sender);
-    }
-
-    /**
-     * @notice Pause the contract until the pauseUntilDuration
-     */
-    function pauseContractUntil() external onlyGuardian {
-        _pauseUntil();
-    }
-
-    /**
-     * @notice Unpause the contract from pauseUntil
-     */
-    function unpauseContractUntil() external onlyOperatingMultisig {
-        _unpauseUntil();
-    }
-
-    /**
-     * @notice Set the pause duration for the contract
-     * @param _pauseUntilDuration The pause duration
-     */
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
-        _setPauseUntilDuration(_pauseUntilDuration);
-    }
-
-    //--------------------------------------------------------------------------------------
     //------------------------------  RECOVERY FUNCTIONS  ----------------------------------
     //--------------------------------------------------------------------------------------
     /**
@@ -261,13 +220,6 @@ contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistribut
     }
 
     /**
-     * @notice Require the contract to be not paused
-     */
-    function _requireNotPaused() internal view virtual {
-        if(paused) revert ContractPaused();
-    }
-
-    /**
      * @notice Authorize contract upgrades
      * @param newImplementation The address of the new implementation
      */
@@ -287,12 +239,4 @@ contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistribut
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
     //--------------------------------------------------------------------------------------
-    /**
-     * @notice Modifier to check if the contract is not paused
-     */
-    modifier whenNotPaused() {
-        _requireNotPaused();
-        _requireNotPausedUntil();
-        _;
-    }
 }

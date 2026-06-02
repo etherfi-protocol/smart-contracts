@@ -75,7 +75,7 @@ contract ReentrancyGuardTest is TestSetup {
     function setUp() public {
         setUpTests();
         vm.prank(admin);
-        withdrawRequestNFTInstance.unPauseContract();
+        withdrawRequestNFTInstance.unpause();
 
         attacker = new ReentrancyAttacker(withdrawRequestNFTInstance);
     }

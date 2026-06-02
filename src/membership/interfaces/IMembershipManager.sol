@@ -66,6 +66,4 @@ interface IMembershipManager {
 
     function setWithdrawalLockBlocks(uint32 _blocks) external;
     function rebase(int128 _accruedRewards) external;
-    function pauseContract() external;
-    function unPauseContract() external;
 }

@@ -3,7 +3,6 @@ pragma solidity ^0.8.23;
 
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -14,6 +13,7 @@ import "@etherfi/deposits/Liquifier.sol";
 import "@etherfi/core/LiquidityPool.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
+import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
 
 import "@etherfi/eigenlayer-interfaces/IStrategyManager.sol";
 import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
@@ -24,7 +24,7 @@ import "@etherfi/core/interfaces/ILiquidityPool.sol";
 import "@etherfi/governance/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
 import "@etherfi/restaking/interfaces/IEtherFiRestaker.sol";
 
-contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable, PausableUntil, RolesLibrary, IEtherFiRestaker {
+contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, DeprecatedOZPausable, PausableUntil, IEtherFiRestaker {
     using SafeERC20 for IERC20;
     using Math for uint256;
     using EnumerableSet for EnumerableSet.Bytes32Set;
@@ -132,7 +132,6 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
      */
     function initialize(address _liquidityPool, address _liquifier) initializer external {
         __Ownable_init();
-        __Pausable_init();
         __UUPSUpgradeable_init();
 
         (,, IStrategy strategy,,,,,,,,) = liquifier.tokenInfos(address(lido));
@@ -328,51 +327,8 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     }
 
     //--------------------------------------------------------------------------------------
-    //------------------------------  PAUSING FUNCTIONS  -----------------------------------
-    //--------------------------------------------------------------------------------------
-    /**
-     * @notice Pause the contract
-     */
-    function pauseContract() external onlyOperatingMultisig {
-        _pause();
-    }
-
-    /**
-     * @notice Unpause the contract
-     */
-    function unpauseContract() external onlyOperatingMultisig {
-        _unpause();
-    }
-
-    /**
-     * @notice Pause the contract until the pauseUntilDuration
-     * @dev Only callable by the guardian
-     */
-    function pauseContractUntil() external onlyGuardian {
-        _pauseUntil();
-    }
-
-    /**
-     * @notice Unpause the contract from pauseUntil
-     * @dev Only callable by the operating multisig
-     */
-    function unpauseContractUntil() external onlyOperatingMultisig {
-        _unpauseUntil();
-    }
-
-    /**
-     * @notice Set the pause duration for the contract
-     * @param _pauseUntilDuration The pause duration for the contract
-     * @dev Only callable by the admin
-     */
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
-        _setPauseUntilDuration(_pauseUntilDuration);
-    }
-
-    //--------------------------------------------------------------------------------------
     //------------------------------  INTERNAL FUNCTIONS  ----------------------------------
     //--------------------------------------------------------------------------------------
-
     /**
      * @notice Convert wei to gwei for rate-limiter buckets, with overflow check.
      * @param amountWei The amount of wei to convert
@@ -415,17 +371,6 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         uint256 amountToLiquidityPool = Math.min(address(this).balance, liquidityPool.totalValueOutOfLp());
         (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: GAS_STIPEND_NO_GRIEF}("");
         if (!sent) revert EthTransferFailed();
-    }
-
-    /**
-     * @notice Fold the auto-expiring PausableUntil check into OZ's `_requireNotPaused`, so
-     *         the standard `whenNotPaused` modifier (used on every fund-flow fn) halts on
-     *         EITHER the boolean pause or the Guardian's auto-expiring pause — consistent
-     *         with the rest of the protocol, no bespoke modifier needed.
-     */
-    function _requireNotPaused() internal view override {
-        _requireNotPausedUntil();
-        super._requireNotPaused();
     }
 
     /**

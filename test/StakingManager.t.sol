@@ -286,7 +286,7 @@ contract StakingManagerTest is TestSetup {
         vm.stopPrank();
 
         vm.prank(alice);
-        stakingManagerInstance.pauseContract();
+        stakingManagerInstance.pause();
 
         hoax(alice);
         vm.expectRevert("Pausable: paused");
@@ -529,7 +529,7 @@ contract StakingManagerTest is TestSetup {
             memory depositDataArray = new IStakingManager.DepositData[](1);
 
         vm.prank(alice);
-        stakingManagerInstance.pauseContract();
+        stakingManagerInstance.pause();
 
         hoax(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
         vm.expectRevert("Pausable: paused");
@@ -1005,7 +1005,7 @@ contract StakingManagerTest is TestSetup {
         );
 
         vm.prank(owner);
-        stakingManagerInstance.pauseContract();
+        stakingManagerInstance.pause();
 
         hoax(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
         vm.expectRevert("Pausable: paused");

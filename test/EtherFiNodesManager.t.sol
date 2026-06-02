@@ -210,28 +210,28 @@ contract EtherFiNodesManagerTest is TestSetup {
     
     function test_pauseContract() public {
         vm.prank(admin);
-        managerInstance.pauseContract();
+        managerInstance.pause();
         assertTrue(managerInstance.paused());
     }
     
     function test_pauseContract_unauthorized() public {
         vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         vm.prank(bob);
-        managerInstance.pauseContract();
+        managerInstance.pause();
     }
     
     function test_unPauseContract() public {
         vm.prank(admin);
-        managerInstance.pauseContract();
+        managerInstance.pause();
         vm.prank(admin);
-        managerInstance.unPauseContract();
+        managerInstance.unpause();
         assertFalse(managerInstance.paused());
     }
     
     function test_unPauseContract_unauthorized() public {
         vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         vm.prank(bob);
-        managerInstance.unPauseContract();
+        managerInstance.unpause();
     }
     
     function test_sweepFunds() public {
@@ -258,7 +258,7 @@ contract EtherFiNodesManagerTest is TestSetup {
 
     function test_sweepFunds_whenPaused() public {
         vm.prank(admin);
-        managerInstance.pauseContract();
+        managerInstance.pause();
 
         vm.expectRevert();
         vm.prank(eigenlayerAdmin);
@@ -294,7 +294,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     
     function test_createEigenPod_whenPaused() public {
         vm.prank(admin);
-        managerInstance.pauseContract();
+        managerInstance.pause();
         
         vm.expectRevert();
         vm.prank(eigenlayerAdmin);
@@ -329,7 +329,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     
     function test_startCheckpoint_whenPaused() public {
         vm.prank(admin);
-        managerInstance.pauseContract();
+        managerInstance.pause();
         
         vm.expectRevert();
         vm.prank(podProver);
@@ -760,7 +760,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     
     function test_linkPubkeyToNode_whenPaused() public {
         vm.prank(admin);
-        managerInstance.pauseContract();
+        managerInstance.pause();
         
         bytes memory newPubkey = vm.randomBytes(48);
         vm.expectRevert();
@@ -836,7 +836,7 @@ contract EtherFiNodesManagerTest is TestSetup {
 
     function _pauseUntil() internal {
         vm.prank(nmPauseUntilPauser);
-        managerInstance.pauseContractUntil();
+        managerInstance.pauseUntil();
     }
 
     function _expectPausedUntilRevert() internal {
@@ -849,7 +849,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         _grantNmPauseUntilRoles();
         vm.prank(bob);
         vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
-        managerInstance.pauseContractUntil();
+        managerInstance.pauseUntil();
     }
 
     function test_pauseContractUntil_setsState() public {
@@ -864,7 +864,7 @@ contract EtherFiNodesManagerTest is TestSetup {
 
         vm.prank(bob);
         vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
-        managerInstance.unpauseContractUntil();
+        managerInstance.unpauseUntil();
     }
 
     function test_unpauseContractUntil_clearsState() public {
@@ -872,7 +872,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         _pauseUntil();
 
         vm.prank(nmUnpauseUntilUnpauser);
-        managerInstance.unpauseContractUntil();
+        managerInstance.unpauseUntil();
         assertEq(_nmPausedUntil(), 0);
     }
 
@@ -880,7 +880,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         _grantNmPauseUntilRoles();
         vm.prank(nmUnpauseUntilUnpauser);
         vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
-        managerInstance.unpauseContractUntil();
+        managerInstance.unpauseUntil();
     }
 
     // --- setPauseUntilDuration ---

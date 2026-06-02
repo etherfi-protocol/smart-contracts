@@ -40,7 +40,7 @@ import "@etherfi/governance/utils/RolesLibrary.sol";
  *        `ceil(amount * 1e18 / rate) <= shareOfEEth`. These keep solvency checks and
  *        the share burn within the request's own share allocation.
  */
-contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuardNamespaced, PausableUntil, RolesLibrary, IWithdrawRequestNFT {
+contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuardNamespaced, PausableUntil, IWithdrawRequestNFT {
     using Math for uint256;
     using SafeERC20 for IERC20;
     using Checkpoints for Checkpoints.Trace224;
@@ -65,10 +65,9 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     uint256 private __gap_3;
 
     uint256 public totalRemainderEEthShares;
-    bool public paused;
 
     // deprecated storage slots
-    uint160 private __gap_4;
+    uint256 private __gap_4;
 
     uint128 public ethAmountLockedForWithdrawal;
     // (requestId upperBound => amountPerShareCeil(1e18) at finalize time).
@@ -104,21 +103,15 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     event WithdrawRequestSeized(uint32 indexed requestId);
     event HandledRemainderOfClaimedWithdrawRequests(uint256 eEthAmountToTreasury, uint256 eEthAmountBurnt);
 
-    event Paused();
-    event Unpaused();
-
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ERRORS  ---------------------------------------
     //--------------------------------------------------------------------------------------
     error IncorrectCaller();
     error AddressZero();
-    error AlreadyPaused();
-    error NotPaused();
     error EETHAmountCannotBeZero();
     error NotEnoughEEthRemainder();
     error FeeReturnFailed();
     error InvalidRequest();
-    error ContractPaused();
     error RequestValid();
     error RequestNotValid();
     error RequestNotFound();
@@ -372,51 +365,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     //--------------------------------------------------------------------------------------
-    //-----------------------------  PAUSING FUNCTIONS  -----------------------------------
-    //--------------------------------------------------------------------------------------
-    /**
-     * @notice Pauses the contract
-     */
-    function pauseContract() external onlyOperatingMultisig {
-        if (paused) revert AlreadyPaused();
-        paused = true;
-        emit Paused();
-    }
-
-    /**
-     * @notice Unpauses the contract
-     */
-    function unPauseContract() external onlyOperatingMultisig {
-        if (!paused) revert NotPaused();
-
-
-        paused = false;
-        emit Unpaused();
-    }
-
-    /**
-     * @notice Pauses the contract until the pauseUntilDuration
-     */
-    function pauseContractUntil() external onlyGuardian {
-        _pauseUntil();
-    }
-
-    /**
-     * @notice Unpauses the contract from pauseUntil
-     */
-    function unpauseContractUntil() external onlyOperatingMultisig {
-        _unpauseUntil();
-    }
-
-    /**
-     * @notice Sets the pause duration for the contract
-     * @param _pauseUntilDuration The new pause duration
-     */
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
-        _setPauseUntilDuration(_pauseUntilDuration);
-    }
-
-    //--------------------------------------------------------------------------------------
     //-----------------------------  INTERNAL FUNCTIONS  -----------------------------------
     //--------------------------------------------------------------------------------------
     /**
@@ -517,14 +465,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     /**
-     * @notice Checks if the contract is not paused
-     * @dev Reverts if the contract is paused
-     */
-    function _requireNotPaused() internal view virtual {
-        if (paused) revert ContractPaused();
-    }
-
-    /**
      * @notice Authorizes the upgrade of the contract
      * @param newImplementation The new implementation address
      */
@@ -613,16 +553,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
      */
     modifier onlyLiquidityPool() {
         if (msg.sender != address(liquidityPool)) revert IncorrectCaller();
-        _;
-    }
-
-    /**
-     * @notice Modifier to check if the contract is not paused
-     * @dev Reverts if the contract is paused
-     */
-    modifier whenNotPaused() {
-        _requireNotPaused();
-        _requireNotPausedUntil();
         _;
     }
 

@@ -1453,7 +1453,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         etherFiAdminInstance.setMaxNegativeRebaseBps(10_000);
         // Pause WithdrawRequestNFT so existing tests that unPauseContract in their
         // own setUp continue to find it paused (initializeOnUpgrade used to set this).
-        withdrawRequestNFTInstance.pauseContract();
+        withdrawRequestNFTInstance.pause();
         vm.stopPrank();
 
         vm.startPrank(owner);
@@ -1479,9 +1479,13 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), alice);
         vm.stopPrank();
 
-        vm.startPrank(alice);
-        liquidityPoolInstance.unPauseContract();
-        vm.stopPrank();
+        // LiquidityPool no longer starts paused at deploy (pause state moved to the namespaced
+        // Pausable storage), so only unpause if it is actually paused.
+        if (liquidityPoolInstance.paused()) {
+            vm.startPrank(alice);
+            liquidityPoolInstance.unpause();
+            vm.stopPrank();
+        }
 
         vm.startPrank(owner);
         _approveNodeOperators();

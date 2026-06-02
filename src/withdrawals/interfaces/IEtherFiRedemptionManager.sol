@@ -13,9 +13,4 @@ interface IEtherFiRedemptionManager {
 
     function redeemEEth(uint256 eEthAmount, address receiver, address outputToken) external;
     function redeemWeEth(uint256 weEthAmount, address receiver, address outputToken) external;
-    function pauseContract() external;
-    function unPauseContract() external;
-    function pauseContractUntil() external;
-    function unpauseContractUntil() external;
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external;
 }

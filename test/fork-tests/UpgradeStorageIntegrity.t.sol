@@ -390,7 +390,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         vm.stopPrank();
         require(granted, "role grant failed");
 
-        wrn.pauseContract();
+        wrn.pause();
         assertTrue(wrn.paused(), "precondition: WRN paused");
 
         uint256 balBefore = nftOwner.balance;

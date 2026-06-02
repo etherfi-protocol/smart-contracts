@@ -5,7 +5,6 @@ import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 import "@etherfi/staking/interfaces/IAuctionManager.sol";
 import "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
@@ -15,16 +14,16 @@ import "@etherfi/staking/interfaces/IStakingManager.sol";
 import "@etherfi/governance/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
+import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
 
 contract EtherFiNodesManager is
     Initializable,
     IEtherFiNodesManager,
     OwnableUpgradeable,
-    PausableUpgradeable,
+    DeprecatedOZPausable,
     PausableUntil,
     ReentrancyGuardUpgradeable,
-    UUPSUpgradeable,
-    RolesLibrary
+    UUPSUpgradeable
 {
 
     IStakingManager public immutable stakingManager;
@@ -62,26 +61,6 @@ contract EtherFiNodesManager is
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
-
-    function pauseContract() external onlyOperatingMultisig {
-        _pause();
-    }
-
-    function unPauseContract() external onlyOperatingMultisig {
-        _unpause();
-    }
-
-    function pauseContractUntil() external onlyGuardian {
-        _pauseUntil();
-    }
-
-    function unpauseContractUntil() external onlyOperatingMultisig {
-        _unpauseUntil();
-    }
-
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
-        _setPauseUntilDuration(_pauseUntilDuration);
-    }
 
     /// @dev under normal conditions ETH should not accumulate in the EtherFiNode. This will forward
     ///   the eth to the liquidity pool in the event of ETH being accidentally sent there
@@ -456,16 +435,5 @@ contract EtherFiNodesManager is
     /// @dev Internal helper to validate node exists and revert if not
     function _validateNode(address node) internal view {
         if (!stakingManager.deployedEtherFiNodes(node)) revert UnknownNode();
-    }
-
-    //--------------------------------------------------------------------------------------
-    //-----------------------------------  MODIFIERS  --------------------------------------
-    //--------------------------------------------------------------------------------------
-
-    /// @dev Route OZ's whenNotPaused through the pause-until check as well, so any function
-    ///      gated by whenNotPaused is automatically blocked during a timed pause too.
-    function _requireNotPaused() internal view override {
-        _requireNotPausedUntil();
-        super._requireNotPaused();
     }
 }

@@ -16,7 +16,7 @@ import "@etherfi/governance/utils/PausableUntil.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
 import "@etherfi/governance/rate-limiting/RateLimitedToken.sol";
 
-contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, ERC20PermitUpgradeable, IRateProvider, AssetRecovery, RolesLibrary, RateLimitedToken {
+contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, ERC20PermitUpgradeable, IRateProvider, AssetRecovery, RateLimitedToken {
     using SafeERC20 for IERC20;
 
     //--------------------------------------------------------------------------------------
@@ -25,8 +25,6 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     // deprecated storage slots
     uint160 private __gap_0;
     uint160 private __gap_1;
-
-    bool public paused;
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  IMMUTABLES  ---------------------------------------
@@ -52,7 +50,6 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     ///      keeping wrap/unwrap non-griefable.
     bytes32 public constant WEETH_MINT_LIMIT_ID = keccak256("WEETH_MINT_LIMIT_ID");
     bytes32 public constant WEETH_BURN_LIMIT_ID = keccak256("WEETH_BURN_LIMIT_ID");
-
     /// @dev Transient-storage slot (EIP-1153) marking that the currently-executing
     ///      mint/burn is part of a wrap/unwrap call. Auto-clears at end of
     ///      transaction; subcall reverts also revert any tstore writes, so the slot
@@ -62,17 +59,10 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     bytes32 private constant _WRAP_CTX_SLOT = keccak256("etherfi.weeth.wrap_ctx");
 
     //--------------------------------------------------------------------------------------
-    //---------------------------------  EVENTS  ------------------------------------------
-    //--------------------------------------------------------------------------------------
-    event Paused();
-    event Unpaused();
-
-    //--------------------------------------------------------------------------------------
     //---------------------------------  ERRORS  ------------------------------------------
     //--------------------------------------------------------------------------------------
     error ZeroAmount();
     error ZeroAddress();
-    error ContractPaused();
     error CannotRecoverEETH();
     error WeETHUnderbacked(uint256 weETHSupply, uint256 proxyShares);
 
@@ -233,46 +223,12 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     //--------------------------------  PAUSING FUNCTIONS  ---------------------------------
     //--------------------------------------------------------------------------------------
     /**
-     * @notice Pauses the contract
-     * @dev Only callable by the operating multisig
-     */
-    function pause() external onlyOperatingMultisig {
-        paused = true;
-        emit Paused();
-    }
-
-    /**
-     * @notice Unpauses the contract
-     * @dev Only callable by the operating multisig
-     */
-    function unpause() external onlyOperatingMultisig {
-        paused = false;
-        emit Unpaused();
-    }
-
-    /**
      * @notice Pauses the contract until the pauseUntilDuration
-     * @dev Only callable by the super guardian
+     * @dev Overrides {PausableUntil-pauseUntil} to require the stricter super guardian role
+     *      for weETH token-transfer pausing
      */
-    function pauseContractUntil() external onlySuperGuardian {
+    function pauseUntil() external override onlySuperGuardian {
         _pauseUntil();
-    }
-
-    /**
-     * @notice Unpauses the contract from pauseUntil
-     * @dev Only callable by the operating multisig
-     */
-    function unpauseContractUntil() external onlyOperatingMultisig {
-        _unpauseUntil();
-    }
-
-    /**
-     * @notice Sets the pause duration for the contract
-     * @param _pauseUntilDuration The new pause duration
-     * @dev Only callable by the admin
-     */
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
-        _setPauseUntilDuration(_pauseUntilDuration);
     }
 
     //--------------------------------------------------------------------------------------
@@ -328,9 +284,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         address from,
         address to,
         uint256 amount
-    ) internal virtual override {
-        if (paused) revert ContractPaused();
-        _requireNotPausedUntil();
+    ) internal virtual override whenNotPaused {
         blacklister.nonBlacklisted(from);
         blacklister.nonBlacklisted(to);
         blacklister.nonBlacklisted(msg.sender);

@@ -152,11 +152,11 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
     cumulativeMerkleRewardsDistributorInstance.pause();
     vm.startPrank(admin);
     cumulativeMerkleRewardsDistributorInstance.pause();
-    vm.expectRevert(ICumulativeMerkleRewardsDistributor.ContractPaused.selector);
+    vm.expectRevert(Pausable.ContractPaused.selector);
     cumulativeMerkleRewardsDistributorInstance.claim(address(eETHInstance), accounts[0], 100 ether, merkleRoot, proofs[0]);
-    vm.expectRevert(ICumulativeMerkleRewardsDistributor.ContractPaused.selector);
+    vm.expectRevert(Pausable.ContractPaused.selector);
     cumulativeMerkleRewardsDistributorInstance.setPendingMerkleRoot(address(eETHInstance), merkleRoot);
-    vm.expectRevert(ICumulativeMerkleRewardsDistributor.ContractPaused.selector);
+    vm.expectRevert(Pausable.ContractPaused.selector);
     vm.roll(block.number + 15000);
     vm.warp(block.timestamp + 15000 * 12);
     cumulativeMerkleRewardsDistributorInstance.finalizeMerkleRoot(address(eETHInstance), block.number - 12000);
@@ -211,34 +211,34 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
 
        vm.prank(chad);
        vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
-       cumulativeMerkleRewardsDistributorInstance.pauseContractUntil();
+       cumulativeMerkleRewardsDistributorInstance.pauseUntil();
    }
 
    function test_pauseContractUntil_setsState() public {
        _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
 
        vm.prank(pauseUntilPauser);
-       cumulativeMerkleRewardsDistributorInstance.pauseContractUntil();
+       cumulativeMerkleRewardsDistributorInstance.pauseUntil();
        assertEq(_pausedUntil(), block.timestamp + cumulativeMerkleRewardsDistributorInstance.MAX_PAUSE_DURATION());
    }
 
    function test_unpauseContractUntil_requiresRole() public {
        _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
        vm.prank(pauseUntilPauser);
-       cumulativeMerkleRewardsDistributorInstance.pauseContractUntil();
+       cumulativeMerkleRewardsDistributorInstance.pauseUntil();
 
        vm.prank(chad);
        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
-       cumulativeMerkleRewardsDistributorInstance.unpauseContractUntil();
+       cumulativeMerkleRewardsDistributorInstance.unpauseUntil();
    }
 
    function test_unpauseContractUntil_clearsState() public {
        _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
        vm.prank(pauseUntilPauser);
-       cumulativeMerkleRewardsDistributorInstance.pauseContractUntil();
+       cumulativeMerkleRewardsDistributorInstance.pauseUntil();
 
        vm.prank(unpauseUntilUnpauser);
-       cumulativeMerkleRewardsDistributorInstance.unpauseContractUntil();
+       cumulativeMerkleRewardsDistributorInstance.unpauseUntil();
        assertEq(_pausedUntil(), 0);
    }
 
@@ -246,7 +246,7 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
        _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
        vm.prank(unpauseUntilUnpauser);
        vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
-       cumulativeMerkleRewardsDistributorInstance.unpauseContractUntil();
+       cumulativeMerkleRewardsDistributorInstance.unpauseUntil();
    }
 
    // --- setPauseUntilDuration ---
@@ -274,7 +274,7 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
        cumulativeMerkleRewardsDistributorInstance.setPauseUntilDuration(d);
 
        vm.prank(pauseUntilPauser);
-       cumulativeMerkleRewardsDistributorInstance.pauseContractUntil();
+       cumulativeMerkleRewardsDistributorInstance.pauseUntil();
        assertEq(_pausedUntil(), block.timestamp + d);
    }
 
@@ -297,7 +297,7 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
    function test_setPendingMerkleRoot_blockedByPauseContractUntil() public {
        _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
        vm.prank(pauseUntilPauser);
-       cumulativeMerkleRewardsDistributorInstance.pauseContractUntil();
+       cumulativeMerkleRewardsDistributorInstance.pauseUntil();
 
        vm.prank(admin);
        vm.expectRevert(
@@ -315,7 +315,7 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
 
        _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
        vm.prank(pauseUntilPauser);
-       cumulativeMerkleRewardsDistributorInstance.pauseContractUntil();
+       cumulativeMerkleRewardsDistributorInstance.pauseUntil();
 
        vm.prank(admin);
        vm.expectRevert(
@@ -329,7 +329,7 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
 
        _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
        vm.prank(pauseUntilPauser);
-       cumulativeMerkleRewardsDistributorInstance.pauseContractUntil();
+       cumulativeMerkleRewardsDistributorInstance.pauseUntil();
 
        vm.expectRevert(
            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _pausedUntil())
@@ -342,7 +342,7 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
 
        _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
        vm.prank(pauseUntilPauser);
-       cumulativeMerkleRewardsDistributorInstance.pauseContractUntil();
+       cumulativeMerkleRewardsDistributorInstance.pauseUntil();
 
        vm.warp(block.timestamp + cumulativeMerkleRewardsDistributorInstance.MAX_PAUSE_DURATION() + 1);
 
@@ -355,9 +355,9 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
 
        _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
        vm.prank(pauseUntilPauser);
-       cumulativeMerkleRewardsDistributorInstance.pauseContractUntil();
+       cumulativeMerkleRewardsDistributorInstance.pauseUntil();
        vm.prank(unpauseUntilUnpauser);
-       cumulativeMerkleRewardsDistributorInstance.unpauseContractUntil();
+       cumulativeMerkleRewardsDistributorInstance.unpauseUntil();
 
        cumulativeMerkleRewardsDistributorInstance.claim(address(eETHInstance), accounts[0], 100 ether, merkleRoot, proofs[0]);
        assertEq(eETHInstance.balanceOf(accounts[0]), 100 ether);

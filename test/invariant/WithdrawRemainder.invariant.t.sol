@@ -41,7 +41,7 @@ contract WithdrawRemainderInvariantTest is TestSetup {
 
         // Unpause WRN; the FrozenRate suite's pattern.
         vm.prank(alice);
-        withdrawRequestNFTInstance.unPauseContract();
+        withdrawRequestNFTInstance.unpause();
 
         // 5 actors, each pre-funded with eETH + approved for WRN/PQ/weETH.
         for (uint256 i = 0; i < 5; i++) {

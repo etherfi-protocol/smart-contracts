@@ -5,9 +5,11 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
+// aliased to avoid a name clash with src/governance/utils/Pausable.sol when both are
+// pulled into the same compilation unit (e.g. TestSetup)
+import {Pausable as OZPausable} from "@openzeppelin/contracts/security/Pausable.sol";
 
-contract EarlyAdopterPool is Ownable, ReentrancyGuard, Pausable {
+contract EarlyAdopterPool is Ownable, ReentrancyGuard, OZPausable {
     using Math for uint256;
 
     struct UserDepositInfo {

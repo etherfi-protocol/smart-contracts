@@ -293,7 +293,7 @@ contract TimelockTest is TestSetup {
         
         // Check if liquifier is paused first
         if (liquifierInstance.paused()) {
-            bytes memory data = abi.encodeWithSelector(Liquifier.unPauseContract.selector);
+            bytes memory data = abi.encodeWithSelector(Pausable.unpause.selector);
             _execute_timelock(target, data, true, true, true, true);
         } else {
             // Skip test if not paused

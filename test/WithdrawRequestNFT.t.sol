@@ -37,7 +37,7 @@ contract WithdrawRequestNFTTest is TestSetup {
     function setUp() public {
         setUpTests();
         vm.prank(admin);
-        withdrawRequestNFTInstance.unPauseContract();
+        withdrawRequestNFTInstance.unpause();
 
         // seizeInvalidRequest is now gated by onlyUpgradeTimelock (audit L-02).
         // Grant the role to the NFT contract's owner so tests calling
@@ -852,23 +852,23 @@ contract WithdrawRequestNFTTest is TestSetup {
         // Non-pauser cannot pause
         vm.prank(bob);
         vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
-        withdrawRequestNFTInstance.pauseContract();
+        withdrawRequestNFTInstance.pause();
 
         // Pauser can pause
         vm.prank(admin);
-        withdrawRequestNFTInstance.pauseContract();
+        withdrawRequestNFTInstance.pause();
         assertTrue(withdrawRequestNFTInstance.paused(), "Contract should be paused");
 
         // Cannot pause again
         vm.prank(admin);
-        vm.expectRevert(WithdrawRequestNFT.AlreadyPaused.selector);
-        withdrawRequestNFTInstance.pauseContract();
+        vm.expectRevert(Pausable.AlreadyPaused.selector);
+        withdrawRequestNFTInstance.pause();
 
         // Cannot request withdraw when paused
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 10 ether}();
         eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
-        vm.expectRevert(WithdrawRequestNFT.ContractPaused.selector);
+        vm.expectRevert(Pausable.ContractPaused.selector);
         liquidityPoolInstance.requestWithdraw(bob, 1 ether);
         vm.stopPrank();
     }
@@ -876,23 +876,23 @@ contract WithdrawRequestNFTTest is TestSetup {
     function test_unPauseContract() public {
         // Pause first
         vm.prank(admin);
-        withdrawRequestNFTInstance.pauseContract();
+        withdrawRequestNFTInstance.pause();
         assertTrue(withdrawRequestNFTInstance.paused(), "Contract should be paused");
 
         // Non-unpauser cannot unpause
         vm.prank(bob);
         vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
-        withdrawRequestNFTInstance.unPauseContract();
+        withdrawRequestNFTInstance.unpause();
 
         // Unpauser can unpause
         vm.prank(admin);
-        withdrawRequestNFTInstance.unPauseContract();
+        withdrawRequestNFTInstance.unpause();
         assertFalse(withdrawRequestNFTInstance.paused(), "Contract should be unpaused");
 
         // Cannot unpause again
         vm.prank(admin);
-        vm.expectRevert(WithdrawRequestNFT.NotPaused.selector);
-        withdrawRequestNFTInstance.unPauseContract();
+        vm.expectRevert(Pausable.NotPaused.selector);
+        withdrawRequestNFTInstance.unpause();
     }
 
     //--------------------------------------------------------------------------------------
@@ -928,33 +928,33 @@ contract WithdrawRequestNFTTest is TestSetup {
         _grantWrPauseUntilRoles();
         vm.prank(bob);
         vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
-        withdrawRequestNFTInstance.pauseContractUntil();
+        withdrawRequestNFTInstance.pauseUntil();
     }
 
     function test_pauseContractUntil_setsState() public {
         _grantWrPauseUntilRoles();
         vm.prank(wrPauseUntilPauser);
-        withdrawRequestNFTInstance.pauseContractUntil();
+        withdrawRequestNFTInstance.pauseUntil();
         assertEq(_wrPausedUntil(), block.timestamp + withdrawRequestNFTInstance.MAX_PAUSE_DURATION());
     }
 
     function test_unpauseContractUntil_requiresRole() public {
         _grantWrPauseUntilRoles();
         vm.prank(wrPauseUntilPauser);
-        withdrawRequestNFTInstance.pauseContractUntil();
+        withdrawRequestNFTInstance.pauseUntil();
 
         vm.prank(bob);
         vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
-        withdrawRequestNFTInstance.unpauseContractUntil();
+        withdrawRequestNFTInstance.unpauseUntil();
     }
 
     function test_unpauseContractUntil_clearsState() public {
         _grantWrPauseUntilRoles();
         vm.prank(wrPauseUntilPauser);
-        withdrawRequestNFTInstance.pauseContractUntil();
+        withdrawRequestNFTInstance.pauseUntil();
 
         vm.prank(wrUnpauseUntilUnpauser);
-        withdrawRequestNFTInstance.unpauseContractUntil();
+        withdrawRequestNFTInstance.unpauseUntil();
         assertEq(_wrPausedUntil(), 0);
     }
 
@@ -962,7 +962,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         _grantWrPauseUntilRoles();
         vm.prank(wrUnpauseUntilUnpauser);
         vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
-        withdrawRequestNFTInstance.unpauseContractUntil();
+        withdrawRequestNFTInstance.unpauseUntil();
     }
 
     // --- setPauseUntilDuration ---
@@ -989,7 +989,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         withdrawRequestNFTInstance.setPauseUntilDuration(d);
 
         vm.prank(wrPauseUntilPauser);
-        withdrawRequestNFTInstance.pauseContractUntil();
+        withdrawRequestNFTInstance.pauseUntil();
         assertEq(_wrPausedUntil(), block.timestamp + d);
     }
 
@@ -1017,7 +1017,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         _grantWrPauseUntilRoles();
         vm.prank(wrPauseUntilPauser);
-        withdrawRequestNFTInstance.pauseContractUntil();
+        withdrawRequestNFTInstance.pauseUntil();
 
         vm.prank(bob);
         vm.expectRevert(
@@ -1041,7 +1041,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         _grantWrPauseUntilRoles();
         vm.prank(wrPauseUntilPauser);
-        withdrawRequestNFTInstance.pauseContractUntil();
+        withdrawRequestNFTInstance.pauseUntil();
         assertGt(_wrPausedUntil(), 0, "precondition: WR must be pause-until");
 
         uint256 bobBalBefore = bob.balance;
@@ -1064,7 +1064,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         _grantWrPauseUntilRoles();
         vm.prank(wrPauseUntilPauser);
-        withdrawRequestNFTInstance.pauseContractUntil();
+        withdrawRequestNFTInstance.pauseUntil();
 
         uint256 bobBalBefore = bob.balance;
         vm.prank(bob);
@@ -1087,7 +1087,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
 
         vm.prank(lpPauser);
-        liquidityPoolInstance.pauseContractUntil();
+        liquidityPoolInstance.pauseUntil();
         uint256 lpPausedUntil = uint256(vm.load(address(liquidityPoolInstance), PAUSABLE_UNTIL_SLOT));
 
         vm.prank(bob);
@@ -1502,7 +1502,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Pause BEFORE the claim — finalized claim must proceed anyway.
         vm.prank(admin);
-        withdrawRequestNFTInstance.pauseContract();
+        withdrawRequestNFTInstance.pause();
         assertTrue(withdrawRequestNFTInstance.paused(), "precondition: must be paused");
 
         uint256 bobBalBefore = bob.balance;
@@ -1519,7 +1519,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         _finalizeWithdrawalRequest(r2);
 
         vm.prank(admin);
-        withdrawRequestNFTInstance.pauseContract();
+        withdrawRequestNFTInstance.pause();
 
         uint256[] memory ids = new uint256[](2);
         ids[0] = r1;
@@ -1537,7 +1537,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         // NOT finalized.
 
         vm.prank(admin);
-        withdrawRequestNFTInstance.pauseContract();
+        withdrawRequestNFTInstance.pause();
 
         vm.prank(bob);
         vm.expectRevert(WithdrawRequestNFT.RequestNotFinalized.selector);
@@ -1558,7 +1558,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         _finalizeWithdrawalRequest(requestId);
 
         vm.prank(admin);
-        liquidityPoolInstance.pauseContract();
+        liquidityPoolInstance.pause();
         assertTrue(liquidityPoolInstance.paused(), "precondition: LP must be paused");
 
         uint256 bobBalBefore = bob.balance;
@@ -1575,7 +1575,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         _finalizeWithdrawalRequest(r2);
 
         vm.prank(admin);
-        liquidityPoolInstance.pauseContract();
+        liquidityPoolInstance.pause();
 
         uint256[] memory ids = new uint256[](2);
         ids[0] = r1;
@@ -1593,8 +1593,8 @@ contract WithdrawRequestNFTTest is TestSetup {
         _finalizeWithdrawalRequest(requestId);
 
         vm.startPrank(admin);
-        liquidityPoolInstance.pauseContract();
-        withdrawRequestNFTInstance.pauseContract();
+        liquidityPoolInstance.pause();
+        withdrawRequestNFTInstance.pause();
         vm.stopPrank();
         assertTrue(liquidityPoolInstance.paused(), "precondition: LP must be paused");
         assertTrue(withdrawRequestNFTInstance.paused(), "precondition: NFT must be paused");
@@ -1611,20 +1611,20 @@ contract WithdrawRequestNFTTest is TestSetup {
         // etherFiRedemptionManager) still revert at the pause gate. The pause check sits between the
         // caller-allowlist require and the eETH-balance check, so no LP funding is needed.
         vm.prank(admin);
-        liquidityPoolInstance.pauseContract();
+        liquidityPoolInstance.pause();
 
         address membershipMgr = address(liquidityPoolInstance.membershipManager());
         address redemptionMgr = address(liquidityPoolInstance.etherFiRedemptionManager());
 
         if (membershipMgr != address(0)) {
             vm.prank(membershipMgr);
-            vm.expectRevert(LiquidityPool.ContractPaused.selector);
+            vm.expectRevert(Pausable.ContractPaused.selector);
             liquidityPoolInstance.withdraw(bob, 1 ether);
         }
 
         if (redemptionMgr != address(0)) {
             vm.prank(redemptionMgr);
-            vm.expectRevert(LiquidityPool.ContractPaused.selector);
+            vm.expectRevert(Pausable.ContractPaused.selector);
             liquidityPoolInstance.withdraw(bob, 1 ether);
         }
     }
@@ -1643,7 +1643,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
 
         vm.prank(lpPauser);
-        liquidityPoolInstance.pauseContractUntil();
+        liquidityPoolInstance.pauseUntil();
         lpPausedUntil = uint256(vm.load(address(liquidityPoolInstance), PAUSABLE_UNTIL_SLOT));
         require(lpPausedUntil > 0, "LP pause-until not set");
     }
@@ -1684,7 +1684,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         _pauseLpUntil();
         vm.prank(admin);
-        liquidityPoolInstance.pauseContract();
+        liquidityPoolInstance.pause();
 
         uint256 bobBalBefore = bob.balance;
         vm.prank(bob);
@@ -1739,10 +1739,10 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.stopPrank();
 
         vm.prank(admin);
-        liquidityPoolInstance.pauseContract();
+        liquidityPoolInstance.pause();
 
         vm.prank(bob);
-        vm.expectRevert(LiquidityPool.ContractPaused.selector);
+        vm.expectRevert(Pausable.ContractPaused.selector);
         liquidityPoolInstance.requestWithdraw(bob, 1 ether);
     }
 

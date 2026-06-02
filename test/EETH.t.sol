@@ -515,7 +515,7 @@ contract EETHTest is TestSetup {
         eETHInstance.pause();
 
         vm.prank(address(liquidityPoolInstance));
-        vm.expectRevert(EETH.ContractPaused.selector);
+        vm.expectRevert(Pausable.ContractPaused.selector);
         eETHInstance.mintShares(alice, 100);
     }
 
@@ -527,7 +527,7 @@ contract EETHTest is TestSetup {
         eETHInstance.pause();
 
         vm.prank(address(liquidityPoolInstance));
-        vm.expectRevert(EETH.ContractPaused.selector);
+        vm.expectRevert(Pausable.ContractPaused.selector);
         eETHInstance.burnShares(alice, 50);
     }
 
@@ -538,7 +538,7 @@ contract EETHTest is TestSetup {
         eETHInstance.pause();
 
         vm.prank(alice);
-        vm.expectRevert(EETH.ContractPaused.selector);
+        vm.expectRevert(Pausable.ContractPaused.selector);
         eETHInstance.transfer(bob, 0.5 ether);
     }
 
@@ -697,24 +697,24 @@ contract EETHTest is TestSetup {
 
         vm.prank(bob);
         vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
 
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
         assertEq(_eETHPausedUntil(), block.timestamp + eETHInstance.MAX_PAUSE_DURATION());
     }
 
     function test_EETH_unpauseContractUntil_requiresRole() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
 
         vm.prank(bob);
         vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
-        eETHInstance.unpauseContractUntil();
+        eETHInstance.unpauseUntil();
 
         vm.prank(unpauseUntilUnpauser);
-        eETHInstance.unpauseContractUntil();
+        eETHInstance.unpauseUntil();
         assertEq(_eETHPausedUntil(), 0);
     }
 
@@ -722,43 +722,43 @@ contract EETHTest is TestSetup {
         _grantPauseUntilRoles();
         vm.prank(unpauseUntilUnpauser);
         vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
-        eETHInstance.unpauseContractUntil();
+        eETHInstance.unpauseUntil();
     }
 
     function test_EETH_pauseContractUntil_revertsIfAlreadyPaused() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
 
         // Re-pausing while already paused-until hits _requireNotPausedUntil inside _pauseUntil.
         vm.prank(pauseUntilPauser);
         vm.expectRevert(
             abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _eETHPausedUntil())
         );
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
     }
 
     function test_EETH_pauseContractUntil_cooldownEnforced() public {
         _grantPauseUntilRoles();
 
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
 
         // Unpause and re-attempt before cooldown ends. Cooldown = MAX_PAUSE_DURATION + PAUSER_UNTIL_COOLDOWN.
         vm.prank(unpauseUntilUnpauser);
-        eETHInstance.unpauseContractUntil();
+        eETHInstance.unpauseUntil();
 
         // Warp past MAX_PAUSE_DURATION (so we are no longer pausedUntil) but not past the cooldown.
         vm.warp(block.timestamp + eETHInstance.MAX_PAUSE_DURATION() + 1);
 
         vm.prank(pauseUntilPauser);
         vm.expectRevert(PausableUntil.PauserCooldownStillActive.selector);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
 
         // After the cooldown window also passes, same pauser can re-pause.
         vm.warp(block.timestamp + eETHInstance.PAUSER_UNTIL_COOLDOWN());
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
     }
 
     // ---- pause-until blocks mint/burn ---------------------------------------
@@ -766,7 +766,7 @@ contract EETHTest is TestSetup {
     function test_EETH_mintShares_revertsWhenPausedUntil() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
 
         uint256 pausedUntilTs = _eETHPausedUntil();
 
@@ -784,7 +784,7 @@ contract EETHTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
 
         uint256 pausedUntilTs = _eETHPausedUntil();
 
@@ -802,7 +802,7 @@ contract EETHTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
         uint256 pausedUntilTs = _eETHPausedUntil();
 
         vm.prank(alice);
@@ -819,7 +819,7 @@ contract EETHTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
         uint256 pausedUntilTs = _eETHPausedUntil();
 
         vm.prank(bob);
@@ -834,7 +834,7 @@ contract EETHTest is TestSetup {
     function test_EETH_mintShares_unblockedAfterPauseExpires() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
 
         // Strict `>=` comparison in _requireNotPausedUntil ⇒ opens at exactly `pausedUntil + 1`.
         vm.warp(block.timestamp + eETHInstance.MAX_PAUSE_DURATION() + 1);
@@ -847,10 +847,10 @@ contract EETHTest is TestSetup {
     function test_EETH_mintShares_unblockedAfterManualUnpause() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
 
         vm.prank(unpauseUntilUnpauser);
-        eETHInstance.unpauseContractUntil();
+        eETHInstance.unpauseUntil();
 
         vm.prank(address(liquidityPoolInstance));
         eETHInstance.mintShares(alice, 100);
@@ -862,7 +862,7 @@ contract EETHTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
 
         vm.warp(block.timestamp + eETHInstance.MAX_PAUSE_DURATION() + 1);
 
@@ -876,10 +876,10 @@ contract EETHTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
 
         vm.prank(unpauseUntilUnpauser);
-        eETHInstance.unpauseContractUntil();
+        eETHInstance.unpauseUntil();
 
         vm.prank(alice);
         eETHInstance.transfer(bob, 0.5 ether);
@@ -931,7 +931,7 @@ contract EETHTest is TestSetup {
         eETHInstance.setPauseUntilDuration(d);
 
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
         assertEq(eETHInstance.pausedUntil(), block.timestamp + d);
     }
 

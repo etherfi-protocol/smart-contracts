@@ -33,7 +33,7 @@ contract FrozenRateWithdrawalInvariantTest is TestSetup {
         setUpTests();
 
         vm.prank(alice);
-        withdrawRequestNFTInstance.unPauseContract();
+        withdrawRequestNFTInstance.unpause();
 
         for (uint256 i = 0; i < 5; i++) {
             address a = address(uint160(uint256(keccak256(abi.encodePacked("frozen.actor.", i)))));

@@ -6,9 +6,20 @@ import "@tests/TestSetup.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 
 contract PausableUntilHarness is PausableUntil {
-    function pauseUntil() external { _pauseUntil(); }
-    function unpauseUntil() external { _unpauseUntil(); }
-    function setPauseUntilDuration(uint256 d) external { _setPauseUntilDuration(d); }
+    // ungated overrides so these unit tests exercise the internal pause-until mechanics
+    // (cooldowns, expiry, storage isolation) independent of role gating
+    constructor(address _roleRegistry) RolesLibrary(_roleRegistry) {}
+    function pauseUntil() external override { _pauseUntil(); }
+    function unpauseUntil() external override {
+        _requirePausedUntil();
+        _getPausableUntilStorage().pausedUntil = 0;
+        emit UnpausedUntil();
+    }
+    function setPauseUntilDuration(uint256 d) external override {
+        if (d < MIN_PAUSE_DURATION || d > MAX_PAUSE_DURATION) revert InvalidPauseUntilDuration();
+        _getPausableUntilStorage().pauseUntilDuration = d;
+        emit PauseUntilDurationSet(d);
+    }
     function requireNotPausedUntil() external view { _requireNotPausedUntil(); }
     function requirePausedUntil() external view { _requirePausedUntil(); }
 
@@ -27,7 +38,7 @@ contract PausableUntilTest is Test {
     event UnpausedUntil();
 
     function setUp() public {
-        harness = new PausableUntilHarness();
+        harness = new PausableUntilHarness(address(0));
         // warp past MAX_PAUSE_DURATION + PAUSER_UNTIL_COOLDOWN so the initial cooldown check
         // (which treats lastPauseTimestamp[pauser] = 0 as literally "last paused at unix 0")
         // does not block the first pause in tests. On mainnet this is a non-issue.
