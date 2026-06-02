@@ -441,8 +441,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
             // Pre-upgrade legacy request — sentinel returned 0. Fall back to the live rate so
             // claim semantics match the pre-upgrade behavior. New (post-upgrade) finalizations
             // always push a non-zero snapshot, so this branch only fires for legacy tokenIds.
-            // Bounds-check the live rate before adopting it — this path is the only one where
-            // `frozenRate` was not already gated by `finalizeRequests`'s write-time check.
             uint256 live = liquidityPool.amountPerShareCeil();
             frozenRate = uint224(live);
         }
