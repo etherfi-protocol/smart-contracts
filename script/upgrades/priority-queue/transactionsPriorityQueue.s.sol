@@ -255,7 +255,7 @@ contract PriorityQueueTransactions is Script, Utils {
         console2.log("");
 
         LiquidityPool newLiquidityPoolImpl = new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: address(0),
                 nodesManager: address(0),
                 eETH: EETH,
