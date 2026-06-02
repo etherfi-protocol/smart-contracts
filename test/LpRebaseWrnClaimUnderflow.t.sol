@@ -16,7 +16,7 @@ import "./TestSetup.sol";
 ///         has driven `totalValueOutOfLp` below `amount`, the contract's
 ///         checked subtraction
 ///
-///             totalValueOutOfLp -= uint128(_amount);     // LiquidityPool.sol:297
+///             totalValueOutOfLp -= uint128(_amountOfEEth);   // LiquidityPool.sol
 ///
 ///         underflows and the entire claim transaction reverts with
 ///         `Panic(0x11)`. This is a **user-facing DoS on a finalized
