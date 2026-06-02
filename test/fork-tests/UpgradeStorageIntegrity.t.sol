@@ -226,8 +226,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: ETHERFI_ADMIN,
                 membershipManager: MEMBERSHIP_MANAGER
-            }),
-            0
+            })
         ));
         address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), ETHERFI_ADMIN));
 
@@ -420,8 +419,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: ETHERFI_ADMIN,
                 membershipManager: MEMBERSHIP_MANAGER
-            }),
-            0
+            })
         ));
         address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), ETHERFI_ADMIN));
         address newPQ = address(new PriorityWithdrawalQueue(
@@ -475,8 +473,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: ETHERFI_ADMIN,
                 membershipManager: MEMBERSHIP_MANAGER
-            }),
-            0
+            })
         ));
         address roleRegOwner = IOwnableRead(ROLE_REGISTRY).owner();
         vm.prank(roleRegOwner);

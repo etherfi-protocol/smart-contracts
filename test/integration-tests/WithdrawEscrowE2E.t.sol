@@ -126,8 +126,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: address(etherFiAdminInstance),
                 membershipManager: address(membershipManagerInstance)
-            }),
-            0
+            })
         )));
         vm.stopPrank();
     }
