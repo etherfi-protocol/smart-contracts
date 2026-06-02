@@ -130,6 +130,7 @@ contract PriorityWithdrawalQueue is
      * @param _roleRegistry The address of the role registry.
      * @param _treasury The address of the treasury.
      * @param _minDelay The minimum delay for a withdrawal request.
+     * @custom:oz-upgrades-unsafe-allow constructor
      */
     constructor(address _liquidityPool, address _eETH, address _weETH, address _blacklister, address _roleRegistry, address _treasury, uint32 _minDelay) RolesLibrary(_roleRegistry) {
         if (_liquidityPool == address(0) || _eETH == address(0) || _weETH == address(0) || _blacklister == address(0) || _treasury == address(0)) {

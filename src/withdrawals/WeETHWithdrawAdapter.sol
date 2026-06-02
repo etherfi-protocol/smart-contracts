@@ -70,6 +70,7 @@ contract WeETHWithdrawAdapter is
      * @param _withdrawRequestNFT The address of the withdraw request NFT.
      * @param _roleRegistry The address of the role registry.
      * @param _blacklister The address of the blacklister.
+     * @custom:oz-upgrades-unsafe-allow constructor
      */
     constructor(
         address _weETH,

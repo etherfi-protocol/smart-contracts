@@ -97,6 +97,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
      * @param _rateLimiter The address of the rate limiter
      * @param _eigenLayerStrategyManager The address of the eigenLayer strategy manager
      * @param _eigenLayerDelegationManager The address of the eigenLayer delegation manager
+     * @custom:oz-upgrades-unsafe-allow constructor
      */
     constructor(
         address _liquidityPool,

@@ -91,6 +91,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
      * @param _minQuorumSize The minimum quorum size
      * @param _etherFiAdmin The address of the EtherFiAdmin contract
      * @param _roleRegistry The address of the RoleRegistry contract
+     * @custom:oz-upgrades-unsafe-allow constructor
      */
     constructor(uint32 _minQuorumSize, address _etherFiAdmin, address _roleRegistry) RolesLibrary(_roleRegistry) {
         minQuorumSize = _minQuorumSize;

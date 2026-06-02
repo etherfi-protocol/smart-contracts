@@ -125,6 +125,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
      * @param _maxAcceptableFinalizedWithdrawalAmountPerDay The maximum acceptable finalized withdrawal amount per day
      * @param _maxAcceptableNumValidatorsToApprovePerDay The maximum acceptable number of validators to approve per day
      * @param _maxNumberOfRequestsToFinalizePerReport The maximum number of requests to finalize per report
+     * @custom:oz-upgrades-unsafe-allow constructor
      */
     constructor(
         ConstructorAddresses memory _constructorAddresses,

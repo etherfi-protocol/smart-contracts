@@ -149,6 +149,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
      * @param _roleRegistry The address of the role registry.
      * @param _blacklister The address of the blacklister.
      * @param _etherFiAdmin The address of the etherFi admin.
+     * @custom:oz-upgrades-unsafe-allow constructor
      */
     constructor(address _treasury, address _eETH, address _liquidityPool, address _membershipManager, address _roleRegistry, address _blacklister,  address _etherFiAdmin) RolesLibrary(_roleRegistry) {
         treasury = _treasury;

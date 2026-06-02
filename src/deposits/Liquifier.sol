@@ -121,6 +121,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
      * @param _minDiscountInBasisPoints The minimum discount rate in basis points
      * @param _stalePriceWindow The stale price window
      * @param _maxPriceDeviationInBps The maximum price deviation in basis points
+     * @custom:oz-upgrades-unsafe-allow constructor
      */
     constructor(ConstructorAddresses memory _constructorAddresses, uint256 _minDiscountInBasisPoints, uint256 _stalePriceWindow, uint256 _maxPriceDeviationInBps) RolesLibrary(_constructorAddresses.roleRegistry) {
         if (_minDiscountInBasisPoints == 0 || _minDiscountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
