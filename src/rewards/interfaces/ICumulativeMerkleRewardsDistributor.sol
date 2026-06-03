@@ -10,8 +10,6 @@ interface ICumulativeMerkleRewardsDistributor {
     event ClaimableMerkleRootUpdated(address indexed token, bytes32 oldMerkleRoot, bytes32 newMerkleRoot, uint256 rewardsCalculatedToBlock);
     event RecipientStatusUpdated(address user, bool isWhitelisted);
     event ClaimDelayUpdated(uint256 newClaimDelay);
-    event Paused(address account);
-    event UnPaused(address account);
 
     error InsufficentDelay();
     error InvalidFinalizedBlock();
@@ -19,17 +17,11 @@ interface ICumulativeMerkleRewardsDistributor {
     error NonWhitelistedUser();
     error MerkleRootWasUpdated();
     error NothingToClaim();
-    error ContractPaused();
     error ETHTransferFailed();
 
     // Sets the merkle root of the merkle tree containing cumulative account balances available to claim.
     function setPendingMerkleRoot(address _token, bytes32 _merkleRoot) external;
     function finalizeMerkleRoot(address _token, uint256 _finalizedBlock) external;
-    function pause() external;
-    function unpause() external;
-    function pauseContractUntil() external;
-    function unpauseContractUntil() external;
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external;
     // Claim the given amount of the token to the given address. Reverts if the inputs are invalid.
     function claim(
         address token, 

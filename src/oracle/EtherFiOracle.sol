@@ -3,14 +3,15 @@ pragma solidity ^0.8.13;
 
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 
 import "@etherfi/oracle/interfaces/IEtherFiOracle.sol";
 import "@etherfi/oracle/interfaces/IEtherFiAdmin.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
+import "@etherfi/governance/utils/Pausable.sol";
+import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
 
 
-contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable, IEtherFiOracle, RolesLibrary {
+contract EtherFiOracle is Initializable, OwnableUpgradeable, DeprecatedOZPausable, UUPSUpgradeable, IEtherFiOracle, Pausable {
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
@@ -270,25 +271,6 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         lastPublishedReportRefSlot = _report.refSlotFrom - 1;
         lastPublishedReportRefBlock = _report.refBlockFrom - 1;
         emit ReportUnpublished(_hash);
-    }
-
-    //--------------------------------------------------------------------------------------
-    //------------------------------  PAUSING FUNCTIONS  -----------------------------------
-    //--------------------------------------------------------------------------------------
-    /**
-     * @notice Pause the contract
-     * @dev Only callable by the operating multisig
-     */
-    function pauseContract() external onlyOperatingMultisig {
-        _pause();
-    }
-
-    /**
-     * @notice Unpause the contract
-     * @dev Only callable by the operating multisig
-     */
-    function unPauseContract() external onlyOperatingMultisig {
-        _unpause();
     }
 
     //--------------------------------------------------------------------------------------

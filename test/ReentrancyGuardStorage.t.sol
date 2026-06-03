@@ -31,7 +31,7 @@ contract ReentrancyGuardStorageTest is TestSetup {
     function setUp() public {
         setUpTests();
         vm.prank(admin);
-        withdrawRequestNFTInstance.unPauseContract();
+        withdrawRequestNFTInstance.unpause();
     }
 
     // -----------------------------------------------------------------
@@ -102,9 +102,9 @@ contract ReentrancyGuardStorageTest is TestSetup {
 
         // Admin pause toggle -> `paused` bool
         vm.prank(admin);
-        withdrawRequestNFTInstance.pauseContract();
+        withdrawRequestNFTInstance.pause();
         vm.prank(admin);
-        withdrawRequestNFTInstance.unPauseContract();
+        withdrawRequestNFTInstance.unpause();
 
         assertEq(
             vm.load(address(withdrawRequestNFTInstance), GUARD_SLOT),
@@ -246,9 +246,9 @@ contract ReentrancyGuardStorageTest is TestSetup {
         // Pause / unpause cycles — only modify `paused`.
         for (uint256 i = 0; i < 3; i++) {
             vm.prank(admin);
-            withdrawRequestNFTInstance.pauseContract();
+            withdrawRequestNFTInstance.pause();
             vm.prank(admin);
-            withdrawRequestNFTInstance.unPauseContract();
+            withdrawRequestNFTInstance.unpause();
         }
 
         assertEq(

@@ -86,7 +86,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
 
         if (withdrawRequestNFTInstance.paused()) {
             vm.prank(alice);
-            withdrawRequestNFTInstance.unPauseContract();
+            withdrawRequestNFTInstance.unpause();
         }
 
         vm.prank(alice);

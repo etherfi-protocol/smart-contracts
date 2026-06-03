@@ -402,14 +402,14 @@ contract EtherFiOracleTest is TestSetup {
         _moveClock(1024 + 2 * slotsPerEpoch);
         
         vm.prank(alice);
-        etherFiOracleInstance.pauseContract();
+        etherFiOracleInstance.pause();
 
         vm.prank(alice);
-        vm.expectRevert("Pausable: paused");
+        vm.expectRevert(Pausable.ContractPaused.selector);
         etherFiOracleInstance.submitReport(reportAtPeriod2A);
 
         vm.prank(alice);
-        etherFiOracleInstance.unPauseContract();
+        etherFiOracleInstance.unpause();
 
         vm.prank(alice);
         etherFiOracleInstance.submitReport(reportAtPeriod2A);
@@ -2128,7 +2128,7 @@ contract EtherFiOracleTest is TestSetup {
     function _unpauseWithdrawNFT() internal {
         if (withdrawRequestNFTInstance.paused()) {
             vm.prank(admin);
-            withdrawRequestNFTInstance.unPauseContract();
+            withdrawRequestNFTInstance.unpause();
         }
     }
 

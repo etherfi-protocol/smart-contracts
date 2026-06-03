@@ -2,13 +2,14 @@
 pragma solidity ^0.8.24;
 
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 
 import "@etherfi/governance/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
+import "@etherfi/governance/utils/Pausable.sol";
+import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
 import "@etherfi/governance/rate-limiting/libraries/BucketLimiter.sol";
 
-contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeable, PausableUpgradeable, RolesLibrary {
+contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeable, DeprecatedOZPausable, Pausable {
 
     /// @dev Hardcoded callers for the per-address bucket API. Only the eETH and weETH
     ///      proxies can create/update/delete/consume per-address buckets; gating is
@@ -40,7 +41,6 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
 
     function initialize() public initializer {
         __UUPSUpgradeable_init();
-        __Pausable_init();
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
@@ -98,16 +98,6 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
 
         BucketLimiter.setRemaining(limits[id], remaining);
         emit RemainingUpdated(id, remaining);
-    }
-
-    /// @notice Pauses the contract, preventing consumption operations
-    function pauseContract() external onlyOperatingMultisig {
-        _pause();
-    }
-
-    /// @notice Unpauses the contract, allowing consumption operations
-    function unPauseContract() external onlyOperatingMultisig {
-        _unpause();
     }
 
     //-------------------------------------------------------------------------

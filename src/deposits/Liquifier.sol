@@ -3,7 +3,6 @@ pragma solidity ^0.8.23;
 
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -14,12 +13,13 @@ import "@etherfi/core/interfaces/ILiquidityPool.sol";
 import "@etherfi/governance/interfaces/IBlacklister.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
+import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
 
 import "@etherfi/eigenlayer-interfaces/IStrategyManager.sol";
 import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
 
 /// Go wild, spread eETH/weETH to the world
-contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable, PausableUntil, ReentrancyGuardUpgradeable, ILiquifier, RolesLibrary {
+contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, DeprecatedOZPausable, PausableUntil, ReentrancyGuardUpgradeable, ILiquifier {
     using SafeERC20 for IERC20;
     using Math for uint256;
 
@@ -165,7 +165,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     function initialize(address _treasury, address _liquidityPool, address _eigenLayerStrategyManager, address _lidoWithdrawalQueue, 
                         address _stEth, address _stEth_Eth_Pool,
                         uint32 _timeBoundCapRefreshInterval) initializer external {
-        __Pausable_init();
         __Ownable_init();
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
@@ -350,50 +349,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
         IERC20(_l2Eth).safeTransfer(msg.sender, msg.value);
         return msg.value;
-    }
-
-    //--------------------------------------------------------------------------------------
-    //----------------------------  PAUSING FUNCTIONS  -------------------------------------
-    //--------------------------------------------------------------------------------------
-    /**
-     * @notice Pauses the contract
-     * @dev Only callable by the operating multisig
-     */
-    function pauseContract() external onlyOperatingMultisig {
-        _pause();
-    }
-
-    /**
-     * @notice Unpauses the contract
-     * @dev Only callable by the operating multisig
-     */
-    function unPauseContract() external onlyOperatingMultisig {
-        _unpause();
-    }
-
-    /**
-     * @notice Pauses the contract until pauseUntilDuration
-     * @dev Only callable by the guardian
-     */
-    function pauseContractUntil() external onlyGuardian {
-        _pauseUntil();
-    }
-
-    /**
-     * @notice Unpauses the contract from pauseUntil
-     * @dev Only callable by the operating multisig
-     */
-    function unpauseContractUntil() external onlyOperatingMultisig {
-        _unpauseUntil();
-    }
-
-    /**
-     * @notice Sets the pause duration for the contract
-     * @param _pauseUntilDuration The pause duration
-     * @dev Only callable by the admin
-     */
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
-        _setPauseUntilDuration(_pauseUntilDuration);
     }
 
     //--------------------------------------------------------------------------------------
@@ -608,15 +563,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
      */
     function _L2SanityChecks(address _token) internal view {
         if (IERC20(_token).totalSupply() != IERC20(_token).balanceOf(address(this))) revert InvalidTotalSupply();
-    }
-
-    /**
-     * @notice Require not paused
-     * @dev Only callable by the internal function
-     */
-    function _requireNotPaused() internal override view {
-        _requireNotPausedUntil();
-        super._requireNotPaused();
     }
 
     /**

@@ -5,7 +5,6 @@ import "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 import "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/beacon/IBeaconUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
@@ -16,13 +15,14 @@ import "@etherfi/staking/interfaces/IEtherFiNode.sol";
 import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
 import "@etherfi/staking/libraries/DepositDataRootGenerator.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
+import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
 
 contract StakingManager is
     Initializable,
     IStakingManager,
     IBeaconUpgradeable,
     OwnableUpgradeable,
-    PausableUpgradeable,
+    DeprecatedOZPausable,
     ReentrancyGuardUpgradeable,
     UUPSUpgradeable,
     RolesLibrary

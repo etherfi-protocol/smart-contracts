@@ -26,15 +26,15 @@ contract WeETHWithdrawAdapter is
     UUPSUpgradeable, 
     OwnableUpgradeable, 
     PausableUntil,
-    RolesLibrary,
-    IWeETHWithdrawAdapter 
+    IWeETHWithdrawAdapter
 {
     using SafeERC20 for IERC20;
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
-    bool public paused;
+    // deprecated storage slot
+    uint8 private __gap_0;
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  IMMUTABLES  ---------------------------------------
@@ -46,17 +46,10 @@ contract WeETHWithdrawAdapter is
     IBlacklister public immutable blacklister;
 
     //--------------------------------------------------------------------------------------
-    //-------------------------------------  EVENTS  --------------------------------------
-    //--------------------------------------------------------------------------------------
-    event Paused(address account);
-    event Unpaused(address account);
-
-    //--------------------------------------------------------------------------------------
     //-------------------------------------  ERRORS  --------------------------------------
     //--------------------------------------------------------------------------------------
     error ZeroAmount();
     error ZeroAddress();
-    error ContractPaused();
     error InvalidAmount();
 
     //--------------------------------------------------------------------------------------
@@ -109,7 +102,6 @@ contract WeETHWithdrawAdapter is
         __Ownable_init();
         __UUPSUpgradeable_init();
         _transferOwnership(_initialOwner);
-        paused = false;
     }
 
     //--------------------------------------------------------------------------------------
@@ -173,60 +165,8 @@ contract WeETHWithdrawAdapter is
     }
 
     //--------------------------------------------------------------------------------------
-    //--------------------------------  PAUSING FUNCTIONS  ---------------------------------
-    //--------------------------------------------------------------------------------------
-    /**
-     * @notice Pause the contract
-     */
-    function pauseContract() external onlyOperatingMultisig {
-        if (paused) revert("Pausable: already paused");
-
-        paused = true;
-        emit Paused(msg.sender);
-    }
-
-    /**
-     * @notice Unpause the contract
-     */
-    function unPauseContract() external onlyOperatingMultisig {
-        if (!paused) revert("Pausable: not paused");
-
-        paused = false;
-        emit Unpaused(msg.sender);
-    }
-
-    /**
-     * @notice Pause the contract until MAX_PAUSE_DURATION
-     */
-    function pauseContractUntil() external onlyGuardian {
-        _pauseUntil();
-    }
-
-    /**
-     * @notice Unpause the contract from pauseUntil
-     */
-    function unpauseContractUntil() external onlyOperatingMultisig {
-        _unpauseUntil();
-    }
-
-    /**
-     * @notice Sets the pause duration for the contract
-     * @param _pauseUntilDuration The new pause duration
-     */
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
-        _setPauseUntilDuration(_pauseUntilDuration);
-    }
-
-    //--------------------------------------------------------------------------------------
     //------------------------------  INTERNAL FUNCTIONS  ----------------------------------
     //--------------------------------------------------------------------------------------
-    /**
-     * @notice Check if contract is not paused
-     */
-    function _requireNotPaused() internal view {
-        if (paused) revert ContractPaused();
-    }
-
     /**
      * @notice Authorize contract upgrades
      */
@@ -255,15 +195,6 @@ contract WeETHWithdrawAdapter is
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
     //--------------------------------------------------------------------------------------
-    /**
-     * @notice Modifier to check if the contract is not paused
-     */
-    modifier whenNotPaused() {
-        _requireNotPaused();
-        _requireNotPausedUntil();
-        _;
-    }
-
     /**
      * @notice Modifier to check if the caller is not blacklisted
      */

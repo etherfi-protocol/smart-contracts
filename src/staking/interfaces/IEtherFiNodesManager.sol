@@ -55,12 +55,6 @@ interface IEtherFiNodesManager {
     function allowedForwardedEigenpodCalls(address user, bytes4 selector) external view returns (bool);
     function allowedForwardedExternalCalls(address user, bytes4 selector, address to) external view returns (bool);
 
-    // protocol
-    function pauseContract() external;
-    function unPauseContract() external;
-    function pauseContractUntil() external;
-    function unpauseContractUntil() external;
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external;
 
     struct LegacyNodesManagerState {
         uint256[4] legacyPadding1;

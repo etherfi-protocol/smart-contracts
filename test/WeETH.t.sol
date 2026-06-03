@@ -528,7 +528,7 @@ contract WeETHTest is TestSetup {
         weEthInstance.pause();
 
         vm.prank(alice);
-        vm.expectRevert(WeETH.ContractPaused.selector);
+        vm.expectRevert(Pausable.ContractPaused.selector);
         weEthInstance.wrap(1 ether);
     }
 
@@ -539,7 +539,7 @@ contract WeETHTest is TestSetup {
         weEthInstance.pause();
 
         vm.prank(alice);
-        vm.expectRevert(WeETH.ContractPaused.selector);
+        vm.expectRevert(Pausable.ContractPaused.selector);
         weEthInstance.unwrap(0.5 ether);
     }
 
@@ -550,7 +550,7 @@ contract WeETHTest is TestSetup {
         weEthInstance.pause();
 
         vm.prank(alice);
-        vm.expectRevert(WeETH.ContractPaused.selector);
+        vm.expectRevert(Pausable.ContractPaused.selector);
         weEthInstance.transfer(bob, 0.5 ether);
     }
 
@@ -707,24 +707,24 @@ contract WeETHTest is TestSetup {
 
         vm.prank(bob);
         vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
-        weEthInstance.pauseContractUntil();
+        weEthInstance.pauseUntil();
 
         vm.prank(pauseUntilPauser);
-        weEthInstance.pauseContractUntil();
+        weEthInstance.pauseUntil();
         assertEq(_weETHPausedUntil(), block.timestamp + weEthInstance.MAX_PAUSE_DURATION());
     }
 
     function test_WeETH_unpauseContractUntil_requiresRole() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        weEthInstance.pauseContractUntil();
+        weEthInstance.pauseUntil();
 
         vm.prank(bob);
         vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
-        weEthInstance.unpauseContractUntil();
+        weEthInstance.unpauseUntil();
 
         vm.prank(unpauseUntilUnpauser);
-        weEthInstance.unpauseContractUntil();
+        weEthInstance.unpauseUntil();
         assertEq(_weETHPausedUntil(), 0);
     }
 
@@ -732,39 +732,39 @@ contract WeETHTest is TestSetup {
         _grantPauseUntilRoles();
         vm.prank(unpauseUntilUnpauser);
         vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
-        weEthInstance.unpauseContractUntil();
+        weEthInstance.unpauseUntil();
     }
 
     function test_WeETH_pauseContractUntil_revertsIfAlreadyPaused() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        weEthInstance.pauseContractUntil();
+        weEthInstance.pauseUntil();
 
         vm.prank(pauseUntilPauser);
         vm.expectRevert(
             abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _weETHPausedUntil())
         );
-        weEthInstance.pauseContractUntil();
+        weEthInstance.pauseUntil();
     }
 
     function test_WeETH_pauseContractUntil_cooldownEnforced() public {
         _grantPauseUntilRoles();
 
         vm.prank(pauseUntilPauser);
-        weEthInstance.pauseContractUntil();
+        weEthInstance.pauseUntil();
 
         vm.prank(unpauseUntilUnpauser);
-        weEthInstance.unpauseContractUntil();
+        weEthInstance.unpauseUntil();
 
         // Past MAX_PAUSE_DURATION but inside cooldown window — should still revert.
         vm.warp(block.timestamp + weEthInstance.MAX_PAUSE_DURATION() + 1);
         vm.prank(pauseUntilPauser);
         vm.expectRevert(PausableUntil.PauserCooldownStillActive.selector);
-        weEthInstance.pauseContractUntil();
+        weEthInstance.pauseUntil();
 
         vm.warp(block.timestamp + weEthInstance.PAUSER_UNTIL_COOLDOWN());
         vm.prank(pauseUntilPauser);
-        weEthInstance.pauseContractUntil();
+        weEthInstance.pauseUntil();
     }
 
     // ---- pause-until blocks every token movement ----------------------------
@@ -774,7 +774,7 @@ contract WeETHTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        weEthInstance.pauseContractUntil();
+        weEthInstance.pauseUntil();
         uint256 pausedUntilTs = _weETHPausedUntil();
 
         vm.prank(alice);
@@ -789,7 +789,7 @@ contract WeETHTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        weEthInstance.pauseContractUntil();
+        weEthInstance.pauseUntil();
         uint256 pausedUntilTs = _weETHPausedUntil();
 
         vm.prank(alice);
@@ -804,7 +804,7 @@ contract WeETHTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        weEthInstance.pauseContractUntil();
+        weEthInstance.pauseUntil();
         uint256 pausedUntilTs = _weETHPausedUntil();
 
         vm.prank(alice);
@@ -821,7 +821,7 @@ contract WeETHTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        weEthInstance.pauseContractUntil();
+        weEthInstance.pauseUntil();
         uint256 pausedUntilTs = _weETHPausedUntil();
 
         vm.prank(bob);
@@ -838,7 +838,7 @@ contract WeETHTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        weEthInstance.pauseContractUntil();
+        weEthInstance.pauseUntil();
 
         vm.warp(block.timestamp + weEthInstance.MAX_PAUSE_DURATION() + 1);
 
@@ -852,10 +852,10 @@ contract WeETHTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        weEthInstance.pauseContractUntil();
+        weEthInstance.pauseUntil();
 
         vm.prank(unpauseUntilUnpauser);
-        weEthInstance.unpauseContractUntil();
+        weEthInstance.unpauseUntil();
 
         vm.prank(alice);
         weEthInstance.transfer(bob, 0.5 ether);
@@ -867,7 +867,7 @@ contract WeETHTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        weEthInstance.pauseContractUntil();
+        weEthInstance.pauseUntil();
 
         vm.warp(block.timestamp + weEthInstance.MAX_PAUSE_DURATION() + 1);
 
@@ -900,7 +900,7 @@ contract WeETHTest is TestSetup {
         weEthInstance.setPauseUntilDuration(d);
 
         vm.prank(pauseUntilPauser);
-        weEthInstance.pauseContractUntil();
+        weEthInstance.pauseUntil();
         assertEq(weEthInstance.pausedUntil(), block.timestamp + d);
     }
 

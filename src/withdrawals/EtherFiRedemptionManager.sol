@@ -7,7 +7,6 @@ import "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
@@ -19,6 +18,7 @@ import "@etherfi/deposits/interfaces/ILiquifier.sol";
 import "@etherfi/restaking/interfaces/IEtherFiRestaker.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
+import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
 
 import "@etherfi/governance/rate-limiting/libraries/BucketLimiter.sol";
 
@@ -32,7 +32,7 @@ import "@etherfi/governance/interfaces/IBlacklister.sol";
     - It has a rate limiter to limit the total amount that can be redeemed in a given time period.
 */
 
-contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, PausableUntil, ReentrancyGuardUpgradeable, UUPSUpgradeable, RolesLibrary, IEtherFiRedemptionManager {
+contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, PausableUntil, ReentrancyGuardUpgradeable, UUPSUpgradeable, IEtherFiRedemptionManager {
     using SafeERC20 for IERC20;
     using Math for uint256;
 
@@ -146,7 +146,6 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         if (_exitFeeInBps > BASIS_POINT_SCALE || _exitFeeSplitToTreasuryInBps > BASIS_POINT_SCALE || _lowWatermarkInBpsOfTvl > BASIS_POINT_SCALE) revert InvalidBps();
 
         __UUPSUpgradeable_init();
-        __Pausable_init();
         __ReentrancyGuard_init();
     }
 
@@ -264,50 +263,6 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
     function setExitFeeSplitToTreasuryInBps(uint16 _exitFeeSplitToTreasuryInBps, address token) external onlyAdmin {
         if (_exitFeeSplitToTreasuryInBps > maxExitFeeSplitToTreasuryInBps) revert ExceedsMaxExitFeeSplit();
         tokenToRedemptionInfo[token].exitFeeSplitToTreasuryInBps = _exitFeeSplitToTreasuryInBps;
-    }
-
-    //--------------------------------------------------------------------------------------
-    //----------------------------  PAUSING FUNCTIONS  -------------------------------------
-    //--------------------------------------------------------------------------------------
-    /**
-     * @notice Pauses the contract.
-     * @dev Only callable by the operating multisig
-     */
-    function pauseContract() external onlyOperatingMultisig {
-        _pause();
-    }
-
-    /**
-     * @notice Unpauses the contract.
-     * @dev Only callable by the operating multisig
-     */
-    function unPauseContract() external onlyOperatingMultisig {
-        _unpause();
-    }
-
-    /**
-     * @notice Pauses the contract until the pauseUntilDuration.
-     * @dev Only callable by the guardian
-     */
-    function pauseContractUntil() external onlyGuardian {
-        _pauseUntil();
-    }
-
-    /**
-     * @notice Unpauses the contract from pauseUntil.
-     * @dev Only callable by the operating multisig
-     */
-    function unpauseContractUntil() external onlyOperatingMultisig {
-        _unpauseUntil();
-    }
-
-    /**
-     * @notice Sets the pause duration for the contract.
-     * @param _pauseUntilDuration The pause duration for the contract.
-     * @dev Only callable by the admin
-     */
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
-        _setPauseUntilDuration(_pauseUntilDuration);
     }
 
     //--------------------------------------------------------------------------------------
@@ -506,15 +461,6 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      */
     function _fee(uint256 assets, uint256 feeBasisPoints) internal pure virtual returns (uint256) {
         return assets.mulDiv(feeBasisPoints, BASIS_POINT_SCALE, Math.Rounding.Up);
-    }
-
-    /**
-     * @notice Route OZ's whenNotPaused through the pause-until check as well, so any function
-     *         gated by whenNotPaused is automatically blocked during a timed pause too.
-     */
-    function _requireNotPaused() internal view override {
-        _requireNotPausedUntil();
-        super._requireNotPaused();
     }
 
     /**

@@ -91,11 +91,6 @@ interface ILiquidityPool {
     function transferLockedEthForPriority(uint128 _amount) external;
     function returnLockedEth(uint128 _amount) external payable;
 
-    function pauseContract() external;
     function burnEEthShares(uint256 shares) external;
-    function unPauseContract() external; 
-    function pauseContractUntil() external;
-    function unpauseContractUntil() external;
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external; 
     function setValidatorSizeWei(uint256 _size) external;
 }

@@ -70,7 +70,7 @@ contract LpRebaseWrnClaimUnderflowTest is TestSetup {
         // Unpause WRN — TestSetup leaves it paused; claimWithdraw is not
         // gated by that flag but the rest of the WRN surface is.
         vm.prank(alice);
-        withdrawRequestNFTInstance.unPauseContract();
+        withdrawRequestNFTInstance.unpause();
 
         claimant = address(uint160(uint256(keccak256("rebase-underflow.claimant"))));
         vm.deal(claimant, 200 ether);

@@ -308,7 +308,7 @@ contract EtherFiRestakerTest is TestSetup {
 
         // Guardian fast-halt (auto-expiring)
         vm.prank(bob);
-        etherFiRestakerInstance.pauseContractUntil();
+        etherFiRestakerInstance.pauseUntil();
         uint256 until = etherFiRestakerInstance.pausedUntil();
         assertGt(until, block.timestamp);
 
@@ -326,25 +326,25 @@ contract EtherFiRestakerTest is TestSetup {
         // a non-guardian cannot fire the auto-expiring halt
         vm.prank(alice);
         vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
-        etherFiRestakerInstance.pauseContractUntil();
+        etherFiRestakerInstance.pauseUntil();
 
         // resume is deliberate / multisig-only
         vm.prank(owner);
-        etherFiRestakerInstance.unpauseContractUntil();
+        etherFiRestakerInstance.unpauseUntil();
         assertEq(etherFiRestakerInstance.pausedUntil(), 0);
     }
 
     // The boolean multisig pause also halts fund movement (reverts via OZ Pausable).
     function test_booleanPause_also_halts_fund_movement() public {
         vm.prank(owner); // owner holds OPERATION_MULTISIG
-        etherFiRestakerInstance.pauseContract();
+        etherFiRestakerInstance.pause();
         assertTrue(etherFiRestakerInstance.paused());
 
-        vm.expectRevert("Pausable: paused");
+        vm.expectRevert(Pausable.ContractPaused.selector);
         etherFiRestakerInstance.transferStETH(bob, 1);
 
         vm.prank(owner);
-        etherFiRestakerInstance.unpauseContract();
+        etherFiRestakerInstance.unpause();
         assertFalse(etherFiRestakerInstance.paused());
     }
 

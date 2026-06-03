@@ -17,14 +17,14 @@ contract NodeOperatorManagerTest is TestSetup {
 
     function test_RegisterNodeOperator() public {
         vm.startPrank(alice);
-        nodeOperatorManagerInstance.pauseContract();
+        nodeOperatorManagerInstance.pause();
 
-        vm.expectRevert("Pausable: paused");
+        vm.expectRevert(Pausable.ContractPaused.selector);
         nodeOperatorManagerInstance.registerNodeOperator(
             aliceIPFS_Hash,
             uint64(10)
         );
-        nodeOperatorManagerInstance.unPauseContract();
+        nodeOperatorManagerInstance.unpause();
 
         nodeOperatorManagerInstance.registerNodeOperator(
             aliceIPFS_Hash,

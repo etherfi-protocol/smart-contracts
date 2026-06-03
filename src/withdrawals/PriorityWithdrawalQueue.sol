@@ -25,7 +25,6 @@ contract PriorityWithdrawalQueue is
     UUPSUpgradeable, 
     ReentrancyGuardUpgradeable,
     PausableUntil,
-    RolesLibrary,
     IPriorityWithdrawalQueue
 {
     using SafeERC20 for IERC20;
@@ -45,7 +44,8 @@ contract PriorityWithdrawalQueue is
 
     uint32 public nonce;
     uint16 public shareRemainderSplitToTreasuryInBps;
-    bool public paused;
+    // deprecated storage slot
+    uint8 private __gap_0;
     uint96 public totalRemainderShares;
     uint128 public ethAmountLockedForPriorityWithdrawal;
 
@@ -71,9 +71,6 @@ contract PriorityWithdrawalQueue is
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-
-    event Paused(address account);
-    event Unpaused(address account);
     event WithdrawRequestCreated(
         bytes32 indexed requestId,
         address indexed user,
@@ -94,15 +91,12 @@ contract PriorityWithdrawalQueue is
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ERRORS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-
     error NotWhitelisted();
     error InvalidAmount();
     error RequestNotFound();
     error RequestNotFinalized();
     error RequestAlreadyFinalized();
     error NotRequestOwner();
-    error ContractPaused();
-    error ContractNotPaused();
     error NotMatured();
     error UnexpectedBalanceChange();
     error Keccak256Collision();
@@ -461,49 +455,6 @@ contract PriorityWithdrawalQueue is
     }
 
     //--------------------------------------------------------------------------------------
-    //------------------------------  PAUSE FUNCTIONS  -------------------------------------
-    //--------------------------------------------------------------------------------------
-    /**
-     * @notice Pause the contract
-     */
-    function pauseContract() external onlyOperatingMultisig {
-        if (paused) revert ContractPaused();
-        paused = true;
-        emit Paused(msg.sender);
-    }
-
-    /**
-     * @notice Unpause the contract
-     */
-    function unPauseContract() external onlyOperatingMultisig {
-        if (!paused) revert ContractNotPaused();
-        paused = false;
-        emit Unpaused(msg.sender);
-    }
-
-    /**
-     * @notice Pause the contract until the pauseUntilDuration
-     */
-    function pauseContractUntil() external onlyGuardian {
-        _pauseUntil();
-    }
-
-    /**
-     * @notice Unpause the contract from pauseUntil
-     */
-    function unpauseContractUntil() external onlyOperatingMultisig {
-        _unpauseUntil();
-    }
-
-    /**
-     * @notice Set the pause duration for the contract
-     * @param _pauseUntilDuration The new pause duration
-     */
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
-        _setPauseUntilDuration(_pauseUntilDuration);
-    }
-
-    //--------------------------------------------------------------------------------------
     //------------------------------  INTERNAL FUNCTIONS  ----------------------------------
     //--------------------------------------------------------------------------------------
     /**
@@ -852,17 +803,6 @@ contract PriorityWithdrawalQueue is
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
     //--------------------------------------------------------------------------------------
-    /**
-     * @notice Modifier to check if the contract is not paused.
-     * @dev Route OZ's whenNotPaused through the pause-until check as well, so any function
-     *      gated by whenNotPaused is automatically blocked during a timed pause too.
-     */
-    modifier whenNotPaused() {
-        if (paused) revert ContractPaused();
-        _requireNotPausedUntil();
-        _;
-    }
-
     /**
      * @dev Reason why modifier has both whitelisted and blacklisted checks is becuase if whitelisted user gets compramised,
      * they can access the protocol before operating multisig can remove whitelist. so guardian can blacklist user.

@@ -20,7 +20,7 @@ import "@etherfi/governance/utils/ReentrancyGuardNamespaced.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 
-contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardNamespaced, PausableUntil, RolesLibrary, ILiquidityPool {
+contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardNamespaced, PausableUntil, ILiquidityPool {
     using SafeERC20 for IERC20;
 
     //--------------------------------------------------------------------------------------
@@ -38,14 +38,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     uint256[10] private __gap_2;
 
     mapping(address => ValidatorSpawner) public validatorSpawner;
-
-    // deprecated storage slots
-    uint8 private __gap_3;
-    uint128 private DEPRECATED_ethAmountLockedForWithdrawal;
-    bool public paused;
-
-    // deprecated storage slots
-    uint256[4] private __gap_4;
+    
+    //deprecated storage slots
+    uint256[5] private __gap_3;
 
     uint256 public validatorSizeWei;
     uint256 public maxWithdrawAmount;
@@ -83,9 +78,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-    event Paused();
-    event Unpaused();
-
     event Deposit(address indexed sender, uint256 amount, SourceOfFunds source, address referral);
     event Withdraw(address indexed sender, address recipient, uint256 amount, SourceOfFunds source);
     event EEthSharesBurnedForNonETHWithdrawal(uint256 amountSharesToBurn, uint256 withdrawalValueInETH);
@@ -122,10 +114,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     error MigrationNotComplete();
     error AlreadyRegistered();
     error NotRegistered();
-    error ContractPaused();
     error EETHRateDeflation();
-    error AlreadyPaused();
-    error NotPaused();
 
     //--------------------------------------------------------------------------------------
     //----------------------------  CONSTRUCTOR  ------------------------------
@@ -167,7 +156,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         
         __Ownable_init();
         __UUPSUpgradeable_init();
-        paused = true;
     }
 
     /**
@@ -177,7 +165,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     function initializeOnUpgradeV2() external onlyUpgradeTimelock {
         if (escrowMigrationCompleted) revert AlreadyMigrated();
 
-        uint128 nftLocked   = DEPRECATED_ethAmountLockedForWithdrawal;
+        // Legacy `ethAmountLockedForWithdrawal` was a uint128 packed at bit offset 8
+        // (byte 1) of __gap_3[0]; read it out directly from that slot.
+        uint128 nftLocked;
+        assembly {
+            nftLocked := and(shr(8, sload(__gap_3.slot)), 0xffffffffffffffffffffffffffffffff)
+        }
         uint128 queueLocked = address(priorityWithdrawalQueue) != address(0)
             ? uint128(priorityWithdrawalQueue.ethAmountLockedForPriorityWithdrawal())
             : 0;
@@ -189,7 +182,11 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
             totalValueOutOfLp += totalLocked;
 
             if (nftLocked > 0) {
-                DEPRECATED_ethAmountLockedForWithdrawal = 0;
+                // zero the legacy uint128 (bits 8..135 of __gap_3[0]), preserving its slot neighbours
+                assembly {
+                    let slot := __gap_3.slot
+                    sstore(slot, and(sload(slot), not(shl(8, 0xffffffffffffffffffffffffffffffff))))
+                }
                 _sendFund(address(withdrawRequestNFT), nftLocked);
             }
             if (queueLocked > 0) _sendFund(address(priorityWithdrawalQueue), queueLocked);
@@ -606,56 +603,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     //--------------------------------------------------------------------------------------
-    //------------------------------  PAUSING FUNCTIONS  -----------------------------------
-    //--------------------------------------------------------------------------------------
-    /**
-     * @notice Pauses the contract
-     * @dev Only callable by the operating multisig
-     */
-    function pauseContract() external onlyOperatingMultisig {
-        if (paused) revert AlreadyPaused();
-
-        paused = true;
-        emit Paused();
-    }
-
-    /**
-     * @notice Unpauses the contract
-     * @dev Only callable by the operating multisig
-     */
-    function unPauseContract() external onlyOperatingMultisig {
-        if (!paused) revert NotPaused();
-
-        paused = false;
-        emit Unpaused();
-    }
-
-    /**
-     * @notice Pauses contract until pasuUntilDuration
-     * @dev Only callable by the guardian
-     */
-    function pauseContractUntil() external onlyGuardian {
-        _pauseUntil();
-    }
-
-    /**
-     * @notice Unpauses contract from pauseUntil
-     * @dev Only callable by the operating multisig
-     */
-    function unpauseContractUntil() external onlyOperatingMultisig {
-        _unpauseUntil();
-    }
-
-    /**
-     * @notice Sets the pause duration for the contract
-     * @param _pauseUntilDuration The new pause duration
-     * @dev Only callable by the admin
-     */
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
-        _setPauseUntilDuration(_pauseUntilDuration);
-    }
-
-    //--------------------------------------------------------------------------------------
     //------------------------------  SETTER FUNCTIONS  ------------------------------------
     //--------------------------------------------------------------------------------------
     /**
@@ -828,13 +775,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     /**
-     * @notice Checks if the contract is paused
-     */
-    function _requireNotPaused() internal view virtual {
-        if (paused) revert ContractPaused();
-    }
-
-    /**
      * @notice Authorizes the upgrade of the contract
      * @param newImplementation The new implementation address
      * @dev Only callable by the upgrade timelock
@@ -933,17 +873,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
     //--------------------------------------------------------------------------------------
-    /**
-     * @notice Modifier to check if the contract is not paused
-     * @dev Only callable when the contract is not paused and not paused until 
-     * the pauseUntilDuration
-     */
-    modifier whenNotPaused() {
-        _requireNotPaused();
-        _requireNotPausedUntil();
-        _;
-    }
-
     /**
      * @notice Modifier to check if the caller is not blacklisted
      * @dev Only callable by the blacklister
