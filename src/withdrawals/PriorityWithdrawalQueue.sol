@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
+import {ReentrancyGuardTransient} from "solady/utils/ReentrancyGuardTransient.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
@@ -14,6 +14,7 @@ import "@etherfi/core/interfaces/IWeETH.sol";
 import "@etherfi/governance/interfaces/IBlacklister.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
+import "@etherfi/governance/utils/DeprecatedOZReentrancyGuard.sol";
 
 /**
  * @title PriorityWithdrawalQueue
@@ -21,9 +22,10 @@ import "@etherfi/governance/utils/RolesLibrary.sol";
  * @dev Implements priority withdrawal queue pattern
  */
 contract PriorityWithdrawalQueue is 
-    Initializable, 
-    UUPSUpgradeable, 
-    ReentrancyGuardUpgradeable,
+    Initializable,
+    UUPSUpgradeable,
+    DeprecatedOZReentrancyGuard,
+    ReentrancyGuardTransient,
     PausableUntil,
     IPriorityWithdrawalQueue
 {
@@ -149,7 +151,6 @@ contract PriorityWithdrawalQueue is
      */
     function initialize() external initializer {
         __UUPSUpgradeable_init();
-        __ReentrancyGuard_init();
 
         nonce = 1;
         shareRemainderSplitToTreasuryInBps = uint16(_BASIS_POINT_SCALE); // 100%

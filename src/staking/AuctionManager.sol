@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
+import {ReentrancyGuardTransient} from "solady/utils/ReentrancyGuardTransient.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
@@ -11,6 +11,7 @@ import "@etherfi/governance/interfaces/IBlacklister.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
 import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
+import "@etherfi/governance/utils/DeprecatedOZReentrancyGuard.sol";
 
 contract AuctionManager is
     Initializable,
@@ -18,7 +19,8 @@ contract AuctionManager is
     DeprecatedOZPausable,
     OwnableUpgradeable,
     PausableUntil,
-    ReentrancyGuardUpgradeable,
+    DeprecatedOZReentrancyGuard,
+    ReentrancyGuardTransient,
     UUPSUpgradeable
 {
     //--------------------------------------------------------------------------------------
@@ -110,7 +112,6 @@ contract AuctionManager is
 
         __Ownable_init();
         __UUPSUpgradeable_init();
-        __ReentrancyGuard_init();
     }
 
     /// @notice Creates bid(s) for the right to run a validator node when ETH is deposited
