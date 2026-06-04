@@ -12,7 +12,6 @@ import "@etherfi/staking/interfaces/IAuctionManager.sol";
 import "@etherfi/staking/interfaces/IEtherFiNode.sol";
 import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
-import "@etherfi/archive/membership/interfaces/IMembershipManager.sol";
 import "@etherfi/withdrawals/interfaces/IWithdrawRequestNFT.sol";
 import "@etherfi/withdrawals/interfaces/IPriorityWithdrawalQueue.sol";
 
@@ -67,7 +66,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
     IAuctionManager public immutable auctionManager;
     IEtherFiNodesManager public immutable etherFiNodesManager;
     ILiquidityPool public immutable liquidityPool;
-    IMembershipManager public immutable membershipManager;
     IWithdrawRequestNFT public immutable withdrawRequestNft;
     IPriorityWithdrawalQueue public immutable priorityWithdrawalQueue;
 
@@ -164,7 +162,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
         auctionManager = IAuctionManager(_constructorAddresses.auctionManager);
         etherFiNodesManager = IEtherFiNodesManager(_constructorAddresses.etherFiNodesManager);
         liquidityPool = ILiquidityPool(_constructorAddresses.liquidityPool);
-        membershipManager = IMembershipManager(_constructorAddresses.membershipManager);
         withdrawRequestNft = IWithdrawRequestNFT(_constructorAddresses.withdrawRequestNft);
         priorityWithdrawalQueue = IPriorityWithdrawalQueue(_constructorAddresses.priorityWithdrawalQueue);
 

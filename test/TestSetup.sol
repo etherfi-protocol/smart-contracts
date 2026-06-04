@@ -616,7 +616,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             deployed.WITHDRAW_REQUEST_NFT_BUYBACK_SAFE(),
             address(eETHInstance),
             address(liquidityPoolInstance),
-            address(membershipManagerV1Instance),
             address(roleRegistryInstance),
             address(blacklisterInstance),
             address(etherFiAdminInstance)
@@ -644,7 +643,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 auctionManager: address(auctionInstance),
                 etherFiNodesManager: address(managerInstance),
                 liquidityPool: address(liquidityPoolInstance),
-                membershipManager: address(membershipManagerV1Instance),
                 withdrawRequestNft: address(withdrawRequestNFTInstance),
                 roleRegistry: address(roleRegistryInstance),
                 priorityWithdrawalQueue: address(priorityQueueInstance)
@@ -1214,7 +1212,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(treasuryInstance),
             address(eETHProxy),
             address(liquidityPoolProxy),
-            address(membershipManagerProxy),
             address(roleRegistryInstance),
             address(blacklisterInstance),
             address(etherFiAdminProxy)
@@ -1248,7 +1245,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 auctionManager: address(auctionManagerProxy),
                 etherFiNodesManager: address(etherFiNodeManagerProxy),
                 liquidityPool: address(liquidityPoolProxy),
-                membershipManager: address(membershipManagerProxy),
                 withdrawRequestNft: address(withdrawRequestNFTProxy),
                 roleRegistry: address(roleRegistryInstance),
                 priorityWithdrawalQueue: address(priorityQueueProxy)
@@ -1556,7 +1552,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 auctionManager: address(auctionInstance),
                 etherFiNodesManager: address(managerInstance),
                 liquidityPool: address(liquidityPoolInstance),
-                membershipManager: address(membershipManagerInstance),
                 withdrawRequestNft: address(withdrawRequestNFTInstance),
                 roleRegistry: address(roleRegistryInstance),
                 priorityWithdrawalQueue: address(priorityQueueInstance)
@@ -1579,7 +1574,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 auctionManager: address(auctionInstance),
                 etherFiNodesManager: address(managerInstance),
                 liquidityPool: address(liquidityPoolInstance),
-                membershipManager: address(membershipManagerInstance),
                 withdrawRequestNft: address(withdrawRequestNFTInstance),
                 roleRegistry: address(roleRegistryInstance),
                 priorityWithdrawalQueue: address(priorityQueueInstance)

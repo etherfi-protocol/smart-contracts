@@ -1056,7 +1056,6 @@ contract EtherFiOracleTest is TestSetup {
             auctionManager: address(auctionInstance),
             etherFiNodesManager: address(managerInstance),
             liquidityPool: address(liquidityPoolInstance),
-            membershipManager: address(membershipManagerInstance),
             withdrawRequestNft: address(withdrawRequestNFTInstance),
             roleRegistry: address(roleRegistryInstance),
             priorityWithdrawalQueue: address(priorityQueueInstance)

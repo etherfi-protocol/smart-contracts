@@ -82,7 +82,6 @@ contract PriorityWithdrawalQueueTest is TestSetup {
                 0x2f5301a3D59388c509C65f8698f521377D41Fd0F,
                 address(eETHInstance),
                 address(liquidityPoolInstance),
-                address(membershipManagerInstance),
                 address(roleRegistryInstance),
                 address(blacklisterInstance),
                 address(etherFiAdminInstance)
