@@ -486,7 +486,7 @@ contract WithdrawRemainderHandler is StdUtils {
         int128 delta = -int128(int256(bound(uint256(deltaSeed), 1, cap)));
 
         vm.prank(membershipManager);
-        try lp.rebase(delta) {
+        try lp.rebase(delta, 0) {
             callCounts["rebase_negative"]++;
         } catch (bytes memory err) {
             _recordRevert("rebase", err);
@@ -502,7 +502,7 @@ contract WithdrawRemainderHandler is StdUtils {
         int128 delta = int128(int256(bound(uint256(deltaSeed), 0, cap)));
 
         vm.prank(membershipManager);
-        try lp.rebase(delta) {
+        try lp.rebase(delta, 0) {
             callCounts["rebase_positive"]++;
         } catch (bytes memory err) {
             _recordRevert("rebase", err);

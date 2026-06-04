@@ -85,8 +85,7 @@ interface ILiquidityPool {
     function registerValidatorSpawner(address _user) external;
     function unregisterValidatorSpawner(address _user) external;
 
-    function rebase(int128 _accruedRewards) external;
-    function payProtocolFees(uint128 _protocolFees) external;
+    function rebase(int128 _accruedRewards, uint128 _protocolFees) external;
     function addEthAmountLockedForWithdrawal(uint128 _amount) external;
     function transferLockedEthForPriority(uint128 _amount) external;
     function returnLockedEth(uint128 _amount) external payable;

@@ -97,7 +97,7 @@ contract EETHTest is TestSetup {
 
         // +25 ether reward = 0.25% of 10000 (exactly at the cap). Pooled = 10025
         vm.prank(address(etherFiAdminInstance));
-        liquidityPoolInstance.rebase(25 ether);
+        liquidityPoolInstance.rebase(25 ether, 0);
         _transferTo(address(liquidityPoolInstance), 25 ether);
 
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 10025 ether);
@@ -128,7 +128,7 @@ contract EETHTest is TestSetup {
 
         // +50 ether reward = ~0.25% of 20050 (within cap). Pooled = 20100
         vm.prank(address(etherFiAdminInstance));
-        liquidityPoolInstance.rebase(50 ether);
+        liquidityPoolInstance.rebase(50 ether, 0);
         _transferTo(address(liquidityPoolInstance), 50 ether);
 
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 20100 ether);

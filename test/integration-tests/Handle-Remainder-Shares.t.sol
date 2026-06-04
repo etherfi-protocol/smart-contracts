@@ -91,7 +91,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
 
         // Rebase to create remainder (increase liquidity pool's ETH backing)
         vm.prank(address(etherFiAdminInstance));
-        liquidityPoolInstance.rebase(5 ether);
+        liquidityPoolInstance.rebase(5 ether, 0);
 
         // Finalize and claim the withdrawal to create remainder
         vm.prank(ETHERFI_ADMIN);
@@ -245,7 +245,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
 
             // Rebase to create remainder (increase liquidity pool's ETH backing)
             vm.prank(address(etherFiAdminInstance));
-            liquidityPoolInstance.rebase(5 ether);
+            liquidityPoolInstance.rebase(5 ether, 0);
 
             // Finalize and claim the withdrawal to create remainder
             vm.prank(ETHERFI_ADMIN);

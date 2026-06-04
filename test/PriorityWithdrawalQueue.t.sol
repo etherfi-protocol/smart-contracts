@@ -172,7 +172,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
     function _rebase(int128 accruedRewards) internal {
         vm.prank(liquidityPoolInstance.etherFiAdminContract());
-        liquidityPoolInstance.rebase(accruedRewards);
+        liquidityPoolInstance.rebase(accruedRewards, 0);
     }
 
     /// @dev Helper to create a withdrawal request via weETH and return both the requestId and request struct

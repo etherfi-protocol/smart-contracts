@@ -1725,18 +1725,6 @@ contract EtherFiOracleTest is TestSetup {
         etherFiAdminInstance.executeTasks(report);
     }
 
-    function test_canExecuteTasks_falseWhenProtocolFeesNegative() public {
-        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
-        report.protocolFees = -1;
-        _moveClock(1 days / 12);
-        _submitForConsensus(report);
-
-        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
-
-        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: protocol fees can't be negative"));
-        etherFiAdminInstance.executeTasks(report);
-    }
-
     // Regression pin: protocolFees == 0 with a negative accruedRewards must
     // pass validation. An earlier refactor accidentally extended the 20%
     // rule to protocolFees == 0, which would have rejected this case

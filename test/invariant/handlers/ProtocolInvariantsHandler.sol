@@ -352,7 +352,7 @@ contract ProtocolInvariantsHandler is StdUtils {
         uint256 outOfLp = lp.totalValueOutOfLp();
         if (outOfLp < 1 ether) {
             vm.prank(membershipManager);
-            try lp.rebase(int128(10 ether)) {
+            try lp.rebase(int128(10 ether), 0) {
                 ghost_ledgerTPE += int256(uint256(10 ether));
             } catch {
                 callCounts["bForNon_skipped"]++;
@@ -434,7 +434,7 @@ contract ProtocolInvariantsHandler is StdUtils {
         delta = int128(bound(int256(delta), minD, maxD));
 
         vm.prank(membershipManager);
-        try lp.rebase(delta) {
+        try lp.rebase(delta, 0) {
             ghost_ledgerTPE += int256(delta);
             callCounts[delta < 0 ? bytes32("rebase_negative") : bytes32("rebase_positive")]++;
         } catch (bytes memory err) {
@@ -462,7 +462,7 @@ contract ProtocolInvariantsHandler is StdUtils {
         delta = int128(bound(int256(delta), minD, maxD));
 
         vm.prank(membershipManager);
-        try lp.rebase(delta) {
+        try lp.rebase(delta, 0) {
             ghost_ledgerTPE += int256(delta);
             callCounts["rebaseExtreme"]++;
         } catch (bytes memory err) {
@@ -751,7 +751,7 @@ contract ProtocolInvariantsHandler is StdUtils {
         uint256 outOfLp = lp.totalValueOutOfLp();
         if (outOfLp < 1 ether) {
             vm.prank(membershipManager);
-            try lp.rebase(int128(int256(uint256(2 ether)))) {
+            try lp.rebase(int128(int256(uint256(2 ether))), 0) {
                 ghost_ledgerTPE += int256(2 ether);
             } catch { callCounts["segClaim_skipped"]++; return; }
             outOfLp = lp.totalValueOutOfLp();

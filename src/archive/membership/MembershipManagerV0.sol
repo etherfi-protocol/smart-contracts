@@ -265,7 +265,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     function rebase(int128 _accruedRewards) external {
         _requireAdmin();
         uint256 ethRewardsPerEEthShareBeforeRebase = liquidityPool.amountForShare(1 ether);
-        liquidityPool.rebase(_accruedRewards);
+        liquidityPool.rebase(_accruedRewards, 0);
         uint256 ethRewardsPerEEthShareAfterRebase = liquidityPool.amountForShare(1 ether);
 
         uint256 etherFanEEthShares = eETH.shares(address(this));

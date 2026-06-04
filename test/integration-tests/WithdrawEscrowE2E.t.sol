@@ -693,7 +693,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
         uint256 totalPooled = liquidityPoolInstance.getTotalPooledEther();
         int128 slash = -int128(uint128(totalPooled / 20));
         vm.prank(liquidityPoolInstance.etherFiAdminContract());
-        liquidityPoolInstance.rebase(slash);
+        liquidityPoolInstance.rebase(slash, 0);
 
         uint256 claimableAfter = withdrawRequestNFTInstance.getClaimableAmount(reqId);
         assertEq(claimableAfter, claimableBefore,

@@ -296,8 +296,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
         (bool _isValid, string memory _error) = _validateReport(_report, reportHash);
         if (!_isValid) revert ReportValidationFailed(_error);
 
-        _handleAccruedRewards(_report);
-        _handleProtocolFees(_report);
+        _handleRebase(_report);
         _enqueueValidatorApprovalTask(reportHash, _report);
         _finalizeWithdrawals(_report.lastFinalizedWithdrawalRequestId, _report.finalizedWithdrawalAmount);
 
@@ -402,26 +401,17 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
     }
 
     /**
-     * @notice Pays the protocol fees
+     * @notice Rebases the protocol and pays the protocol fees in a single call
      * @param _report The report
+     * @dev LiquidityPool.rebase no-ops each leg when its amount is zero, so an
+     *      empty report (no rewards, no fees) is a no-op.
      */
-    function _handleProtocolFees(IEtherFiOracle.OracleReport calldata _report) internal { 
-        if(_report.protocolFees == 0) {
-            return;
-        }
-        liquidityPool.payProtocolFees(uint128(_report.protocolFees));
-    }
-
-    /**
-     * @notice Rebases the protocol
-     * @param _report The report
-     */
-    function _handleAccruedRewards(IEtherFiOracle.OracleReport calldata _report) internal {
-        if (_report.accruedRewards == 0) {
+    function _handleRebase(IEtherFiOracle.OracleReport calldata _report) internal {
+        if (_report.accruedRewards == 0 && _report.protocolFees == 0) {
             return;
         }
 
-        liquidityPool.rebase(_report.accruedRewards);
+        liquidityPool.rebase(_report.accruedRewards, _report.protocolFees);
     }
 
     /**
@@ -559,10 +549,9 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
      * @return _error The error message
      */
     function _validateProtocolFees(IEtherFiOracle.OracleReport calldata _report) internal pure returns (bool, string memory) {
-        if (_report.protocolFees < 0) return (false, "EtherFiAdmin: protocol fees can't be negative");
-        int128 totalRewards = _report.protocolFees + _report.accruedRewards;
+        int128 totalRewards = int128(_report.protocolFees) + _report.accruedRewards;
         // protocol fees are less than 20% of total rewards
-        if (_report.protocolFees > 0 && _report.protocolFees * int256(uint256(MAX_PROTOCOL_FEE_INV_RATIO)) > totalRewards) return (false, "EtherFiAdmin: protocol fees exceed 20% total rewards");
+        if (_report.protocolFees > 0 && int128(_report.protocolFees) * int256(uint256(MAX_PROTOCOL_FEE_INV_RATIO)) > totalRewards) return (false, "EtherFiAdmin: protocol fees exceed 20% total rewards");
         return (true, "");
     }
 

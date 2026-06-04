@@ -1896,7 +1896,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         address admin = liquidityPoolInstance.etherFiAdminContract();
         if (_amount <= 0) {
             vm.prank(admin);
-            liquidityPoolInstance.rebase(_amount);
+            liquidityPoolInstance.rebase(_amount, 0);
             return;
         }
         uint256 remaining = uint256(uint128(_amount));
@@ -1906,7 +1906,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             require(maxIncrease > 0, "_rebaseUncapped: TVL too small for a positive rebase");
             uint256 chunk = remaining < maxIncrease ? remaining : maxIncrease;
             vm.prank(admin);
-            liquidityPoolInstance.rebase(int128(uint128(chunk)));
+            liquidityPoolInstance.rebase(int128(uint128(chunk)), 0);
             remaining -= chunk;
         }
     }
