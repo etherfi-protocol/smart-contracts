@@ -7,10 +7,9 @@ import {AssetRecovery} from "@etherfi/utils/AssetRecovery.sol";
 import {PausableUntil} from "@etherfi/governance/utils/PausableUntil.sol";
 import {RolesLibrary} from "@etherfi/governance/utils/RolesLibrary.sol";
 import {DeprecatedOZOwnable} from "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
-import {DeprecatedOZPausable} from "@etherfi/governance/utils/DeprecatedOZPausable.sol";
 import {ICumulativeMerkleRewardsDistributor}  from "@etherfi/rewards/interfaces/ICumulativeMerkleRewardsDistributor.sol";
 
-contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistributor, DeprecatedOZOwnable, DeprecatedOZPausable, UUPSUpgradeable, PausableUntil, AssetRecovery {
+contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistributor, DeprecatedOZOwnable, UUPSUpgradeable, PausableUntil, AssetRecovery {
     using SafeERC20 for IERC20;
 
     //--------------------------------------------------------------------------------------
