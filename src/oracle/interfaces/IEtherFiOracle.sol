@@ -12,7 +12,6 @@ interface IEtherFiOracle {
         int128 protocolFees;
         uint256[] validatorsToApprove;
         uint32 lastFinalizedWithdrawalRequestId;
-        uint128 finalizedWithdrawalAmount;
     }
 
     struct CommitteeMemberState {

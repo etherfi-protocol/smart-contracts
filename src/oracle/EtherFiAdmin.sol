@@ -73,7 +73,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
 
     int256 public immutable maxAcceptableRebaseAprInBps;
     uint256 public immutable maxValidatorTaskBatchSize;
-    uint256 public immutable maxNumberOfRequestsToFinalizePerReport;
+    uint256 public immutable maxNumberOfStaleRequestsToFinalizePerReport;
     uint256 public immutable maxAcceptableFinalizedWithdrawalAmountPerDay;
     uint256 public immutable maxAcceptableNumValidatorsToApprovePerDay;
     uint256 public immutable staleOracleReportBlockWindow;
@@ -111,7 +111,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
     //-------------------------------------  ERRORS  ---------------------------------------
     //--------------------------------------------------------------------------------------
     error InvalidMaxAcceptableFinalizedWithdrawalAmount();
-    error InvalidMaxNumberOfRequestsToFinalizePerReport();
+    error InvalidMaxNumberOfStaleRequestsToFinalizePerReport();
     error InvalidMaxFinalizedWithdrawalAmountPerDay();
     error InvalidMaxNumValidatorsToApprovePerDay();
     error InvalidAcceptableRebaseApr();
@@ -141,7 +141,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
      * @param _staleOracleReportBlockWindow The stale oracle report block window
      * @param _maxAcceptableFinalizedWithdrawalAmountPerDay The maximum acceptable finalized withdrawal amount per day
      * @param _maxAcceptableNumValidatorsToApprovePerDay The maximum acceptable number of validators to approve per day
-     * @param _maxNumberOfRequestsToFinalizePerReport The maximum number of requests to finalize per report
+     * @param _maxNumberOfStaleRequestsToFinalizePerReport The maximum number of stale requests to finalize per report
      * @custom:oz-upgrades-unsafe-allow constructor
      */
     constructor(
@@ -151,13 +151,13 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
         uint256 _staleOracleReportBlockWindow,
         uint256 _maxAcceptableFinalizedWithdrawalAmountPerDay,
         uint256 _maxAcceptableNumValidatorsToApprovePerDay,
-        uint256 _maxNumberOfRequestsToFinalizePerReport
+        uint256 _maxNumberOfStaleRequestsToFinalizePerReport
     ) RolesLibrary(_constructorAddresses.roleRegistry) {
         if (_maxAcceptableRebaseAprInBps <= 0 || _maxAcceptableRebaseAprInBps > int256(BASIS_POINTS_DENOMINATOR)) revert InvalidMaxAcceptableRebaseApr();
         if (_maxValidatorTaskBatchSize == 0) revert InvalidValidatorTaskBatchSize();
         if (_staleOracleReportBlockWindow == 0) revert InvalidStaleOracleReportBlockWindow();
         if (_maxAcceptableFinalizedWithdrawalAmountPerDay == 0) revert InvalidMaxAcceptableFinalizedWithdrawalAmount();
-        if (_maxNumberOfRequestsToFinalizePerReport == 0) revert InvalidMaxNumberOfRequestsToFinalizePerReport();
+        if (_maxNumberOfStaleRequestsToFinalizePerReport == 0) revert InvalidMaxNumberOfStaleRequestsToFinalizePerReport();
 
         etherFiOracle = IEtherFiOracle(_constructorAddresses.etherFiOracle);
         stakingManager = IStakingManager(_constructorAddresses.stakingManager);
@@ -173,7 +173,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
         staleOracleReportBlockWindow = _staleOracleReportBlockWindow;
         maxAcceptableFinalizedWithdrawalAmountPerDay = _maxAcceptableFinalizedWithdrawalAmountPerDay;
         maxAcceptableNumValidatorsToApprovePerDay = _maxAcceptableNumValidatorsToApprovePerDay;
-        maxNumberOfRequestsToFinalizePerReport = _maxNumberOfRequestsToFinalizePerReport;
+        maxNumberOfStaleRequestsToFinalizePerReport = _maxNumberOfStaleRequestsToFinalizePerReport;
 
         _disableInitializers();
     }
@@ -299,7 +299,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
         _handleAccruedRewards(_report);
         _handleProtocolFees(_report);
         _enqueueValidatorApprovalTask(reportHash, _report);
-        _finalizeWithdrawals(_report.lastFinalizedWithdrawalRequestId, _report.finalizedWithdrawalAmount);
+        _finalizeWithdrawals(_report.lastFinalizedWithdrawalRequestId);
 
         lastHandledReportRefSlot = _report.refSlotTo;
         lastHandledReportRefBlock = _report.refBlockTo;
@@ -345,7 +345,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
         uint32 requestId = lastFinalizedRequestId;
         uint128 finalizedWithdrawalAmount;
         while (requestId < currentRequestId) {
-            if ((requestId + 1) - lastFinalizedRequestId > maxNumberOfRequestsToFinalizePerReport) {
+            if ((requestId + 1) - lastFinalizedRequestId > maxNumberOfStaleRequestsToFinalizePerReport) {
                 break;
             }
             IWithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNft.getRequest(requestId + 1);
@@ -360,7 +360,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
             requestId++;
         }
         if (finalizedWithdrawalAmount == 0) revert NoWithdrawalsToFinalize();
-        _finalizeWithdrawals(requestId, finalizedWithdrawalAmount);
+        _finalizeWithdrawals(requestId);
         lastStaleReportFinalizationBlock = block.number;
     }
 
@@ -454,11 +454,10 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
     /**
      * @notice Finalizes the withdraw requests
      * @param _lastFinalizedRequestId The last finalized request id
-     * @param _finalizedWithdrawalAmount The finalized withdrawal amount
      */
-    function _finalizeWithdrawals(uint32 _lastFinalizedRequestId, uint128 _finalizedWithdrawalAmount) internal {
+    function _finalizeWithdrawals(uint32 _lastFinalizedRequestId) internal {
         withdrawRequestNft.finalizeRequests(_lastFinalizedRequestId);
-        liquidityPool.addEthAmountLockedForWithdrawal(_finalizedWithdrawalAmount);
+        liquidityPool.addEthAmountLockedForWithdrawal(withdrawRequestNft.getFinalizedWithdrawalAmount(_lastFinalizedRequestId));
     }
 
     /**
@@ -587,22 +586,14 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
      * @return _error The error message
      */
     function _validateWithdrawals(IEtherFiOracle.OracleReport calldata _report, uint256 elapsedTime) internal view returns (bool, string memory) {
-        uint256 finalizedWithdrawalAmountPerDay = uint256(_report.finalizedWithdrawalAmount).mulDiv(1 days, elapsedTime);
+        uint256 finalizedWithdrawalAmount = withdrawRequestNft.getFinalizedWithdrawalAmount(_report.lastFinalizedWithdrawalRequestId);
+        uint256 finalizedWithdrawalAmountPerDay = uint256(finalizedWithdrawalAmount).mulDiv(1 days, elapsedTime);
         if (finalizedWithdrawalAmountPerDay > maxFinalizedWithdrawalAmountPerDay) return (false, "EtherFiAdmin: finalized withdrawal amount exceeds max");
-        if (_report.finalizedWithdrawalAmount > liquidityPool.totalValueInLp()) return (false, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
+        if (finalizedWithdrawalAmount > liquidityPool.totalValueInLp()) return (false, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
 
         // valdate finalized request id
         uint32 lastFinalizedRequestId = withdrawRequestNft.lastFinalizedRequestId();
         if (_report.lastFinalizedWithdrawalRequestId < lastFinalizedRequestId) return (false, "EtherFiAdmin: finalized withdrawal request id is less than last finalized request id");
-        if (_report.lastFinalizedWithdrawalRequestId - lastFinalizedRequestId > maxNumberOfRequestsToFinalizePerReport) return (false, "EtherFiAdmin: number of requests to finalize exceeds max");
-        uint256 sumOfRequests;
-        for (uint256 i = lastFinalizedRequestId + 1; i <= _report.lastFinalizedWithdrawalRequestId; i++) {
-            IWithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNft.getRequest(i);
-            if (request.isValid) {
-                sumOfRequests += request.amountOfEEth;
-            }
-        }
-        if (sumOfRequests != _report.finalizedWithdrawalAmount) return (false, "EtherFiAdmin: sum of requests does not match finalized withdrawal amount");
         return (true, "");
     }
 

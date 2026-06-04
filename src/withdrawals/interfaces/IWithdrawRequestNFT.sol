@@ -18,6 +18,8 @@ interface IWithdrawRequestNFT {
     function ethAmountLockedForWithdrawal() external view returns (uint128);
     function nextRequestId() external view returns (uint32);
     function lastFinalizedRequestId() external view returns (uint32);
+    function totalRequestedWithdrawalAmount(uint256 requestId) external view returns (uint256);
+    function getFinalizedWithdrawalAmount(uint32 requestId) external view returns (uint128);
 
     function invalidateRequest(uint256 requestId) external;
     function finalizeRequests(uint256 upperBound) external;
