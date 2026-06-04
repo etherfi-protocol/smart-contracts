@@ -197,6 +197,19 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     //--------------------------------------------------------------------------------------
+    //----------------------------  RECEIVE FUNCTIONS  -------------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Receive ETH
+     */
+    receive() external payable {
+        if (msg.value > type(uint128).max) revert InvalidAmount();
+        totalValueOutOfLp -= uint128(msg.value);
+        totalValueInLp += uint128(msg.value);
+        _checkTotalValueInLp();
+    }
+
+    //--------------------------------------------------------------------------------------
     //----------------------------  DEPOSIT FUNCTIONS  -------------------------------------
     //--------------------------------------------------------------------------------------
     /**
@@ -285,13 +298,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     /**
      * @notice Settles a finalized claim for withdrawRequestNFT or priorityWithdrawalQueue.
-     * @param _amount The amount of ETH paid to the claimer
-     * @param _amountOfEEth The fulfill-time credit to remove from `totalValueOutOfLp`. Must
-     *        equal what was credited at fulfill/lock, not `_amount` (the two diverge on a
-     *        down-rebase). See the trust-model note below.
-     * @param _rate The rate of the withdraw
-     * @param _shareOfEEth The share of eETH to withdraw
-     * @return uint256 The amount of eETH burned
+     * @param _amount The amount of ETH to withdraw
+     * @param _share The share of eETH to withdraw
      * @dev Only callable by the withdrawRequestNFT or the priorityWithdrawalQueue
      * Caller supplies the snapshotted rate and the request's share allocation;
      * LP derives the share burn defensively from both inputs and current live rate.
@@ -324,32 +332,15 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
      * A negative rebase that drops `totalValueOutOfLp` below it reverts the claim
      * (finalized-withdrawal DoS, bounded by EtherFiAdmin's rebase-APR cap).
     */
-    function withdraw(uint256 _amount, uint256 _amountOfEEth, uint256 _rate, uint256 _shareOfEEth) external nonReentrant returns (uint256) {
+    function withdraw(uint256 _amount, uint256 _share) external nonReentrant {
         if (msg.sender != address(withdrawRequestNFT) && msg.sender != address(priorityWithdrawalQueue)) {
             revert IncorrectCaller();
         }
-        if (_amount > type(uint128).max || _amount == 0) revert InvalidAmount();
-        if (_rate == 0) revert InvalidRate();
+        if (_amount > type(uint128).max || _amount == 0 || _share == 0) revert InvalidAmount();
+        if (eETH.shares(msg.sender) < _share) revert InsufficientLiquidity();
 
-        // Guard 1: amount-cap against rate-implied entitlement of the request's allocation.
-        uint256 amountCap = Math.mulDiv(_shareOfEEth, _rate, SHARE_UNIT, Math.Rounding.Down);
-        if (_amount > amountCap) revert InvalidAmount();
-
-        // Guard 2: burn at the worse-for-protocol rate (the higher share count).
-        uint256 shareAtFrozen = Math.mulDiv(_amount, SHARE_UNIT, _rate, Math.Rounding.Up);
-        uint256 shareAtLive = Math.mulDiv(_amount, SHARE_UNIT, amountPerShareCeil(), Math.Rounding.Up);
-        uint256 share = Math.max(shareAtFrozen, shareAtLive);
-
-        // Guard 3: cap at the caller-asserted per-request allocation.
-        if (share > _shareOfEEth) share = _shareOfEEth;
-
-        if (share == 0) revert InvalidAmount();
-        if (eETH.shares(msg.sender) < share) revert InsufficientLiquidity();
-
-        totalValueOutOfLp -= uint128(_amountOfEEth);
-        eETH.burnShares(msg.sender, share);
-
-        return share;
+        totalValueOutOfLp -= uint128(_amount);
+        eETH.burnShares(msg.sender, _share);
     }
 
     /**
@@ -549,20 +540,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     /**
-     * @notice Returns ETH from the priority queue back to LP on a finalized cancel. Inverse of transferLockedEthForPriority.
-     * @param _amount The amount of ETH to return
-     * @dev Only callable by the priorityWithdrawalQueue
-     */
-    function returnLockedEth(uint128 _amount) external payable {
-        if (msg.sender != address(priorityWithdrawalQueue)) revert IncorrectCaller();
-        if (msg.value != _amount || _amount == 0) revert InvalidAmount();
-        totalValueOutOfLp -= uint128(_amount);
-        totalValueInLp    += uint128(_amount);
-
-        _checkTotalValueInLp();
-    }
-
-    /**
      * @notice Burns eETH shares
      * @param shares The amount of eETH shares to burn
      * @dev Only callable by the etherFiRedemptionManager, the withdrawRequestNFT or the priorityWithdrawalQueue
@@ -590,16 +567,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
         eETH.burnShares(msg.sender, _amountSharesToBurn);
         emit EEthSharesBurnedForNonETHWithdrawal(_amountSharesToBurn, _withdrawalValueInETH);
-    }
-
-    /**
-     * @notice Receive ETH
-     */
-    receive() external payable {
-        if (msg.value > type(uint128).max) revert InvalidAmount();
-        totalValueOutOfLp -= uint128(msg.value);
-        totalValueInLp += uint128(msg.value);
-        _checkTotalValueInLp();
     }
 
     //--------------------------------------------------------------------------------------

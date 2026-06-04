@@ -44,7 +44,6 @@ interface IPriorityWithdrawalQueue {
     function getClaimableAmount(WithdrawRequest calldata request) external view returns (uint256);
     function isWhitelisted(address user) external view returns (bool);
     function nonce() external view returns (uint32);
-    function shareRemainderSplitToTreasuryInBps() external view returns (uint16);
     function ethAmountLockedForPriorityWithdrawal() external view returns (uint128);
 
     // Constants
@@ -59,8 +58,6 @@ interface IPriorityWithdrawalQueue {
     function removeFromWhitelist(address user) external;
     function batchUpdateWhitelist(address[] calldata users, bool[] calldata statuses) external;
     function invalidateRequests(WithdrawRequest[] calldata requests) external returns(bytes32[] memory);
-    function updateShareRemainderSplitToTreasury(uint16 _shareRemainderSplitToTreasuryInBps) external;
-    function handleRemainder(uint256 eEthAmount) external;
 
     // Immutables
     function treasury() external view returns (address);
