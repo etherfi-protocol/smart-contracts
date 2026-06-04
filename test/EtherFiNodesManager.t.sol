@@ -39,7 +39,7 @@ contract EtherFiNodesManagerTest is TestSetup {
 
         address nodesManagerImplementation = address(new EtherFiNodesManager(address(stakingManagerInstance), address(roleRegistryInstance), address(rateLimiterInstance)));
 
-        vm.startPrank(managerInstance.owner());
+        vm.startPrank(roleRegistryInstance.owner());
         // ETHERFI_NODES_MANAGER_ADMIN_ROLE → OPERATION_TIMELOCK_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), admin);
         // ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE → HOUSEKEEPING_OPERATIONS_ROLE
@@ -93,7 +93,7 @@ contract EtherFiNodesManagerTest is TestSetup {
             address(eigenLayerEigenPodManager),
             address(eigenLayerDelegationManager)
         );
-        vm.prank(stakingManagerInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         stakingManagerInstance.upgradeEtherFiNode(address(nodeImpl));
         
         // // Now create a test node

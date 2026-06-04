@@ -204,7 +204,6 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
         int32 _acceptableRebaseAprInBps,
         uint16 _postReportWaitTimeInSlots
     ) external initializer {
-        __Ownable_init();
         __UUPSUpgradeable_init();
 
         acceptableRebaseAprInBps = _acceptableRebaseAprInBps;

@@ -123,7 +123,6 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
         if (_liquidityPool == address(0)) revert AddressZero();
 
         __UUPSUpgradeable_init();
-        __Ownable_init();
     }
 
     //--------------------------------------------------------------------------------------

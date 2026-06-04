@@ -50,7 +50,6 @@ contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistribut
      * @notice Initialize the CumulativeMerkleRewardsDistributor
      */
     function initialize() external initializer {
-        __Ownable_init();
         __UUPSUpgradeable_init();
         claimDelay = 2 days; // 48 hours
     }

@@ -72,10 +72,10 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         EtherFiNodesManager newManagerImpl = new EtherFiNodesManager(address(0x0), address(0x0));
         EtherFiNode newNodeImpl = new EtherFiNode(address(0x0), address(0x0), address(0x0), address(0x0));
 
-        vm.startPrank(managerInstance.owner());
+        vm.startPrank(roleRegistryInstance.owner());
         managerInstance.upgradeTo(address(newManagerImpl));
         vm.stopPrank();
-        vm.startPrank(stakingManagerInstance.owner());
+        vm.startPrank(roleRegistryInstance.owner());
         stakingManagerInstance.upgradeEtherFiNode(address(newNodeImpl));
         vm.stopPrank();
 
@@ -177,7 +177,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         data[0] = abi.encodeWithSelector(selector, podOwner, alice);
 
         // whitelist this external call
-        vm.prank(managerInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         managerInstance.updateAllowedForwardedExternalCalls(selector, delayedWithdrawalRouter, true);
 
         vm.prank(owner);
@@ -237,7 +237,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         data[0] = abi.encodeWithSelector(selector, operator, signatureWithExpiry, bytes32(0));
 
         // whitelist this external call
-        vm.prank(managerInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         managerInstance.updateAllowedForwardedExternalCalls(selector, delegationManager, true);
 
         assertEq(eigenLayerDelegationManager.isDelegated(podOwner), false);
@@ -260,7 +260,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
             data[0] = abi.encodeWithSelector(selector, podOwner);
 
             // whitelist this external call
-            vm.prank(managerInstance.owner());
+            vm.prank(roleRegistryInstance.owner());
             managerInstance.updateAllowedForwardedExternalCalls(selector, delegationManager, true);
 
             vm.prank(owner);
@@ -281,7 +281,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
             data[0] = abi.encodeWithSelector(selector, dsrv, signatureWithExpiry, bytes32(0));
 
             // whitelist this external call
-            vm.prank(managerInstance.owner());
+            vm.prank(roleRegistryInstance.owner());
             managerInstance.updateAllowedForwardedExternalCalls(selector, delegationManager, true);
 
             vm.startPrank(owner);
@@ -385,7 +385,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         vm.stopPrank();
 
-        vm.startPrank(managerInstance.owner());
+        vm.startPrank(roleRegistryInstance.owner());
         managerInstance.updateAllowedForwardedEigenpodCalls(selector1, true);
         managerInstance.updateAllowedForwardedExternalCalls(selector2, eigenPodManager, true);
         managerInstance.updateAllowedForwardedExternalCalls(selector3, delegationManager, true);

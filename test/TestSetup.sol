@@ -535,7 +535,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             existingBeacon,
             address(roleRegistryInstance)
         ));
-        vm.prank(stakingManagerInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         stakingManagerInstance.upgradeTo(newSmImpl);
 
         // Upgrade EtherFiRedemptionManager on the fork for the same reason — the
@@ -583,7 +583,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 roleRegistry: address(roleRegistryInstance)
             })
         ));
-        vm.prank(depositAdapterInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         depositAdapterInstance.upgradeTo(newDepositAdapterImpl);
 
         // Upgrade LiquidityPool — deployed impl uses `onlyProtocolUpgrader`,
@@ -606,7 +606,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 membershipManager: address(membershipManagerV1Instance)
             })
         ));
-        vm.prank(liquidityPoolInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         liquidityPoolInstance.upgradeTo(newLpImpl);
 
         // Upgrade WithdrawRequestNFT — legacy `_authorizeUpgrade` is `onlyOwner`,
@@ -621,7 +621,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(blacklisterInstance),
             address(etherFiAdminInstance)
         ));
-        vm.prank(withdrawRequestNFTInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         withdrawRequestNFTInstance.upgradeTo(newWrnImpl);
 
         // Upgrade EtherFiNodesManager — deployed impl uses `onlyProtocolUpgrader`.
@@ -630,7 +630,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(roleRegistryInstance),
             address(rateLimiterInstance)
         ));
-        vm.prank(managerInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         managerInstance.upgradeTo(newManagerImpl);
 
         // Upgrade EtherFiAdmin — deployed impl uses `onlyProtocolUpgrader`. Tests
@@ -666,7 +666,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(blacklisterInstance),
             address(rateLimiterInstance)
         ));
-        vm.prank(weEthInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         weEthInstance.upgradeTo(newWeETHImpl);
 
         // Upgrade Liquifier — legacy `_authorizeUpgrade` is `onlyOwner`, but we
@@ -692,7 +692,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             LIQUIFIER_STALE_WINDOW,
             LIQUIFIER_MAX_PRICE_DEVIATION_BPS
         ));
-        vm.prank(liquifierInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         liquifierInstance.upgradeTo(newLiquifierImpl);
 
         // Now that every live proxy that authorizes upgrades through the legacy
@@ -720,16 +720,16 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // UPGRADE_TIMELOCK_ROLE. Grant it to every proxy owner address that
         // realistic-fork tests prank as for an upgradeTo call.
         roleRegistryInstance.grantRole(_upgradeTimelockRole, _roleRegOwner);
-        roleRegistryInstance.grantRole(_upgradeTimelockRole, stakingManagerInstance.owner());
-        roleRegistryInstance.grantRole(_upgradeTimelockRole, depositAdapterInstance.owner());
-        roleRegistryInstance.grantRole(_upgradeTimelockRole, liquidityPoolInstance.owner());
-        roleRegistryInstance.grantRole(_upgradeTimelockRole, withdrawRequestNFTInstance.owner());
-        roleRegistryInstance.grantRole(_upgradeTimelockRole, managerInstance.owner());
-        roleRegistryInstance.grantRole(_upgradeTimelockRole, etherFiAdminInstance.owner());
-        roleRegistryInstance.grantRole(_upgradeTimelockRole, etherFiOracleInstance.owner());
-        roleRegistryInstance.grantRole(_upgradeTimelockRole, liquifierInstance.owner());
-        roleRegistryInstance.grantRole(_upgradeTimelockRole, nodeOperatorManagerInstance.owner());
-        roleRegistryInstance.grantRole(_upgradeTimelockRole, etherFiRestakerInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, roleRegistryInstance.owner());
         roleRegistryInstance.grantRole(_upgradeTimelockRole, owner);
 
         // Operational roles for test setUps. Pre-consolidation, these
@@ -802,7 +802,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         // Upgrade Liquifier BEFORE swapping RoleRegistry: the live Liquifier impl
         // still authorizes upgrades through `onlyProtocolUpgrader`, which the new
-        // RoleRegistry impl no longer exposes. `liquifierInstance.owner()` matches
+        // RoleRegistry impl no longer exposes. `roleRegistryInstance.owner()` matches
         // RoleRegistry.owner() on mainnet, so the OLD impl's owner check passes.
         if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
             // Deploy the new impl BEFORE pranking — see note above; the inlined
@@ -818,7 +818,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 etherfiRestaker: address(etherFiRestakerInstance),
                 l1SyncPool: address(0xA6)
             }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS));
-            vm.prank(liquifierInstance.owner());
+            vm.prank(roleRegistryInstance.owner());
             liquifierInstance.upgradeTo(newLiquifierImpl);
         }
 
@@ -1563,13 +1563,13 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             }),
             10_000, 1_000, 7200
         , 100_000 ether, 500, 1000));
-        vm.prank(etherFiAdminInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         etherFiAdminInstance.upgradeTo(newAdminImpl);
     }
 
     function _upgradeOracleAndAdminForFork() internal {
         address newOracleImpl = address(new EtherFiOracle(1, address(etherFiAdminInstance), address(roleRegistryInstance)));
-        vm.prank(etherFiOracleInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         etherFiOracleInstance.upgradeTo(newOracleImpl);
 
         address newAdminImpl = address(new EtherFiAdmin(
@@ -2277,13 +2277,13 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         EtherFiNode etherFiNode = new EtherFiNode(liquidityPool, etherFiNodesManager, eigenPodManager, delegationManager);
         address newImpl = address(etherFiNode);
-        vm.prank(stakingManagerInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         stakingManagerInstance.upgradeEtherFiNode(newImpl);
     }
 
     function _upgrade_etherfi_nodes_manager_contract() internal {
         address newImpl = address(new EtherFiNodesManager(address(stakingManagerInstance), address(roleRegistryInstance), address(rateLimiterInstance)));
-        vm.prank(managerInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         managerInstance.upgradeTo(newImpl);
     }
 
@@ -2291,7 +2291,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // TODO(dave): fix
         //address newImpl = address(new StakingManager());
         address newImpl = address(0x0);
-        vm.prank(stakingManagerInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         stakingManagerInstance.upgradeTo(newImpl);
     }
 
@@ -2311,7 +2311,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 membershipManager: address(membershipManagerInstance)
             })
         ));
-        vm.startPrank(liquidityPoolInstance.owner());
+        vm.startPrank(roleRegistryInstance.owner());
         liquidityPoolInstance.upgradeTo(newImpl);
         vm.stopPrank();
     }
@@ -2328,7 +2328,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             etherfiRestaker: address(0xA5),
             l1SyncPool: address(0xA6)
         }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS));
-        vm.prank(liquifierInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         liquifierInstance.upgradeTo(newImpl);
     }
 

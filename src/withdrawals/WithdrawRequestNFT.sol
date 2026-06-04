@@ -166,7 +166,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, DeprecatedOZO
     function initialize(address _liquidityPoolAddress, address _eEthAddress, address _membershipManagerAddress) initializer external {
         if (_liquidityPoolAddress == address(0) || _eEthAddress == address(0) || _membershipManagerAddress == address(0)) revert AddressZero();
         __ERC721_init("Withdraw Request NFT", "WithdrawRequestNFT");
-        __Ownable_init();
         __UUPSUpgradeable_init();
 
         nextRequestId = 1;
@@ -452,7 +451,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, DeprecatedOZO
         blacklister.nonBlacklisted(to);
         for (uint256 i = 0; i < batchSize; i++) {
             uint256 tokenId = firstTokenId + i;
-            if (!_requests[tokenId].isValid && msg.sender != owner()) revert InvalidRequest();
+            if (!_requests[tokenId].isValid && msg.sender != roleRegistry.owner()) revert InvalidRequest();
         }
     }
 

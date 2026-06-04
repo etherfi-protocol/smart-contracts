@@ -154,7 +154,6 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
     function initialize(address _eEthAddress, address _stakingManagerAddress, address _nodesManagerAddress, address _membershipManagerAddress, address _tNftAddress, address _etherFiAdminContract, address _withdrawRequestNFT) external initializer {
         if (_eEthAddress == address(0) || _stakingManagerAddress == address(0) || _nodesManagerAddress == address(0) || _membershipManagerAddress == address(0) || _tNftAddress == address(0)) revert DataNotSet();
         
-        __Ownable_init();
         __UUPSUpgradeable_init();
     }
 

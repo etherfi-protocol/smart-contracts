@@ -72,7 +72,6 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
 
     /// @notice initializes contract
     function initialize() external initializer {
-        __Ownable_init();
         __UUPSUpgradeable_init();
     }
 

@@ -166,7 +166,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
     function initialize(address _treasury, address _liquidityPool, address _eigenLayerStrategyManager, address _lidoWithdrawalQueue, 
                         address _stEth, address _stEth_Eth_Pool,
                         uint32 _timeBoundCapRefreshInterval) initializer external {
-        __Ownable_init();
         __UUPSUpgradeable_init();
 
         timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;

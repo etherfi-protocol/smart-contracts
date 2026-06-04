@@ -103,7 +103,6 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
         __ERC20_init("Wrapped eETH", "weETH");
         __ERC20Permit_init("Wrapped eETH");
         __UUPSUpgradeable_init();
-        __Ownable_init();
     }
 
     /// @dev name changed from the version initially deployed

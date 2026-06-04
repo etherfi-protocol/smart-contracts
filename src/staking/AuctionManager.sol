@@ -110,7 +110,6 @@ contract AuctionManager is
         numberOfBids = 1;
         whitelistEnabled = true;
 
-        __Ownable_init();
         __UUPSUpgradeable_init();
     }
 

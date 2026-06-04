@@ -116,7 +116,6 @@ contract EtherFiOracle is Initializable, DeprecatedOZOwnable, DeprecatedOZPausab
         external
         initializer
     {
-        __Ownable_init();
         __UUPSUpgradeable_init();
 
         consensusVersion = 1;

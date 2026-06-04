@@ -99,9 +99,7 @@ contract WeETHWithdrawAdapter is
      */
     function initialize(address _initialOwner) external initializer {
         if (_initialOwner == address(0)) revert ZeroAddress();
-        __Ownable_init();
         __UUPSUpgradeable_init();
-        _transferOwnership(_initialOwner);
     }
 
     //--------------------------------------------------------------------------------------

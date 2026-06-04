@@ -55,7 +55,6 @@ contract EtherFiRewardsRouter is DeprecatedOZOwnable, UUPSUpgradeable, RolesLibr
      * @notice Initialize the EtherFiRewardsRouter
      */
     function initialize() public initializer {
-        __Ownable_init();
         __UUPSUpgradeable_init();
     }
 
