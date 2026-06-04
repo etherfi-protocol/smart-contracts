@@ -91,7 +91,7 @@ contract LiquifierTest is TestSetup {
 
         vm.deal(alice, 100 ether);
 
-        vm.startPrank(liquifierInstance.owner());
+        vm.startPrank(roleRegistryInstance.owner());
         liquifierInstance.updateQuoteStEthWithCurve(true);
         liquifierInstance.updateDiscountInBasisPoints(address(stEth), 500); // 5%
         vm.stopPrank();

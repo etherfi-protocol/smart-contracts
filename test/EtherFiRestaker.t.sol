@@ -230,7 +230,7 @@ contract EtherFiRestakerTest is TestSetup {
 
         address newRestakerImpl = address(new EtherFiRestaker(address(liquidityPoolInstance), address(liquifierInstance), address(eigenLayerRewardsCoordinator), address(etherFiRedemptionManagerInstance), address(roleRegistryInstance), address(rateLimiterInstance), address(eigenLayerStrategyManager), address(eigenLayerDelegationManager)));
 
-        address restakerOwner = restaker.owner();
+        address restakerOwner = roleRegistryInstance.owner();
         vm.startPrank(roleRegistryInstance.owner());
         // ETHERFI_RESTAKER_ADMIN_ROLE consolidated into OPERATION_MULTISIG_ROLE.
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), restakerOwner);

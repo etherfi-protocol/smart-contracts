@@ -1,15 +1,15 @@
 pragma solidity ^0.8.24;
 
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "@etherfi/governance/utils/RolesLibrary.sol";
+import "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
 
-contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable, RolesLibrary {
+contract EtherFiRewardsRouter is DeprecatedOZOwnable, UUPSUpgradeable, RolesLibrary {
     using SafeERC20 for IERC20;
 
     //--------------------------------------------------------------------------------------
@@ -55,7 +55,6 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable, RolesLibra
      * @notice Initialize the EtherFiRewardsRouter
      */
     function initialize() public initializer {
-        __Ownable_init();
         __UUPSUpgradeable_init();
     }
 

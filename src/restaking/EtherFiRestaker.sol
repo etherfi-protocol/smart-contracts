@@ -2,7 +2,6 @@
 pragma solidity ^0.8.23;
 
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
@@ -12,6 +11,7 @@ import "@etherfi/deposits/Liquifier.sol";
 import "@etherfi/core/LiquidityPool.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
+import "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
 import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
 
 import "@etherfi/eigenlayer-interfaces/IStrategyManager.sol";
@@ -23,7 +23,7 @@ import "@etherfi/core/interfaces/ILiquidityPool.sol";
 import "@etherfi/governance/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
 import "@etherfi/restaking/interfaces/IEtherFiRestaker.sol";
 
-contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, DeprecatedOZPausable, PausableUntil, IEtherFiRestaker {
+contract EtherFiRestaker is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, DeprecatedOZPausable, PausableUntil, IEtherFiRestaker {
     using SafeERC20 for IERC20;
     using Math for uint256;
     using EnumerableSet for EnumerableSet.Bytes32Set;
@@ -130,7 +130,6 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
      * @param _liquifier The address of the liquifier
      */
     function initialize(address _liquidityPool, address _liquifier) initializer external {
-        __Ownable_init();
         __UUPSUpgradeable_init();
 
         (,, IStrategy strategy,,,,,,,,) = liquifier.tokenInfos(address(lido));

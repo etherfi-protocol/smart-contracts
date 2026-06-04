@@ -41,11 +41,11 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // seizeInvalidRequest is now gated by onlyUpgradeTimelock (audit L-02).
         // Grant the role to the NFT contract's owner so tests calling
-        // `vm.prank(withdrawRequestNFTInstance.owner())` can still invoke it.
+        // `vm.prank(roleRegistryInstance.owner())` can still invoke it.
         // Cache view-call results before the prank — each external call (even view)
         // consumes a single `vm.prank`.
         address roleOwner = roleRegistryInstance.owner();
-        address nftOwner = withdrawRequestNFTInstance.owner();
+        address nftOwner = roleRegistryInstance.owner();
         bytes32 upgradeRole = roleRegistryInstance.UPGRADE_TIMELOCK_ROLE();
         vm.prank(roleOwner);
         roleRegistryInstance.grantRole(upgradeRole, nftOwner);
@@ -442,7 +442,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.deal(recipient, depositAmount);
 
         // Configure remainder split
-        vm.prank(withdrawRequestNFTInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(remainderSplitBps);
 
         // First deposit ETH to get eETH
@@ -596,11 +596,11 @@ contract WithdrawRequestNFTTest is TestSetup {
         
         // Verify cannot transfer invalid request
         vm.prank(recipient);
-        vm.expectRevert(WithdrawRequestNFT.InvalidRequest.selector);
+        vm.expectRevert(RoleRegistry.OnlyUpgradeTimelock.selector);
         withdrawRequestNFTInstance.transferFrom(recipient, address(0xdead), requestId);
 
         // Owner can seize the invalidated request NFT
-        vm.prank(withdrawRequestNFTInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         withdrawRequestNFTInstance.seizeInvalidRequest(requestId, admin);
     }
 
@@ -830,13 +830,13 @@ contract WithdrawRequestNFTTest is TestSetup {
     function test_updateShareRemainderSplitToTreasuryInBps() public {
         uint16 newSplit = 5000; // 50%
         
-        vm.prank(withdrawRequestNFTInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(newSplit);
         
         assertEq(withdrawRequestNFTInstance.shareRemainderSplitToTreasuryInBps(), newSplit, "Split should be updated");
 
         // Test invalid value (> 10000)
-        vm.prank(withdrawRequestNFTInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         vm.expectRevert(WithdrawRequestNFT.InvalidShareRemainderSplit.selector);
         withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(10001);
 
@@ -1311,7 +1311,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
 
         // Cannot seize valid request
-        vm.prank(withdrawRequestNFTInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         vm.expectRevert(WithdrawRequestNFT.RequestValid.selector);
         withdrawRequestNFTInstance.seizeInvalidRequest(requestId, admin);
 
@@ -1320,13 +1320,13 @@ contract WithdrawRequestNFTTest is TestSetup {
         withdrawRequestNFTInstance.invalidateRequest(requestId);
 
         // Cannot seize non-existent request
-        vm.prank(withdrawRequestNFTInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         vm.expectRevert(WithdrawRequestNFT.RequestNotFound.selector);
         withdrawRequestNFTInstance.seizeInvalidRequest(99999, admin);
 
         // Owner can seize invalid request
         address recipient = alice;
-        vm.prank(withdrawRequestNFTInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         withdrawRequestNFTInstance.seizeInvalidRequest(requestId, recipient);
         
         assertEq(withdrawRequestNFTInstance.ownerOf(requestId), recipient, "NFT should be transferred to recipient");
@@ -1434,11 +1434,11 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Owner cannot transfer invalid request
         vm.prank(bob);
-        vm.expectRevert(WithdrawRequestNFT.InvalidRequest.selector);
+        vm.expectRevert(RoleRegistry.OnlyUpgradeTimelock.selector);
         withdrawRequestNFTInstance.transferFrom(bob, alice, requestId);
 
         // Contract owner can transfer invalid request
-        vm.prank(withdrawRequestNFTInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         withdrawRequestNFTInstance.seizeInvalidRequest(requestId, alice);
         
         assertEq(withdrawRequestNFTInstance.ownerOf(requestId), alice, "NFT should be transferred");
@@ -2018,10 +2018,10 @@ contract WithdrawRequestNFTTest is TestSetup {
     function _clearFinalizationRatesForTest() internal {
         address cur_impl = withdrawRequestNFTInstance.getImplementation();
         address new_impl = address(new WithdrawRequestNFTIntrusive(address(roleRegistryInstance)));
-        vm.prank(withdrawRequestNFTInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         withdrawRequestNFTInstance.upgradeTo(new_impl);
         WithdrawRequestNFTIntrusive(payable(address(withdrawRequestNFTInstance))).clearFinalizationRatesForTest();
-        vm.prank(withdrawRequestNFTInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         withdrawRequestNFTInstance.upgradeTo(cur_impl);
     }
 
@@ -2044,7 +2044,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.stopPrank();
 
         // Simulate pre-upgrade state: `legacyId` is finalized but no snapshot exists for it.
-        vm.startPrank(withdrawRequestNFTInstance.owner());
+        vm.startPrank(roleRegistryInstance.owner());
         _setLastFinalizedRequestIdForTest(uint32(legacyId));
         vm.stopPrank();
         assertEq(uint256(withdrawRequestNFTInstance.lastFinalizedRequestId()), legacyId, "legacy lastFinalized setup");
@@ -2054,7 +2054,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         liquidityPoolInstance.addEthAmountLockedForWithdrawal(uint128(1 ether));
 
         // Now seed the legacy sentinel (this is what the post-upgrade init call does on mainnet).
-        vm.prank(withdrawRequestNFTInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         withdrawRequestNFTInstance.initializeShareRateFreezeUpgrade();
 
         // Sentinel has value 0 → frozenRateFor returns 0 → claim falls back to live rate.
@@ -2083,7 +2083,7 @@ contract WithdrawRequestNFTTest is TestSetup {
     ///      requestIds strictly above the sentinel use the frozen rate.
     function test_shareRateFreeze_postUpgradeRequests_useFrozenRate() public {
         _clearFinalizationRatesForTest();
-        vm.prank(withdrawRequestNFTInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         withdrawRequestNFTInstance.initializeShareRateFreezeUpgrade();
 
         startHoax(bob);
@@ -2102,7 +2102,7 @@ contract WithdrawRequestNFTTest is TestSetup {
     /// @dev `initializeShareRateFreezeUpgrade` is a one-shot.
     function test_shareRateFreeze_initializeUpgrade_revertsIfAlreadyInitialized() public {
         _clearFinalizationRatesForTest();
-        vm.startPrank(withdrawRequestNFTInstance.owner());
+        vm.startPrank(roleRegistryInstance.owner());
         withdrawRequestNFTInstance.initializeShareRateFreezeUpgrade();
         vm.expectRevert(WithdrawRequestNFT.AlreadyInitialized.selector);
         withdrawRequestNFTInstance.initializeShareRateFreezeUpgrade();
@@ -2251,7 +2251,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         uint256 legacyId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
         vm.stopPrank();
 
-        vm.startPrank(withdrawRequestNFTInstance.owner());
+        vm.startPrank(roleRegistryInstance.owner());
         _setLastFinalizedRequestIdForTest(uint32(legacyId));
         vm.stopPrank();
 
@@ -2266,7 +2266,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         uint256 expectedPreUpgrade = Math.min(uint256(legacyReq.amountOfEEth), liveAmountForShares);
 
         // 3. call initializeShareRateFreezeUpgrade (pushes the sentinel = value 0).
-        vm.prank(withdrawRequestNFTInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         withdrawRequestNFTInstance.initializeShareRateFreezeUpgrade();
         assertEq(
             withdrawRequestNFTInstance.frozenRateFor(legacyId),

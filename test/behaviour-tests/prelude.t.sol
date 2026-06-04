@@ -100,7 +100,7 @@ contract PreludeTest is Test, ArrayTestHelper {
             address(etherFiNodeBeacon),
             address(roleRegistry)
         );
-        vm.prank(stakingManager.owner());
+        vm.prank(roleRegistry.owner());
         stakingManager.upgradeTo(address(stakingManagerImpl));
 
         // Wire LP immutables to the real mainnet proxy addresses so calls into
@@ -120,11 +120,11 @@ contract PreludeTest is Test, ArrayTestHelper {
                 membershipManager: 0x3d320286E014C3e1ce99Af6d6B00f0C1D63E3000
             })
         );
-        vm.prank(LiquidityPool(payable(address(liquidityPool))).owner());
+        vm.prank(roleRegistry.owner());
         LiquidityPool(payable(address(liquidityPool))).upgradeTo(address(liquidityPoolImpl));
 
         EtherFiNodesManager etherFiNodesManagerImpl = new EtherFiNodesManager(address(stakingManager), address(roleRegistry), address(rateLimiter));
-        vm.prank(etherFiNodesManager.owner());
+        vm.prank(roleRegistry.owner());
         etherFiNodesManager.upgradeTo(address(etherFiNodesManagerImpl));
 
         // Now swap RoleRegistry in place so newly-added role getters defined in
@@ -136,9 +136,9 @@ contract PreludeTest is Test, ArrayTestHelper {
         // `upgradeEtherFiNode` checks UPGRADE_TIMELOCK_ROLE via
         // `onlyUpgradeTimelock`. Grant it to every proxy owner pranked below.
         vm.startPrank(roleRegistry.owner());
-        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), stakingManager.owner());
-        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), LiquidityPool(payable(address(liquidityPool))).owner());
-        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), etherFiNodesManager.owner());
+        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), roleRegistry.owner());
+        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), roleRegistry.owner());
+        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), roleRegistry.owner());
         vm.stopPrank();
 
         // upgrade etherFiNode impl
@@ -148,10 +148,10 @@ contract PreludeTest is Test, ArrayTestHelper {
             eigenPodManager,
             delegationManager
         );
-        vm.prank(stakingManager.owner());
+        vm.prank(roleRegistry.owner());
         stakingManager.upgradeEtherFiNode(address(etherFiNodeImpl));
 
-        vm.prank(auctionManager.owner());
+        vm.prank(roleRegistry.owner());
         auctionManager.disableWhitelist();
 
         // permissions
@@ -606,7 +606,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         stakingManager.upgradeTo(address(stakingManagerImpl));
 
         // should succeed when called by owner
-        address owner = stakingManager.owner();
+        address owner = roleRegistry.owner();
         vm.prank(owner);
         stakingManager.upgradeTo(address(stakingManagerImpl));
     }

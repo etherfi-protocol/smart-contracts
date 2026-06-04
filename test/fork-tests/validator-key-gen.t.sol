@@ -63,7 +63,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
             address(etherFiNodeBeacon),
             address(roleRegistry)
         );
-        vm.prank(stakingManager.owner());
+        vm.prank(roleRegistry.owner());
         stakingManager.upgradeTo(address(stakingManagerImpl));
 
         // Wire LP immutables to real mainnet proxy addresses so calls into
@@ -83,11 +83,11 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
                 membershipManager: 0x3d320286E014C3e1ce99Af6d6B00f0C1D63E3000
             })
         );
-        vm.prank(liquidityPool.owner());
+        vm.prank(roleRegistry.owner());
         liquidityPool.upgradeTo(address(liquidityPoolImpl));
 
         AuctionManager auctionManagerImpl = new AuctionManager(address(roleRegistry), address(blacklister), address(nodeOperatorManager), address(stakingManager), 0x0c83EAe1FE72c390A02E426572854931EefF93BA);
-        vm.prank(auctionManager.owner());
+        vm.prank(roleRegistry.owner());
         auctionManager.upgradeTo(address(auctionManagerImpl));
 
         // Now swap RoleRegistry so newly-added role getters (e.g. BLACKLISTED_USER)

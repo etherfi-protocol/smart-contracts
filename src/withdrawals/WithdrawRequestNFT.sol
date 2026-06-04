@@ -2,7 +2,6 @@
 pragma solidity ^0.8.13;
 import "@openzeppelin-upgradeable/contracts/token/ERC721/ERC721Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
 import "@etherfi/core/interfaces/IeETH.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
@@ -16,6 +15,7 @@ import "@openzeppelin/contracts/utils/Checkpoints.sol";
 import {ReentrancyGuardTransient} from "solady/utils/ReentrancyGuardTransient.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
+import "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
 
 /**
  * @title WithdrawRequestNFT — share-rate-freeze invariants
@@ -40,7 +40,7 @@ import "@etherfi/governance/utils/RolesLibrary.sol";
  *        `ceil(amount * 1e18 / rate) <= shareOfEEth`. These keep solvency checks and
  *        the share burn within the request's own share allocation.
  */
-contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuardTransient, PausableUntil, IWithdrawRequestNFT {
+contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, ReentrancyGuardTransient, PausableUntil, IWithdrawRequestNFT {
     using Math for uint256;
     using SafeERC20 for IERC20;
     using Checkpoints for Checkpoints.Trace224;
@@ -111,7 +111,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     error EETHAmountCannotBeZero();
     error NotEnoughEEthRemainder();
     error FeeReturnFailed();
-    error InvalidRequest();
     error RequestValid();
     error RequestNotValid();
     error RequestNotFound();
@@ -166,7 +165,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     function initialize(address _liquidityPoolAddress, address _eEthAddress, address _membershipManagerAddress) initializer external {
         if (_liquidityPoolAddress == address(0) || _eEthAddress == address(0) || _membershipManagerAddress == address(0)) revert AddressZero();
         __ERC721_init("Withdraw Request NFT", "WithdrawRequestNFT");
-        __Ownable_init();
         __UUPSUpgradeable_init();
 
         nextRequestId = 1;
@@ -452,7 +450,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         blacklister.nonBlacklisted(to);
         for (uint256 i = 0; i < batchSize; i++) {
             uint256 tokenId = firstTokenId + i;
-            if (!_requests[tokenId].isValid && msg.sender != owner()) revert InvalidRequest();
+            if (!_requests[tokenId].isValid) roleRegistry.onlyUpgradeTimelock(msg.sender);
         }
     }
 
