@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 import "@etherfi/staking/interfaces/INodeOperatorManager.sol";
@@ -9,10 +8,11 @@ import "@etherfi/staking/interfaces/IAuctionManager.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
 import "@etherfi/governance/utils/Pausable.sol";
+import "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
 import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
 
 /// Contract which helps us control our node operators and their permissions in different aspects of the protocol
-contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgradeable, DeprecatedOZPausable, OwnableUpgradeable, Pausable {
+contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgradeable, DeprecatedOZPausable, DeprecatedOZOwnable, Pausable {
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------

@@ -5,7 +5,6 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
 import "@etherfi/core/interfaces/IeETH.sol";
 import "@etherfi/staking/interfaces/IStakingManager.sol";
@@ -19,8 +18,9 @@ import "@etherfi/governance/interfaces/IBlacklister.sol";
 import {ReentrancyGuardTransient} from "solady/utils/ReentrancyGuardTransient.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
+import "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
 
-contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardTransient, PausableUntil, ILiquidityPool {
+contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, ReentrancyGuardTransient, PausableUntil, ILiquidityPool {
     using SafeERC20 for IERC20;
 
     //--------------------------------------------------------------------------------------

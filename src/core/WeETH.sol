@@ -3,7 +3,6 @@ pragma solidity ^0.8.13;
 
 import "@openzeppelin-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/draft-ERC20PermitUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@etherfi/core/interfaces/IeETH.sol";
@@ -14,9 +13,10 @@ import "@etherfi/utils/AssetRecovery.sol";
 import "@etherfi/governance/interfaces/IBlacklister.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
+import "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
 import "@etherfi/governance/rate-limiting/RateLimitedToken.sol";
 
-contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, ERC20PermitUpgradeable, IRateProvider, AssetRecovery, RateLimitedToken {
+contract WeETH is ERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, PausableUntil, ERC20PermitUpgradeable, IRateProvider, AssetRecovery, RateLimitedToken {
     using SafeERC20 for IERC20;
 
     //--------------------------------------------------------------------------------------

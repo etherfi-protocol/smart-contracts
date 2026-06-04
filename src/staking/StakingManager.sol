@@ -4,7 +4,6 @@ pragma solidity ^0.8.27;
 import "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 import "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/beacon/IBeaconUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 import "@etherfi/staking/interfaces/IAuctionManager.sol";
@@ -14,6 +13,7 @@ import "@etherfi/staking/interfaces/IEtherFiNode.sol";
 import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
 import "@etherfi/staking/libraries/DepositDataRootGenerator.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
+import "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
 import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
 import "@etherfi/governance/utils/DeprecatedOZReentrancyGuard.sol";
 
@@ -21,7 +21,7 @@ contract StakingManager is
     Initializable,
     IStakingManager,
     IBeaconUpgradeable,
-    OwnableUpgradeable,
+    DeprecatedOZOwnable,
     DeprecatedOZPausable,
     DeprecatedOZReentrancyGuard,
     UUPSUpgradeable,

@@ -3,7 +3,6 @@ pragma solidity ^0.8.13;
 
 import {Initializable} from "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import {OwnableUpgradeable} from "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -15,6 +14,7 @@ import {IWithdrawRequestNFT} from "@etherfi/withdrawals/interfaces/IWithdrawRequ
 import {IBlacklister} from "@etherfi/governance/interfaces/IBlacklister.sol";
 import {PausableUntil} from "@etherfi/governance/utils/PausableUntil.sol";
 import {RolesLibrary} from "@etherfi/governance/utils/RolesLibrary.sol";
+import {DeprecatedOZOwnable} from "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
 
 /**
  * @title WeETHWithdrawAdapter
@@ -24,7 +24,7 @@ import {RolesLibrary} from "@etherfi/governance/utils/RolesLibrary.sol";
 contract WeETHWithdrawAdapter is 
     Initializable, 
     UUPSUpgradeable, 
-    OwnableUpgradeable, 
+    DeprecatedOZOwnable, 
     PausableUntil,
     IWeETHWithdrawAdapter
 {
