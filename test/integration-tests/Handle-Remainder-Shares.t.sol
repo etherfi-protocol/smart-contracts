@@ -27,7 +27,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
     }
 
     function _newWrnImpl() internal returns (address) {
-        return address(new WithdrawRequestNFT(buybackWallet, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), address(etherFiAdminInstance)));
+        return address(new WithdrawRequestNFT(buybackWallet, EETH, LIQUIDITY_POOL, ROLE_REGISTRY, address(blacklisterInstance), address(etherFiAdminInstance)));
     }
 
     function setUp() public {
@@ -90,8 +90,8 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
         vm.stopPrank();
 
         // Rebase to create remainder (increase liquidity pool's ETH backing)
-        vm.prank(address(membershipManagerV1Instance));
-        liquidityPoolInstance.rebase(5 ether);
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.rebase(5 ether, 0);
 
         // Finalize and claim the withdrawal to create remainder
         vm.prank(ETHERFI_ADMIN);
@@ -244,8 +244,8 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
             vm.stopPrank();
 
             // Rebase to create remainder (increase liquidity pool's ETH backing)
-            vm.prank(address(membershipManagerV1Instance));
-            liquidityPoolInstance.rebase(5 ether);
+            vm.prank(address(etherFiAdminInstance));
+            liquidityPoolInstance.rebase(5 ether, 0);
 
             // Finalize and claim the withdrawal to create remainder
             vm.prank(ETHERFI_ADMIN);

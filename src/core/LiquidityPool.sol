@@ -495,37 +495,33 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     //------------------------------  OPERATIONAL FUNCTIONS  -------------------------------
     //--------------------------------------------------------------------------------------
     /**
-     * @notice Rebase by ether.fi
+     * @notice Rebase by ether.fi and pay protocol fees in a single oracle-driven step
      * @param _accruedRewards The amount of rewards to rebase
-     * @dev Only callable by the membership manager
+     * @param _protocolFees The amount of protocol fees to pay in ether. Minted to feeRecipient after the rebase.
+     * @dev Only callable by the etherFiAdminContract
      */
-    function rebase(int128 _accruedRewards) public {
-        if (msg.sender != address(membershipManager)) revert IncorrectCaller();
+    function rebase(int128 _accruedRewards, uint128 _protocolFees) external {
+        if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
 
         // Positive (reward) upper bound, enforced at the share-rate chokepoint regardless
         // of who calls rebase. A single rebase cannot increase TVL by more than
         // MAX_POSITIVE_REBASE_BPS of pre-rebase TVL. Defense-in-depth alongside the
         // oracle-side negative cap in EtherFiAdmin; the negative side is intentionally not
-        // re-checked here (the oracle path owns it and bounds it tighter).
+        // re-checked here (the oracle path owns it and bounds it tighter). Guarded on the
+        // positive branch: for a negative _accruedRewards, uint128(_accruedRewards) would
+        // reinterpret the sign bit as a huge unsigned value and spuriously trip the cap.
         if (_accruedRewards > 0) {
             uint256 maxIncrease = (getTotalPooledEther() * MAX_POSITIVE_REBASE_BPS) / REBASE_BPS_DENOMINATOR;
             if (uint256(uint128(_accruedRewards)) > maxIncrease) revert RebaseExceedsPositiveCap();
         }
 
         totalValueOutOfLp = uint128(int128(totalValueOutOfLp) + _accruedRewards);
-
         emit Rebase(getTotalPooledEther(), eETH.totalShares());
-    }
 
-    /**
-     * @notice pay protocol fees including 5% to treaury, 5% to node operator and ethfund bnft holders
-     * @param _protocolFees The amount of protocol fees to pay in ether
-     * @dev Only callable by the etherFiAdminContract
-     */
-    function payProtocolFees(uint128 _protocolFees) external {
-        if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();   
-        emit ProtocolFeePaid(_protocolFees);
-        depositToRecipient(feeRecipient, _protocolFees, address(0));
+        if (_protocolFees > 0) {
+            emit ProtocolFeePaid(_protocolFees);
+            depositToRecipient(feeRecipient, _protocolFees, address(0));
+        }
     }
 
     /**

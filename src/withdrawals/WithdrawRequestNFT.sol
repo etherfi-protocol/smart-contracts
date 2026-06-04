@@ -7,7 +7,6 @@ import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@etherfi/core/interfaces/IeETH.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
 import "@etherfi/withdrawals/interfaces/IWithdrawRequestNFT.sol";
-import "@etherfi/membership/interfaces/IMembershipManager.sol";
 import "@etherfi/governance/interfaces/IBlacklister.sol";
 
 import "@openzeppelin/contracts/utils/math/Math.sol";
@@ -81,7 +80,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     //--------------------------------------------------------------------------------------
     ILiquidityPool public immutable liquidityPool;
     IeETH public immutable eETH;
-    IMembershipManager public immutable membershipManager;
     IBlacklister public immutable blacklister;
     // this treasury address is set to ethfi buyback wallet address
     address public immutable treasury;
@@ -138,17 +136,15 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
      * @param _treasury The address of the treasury.
      * @param _eETH The address of the eETH token.
      * @param _liquidityPool The address of the liquidity pool.
-     * @param _membershipManager The address of the membership manager.
      * @param _roleRegistry The address of the role registry.
      * @param _blacklister The address of the blacklister.
      * @param _etherFiAdmin The address of the etherFi admin.
      * @custom:oz-upgrades-unsafe-allow constructor
      */
-    constructor(address _treasury, address _eETH, address _liquidityPool, address _membershipManager, address _roleRegistry, address _blacklister,  address _etherFiAdmin) RolesLibrary(_roleRegistry) {
+    constructor(address _treasury, address _eETH, address _liquidityPool, address _roleRegistry, address _blacklister,  address _etherFiAdmin) RolesLibrary(_roleRegistry) {
         treasury = _treasury;
         eETH = IeETH(_eETH);
         liquidityPool = ILiquidityPool(_liquidityPool);
-        membershipManager = IMembershipManager(_membershipManager);
         blacklister = IBlacklister(_blacklister);
         etherFiAdmin = _etherFiAdmin;
         _disableInitializers();

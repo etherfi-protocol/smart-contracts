@@ -570,8 +570,8 @@ contract FrozenRateWithdrawalHandler is StdUtils {
             maxD = int256(cap);
         }
         delta = int128(bound(int256(delta), minD, maxD));
-        vm.prank(membershipManager);
-        try lp.rebase(delta) {
+        vm.prank(etherFiAdminContract);
+        try lp.rebase(delta, 0) {
             callCounts[delta < 0 ? bytes32("rebase_negative") : bytes32("rebase_positive")]++;
         } catch { callCounts["rebase_revert"]++; }
     }
@@ -588,8 +588,8 @@ contract FrozenRateWithdrawalHandler is StdUtils {
             maxD = int256(cap);
         }
         delta = int128(bound(int256(delta), minD, maxD));
-        vm.prank(membershipManager);
-        try lp.rebase(delta) { callCounts["rebaseExtreme"]++; }
+        vm.prank(etherFiAdminContract);
+        try lp.rebase(delta, 0) { callCounts["rebaseExtreme"]++; }
         catch { callCounts["rebaseExtreme_revert"]++; }
     }
 
