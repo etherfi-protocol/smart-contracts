@@ -171,7 +171,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     }
 
     function _rebase(int128 accruedRewards) internal {
-        vm.prank(liquidityPoolInstance.membershipManager());
+        vm.prank(liquidityPoolInstance.etherFiAdminContract());
         liquidityPoolInstance.rebase(accruedRewards);
     }
 

@@ -12,7 +12,7 @@ import "@etherfi/staking/interfaces/IAuctionManager.sol";
 import "@etherfi/staking/interfaces/IEtherFiNode.sol";
 import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
-import "@etherfi/membership/interfaces/IMembershipManager.sol";
+import "@etherfi/archive/membership/interfaces/IMembershipManager.sol";
 import "@etherfi/withdrawals/interfaces/IWithdrawRequestNFT.sol";
 import "@etherfi/withdrawals/interfaces/IPriorityWithdrawalQueue.sol";
 
@@ -421,7 +421,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
             return;
         }
 
-        membershipManager.rebase(_report.accruedRewards);
+        liquidityPool.rebase(_report.accruedRewards);
     }
 
     /**

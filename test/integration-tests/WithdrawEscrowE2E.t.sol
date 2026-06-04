@@ -692,7 +692,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
         // Use ~5% of the live TPE so we don't trip `_checkMinAmountForShare`.
         uint256 totalPooled = liquidityPoolInstance.getTotalPooledEther();
         int128 slash = -int128(uint128(totalPooled / 20));
-        vm.prank(liquidityPoolInstance.membershipManager());
+        vm.prank(liquidityPoolInstance.etherFiAdminContract());
         liquidityPoolInstance.rebase(slash);
 
         uint256 claimableAfter = withdrawRequestNFTInstance.getClaimableAmount(reqId);

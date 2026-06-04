@@ -222,7 +222,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.prank(bob);
         uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
 
-        vm.prank(address(membershipManagerInstance));
+        vm.prank(address(etherFiAdminInstance));
         liquidityPoolInstance.rebase(-35 ether);
 
         assertEq(withdrawRequestNFTInstance.balanceOf(bob), 1, "Bobs balance should be 1");
@@ -1164,7 +1164,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.prank(bob);
         uint256 reqB = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
 
-        vm.prank(address(membershipManagerInstance));
+        vm.prank(address(etherFiAdminInstance));
         liquidityPoolInstance.rebase(-int128(int256(7 ether)));
 
         _finalizeWithdrawalRequest(reqB);
@@ -1244,7 +1244,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.prank(bob);
         uint256 reqB = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
 
-        vm.prank(address(membershipManagerInstance));
+        vm.prank(address(etherFiAdminInstance));
         liquidityPoolInstance.rebase(-8 ether);
 
         _finalizeWithdrawalRequest(reqA);
@@ -1905,7 +1905,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Negative rebase AFTER finalize. Pre-freeze behavior would drop the claim amount;
         // post-freeze behavior must not — the rate is locked in.
-        vm.prank(address(membershipManagerInstance));
+        vm.prank(address(etherFiAdminInstance));
         liquidityPoolInstance.rebase(-5 ether);
 
         uint256 claimableAfterNegativeRebase = withdrawRequestNFTInstance.getClaimableAmount(requestId);
@@ -2063,7 +2063,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         // Negative rebase post-init. With live-rate fallback, the claim is reduced. If the path
         // were instead a (non-existent) frozen snapshot, the claim would be shielded — so a
         // reduced amount proves the legacy branch is in use.
-        vm.prank(address(membershipManagerInstance));
+        vm.prank(address(etherFiAdminInstance));
         liquidityPoolInstance.rebase(-5 ether);
 
         uint256 liveAmountForShares = liquidityPoolInstance.amountForShare(
@@ -2175,7 +2175,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         );
 
         // 6. apply negative rebase
-        vm.prank(address(membershipManagerInstance));
+        vm.prank(address(etherFiAdminInstance));
         liquidityPoolInstance.rebase(-15 ether);
 
         // 7. assert getClaimableAmount unchanged after negative rebase

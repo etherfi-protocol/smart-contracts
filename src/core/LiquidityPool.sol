@@ -497,10 +497,10 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /**
      * @notice Rebase by ether.fi
      * @param _accruedRewards The amount of rewards to rebase
-     * @dev Only callable by the membership manager
+     * @dev Only callable by the etherFiAdminContract
      */
     function rebase(int128 _accruedRewards) public {
-        if (msg.sender != address(membershipManager)) revert IncorrectCaller();
+        if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
 
         // Positive (reward) upper bound, enforced at the share-rate chokepoint regardless
         // of who calls rebase. A single rebase cannot increase TVL by more than

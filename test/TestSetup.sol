@@ -34,8 +34,8 @@ import "@etherfi/deposits/Liquifier.sol";
 import "@etherfi/restaking/EtherFiRestaker.sol";
 import "@etherfi/core/EETH.sol";
 import "@etherfi/core/WeETH.sol";
-import "@etherfi/membership/MembershipManager.sol";
-import "@etherfi/membership/MembershipNFT.sol";
+import "@etherfi/archive/membership/MembershipManager.sol";
+import "@etherfi/archive/membership/MembershipNFT.sol";
 import "@etherfi/archive/EarlyAdopterPool.sol";
 import "@etherfi/archive/TVLOracle.sol";
 import "@etherfi/utils/UUPSProxy.sol";
@@ -45,7 +45,7 @@ import "@tests/common/DepositDataGeneration.sol";
 import "@tests/common/DepositContract.sol";
 import "@tests/TestERC20.sol";
 
-import "@etherfi/archive/MembershipManagerV0.sol";
+import "@etherfi/archive/membership/MembershipManagerV0.sol";
 import "@etherfi/oracle/EtherFiOracle.sol";
 import "@etherfi/oracle/EtherFiAdmin.sol";
 import "@etherfi/oracle/interfaces/IEtherFiAdmin.sol";
@@ -1755,7 +1755,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(eETHInstance),
             address(liquidityPoolInstance),
             address(membershipNftInstance),
-            address(etherFiAdminInstance),
             address(roleRegistryInstance),
             address(blacklisterInstance)
         );
@@ -1891,12 +1890,12 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     ///         so applying the chunks back-to-back leaves the final TVL and share rate
     ///         identical to a single rebase of `_amount` — every post-rebase assertion holds.
     ///         Negative/zero rebases are applied in a single call (no positive cap applies).
-    /// @dev Pranks the LP's registered membership manager, so it works in both the unit
+    /// @dev Pranks the LP's registered etherFiAdmin contract, so it works in both the unit
     ///      setup and mainnet-fork setups regardless of which instance is wired in.
     function _rebaseUncapped(int128 _amount) internal {
-        address mm = liquidityPoolInstance.membershipManager();
+        address admin = liquidityPoolInstance.etherFiAdminContract();
         if (_amount <= 0) {
-            vm.prank(mm);
+            vm.prank(admin);
             liquidityPoolInstance.rebase(_amount);
             return;
         }
@@ -1906,7 +1905,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 * liquidityPoolInstance.MAX_POSITIVE_REBASE_BPS()) / 10_000;
             require(maxIncrease > 0, "_rebaseUncapped: TVL too small for a positive rebase");
             uint256 chunk = remaining < maxIncrease ? remaining : maxIncrease;
-            vm.prank(mm);
+            vm.prank(admin);
             liquidityPoolInstance.rebase(int128(uint128(chunk)));
             remaining -= chunk;
         }

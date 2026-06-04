@@ -267,7 +267,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.stopPrank();
 
         vm.deal(owner, 100 ether);
-        vm.prank(address(membershipManagerInstance));
+        vm.prank(address(etherFiAdminInstance));
         liquidityPoolInstance.rebase(2 ether); // 0.25% of 800 ETH TVL — exactly at the cap
         assertEq(eETHInstance.balanceOf(alice), 401 ether);
         assertEq(eETHInstance.balanceOf(bob), 401 ether);
@@ -303,7 +303,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.stopPrank();
 
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 400 ether);
-        vm.prank(address(membershipManagerInstance));
+        vm.prank(address(etherFiAdminInstance));
         liquidityPoolInstance.rebase(1 ether); // 0.25% of 400 ETH — exactly at the cap
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 401 ether);
 
@@ -1146,7 +1146,7 @@ contract LiquidityPoolTest is TestSetup {
         uint256 totalPooledBefore = liquidityPoolInstance.getTotalPooledEther();
 
         // rebase within the 25 bps per-report cap (0.25% of 100 ETH TVL = 0.25 ETH)
-        vm.prank(address(membershipManagerInstance));
+        vm.prank(address(etherFiAdminInstance));
         liquidityPoolInstance.rebase(0.25 ether);
 
         uint256 totalPooledAfter = liquidityPoolInstance.getTotalPooledEther();
@@ -1167,25 +1167,48 @@ contract LiquidityPoolTest is TestSetup {
         uint256 cap = (tvl * 25) / 10_000;
 
         // one wei over the cap reverts
-        vm.prank(address(membershipManagerInstance));
+        vm.prank(address(etherFiAdminInstance));
         vm.expectRevert(LiquidityPool.RebaseExceedsPositiveCap.selector);
         liquidityPoolInstance.rebase(int128(uint128(cap + 1)));
 
         // exactly at the cap succeeds
-        vm.prank(address(membershipManagerInstance));
+        vm.prank(address(etherFiAdminInstance));
         liquidityPoolInstance.rebase(int128(uint128(cap)));
 
         // a negative rebase (slashing) is not bounded by this LP-side cap — the oracle
         // path (EtherFiAdmin negative cap) owns that direction
-        vm.prank(address(membershipManagerInstance));
+        vm.prank(address(etherFiAdminInstance));
         liquidityPoolInstance.rebase(-int128(uint128(cap)));
     }
 
-    function test_RebaseFailsIfNotMembershipManager() public {
-        vm.startPrank(alice);
+    // EARN-1440: rebase is now driven directly by EtherFiAdmin; the MembershipManager hop is
+    // removed, so MembershipManager is no longer an authorized rebase caller.
+    function test_RebaseFailsIfNotEtherFiAdmin() public {
+        // arbitrary unauthorized caller reverts
+        vm.prank(alice);
         vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
         liquidityPoolInstance.rebase(5 ether);
-        vm.stopPrank();
+
+        // the old caller (MembershipManager) is now rejected too — the hop is gone
+        vm.prank(address(membershipManagerInstance));
+        vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
+        liquidityPoolInstance.rebase(5 ether);
+
+        // establish TVL, then the etherFiAdmin contract can rebase the LP directly
+        vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+
+        uint256 totalPooledBefore = liquidityPoolInstance.getTotalPooledEther();
+        uint256 mmSharesBefore = eETHInstance.shares(address(membershipManagerInstance));
+
+        // within the 25 bps cap (0.25% of 100 ETH = 0.25 ETH)
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.rebase(0.25 ether);
+
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), totalPooledBefore + 0.25 ether);
+        // no reward distribution touches MembershipManager: its eETH shares are unchanged
+        assertEq(eETHInstance.shares(address(membershipManagerInstance)), mmSharesBefore, "MM must not be touched by rebase");
     }
 
     function test_PayProtocolFees() public {
@@ -1358,7 +1381,7 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.deposit{value: 100 ether}();
         vm.stopPrank();
 
-        vm.prank(address(membershipManagerInstance));
+        vm.prank(address(etherFiAdminInstance));
         liquidityPoolInstance.rebase(0.25 ether); // within 25 bps cap
 
         uint256 claim = liquidityPoolInstance.getTotalEtherClaimOf(alice);
@@ -1543,7 +1566,7 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.deposit{value: 100 ether}();
         vm.stopPrank();
 
-        vm.prank(address(membershipManagerInstance));
+        vm.prank(address(etherFiAdminInstance));
         liquidityPoolInstance.rebase(0.25 ether); // within 25 bps cap
 
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 100.25 ether);

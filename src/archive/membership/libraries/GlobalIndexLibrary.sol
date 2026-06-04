@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "@etherfi/membership/MembershipManager.sol";
+import "@etherfi/archive/membership/MembershipManager.sol";
 import "@etherfi/core/LiquidityPool.sol";
 import "forge-std/console.sol";
 

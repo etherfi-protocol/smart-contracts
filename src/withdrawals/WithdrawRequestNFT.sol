@@ -7,7 +7,7 @@ import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@etherfi/core/interfaces/IeETH.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
 import "@etherfi/withdrawals/interfaces/IWithdrawRequestNFT.sol";
-import "@etherfi/membership/interfaces/IMembershipManager.sol";
+import "@etherfi/archive/membership/interfaces/IMembershipManager.sol";
 import "@etherfi/governance/interfaces/IBlacklister.sol";
 
 import "@openzeppelin/contracts/utils/math/Math.sol";
