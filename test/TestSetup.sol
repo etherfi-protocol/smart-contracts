@@ -1346,18 +1346,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // guard requires. We're inside an active `vm.startPrank(owner)` block here and
         // `owner` was granted UPGRADE_TIMELOCK_ROLE in Phase 1, so no extra prank needed.
         withdrawRequestNFTInstance.initializeShareRateFreezeUpgrade();
-        // initializeOnUpgrade now reverts (checks immutable roleRegistry == 0). Set the
-        // share-remainder split + paused state it used to bootstrap directly.
-        withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(1000);
-        {
-            // Slot 306 packs (nextRequestId, lastFinalizedRequestId, shareRemainderSplit,
-            // _unused_gap, currentRequestIdToScanFromForShareRemainder, lastRequestIdToScanUntilForShareRemainder).
-            // currentRequestIdToScanFromForShareRemainder sits at bytes 12-15 (bits 96-127).
-            bytes32 slot306 = vm.load(address(withdrawRequestNFTInstance), bytes32(uint256(306)));
-            uint256 mask = ~(uint256(0xffffffff) << 96);
-            bytes32 updated = bytes32((uint256(slot306) & mask) | (uint256(1) << 96));
-            vm.store(address(withdrawRequestNFTInstance), bytes32(uint256(306)), updated);
-        }
 
         membershipManagerInstance.initialize(
             address(eETHInstance),

@@ -472,7 +472,7 @@ contract PriorityWithdrawalQueue is
         uint256 userEthBefore,
         address user
     ) internal view {
-        // LP ETH balance may increase by feeEth (returned from queue to LP via returnLockedEth).
+        // LP ETH balance may increase by the stranded ETH swept from the queue back to LP (via LP.receive()).
         if (liquidityPool.totalValueInLp() < lpEthBefore) revert UnexpectedBalanceChange();
         if (eETH.shares(address(this)) >= queueEEthSharesBefore) revert UnexpectedBalanceChange();
         // Queue paid ETH to the user (and optionally fee back to LP) from its own escrow balance.
@@ -542,7 +542,11 @@ contract PriorityWithdrawalQueue is
         if (!removedFromPending) revert RequestNotFound();
     }
 
-    /// @dev On a finalized cancel, returns the locked ETH to LP via LP.returnLockedEth. Pending cancels do not move ETH.
+     /**
+      * @notice On a finalized cancel, returns the locked ETH to LP via a plain ETH transfer (LP's receive() re-credits it). Pending cancels do not move ETH.
+      * @param request The withdrawal request to cancel
+      * @return requestId The hash-based ID of the cancelled withdrawal request
+      */
     function _cancelWithdrawRequest(WithdrawRequest calldata request) internal returns (bytes32 requestId) {
         requestId = keccak256(abi.encode(request));
         
@@ -586,21 +590,22 @@ contract PriorityWithdrawalQueue is
 
         ethAmountLockedForPriorityWithdrawal -= uint128(request.amountOfEEth);
 
-        // `withdraw` unwinds only its share of the fulfill-time `totalValueOutOfLp` credit
-        // (`amountToWithdraw`); the remaining `feeEth` is unwound below by `returnLockedEth`.
-        // Together they sum to `request.amountOfEEth` — the amount credited at fulfill. Passing
-        // the full `amountOfEEth` here would double-count `feeEth` (once here, once in returnLockedEth).
+        // `withdraw` pays out `amountToWithdraw` and unwinds the matching `totalValueOutOfLp` credit,
+        // while burning the request's full `shareOfEEth`. Any escrowed ETH beyond `amountToWithdraw`
+        // (e.g. the fee portion of the fulfill-time credit) is swept back to LP below as stranded ETH.
         liquidityPool.withdraw(amountToWithdraw, request.shareOfEEth);
 
         if (address(this).balance < amountToWithdraw) revert InsufficientEscrow();
         (bool ok, ) = payable(request.user).call{value: amountToWithdraw}("");
         if (!ok) revert EthTransferFailed();
 
-        // Return stranded ETH to LP
-        uint256 strandedEth = address(this).balance - ethAmountLockedForPriorityWithdrawal;
-        if (strandedEth > 0) {
-            (bool ok, ) = payable(address(liquidityPool)).call{value: strandedEth}("");
-            if (!ok) revert EthTransferFailed();
+        // Return any stranded ETH (balance above what is still locked) to LP. Guarded so an
+        // under-funded queue (balance < locked) reverts cleanly via the invariant check below
+        // rather than underflowing here.
+        if (address(this).balance > ethAmountLockedForPriorityWithdrawal) {
+            uint256 strandedEth = address(this).balance - ethAmountLockedForPriorityWithdrawal;
+            (bool okStranded, ) = payable(address(liquidityPool)).call{value: strandedEth}("");
+            if (!okStranded) revert EthTransferFailed();
         }
         _checkEthAmountLockedForPriorityWithdrawal();
 

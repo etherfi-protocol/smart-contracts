@@ -562,8 +562,8 @@ contract WithdrawEscrowE2ETest is TestSetup {
         vm.prank(user);
         pQueue.claimWithdraw(req);
 
-        // User received ETH from queue balance. Fee ETH (amountOfEEth - amountWithFee) is
-        // returned to LP via returnLockedEth, so LP raw ETH may increase by up to feeEth.
+        // User received ETH from queue balance. Stranded ETH (amountOfEEth - amountWithFee) is
+        // swept back to LP via LP.receive(), so LP raw ETH may increase by up to that amount.
         assertApproxEqAbs(user.balance, userEthPre + expectedEth, 2,
             "step4: user ETH after claim (2-wei tolerance)");
         assertLt(address(pQueue).balance, preQ.rawEth,

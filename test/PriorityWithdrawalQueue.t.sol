@@ -240,8 +240,6 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         // Verify initial state
         assertEq(priorityQueue.nonce(), 1);
         assertFalse(priorityQueue.paused());
-        assertEq(priorityQueue.totalRemainderShares(), 0);
-        assertEq(priorityQueue.shareRemainderSplitToTreasuryInBps(), 10000);
 
         // Verify constants
         assertEq(priorityQueue.minDelay(), 1 hours);
@@ -791,24 +789,20 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         // Record state before claim
         uint256 userEthBefore = vipUser.balance;
         uint256 queueEethBefore = eETHInstance.balanceOf(address(priorityQueue));
-        uint256 remainderBefore = priorityQueue.totalRemainderShares();
 
         // Anyone can send the ETH to the request user
         vm.prank(regularUser);
         priorityQueue.claimWithdraw(request);
-        
+
         // Verify ETH was received (approximately, due to share price)
         assertApproxEqRel(vipUser.balance, userEthBefore + withdrawAmount, 0.001e18, "User should receive ETH");
-        
+
         // Verify eETH was burned from queue
         assertLt(eETHInstance.balanceOf(address(priorityQueue)), queueEethBefore, "Queue eETH balance should decrease");
 
         // Verify request was removed
         assertFalse(priorityQueue.requestExists(requestId), "Request should be removed");
         assertFalse(priorityQueue.isFinalized(requestId), "Request should no longer be finalized");
-
-        // Verify remainder tracking
-        assertGe(priorityQueue.totalRemainderShares(), remainderBefore, "Remainder shares should increase or stay same");
     }
 
     function test_batchClaimWithdraw() public {
@@ -949,10 +943,9 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             2,
             "User balance increase should match slash-adjusted amount"
         );
-        assertEq(priorityQueue.totalRemainderShares(), 0, "No remainder expected for this exact-ratio case");
     }
 
-    function test_cancelWithdraw_afterPositiveRebase_tracksRemainderShares() public {
+    function test_cancelWithdraw_afterPositiveRebase_returnsCurrentShareValue() public {
         uint96 withdrawAmount = 10 ether;
 
         (, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
@@ -961,7 +954,6 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         // Positive rebase raises amount value per share.
         _rebase(5 ether);
 
-        uint256 remainderBefore = priorityQueue.totalRemainderShares();
         uint256 userBalanceBeforeCancel = eETHInstance.balanceOf(vipUser);
         uint256 expectedReturned = liquidityPoolInstance.amountForShare(request.shareOfEEth);
 
@@ -974,11 +966,6 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             userBalanceBeforeCancel + expectedReturned,
             2,
             "User balance increase should match current share value"
-        );
-        assertEq(
-            priorityQueue.totalRemainderShares(),
-            remainderBefore,
-            "Cancel should not modify remainder shares"
         );
     }
 
@@ -1646,222 +1633,6 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     }
 
     //--------------------------------------------------------------------------------------
-    //------------------------------  REMAINDER TESTS  -------------------------------------
-    //--------------------------------------------------------------------------------------
-
-    function test_handleRemainder() public {
-        // First create and complete a withdrawal to accumulate remainder
-        uint96 withdrawAmount = 10 ether;
-        (, IPriorityWithdrawalQueue.WithdrawRequest memory request) = 
-            _createWithdrawRequest(vipUser, withdrawAmount);
-
-        IPriorityWithdrawalQueue.WithdrawRequest[] memory requests = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
-        requests[0] = request;
-        
-        vm.prank(requestManager);
-        priorityQueue.fulfillRequests(requests);
-
-        vm.prank(vipUser);
-        priorityQueue.claimWithdraw(request);
-
-        uint256 remainderAmount = priorityQueue.getRemainderAmount();
-
-        // Only test if there are remainder shares. The remainder is just a few wei on mainnet
-        // fork (rounding dust), so halving it can round `sharesForAmount(eEthAmount)` to zero
-        // and leave `totalRemainderShares` untouched. Sweep the full remainder so the share
-        // delta is non-zero and the post-condition can fire.
-        if (remainderAmount > 0) {
-            uint256 remainderBefore = priorityQueue.totalRemainderShares();
-
-            vm.prank(alice);
-            priorityQueue.handleRemainder(remainderAmount);
-
-            assertLt(priorityQueue.totalRemainderShares(), remainderBefore, "Remainder should decrease");
-        }
-    }
-
-    function test_handleRemainder_roundsTreasurySplitUp() public {
-        vm.prank(alice);
-        priorityQueue.updateShareRemainderSplitToTreasury(5000); // 50%
-
-        // Create and complete a withdrawal to accumulate remainder
-        uint96 withdrawAmount = 10 ether;
-        (, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
-            _createWithdrawRequest(vipUser, withdrawAmount);
-
-        IPriorityWithdrawalQueue.WithdrawRequest[] memory requests = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
-        requests[0] = request;
-
-        vm.prank(requestManager);
-        priorityQueue.fulfillRequests(requests);
-
-        vm.prank(vipUser);
-        priorityQueue.claimWithdraw(request);
-
-        uint256 remainderAmount = priorityQueue.getRemainderAmount();
-        if (remainderAmount <= 1) return;
-
-        // Force an odd amount so 50% split requires rounding.
-        uint256 amountToHandle = remainderAmount % 2 == 0 ? remainderAmount - 1 : remainderAmount;
-        uint256 treasuryBalanceBefore = eETHInstance.balanceOf(treasury);
-
-        vm.prank(alice);
-        priorityQueue.handleRemainder(amountToHandle);
-
-        uint256 treasuryReceived = eETHInstance.balanceOf(treasury) - treasuryBalanceBefore;
-        uint256 expectedTreasuryAmount = amountToHandle / 2;
-        assertEq(amountToHandle % 2, 1, "Test setup must use odd amount");
-        assertEq(treasuryReceived, expectedTreasuryAmount, "Treasury split round down");
-    }
-
-    // function test_handleRemainder_withTreasurySplit() public {
-    //     // Set 50% split to treasury (5000 bps)
-    //     vm.prank(alice);
-    //     priorityQueue.updateShareRemainderSplitToTreasury(5000);
-
-    //     // Create and complete a withdrawal to accumulate remainder
-    //     uint96 withdrawAmount = 10 ether;
-    //     (, IPriorityWithdrawalQueue.WithdrawRequest memory request) = 
-    //         _createWithdrawRequest(vipUser, withdrawAmount);
-
-    //     IPriorityWithdrawalQueue.WithdrawRequest[] memory requests = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
-    //     requests[0] = request;
-        
-    //     vm.prank(requestManager);
-    //     priorityQueue.fulfillRequests(requests);
-
-    //     vm.prank(vipUser);
-    //     priorityQueue.claimWithdraw(request);
-
-    //     uint256 remainderAmount = priorityQueue.getRemainderAmount();
-        
-    //     // Only test if there are remainder shares
-    //     if (remainderAmount > 0) {
-    //         uint256 treasuryBalanceBefore = eETHInstance.balanceOf(treasury);
-    //         uint256 remainderSharesBefore = priorityQueue.totalRemainderShares();
-
-    //         vm.prank(alice);
-    //         priorityQueue.handleRemainder(remainderAmount);
-
-    //         // Verify treasury received ~50% of remainder as eETH
-    //         uint256 treasuryBalanceAfter = eETHInstance.balanceOf(treasury);
-    //         assertGt(treasuryBalanceAfter, treasuryBalanceBefore, "Treasury should receive eETH");
-            
-    //         // Approximately 50% should go to treasury (allowing for rounding)
-    //         uint256 expectedToTreasury = remainderAmount / 2;
-    //         assertApproxEqRel(treasuryBalanceAfter - treasuryBalanceBefore, expectedToTreasury, 0.01e18, "Treasury should receive ~50%");
-
-    //         // Remainder should be cleared
-    //         assertLt(priorityQueue.totalRemainderShares(), remainderSharesBefore, "Remainder shares should decrease");
-    //     }
-    // }
-
-    // function test_handleRemainder_fullTreasurySplit() public {
-    //     // Set 100% split to treasury (10000 bps)
-    //     vm.prank(alice);
-    //     priorityQueue.updateShareRemainderSplitToTreasury(10000);
-
-    //     // Create and complete a withdrawal to accumulate remainder
-    //     uint96 withdrawAmount = 10 ether;
-    //     (, IPriorityWithdrawalQueue.WithdrawRequest memory request) = 
-    //         _createWithdrawRequest(vipUser, withdrawAmount);
-
-    //     IPriorityWithdrawalQueue.WithdrawRequest[] memory requests = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
-    //     requests[0] = request;
-        
-    //     vm.prank(requestManager);
-    //     priorityQueue.fulfillRequests(requests);
-
-    //     vm.prank(vipUser);
-    //     priorityQueue.claimWithdraw(request);
-
-    //     uint256 remainderAmount = priorityQueue.getRemainderAmount();
-        
-    //     if (remainderAmount > 0) {
-    //         uint256 treasuryBalanceBefore = eETHInstance.balanceOf(treasury);
-
-    //         vm.prank(alice);
-    //         priorityQueue.handleRemainder(remainderAmount);
-
-    //         // Verify treasury received all remainder as eETH (nothing burned)
-    //         uint256 treasuryBalanceAfter = eETHInstance.balanceOf(treasury);
-    //         assertApproxEqRel(treasuryBalanceAfter - treasuryBalanceBefore, remainderAmount, 0.01e18, "Treasury should receive ~100%");
-    //     }
-    // }
-
-    // function test_handleRemainder_noBurn() public {
-    //     // Set 0% split to treasury (all burn)
-    //     vm.prank(alice);
-    //     priorityQueue.updateShareRemainderSplitToTreasury(0);
-
-    //     // Create and complete a withdrawal to accumulate remainder
-    //     uint96 withdrawAmount = 10 ether;
-    //     (, IPriorityWithdrawalQueue.WithdrawRequest memory request) = 
-    //         _createWithdrawRequest(vipUser, withdrawAmount);
-
-    //     IPriorityWithdrawalQueue.WithdrawRequest[] memory requests = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
-    //     requests[0] = request;
-        
-    //     vm.prank(requestManager);
-    //     priorityQueue.fulfillRequests(requests);
-
-    //     vm.prank(vipUser);
-    //     priorityQueue.claimWithdraw(request);
-
-    //     uint256 remainderAmount = priorityQueue.getRemainderAmount();
-        
-    //     if (remainderAmount > 0) {
-    //         uint256 treasuryBalanceBefore = eETHInstance.balanceOf(treasury);
-
-    //         vm.prank(alice);
-    //         priorityQueue.handleRemainder(remainderAmount);
-
-    //         // Verify treasury received nothing
-    //         uint256 treasuryBalanceAfter = eETHInstance.balanceOf(treasury);
-    //         assertEq(treasuryBalanceAfter, treasuryBalanceBefore, "Treasury should receive nothing");
-    //     }
-    // }
-
-    function test_updateShareRemainderSplitToTreasury() public {
-        assertEq(priorityQueue.shareRemainderSplitToTreasuryInBps(), 10000, "Initial split should be 100%");
-
-        vm.prank(alice);
-        priorityQueue.updateShareRemainderSplitToTreasury(5000);
-
-        assertEq(priorityQueue.shareRemainderSplitToTreasuryInBps(), 5000, "Split should be updated to 50%");
-    }
-
-    function test_revert_updateShareRemainderSplitToTreasury_tooHigh() public {
-        vm.prank(alice);
-        vm.expectRevert(PriorityWithdrawalQueue.BadInput.selector);
-        priorityQueue.updateShareRemainderSplitToTreasury(10001); // > 100%
-    }
-
-    function test_revert_updateShareRemainderSplitToTreasury_notAdmin() public {
-        vm.prank(regularUser);
-        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
-        priorityQueue.updateShareRemainderSplitToTreasury(5000);
-    }
-
-    function test_revert_handleRemainderTooMuch() public {
-        vm.prank(alice);
-        vm.expectRevert(PriorityWithdrawalQueue.BadInput.selector);
-        priorityQueue.handleRemainder(1 ether);
-    }
-
-    function test_revert_handleRemainderZero() public {
-        vm.prank(alice);
-        vm.expectRevert(PriorityWithdrawalQueue.BadInput.selector);
-        priorityQueue.handleRemainder(0);
-    }
-
-    function test_revert_handleRemainderNotFeeClaimer() public {
-        vm.prank(regularUser);
-        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
-        priorityQueue.handleRemainder(1 ether);
-    }
-
-    //--------------------------------------------------------------------------------------
     //------------------------------  REVERT TESTS  ----------------------------------------
     //--------------------------------------------------------------------------------------
 
@@ -2457,7 +2228,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         assertLt(address(priorityQueue).balance, queueEthBefore, "queue did not pay from own balance");
     }
 
-    //-----  Tasks 10-12: returnLockedEth / finalized cancel return path  ----
+    //-----  Tasks 10-12: ETH-to-LP return path (via LP.receive()) / finalized cancel  ----
 
     function test_cancelWithdraw_finalized_returnsEthToLP() public {
         address user = makeAddr("cancelFinalizedUser10");
@@ -2568,7 +2339,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             "queue ETH should return to pre-fulfill baseline"
         );
 
-        // LP totalValueInLp rose by feeEth (returned via returnLockedEth).
+        // LP totalValueInLp rose by feeEth (stranded ETH swept back to LP via receive()).
         assertEq(
             liquidityPoolInstance.totalValueInLp(),
             lpInBeforeClaim + feeAmount,
@@ -2576,7 +2347,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         );
 
         // LP totalValueOutOfLp fell by amountWithFee (LP.withdraw decrements by amountWithFee)
-        // then fell again by feeEth (returnLockedEth decrements totalValueOutOfLp).
+        // then fell again by feeEth (receive() decrements totalValueOutOfLp on the stranded sweep).
         // Net: totalValueOutOfLp decreased by amountOfEEth relative to before claim.
         assertEq(
             liquidityPoolInstance.totalValueOutOfLp(),

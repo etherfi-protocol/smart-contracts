@@ -307,10 +307,10 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
      * @notice Gets the claimable amount for a withdrawal request
      * @param tokenId The ID of the withdrawal request
      * @return amountToWithdraw The amount of eETH that can be claimed
-     * @dev For pre-upgrade legacy requests (covered only by the sentinel checkpoint with value 0), 
-     *      the live rate from `LP.amountPerShareCeil()` is substituted locally — preserving legacy 
-     *      claim semantics (live-rate at claim). The returned `frozenRate` is therefore guaranteed 
-     *      non-zero, which is what `LP.withdraw` now requires (`InvalidRate` reverts on zero).
+     * @dev For pre-upgrade legacy requests (covered only by the sentinel checkpoint with value 0),
+     *      the live rate from `LP.amountPerShareCeil()` is substituted locally — preserving legacy
+     *      claim semantics (live-rate at claim). The claimable amount is the lesser of the originally
+     *      requested eETH amount and the frozen-rate value of the request's shares.
      */
     function _getClaimableAmount(uint256 tokenId) internal view returns (uint256 amountToWithdraw) {
         if (tokenId > lastFinalizedRequestId) revert RequestNotFinalized();
@@ -337,13 +337,16 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     /**
-     * @notice Pays the recipient from this contract's own ETH balance (segregated at finalize via
+     * @notice Pays the request owner from this contract's own ETH balance (segregated at finalize via
+     *         `addEthAmountLockedForWithdrawal`) and burns the request's full share allocation in LP.
      * @param tokenId The ID of the withdrawal request
-     * @dev Burns shares against the rate frozen at finalize via `LP.withdraw(amount, rate)`. 
-     *      `_getClaimableAmount` always resolves `frozenRate` to a non-zero value (live-rate fallback for pre-upgrade legacy ids), 
-     *      satisfying LP's `InvalidRate` guard.
+     * @dev Permissionless: any caller can settle a finalized, valid request; proceeds always go to the
+     *      NFT owner. Burns the request's full `shareOfEEth` via `LP.withdraw(amount, share)`, leaving no
+     *      share remainder. Any ETH left over after paying the owner (e.g. from a negative rebase shrinking
+     *      the claimable amount below the segregated escrow) is swept back to the LP.
      */
     function _claimWithdraw(uint256 tokenId) internal {
+        address recipient = ownerOf(tokenId);
         IWithdrawRequestNFT.WithdrawRequest memory request = _requests[tokenId];
         if (!request.isValid) revert RequestNotValid();
 
@@ -357,18 +360,21 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
         liquidityPool.withdraw(amountToWithdraw, request.shareOfEEth);
 
-        (bool ok, ) = payable(ownerOf(tokenId)).call{value: amountToWithdraw}("");
+        (bool ok, ) = payable(recipient).call{value: amountToWithdraw}("");
         if (!ok) revert EthTransferFailed();
 
-        uint256 strandedEth = address(this).balance - ethAmountLockedForWithdrawal;
-        if (strandedEth > 0) {
-            (bool ok, ) = payable(address(liquidityPool)).call{value: strandedEth}("");
-            if (!ok) revert EthTransferFailed();
+        // Return any stranded ETH (balance above what is still locked) to LP. Guarded so an
+        // under-funded contract (balance < locked) reverts cleanly via the invariant check below
+        // rather than underflowing here.
+        if (address(this).balance > ethAmountLockedForWithdrawal) {
+            uint256 strandedEth = address(this).balance - ethAmountLockedForWithdrawal;
+            (bool okStranded, ) = payable(address(liquidityPool)).call{value: strandedEth}("");
+            if (!okStranded) revert EthTransferFailed();
         }
 
         _checkEthAmountLockedForWithdrawal();
 
-        emit WithdrawRequestClaimed(uint32(tokenId), amountToWithdraw, request.shareOfEEth, ownerOf(tokenId));
+        emit WithdrawRequestClaimed(uint32(tokenId), amountToWithdraw, request.shareOfEEth, recipient);
     }
 
     /**

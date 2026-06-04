@@ -298,38 +298,20 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     /**
      * @notice Settles a finalized claim for withdrawRequestNFT or priorityWithdrawalQueue.
-     * @param _amount The amount of ETH to withdraw
-     * @param _share The share of eETH to withdraw
-     * @dev Only callable by the withdrawRequestNFT or the priorityWithdrawalQueue
-     * Caller supplies the snapshotted rate and the request's share allocation;
-     * LP derives the share burn defensively from both inputs and current live rate.
-     * Three guards bound caller-supplied inputs without trusting any single one:
-     * (1) `_amount <= _shareOfEEth * _rate / SHARE_UNIT` — caps `_amount` at the
-     *     rate-implied value of `_shareOfEEth`. Defeats isolated `_amount` inflation
-     *     when `_rate` is honest. (Does NOT catch proportional `_amount`/`_rate`
-     *     co-inflation — see residual below.)
-     * (2) Burn at `max(amount/_rate, amount/live)` shares — Lido-pattern worse-for-
-     *     protocol clamp. An inflated `_rate` is silently floored to live; the protocol
-     *     burns at the honest live rate regardless of what the caller passed.
-     * (3) Share burn capped at `_shareOfEEth` — per-call cap on burn. Un-DoSes
-     *     legitimate down-rebase claims (where `amount/live > shareOfEEth`).
-     * `_shareOfEEth` MUST be the request-time share snapshot, not a live-derived value.
-     * If a future caller refactor breaks this invariant, Guard 3's cap silently loosens.
-     * LP cannot independently verify this — the caller (WRN / PWQ) is trusted to pass
-     * the snapshot honestly. The downstream `eETH.shares(msg.sender) < share` solvency
-     * check is the only bound against caller-asserted `_shareOfEEth` exceeding the
-     * caller's actual share holdings; it does NOT enforce a per-request bound.
-     * Residual: a caller corrupted in MULTIPLE inputs simultaneously (e.g. proportional
-     * `_amount` and `_rate` inflation) can bypass Guard 1 and Guard 2. The remaining
-     * bound is `eETH.shares(msg.sender)` (aggregate caller holdings), not per-request.
-     * This is the documented limit of LP-local defense; tighter bounds would require
-     * a per-request ledger on the LP side.
+     * @param _amount The amount of ETH paid to the claimer; the credit removed from `totalValueOutOfLp`.
+     * @param _share The full share allocation of the request, burned in its entirety.
+     * @dev Only callable by the withdrawRequestNFT or the priorityWithdrawalQueue.
+     * The caller (WRN / PWQ) supplies the request's full share snapshot and the ETH amount to pay;
+     * LP burns the full `_share` and unwinds the matching `_amount` from `totalValueOutOfLp`.
+     * Burning the full share (rather than a rate-derived subset) removes the dust/remainder
+     * that the prior rate-based burn left behind, so no separate remainder-handling flow is needed.
+     * `_share` MUST be the request-time share snapshot; LP cannot independently verify this and
+     * trusts the caller to pass it honestly. The `eETH.shares(msg.sender) < _share` solvency check
+     * is the only bound against the caller burning more than its actual holdings.
      * ETH was already segregated to the caller at finalize/fulfill via
      * `addEthAmountLockedForWithdrawal` / `transferLockedEthForPriority`; LP only
      * performs accounting (burn + `totalValueOutOfLp -=`).
-     * `_amountOfEEth` is trusted caller state, not bounded by Guards 1-3; the checked
-     * `totalValueOutOfLp -= _amountOfEEth` is the only backstop (reverts on over-assertion).
-     * A negative rebase that drops `totalValueOutOfLp` below it reverts the claim
+     * A negative rebase that drops `totalValueOutOfLp` below `_amount` reverts the claim
      * (finalized-withdrawal DoS, bounded by EtherFiAdmin's rebase-APR cap).
     */
     function withdraw(uint256 _amount, uint256 _share) external nonReentrant {
