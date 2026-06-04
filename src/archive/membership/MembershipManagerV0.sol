@@ -8,10 +8,10 @@ import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 
 import "@etherfi/core/interfaces/IeETH.sol";
 import "@etherfi/archive/interfaces/IMembershipManagerV0.sol";
-import "@etherfi/membership/interfaces/IMembershipNFT.sol";
+import "@etherfi/archive/membership/interfaces/IMembershipNFT.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
 
-import "@etherfi/membership/libraries/GlobalIndexLibrary.sol";
+import "@etherfi/archive/membership/libraries/GlobalIndexLibrary.sol";
 
 
 // Legacy view of MembershipNFT used only by this archived V0 manager. The
@@ -265,7 +265,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     function rebase(int128 _accruedRewards) external {
         _requireAdmin();
         uint256 ethRewardsPerEEthShareBeforeRebase = liquidityPool.amountForShare(1 ether);
-        liquidityPool.rebase(_accruedRewards);
+        liquidityPool.rebase(_accruedRewards, 0);
         uint256 ethRewardsPerEEthShareAfterRebase = liquidityPool.amountForShare(1 ether);
 
         uint256 etherFanEEthShares = eETH.shares(address(this));

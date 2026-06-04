@@ -52,13 +52,10 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     //---------------------------------  CONSTANTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
     /// @dev Protocol-wide circuit breakers on supply changes. Mints and burns
-    ///      each draw from their own global bucket via `consumeToken`,
-    ///      independent of (and additive with) the per-address buckets. A
-    ///      compromise that bypasses per-address gating (e.g. attacker minting
-    ///      to a fresh wallet with no bucket) still has to fit inside the
-    ///      global cap. Transfers are intentionally NOT globally rate-limited
-    ///      — they don't change supply and the per-address path is the right
-    ///      tool there.
+    ///      each draw from their own global bucket via `consumeToken`. The global
+    ///      cap bounds how much supply can be created or destroyed in a window, so
+    ///      a compromised mint/burn path still has to fit inside it. Transfers are
+    ///      intentionally NOT rate-limited — they don't change supply.
     bytes32 public constant EETH_MINT_LIMIT_ID = keccak256("EETH_MINT_LIMIT_ID");
     bytes32 public constant EETH_BURN_LIMIT_ID = keccak256("EETH_BURN_LIMIT_ID");
 
@@ -133,7 +130,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
      * @notice Mint shares to a user
      * @param _user The address of the user to mint shares to
      * @param _share The amount of shares to mint
-     * @dev Rate Limited for mint bucket and per-address bucket
+     * @dev Rate Limited for the global mint bucket
      * Only callable by the liquidity pool contract
      * Only callable when the contract is not paused
      * Only callable when the user is not blacklisted
@@ -144,9 +141,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         totalShares += _share;
 
         uint256 amount = liquidityPool.amountForShare(_share);
-        uint64 amt = toBucketUnit(amount);
-        rateLimiter.consumeToken(EETH_MINT_LIMIT_ID, amt);
-        rateLimiter.consumeForAddressIfConfigured(_user, amt);
+        rateLimiter.consumeToken(EETH_MINT_LIMIT_ID, toBucketUnit(amount));
 
         emit Transfer(address(0), _user, amount);
         emit TransferShares(address(0), _user, _share);
@@ -156,7 +151,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
      * @notice Burn shares from a user
      * @param _user The address of the user to burn shares from
      * @param _share The amount of shares to burn
-     * @dev Rate Limited for burn bucket and per-address bucket
+     * @dev Rate Limited for the global burn bucket
      * Only callable by the liquidity pool contract
      * Only callable when the contract is not paused
      * Only callable when the user is not blacklisted
@@ -169,59 +164,10 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         totalShares -= _share;
 
         uint256 amount = liquidityPool.amountForShare(_share);
-        uint64 amt = toBucketUnit(amount);
-        rateLimiter.consumeToken(EETH_BURN_LIMIT_ID, amt);
-        rateLimiter.consumeForAddressIfConfigured(_user, amt);
+        rateLimiter.consumeToken(EETH_BURN_LIMIT_ID, toBucketUnit(amount));
 
         emit Transfer(_user, address(0), amount);
         emit TransferShares(_user, address(0), _share);
-    }
-
-    //--------------------------------------------------------------------------------------
-    //----------------------  PER-ADDRESS RATE LIMIT MANAGEMENT  ---------------------------
-    //--------------------------------------------------------------------------------------
-    // Thin role-gated wrappers around the internal helpers in RateLimitedToken — the
-    // rate-limit semantics live in the helper / EtherFiRateLimiter; this contract just
-    // declares the access split (Guardian = tighten, Operating Multisig = set + delete).
-    // For a single user, pass a length-1 array.
-
-    /**
-     * @notice Tighten the address rate limits
-     * @param users The addresses of the users to tighten the rate limits for
-     * @param capacities The capacities of the rate limits
-     * @param refillRates The refill rates of the rate limits
-     * @dev Only callable by the guardian
-     */
-    function tightenAddressRateLimits(
-        address[] calldata users,
-        uint64[] calldata capacities,
-        uint64[] calldata refillRates
-    ) external onlyGuardian {
-        _tightenAddressRateLimits(users, capacities, refillRates);
-    }
-
-    /**
-     * @notice Set the address rate limits
-     * @param users The addresses of the users to set the rate limits for
-     * @param capacities The capacities of the rate limits
-     * @param refillRates The refill rates of the rate limits
-     * @dev Only callable by the operating multisig
-     */
-    function setAddressRateLimits(
-        address[] calldata users,
-        uint64[] calldata capacities,
-        uint64[] calldata refillRates
-    ) external onlyOperatingMultisig {
-        _setAddressRateLimits(users, capacities, refillRates);
-    }
-
-    /**
-     * @notice Delete the address rate limits
-     * @param users The addresses of the users to delete the rate limits for
-     * @dev Only callable by the operating multisig
-     */
-    function deleteAddressRateLimits(address[] calldata users) external onlyOperatingMultisig {
-        _deleteAddressRateLimits(users);
     }
 
     //--------------------------------------------------------------------------------------
@@ -392,11 +338,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
      * @param _recipient The address of the recipient
      * @param _amount The amount of eETH to transfer
      * @dev Order mirrors `WeETH._beforeTokenTransfer`: pause + blacklist checks
-     * Run BEFORE the rate-limit consume so a paused/blacklisted call doesn't
-     * bother the external rate limiter, and so blacklist / pause states
-     * cannot be silently observed via rate-limit state changes (atomic revert
-     * makes this safe either way, but consistent ordering removes the
-     * duplicate-check footprint that previously lived in `_transferShares`).
+     * run first. Transfers are NOT rate-limited — they don't change supply.
      * Only callable when the contract is not paused
      * Only callable when the sender is not blacklisted
      * Only callable when the recipient is not blacklisted
@@ -406,10 +348,6 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         blacklister.nonBlacklisted(_recipient);
         blacklister.nonBlacklisted(msg.sender);
         if (_sender == address(0) || _recipient == address(0)) revert AddressZero();
-
-        uint64 amt = toBucketUnit(_amount);
-        rateLimiter.consumeForAddressIfConfigured(_sender,    amt);
-        rateLimiter.consumeForAddressIfConfigured(_recipient, amt);
 
         uint256 _sharesToTransfer = liquidityPool.sharesForAmount(_amount);
         _transferShares(_sender, _recipient, _sharesToTransfer);

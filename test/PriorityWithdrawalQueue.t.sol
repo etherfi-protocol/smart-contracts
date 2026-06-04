@@ -82,7 +82,6 @@ contract PriorityWithdrawalQueueTest is TestSetup {
                 0x2f5301a3D59388c509C65f8698f521377D41Fd0F,
                 address(eETHInstance),
                 address(liquidityPoolInstance),
-                address(membershipManagerInstance),
                 address(roleRegistryInstance),
                 address(blacklisterInstance),
                 address(etherFiAdminInstance)
@@ -171,8 +170,8 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     }
 
     function _rebase(int128 accruedRewards) internal {
-        vm.prank(liquidityPoolInstance.membershipManager());
-        liquidityPoolInstance.rebase(accruedRewards);
+        vm.prank(liquidityPoolInstance.etherFiAdminContract());
+        liquidityPoolInstance.rebase(accruedRewards, 0);
     }
 
     /// @dev Helper to create a withdrawal request via weETH and return both the requestId and request struct
