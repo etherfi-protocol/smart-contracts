@@ -596,7 +596,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         
         // Verify cannot transfer invalid request
         vm.prank(recipient);
-        vm.expectRevert(WithdrawRequestNFT.InvalidRequest.selector);
+        vm.expectRevert(RoleRegistry.OnlyUpgradeTimelock.selector);
         withdrawRequestNFTInstance.transferFrom(recipient, address(0xdead), requestId);
 
         // Owner can seize the invalidated request NFT
@@ -1434,7 +1434,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Owner cannot transfer invalid request
         vm.prank(bob);
-        vm.expectRevert(WithdrawRequestNFT.InvalidRequest.selector);
+        vm.expectRevert(RoleRegistry.OnlyUpgradeTimelock.selector);
         withdrawRequestNFTInstance.transferFrom(bob, alice, requestId);
 
         // Contract owner can transfer invalid request

@@ -111,7 +111,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, DeprecatedOZO
     error EETHAmountCannotBeZero();
     error NotEnoughEEthRemainder();
     error FeeReturnFailed();
-    error InvalidRequest();
     error RequestValid();
     error RequestNotValid();
     error RequestNotFound();
@@ -451,7 +450,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, DeprecatedOZO
         blacklister.nonBlacklisted(to);
         for (uint256 i = 0; i < batchSize; i++) {
             uint256 tokenId = firstTokenId + i;
-            if (!_requests[tokenId].isValid && msg.sender != roleRegistry.owner()) revert InvalidRequest();
+            if (!_requests[tokenId].isValid) roleRegistry.onlyUpgradeTimelock(msg.sender);
         }
     }
 
