@@ -351,7 +351,7 @@ contract ProtocolInvariantsHandler is StdUtils {
     function burnEEthSharesForNonETHWithdrawal(uint128 valueETH, uint128 extra) external {
         uint256 outOfLp = lp.totalValueOutOfLp();
         if (outOfLp < 1 ether) {
-            vm.prank(membershipManager);
+            vm.prank(lp.etherFiAdminContract());
             try lp.rebase(int128(10 ether), 0) {
                 ghost_ledgerTPE += int256(uint256(10 ether));
             } catch {
@@ -433,7 +433,7 @@ contract ProtocolInvariantsHandler is StdUtils {
         }
         delta = int128(bound(int256(delta), minD, maxD));
 
-        vm.prank(membershipManager);
+        vm.prank(lp.etherFiAdminContract());
         try lp.rebase(delta, 0) {
             ghost_ledgerTPE += int256(delta);
             callCounts[delta < 0 ? bytes32("rebase_negative") : bytes32("rebase_positive")]++;
@@ -461,7 +461,7 @@ contract ProtocolInvariantsHandler is StdUtils {
         }
         delta = int128(bound(int256(delta), minD, maxD));
 
-        vm.prank(membershipManager);
+        vm.prank(lp.etherFiAdminContract());
         try lp.rebase(delta, 0) {
             ghost_ledgerTPE += int256(delta);
             callCounts["rebaseExtreme"]++;
@@ -750,7 +750,7 @@ contract ProtocolInvariantsHandler is StdUtils {
     function claimSegregated(uint128 amountSeed, uint128 rateSeed) external {
         uint256 outOfLp = lp.totalValueOutOfLp();
         if (outOfLp < 1 ether) {
-            vm.prank(membershipManager);
+            vm.prank(lp.etherFiAdminContract());
             try lp.rebase(int128(int256(uint256(2 ether))), 0) {
                 ghost_ledgerTPE += int256(2 ether);
             } catch { callCounts["segClaim_skipped"]++; return; }
