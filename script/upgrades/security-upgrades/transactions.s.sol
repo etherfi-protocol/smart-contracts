@@ -551,7 +551,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         codeChecker.verifyContractByteCodeMatch(etherFiRedemptionManagerImpl, address(fresh));
 
         PriorityWithdrawalQueue fresh2 = new PriorityWithdrawalQueue(
-            LIQUIDITY_POOL, EETH, WEETH, ROLE_REGISTRY, WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, PWQ_MIN_DELAY
+            LIQUIDITY_POOL, EETH, WEETH, blacklisterProxy, ROLE_REGISTRY, WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, PWQ_MIN_DELAY
         );
         codeChecker.verifyContractByteCodeMatch(priorityWithdrawalQueueImpl, address(fresh2));
 
