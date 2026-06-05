@@ -40,6 +40,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             address(liquidityPoolInstance),
             address(eETHInstance),
             address(weEthInstance),
+            address(blacklisterInstance),
             address(roleRegistryInstance),
             treasury,
             1 hours

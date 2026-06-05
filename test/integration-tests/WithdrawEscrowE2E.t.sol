@@ -103,6 +103,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
             address(liquidityPoolInstance),
             address(eETHInstance),
             address(weEthInstance),
+            address(blacklisterInstance),
             address(roleRegistryInstance),
             treasuryInstance,
             1 hours

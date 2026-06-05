@@ -326,8 +326,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
                 // if stETH price is temporarily larger than underlying ETH value, we set market value as 1:1 
                 _marketValue = _min(_amount, ICurvePoolQuoter1(address(stEth_Eth_Pool)).get_dy(1, 0, _amount));
 
-                // We also validate against chainlink price feed to ensure there's no significant price deviation 
-                // If price feed is stale, we skip the check
+                // We also validate against chainlink price feed to ensure there's no significant price deviation
+                // If price feed is stale, we BLOCK the stETH deposit (revert StalePriceFeed) — we do NOT skip the check
                 // If price feed is negative or deviation is too high, we do not allow the stETH deposit at all, something is wrong with the markets and deposit
                 // via stETH will be blocked until it stablises (either because of underlying lido solvency/liquidity issue or oracle manipulation)
                 (, int256 answer, , uint256 updatedAt,) = stEthPriceFeed.latestRoundData();
