@@ -169,7 +169,9 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         uint256 _totalRequestedWithdrawalAmount = 0;
         uint256 _nextRequestId = nextRequestId;
         for (uint256 requestId = lastFinalizedRequestId + 1; requestId < _nextRequestId; requestId++) {
-            _totalRequestedWithdrawalAmount += _requests[requestId].amountOfEEth;
+            if (_requests[requestId].isValid) {
+                _totalRequestedWithdrawalAmount += _requests[requestId].amountOfEEth;
+            }
         }
         totalRequestedWithdrawalAmount[_nextRequestId - 1] = _totalRequestedWithdrawalAmount;
     }
