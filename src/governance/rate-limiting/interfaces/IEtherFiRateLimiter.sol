@@ -22,9 +22,6 @@ interface IEtherFiRateLimiter {
     function deleteAddressLimit(address user) external;
     function consumeForAddressIfConfigured(address user, uint64 amount) external;
 
-    // protocol
-    function pauseContract() external;
-    function unPauseContract() external;
 
     // view functions
     function getLimit(bytes32 id) external view returns (uint64 capacity, uint64 remaining, uint64 refillRate, uint256 lastRefill);

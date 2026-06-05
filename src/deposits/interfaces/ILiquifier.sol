@@ -154,14 +154,22 @@ interface ILiquifier {
         bool isL2Eth;
     }
 
+    struct ConstructorAddresses {
+        address liquidityPool;
+        address lidoWithdrawalQueue;
+        address lido;
+        address stEth_Eth_Pool;
+        address roleRegistry;
+        address stEthPriceFeed;
+        address blacklister;
+        address etherfiRestaker;
+        address l1SyncPool;
+    }
+
     function lido() external view returns (ILido);
     function lidoWithdrawalQueue() external view returns (ILidoWithdrawalQueue);
     function tokenInfos(address _token) external view returns (uint128, uint128, IStrategy, bool, uint16, uint32, uint32, uint32, uint96, uint96, bool);
 
     function depositWithERC20(address _token, uint256 _amount, address _referral) external returns (uint256);
     function quoteByFairValue(address _token, uint256 _amount) external view returns (uint256);
-
-    function pauseContractUntil() external;
-    function unpauseContractUntil() external;
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external;
 }

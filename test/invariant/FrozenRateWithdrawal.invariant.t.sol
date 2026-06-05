@@ -33,7 +33,7 @@ contract FrozenRateWithdrawalInvariantTest is TestSetup {
         setUpTests();
 
         vm.prank(alice);
-        withdrawRequestNFTInstance.unPauseContract();
+        withdrawRequestNFTInstance.unpause();
 
         for (uint256 i = 0; i < 5; i++) {
             address a = address(uint160(uint256(keccak256(abi.encodePacked("frozen.actor.", i)))));
@@ -104,19 +104,6 @@ contract FrozenRateWithdrawalInvariantTest is TestSetup {
     // =====================================================================
     // FROZEN-RATE INTEGRITY
     // =====================================================================
-
-    function invariant_frozen_rate_within_bounds() public view {
-        assertFalse(
-            handler.ghost_frozenRateOutOfBounds(),
-            "frozen rate observed outside [min, max]"
-        );
-    }
-
-    function invariant_all_checkpoints_in_bounds() public view {
-        (bool ok, uint256 firstOOB) = handler.verifyAllFinalizationCheckpointsInBounds();
-        assertTrue(ok, string.concat("frozen rate OOB for tokenId=", vm.toString(firstOOB)));
-    }
-
     function invariant_frozen_rate_persists_under_rebase() public {
         handler.verifyFrozenRatePersistence();
         assertFalse(

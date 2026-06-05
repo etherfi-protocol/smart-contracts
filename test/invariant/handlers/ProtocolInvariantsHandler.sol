@@ -671,7 +671,7 @@ contract ProtocolInvariantsHandler is StdUtils {
     /// then unpause. Pranks as `operatingMultisigSigner` (alice in TestSetup).
     function pause_lp_and_attempt_deposit(uint256 actorSeed) external {
         vm.prank(address(operatingMultisig));
-        try lp.pauseContract() { callCounts["pause_lp"]++; }
+        try lp.pause() { callCounts["pause_lp"]++; }
         catch (bytes memory err) {
             _recordRevert("pause_lp", err);
             return;
@@ -688,7 +688,7 @@ contract ProtocolInvariantsHandler is StdUtils {
         }
         // Unpause to keep subsequent ops reachable.
         vm.prank(address(operatingMultisig));
-        try lp.unPauseContract() { callCounts["unpause_lp"]++; }
+        try lp.unpause() { callCounts["unpause_lp"]++; }
         catch {}
     }
     /// (F-018) Set if a paused contract accepted a state-changing call.
@@ -794,7 +794,7 @@ contract ProtocolInvariantsHandler is StdUtils {
         // Pass `_shareOfEEth = sharesToBurn` so the new guards are no-ops and the handler
         // reproduces the pre-Option-5 burn behavior exactly.
         vm.prank(wrn);
-        try lp.withdraw(amount, rate, sharesToBurn) {
+        try lp.withdraw(amount, amount, rate, sharesToBurn) {
             ghost_ledgerTPE -= int256(amount);   // ETH leaves LP accounting
             callCounts["segClaim"]++;
         } catch (bytes memory err) {

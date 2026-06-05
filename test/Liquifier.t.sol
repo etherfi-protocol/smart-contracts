@@ -91,7 +91,7 @@ contract LiquifierTest is TestSetup {
 
         vm.deal(alice, 100 ether);
 
-        vm.startPrank(liquifierInstance.owner());
+        vm.startPrank(roleRegistryInstance.owner());
         liquifierInstance.updateQuoteStEthWithCurve(true);
         liquifierInstance.updateDiscountInBasisPoints(address(stEth), 500); // 5%
         vm.stopPrank();
@@ -354,7 +354,7 @@ contract LiquifierTest is TestSetup {
         // bob has no pauser role
         vm.startPrank(bob);
         vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
-        liquifierInstance.pauseContract();
+        liquifierInstance.pause();
         vm.stopPrank();
 
         // grant OPERATION_MULTISIG_ROLE (consolidated admin/pauser) to bob
@@ -363,11 +363,11 @@ contract LiquifierTest is TestSetup {
         vm.stopPrank();
 
         vm.prank(bob);
-        liquifierInstance.pauseContract();
+        liquifierInstance.pause();
 
         // bob can also unpause now (consolidated into a single admin role).
         vm.prank(bob);
-        liquifierInstance.unPauseContract();
+        liquifierInstance.unpause();
     }
 
     function test_sendToEtherFiRestaker_requiresSenderRole() public {
@@ -470,7 +470,7 @@ contract LiquifierTest is TestSetup {
 
         vm.prank(bob);
         vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
-        liquifierInstance.pauseContractUntil();
+        liquifierInstance.pauseUntil();
     }
 
     function test_pauseContractUntil_setsState() public {
@@ -479,7 +479,7 @@ contract LiquifierTest is TestSetup {
         _grantLiqPauseUntilRoles();
 
         vm.prank(liqPauseUntilPauser);
-        liquifierInstance.pauseContractUntil();
+        liquifierInstance.pauseUntil();
         assertEq(_liqPausedUntil(), block.timestamp + liquifierInstance.MAX_PAUSE_DURATION());
     }
 
@@ -489,11 +489,11 @@ contract LiquifierTest is TestSetup {
         _grantLiqPauseUntilRoles();
 
         vm.prank(liqPauseUntilPauser);
-        liquifierInstance.pauseContractUntil();
+        liquifierInstance.pauseUntil();
 
         vm.prank(bob);
         vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
-        liquifierInstance.unpauseContractUntil();
+        liquifierInstance.unpauseUntil();
     }
 
     function test_unpauseContractUntil_clearsState() public {
@@ -502,10 +502,10 @@ contract LiquifierTest is TestSetup {
         _grantLiqPauseUntilRoles();
 
         vm.prank(liqPauseUntilPauser);
-        liquifierInstance.pauseContractUntil();
+        liquifierInstance.pauseUntil();
 
         vm.prank(liqUnpauseUntilUnpauser);
-        liquifierInstance.unpauseContractUntil();
+        liquifierInstance.unpauseUntil();
         assertEq(_liqPausedUntil(), 0);
     }
 
@@ -516,7 +516,7 @@ contract LiquifierTest is TestSetup {
 
         vm.prank(liqUnpauseUntilUnpauser);
         vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
-        liquifierInstance.unpauseContractUntil();
+        liquifierInstance.unpauseUntil();
     }
 
     // --- setPauseUntilDuration ---
@@ -547,7 +547,7 @@ contract LiquifierTest is TestSetup {
         liquifierInstance.setPauseUntilDuration(d);
 
         vm.prank(liqPauseUntilPauser);
-        liquifierInstance.pauseContractUntil();
+        liquifierInstance.pauseUntil();
         assertEq(_liqPausedUntil(), block.timestamp + d);
     }
 
@@ -581,7 +581,7 @@ contract LiquifierTest is TestSetup {
         vm.stopPrank();
 
         vm.prank(liqPauseUntilPauser);
-        liquifierInstance.pauseContractUntil();
+        liquifierInstance.pauseUntil();
 
         vm.prank(alice);
         vm.expectRevert(
@@ -596,7 +596,7 @@ contract LiquifierTest is TestSetup {
         _grantLiqPauseUntilRoles();
 
         vm.prank(liqPauseUntilPauser);
-        liquifierInstance.pauseContractUntil();
+        liquifierInstance.pauseUntil();
 
         ILiquifier.PermitInput memory emptyPermit;
         vm.prank(alice);
@@ -606,20 +606,20 @@ contract LiquifierTest is TestSetup {
         liquifierInstance.depositWithERC20WithPermit(address(stEth), 1 ether, address(0), emptyPermit);
     }
 
-    function test_pauseContract_blockedWhilePauseUntilActive() public {
-        // OZ's _pause() is internally gated by whenNotPaused, which now routes through the
-        // _requireNotPaused override. So full pauseContract is blocked while paused-until is active.
+    function test_pauseContract_allowedWhilePauseUntilActive() public {
+        // The indefinite pause and the timed pause are now independent primitives: pausing
+        // indefinitely while a timed pause is active is allowed (escalation), and both keep
+        // `whenNotPaused`-gated functions blocked.
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
         _grantLiqPauseUntilRoles();
 
         vm.prank(liqPauseUntilPauser);
-        liquifierInstance.pauseContractUntil();
-        uint256 until = block.timestamp + liquifierInstance.MAX_PAUSE_DURATION();
+        liquifierInstance.pauseUntil();
 
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, until));
-        liquifierInstance.pauseContract();
+        liquifierInstance.pause();
+        assertTrue(liquifierInstance.paused());
     }
 
     function test_depositWithERC20_unblockedAfterPauseExpires() public {
@@ -634,7 +634,7 @@ contract LiquifierTest is TestSetup {
         vm.stopPrank();
 
         vm.prank(liqPauseUntilPauser);
-        liquifierInstance.pauseContractUntil();
+        liquifierInstance.pauseUntil();
 
         vm.warp(block.timestamp + liquifierInstance.MAX_PAUSE_DURATION() + 1);
         // Refresh after warp — pause window is days, well past stalePriceWindow.
@@ -657,9 +657,9 @@ contract LiquifierTest is TestSetup {
         vm.stopPrank();
 
         vm.prank(liqPauseUntilPauser);
-        liquifierInstance.pauseContractUntil();
+        liquifierInstance.pauseUntil();
         vm.prank(liqUnpauseUntilUnpauser);
-        liquifierInstance.unpauseContractUntil();
+        liquifierInstance.unpauseUntil();
 
         vm.prank(alice);
         liquifierInstance.depositWithERC20(address(stEth), 1 ether, address(0));
@@ -672,9 +672,9 @@ contract LiquifierTest is TestSetup {
     function _ctorAddrs(address roleRegistry_, address priceFeed_, address blacklister_)
         internal
         pure
-        returns (Liquifier.ConstructorAddresses memory)
+        returns (ILiquifier.ConstructorAddresses memory)
     {
-        return Liquifier.ConstructorAddresses({
+        return ILiquifier.ConstructorAddresses({
             liquidityPool: address(0xA1),
             lidoWithdrawalQueue: address(0xA2),
             lido: address(0xA3),

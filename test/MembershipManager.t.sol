@@ -19,7 +19,7 @@ contract MembershipManagerTest is TestSetup {
 //         vm.stopPrank();
 
 //         vm.prank(admin);
-//         withdrawRequestNFTInstance.unPauseContract();
+//         withdrawRequestNFTInstance.unpause();
 
 
 //         _upgradeMembershipManagerFromV0ToV1();
@@ -249,7 +249,7 @@ contract MembershipManagerTest is TestSetup {
 
 //         // PAUSE CONTRACTS AND GET READY FOR SNAPSHOT
 //         vm.startPrank(owner);
-//         earlyAdopterPoolInstance.pauseContract();
+//         earlyAdopterPoolInstance.pause();
 //         vm.stopPrank();
 
 //         /// SNAPSHOT FROM PYTHON SCRIPT GETS TAKEN HERE
@@ -320,7 +320,7 @@ contract MembershipManagerTest is TestSetup {
 
 //         // PAUSE CONTRACTS AND GET READY FOR SNAPSHOT
 //         vm.startPrank(owner);
-//         earlyAdopterPoolInstance.pauseContract();
+//         earlyAdopterPoolInstance.pause();
 //         vm.stopPrank();
 
 //         /// SNAPSHOT FROM PYTHON SCRIPT GETS TAKEN HERE
@@ -749,7 +749,7 @@ contract MembershipManagerTest is TestSetup {
 
 //         /// MERKLE TREE GETS GENERATED AND UPDATED
 //         vm.prank(owner);
-//         earlyAdopterPoolInstance.pauseContract();
+//         earlyAdopterPoolInstance.pause();
 //         vm.prank(alice);
 //         membershipNftInstance.setUpForEap(rootMigration2, requiredEapPointsPerEapDeposit);
 
@@ -931,14 +931,14 @@ contract MembershipManagerTest is TestSetup {
 
 //         vm.expectRevert(MembershipManager.OnlyAdmin.selector);
 //         vm.prank(owner);
-//         membershipManagerV1Instance.pauseContract();
+//         membershipManagerV1Instance.pause();
 
 //         vm.prank(alice);
-//         membershipManagerV1Instance.pauseContract();
+//         membershipManagerV1Instance.pause();
 //         assertEq(membershipManagerV1Instance.paused(), true);
 
 //         vm.prank(alice);
-//         membershipManagerV1Instance.unPauseContract();
+//         membershipManagerV1Instance.unpause();
 //         assertEq(membershipManagerV1Instance.paused(), false);
 //     }
 
@@ -1438,11 +1438,12 @@ contract MembershipManagerTest is TestSetup {
 
         // rebase must succeed (no division-by-zero) AND the underlying LP rebase must apply.
         uint256 tvolBefore = liquidityPoolInstance.totalValueOutOfLp();
+        // rebase within the 25 bps cap (0.25% of the 5 ETH pool = 0.0125 ETH)
         vm.prank(address(etherFiAdminInstance));
-        membershipManagerInstance.rebase(1 ether);
+        membershipManagerInstance.rebase(0.01 ether);
         assertEq(
             liquidityPoolInstance.totalValueOutOfLp(),
-            tvolBefore + 1 ether,
+            tvolBefore + 0.01 ether,
             "LP rebase still applied even on early-return"
         );
     }

@@ -20,7 +20,7 @@ contract WeETHWithdrawAdapterTest is TestSetup {
     function setUp() public {
         setUpTests();
         vm.prank(admin);
-        withdrawRequestNFTInstance.unPauseContract();
+        withdrawRequestNFTInstance.unpause();
 
         // Deploy the adapter standalone (TestSetup only wires it up in fork mode)
         WeETHWithdrawAdapter impl = new WeETHWithdrawAdapter(
@@ -68,33 +68,33 @@ contract WeETHWithdrawAdapterTest is TestSetup {
         _grantPauseUntilRoles();
         vm.prank(bob);
         vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
-        adapter.pauseContractUntil();
+        adapter.pauseUntil();
     }
 
     function test_pauseContractUntil_setsState() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        adapter.pauseContractUntil();
+        adapter.pauseUntil();
         assertEq(_pausedUntil(), block.timestamp + adapter.MAX_PAUSE_DURATION());
     }
 
     function test_unpauseContractUntil_requiresRole() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        adapter.pauseContractUntil();
+        adapter.pauseUntil();
 
         vm.prank(bob);
         vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
-        adapter.unpauseContractUntil();
+        adapter.unpauseUntil();
     }
 
     function test_unpauseContractUntil_clearsState() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        adapter.pauseContractUntil();
+        adapter.pauseUntil();
 
         vm.prank(unpauseUntilUnpauser);
-        adapter.unpauseContractUntil();
+        adapter.unpauseUntil();
         assertEq(_pausedUntil(), 0);
     }
 
@@ -102,7 +102,7 @@ contract WeETHWithdrawAdapterTest is TestSetup {
         _grantPauseUntilRoles();
         vm.prank(unpauseUntilUnpauser);
         vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
-        adapter.unpauseContractUntil();
+        adapter.unpauseUntil();
     }
 
     // --- setPauseUntilDuration ---
@@ -129,7 +129,7 @@ contract WeETHWithdrawAdapterTest is TestSetup {
         adapter.setPauseUntilDuration(d);
 
         vm.prank(pauseUntilPauser);
-        adapter.pauseContractUntil();
+        adapter.pauseUntil();
         assertEq(_pausedUntil(), block.timestamp + d);
     }
 
@@ -154,7 +154,7 @@ contract WeETHWithdrawAdapterTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        adapter.pauseContractUntil();
+        adapter.pauseUntil();
 
         vm.prank(bob);
         vm.expectRevert(
@@ -166,7 +166,7 @@ contract WeETHWithdrawAdapterTest is TestSetup {
     function test_requestWithdrawWithPermit_blockedByPauseContractUntil() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        adapter.pauseContractUntil();
+        adapter.pauseUntil();
 
         IWeETHWithdrawAdapter.PermitInput memory emptyPermit;
         vm.prank(bob);
@@ -181,7 +181,7 @@ contract WeETHWithdrawAdapterTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        adapter.pauseContractUntil();
+        adapter.pauseUntil();
 
         vm.warp(block.timestamp + adapter.MAX_PAUSE_DURATION() + 1);
 
@@ -194,9 +194,9 @@ contract WeETHWithdrawAdapterTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        adapter.pauseContractUntil();
+        adapter.pauseUntil();
         vm.prank(unpauseUntilUnpauser);
-        adapter.unpauseContractUntil();
+        adapter.unpauseUntil();
 
         vm.prank(bob);
         adapter.requestWithdraw(0.5 ether, bob);
@@ -285,7 +285,7 @@ contract WeETHWithdrawAdapterTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        adapter.pauseContractUntil();
+        adapter.pauseUntil();
 
         vm.prank(owner);
         blacklisterInstance.blacklistUser(bob);
@@ -298,7 +298,7 @@ contract WeETHWithdrawAdapterTest is TestSetup {
 
         // After unpause, the blacklist gate takes over.
         vm.prank(unpauseUntilUnpauser);
-        adapter.unpauseContractUntil();
+        adapter.unpauseUntil();
 
         vm.prank(bob);
         _expectBlacklistedRevert(bob);

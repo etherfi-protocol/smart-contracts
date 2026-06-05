@@ -35,8 +35,8 @@ contract DeployCumulativeMerkleRewardsDistributor is Script {
         CumulativeMerkleRewardsDistributor cumulativeMerkleRewardsDistributorImplementation = new CumulativeMerkleRewardsDistributor(roleRegistryProxyAddress);
         UUPSProxy cumulativeMerkleRewardsDistributorProxy = new UUPSProxy(address(cumulativeMerkleRewardsDistributorImplementation), initializerData);
         CumulativeMerkleRewardsDistributor cumulativeMerkleInstance = CumulativeMerkleRewardsDistributor(payable(address(cumulativeMerkleRewardsDistributorProxy)));
-        //cumulativeMerkleInstance.grantRole(keccak256("CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE"), msg.sender);
-        cumulativeMerkleInstance.transferOwnership(address(timelockAddress));
+        // Access control is governed by the RoleRegistry; the contract no longer
+        // has a per-contract Ownable owner to transfer.
 
         vm.stopBroadcast();
     }

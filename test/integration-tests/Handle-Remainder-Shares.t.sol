@@ -10,7 +10,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
 
     function _newLpImpl() internal returns (address) {
         return address(new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: STAKING_MANAGER,
                 nodesManager: ETHERFI_NODES_MANAGER,
                 eETH: EETH,
@@ -22,13 +22,12 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: ETHERFI_ADMIN,
                 membershipManager: MEMBERSHIP_MANAGER
-            }),
-            0
+            })
         ));
     }
 
     function _newWrnImpl() internal returns (address) {
-        return address(new WithdrawRequestNFT(buybackWallet, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), address(etherFiAdminInstance), 1, 4e18));
+        return address(new WithdrawRequestNFT(buybackWallet, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), address(etherFiAdminInstance)));
     }
 
     function setUp() public {
@@ -38,7 +37,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
 
         // Upgrade LP and NFT to the new escrow-aware implementations so that
         // finalizeRequests + claimWithdraw work with the new ETH-escrow flow.
-        address lpOwner = liquidityPoolInstance.owner();
+        address lpOwner = roleRegistryInstance.owner();
         // Deploy the impl BEFORE pranking: `_newLpImpl()` performs a CREATE that
         // would otherwise consume the single-shot vm.prank, leaving upgradeTo to
         // run as the test contract (OnlyUpgradeTimelock after the RoleRegistry swap).
@@ -46,7 +45,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
         vm.prank(lpOwner);
         liquidityPoolInstance.upgradeTo(newLpImpl);
 
-        address wrnOwner = withdrawRequestNFTInstance.owner();
+        address wrnOwner = roleRegistryInstance.owner();
         address newWrnImpl = _newWrnImpl();
         vm.prank(wrnOwner);
         withdrawRequestNFTInstance.upgradeTo(newWrnImpl);
@@ -167,8 +166,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
         // total_remainder ≈ bob_locked × p. With bob_locked = 200 ETH and p = 0.5%,
         // expected remainder ≈ 1 ETH, well above the 0.05 floor below.
         int128 rebaseAmount = int128(int256(liquidityPoolInstance.getTotalPooledEther() / 200));
-        vm.prank(address(membershipManagerV1Instance));
-        liquidityPoolInstance.rebase(rebaseAmount);
+        _rebaseUncapped(rebaseAmount);
 
         // Finalize and claim all requests
         for (uint256 i = 0; i < 20; i++) {

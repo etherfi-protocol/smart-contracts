@@ -86,7 +86,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
 
         if (withdrawRequestNFTInstance.paused()) {
             vm.prank(alice);
-            withdrawRequestNFTInstance.unPauseContract();
+            withdrawRequestNFTInstance.unpause();
         }
 
         vm.prank(alice);
@@ -114,7 +114,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
         );
         pQueue = PriorityWithdrawalQueue(payable(address(proxy)));
         liquidityPoolInstance.upgradeTo(address(new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: address(stakingManagerInstance),
                 nodesManager: address(managerInstance),
                 eETH: address(eETHInstance),
@@ -126,14 +126,13 @@ contract WithdrawEscrowE2ETest is TestSetup {
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: address(etherFiAdminInstance),
                 membershipManager: address(membershipManagerInstance)
-            }),
-            0
+            })
         )));
         vm.stopPrank();
     }
 
     function _upgradeWithdrawRequestNFT() internal {
-        address wrnOwner = withdrawRequestNFTInstance.owner();
+        address wrnOwner = roleRegistryInstance.owner();
         // Deploy the impl BEFORE pranking — the inlined `new` is a CREATE that
         // would otherwise consume the single-shot vm.prank (OnlyUpgradeTimelock).
         address newWrnImpl = address(new WithdrawRequestNFT(
@@ -143,7 +142,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
             address(membershipManagerInstance),
             address(roleRegistryInstance),
             address(blacklisterInstance)
-        , address(etherFiAdminInstance), 1, 4e18));
+        , address(etherFiAdminInstance)));
         vm.prank(wrnOwner);
         withdrawRequestNFTInstance.upgradeTo(newWrnImpl);
     }
@@ -366,8 +365,13 @@ contract WithdrawEscrowE2ETest is TestSetup {
             "step4: LP raw ETH unchanged at claim");
         assertEq(liquidityPoolInstance.totalValueInLp(), preLp.inLp,
             "step4: totalValueInLp unchanged at claim");
-        // totalValueOutOfLp decrements by claimable (the actual ETH paid), not raw withdrawAmt
-        // — share-rate round-trip can drift by 2 wei at the live mainnet share rate
+        // totalValueOutOfLp decrements by request.amountOfEEth (the value credited at
+        // fulfill), not by the ETH actually paid. Here that credit == withdrawAmt
+        // (step2 asserts request.amountOfEEth == withdrawAmt) and there is no rebase between
+        // finalize and claim, so the two coincide. The 5-wei tolerance absorbs the share-rate
+        // round-trip drift in withdrawAmt itself. The down-rebase case, where the credit and
+        // the paid amount diverge, is pinned at the LP boundary in
+        // LiquidityPool.t.sol:test_withdraw_debitsAmountOfEEth_notAmountPaid.
         assertApproxEqAbs(liquidityPoolInstance.totalValueOutOfLp(),
             preLp.outLp - uint128(withdrawAmt), 5,
             "step4: totalValueOutOfLp after claim");

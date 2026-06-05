@@ -11,6 +11,7 @@ import "@etherfi/membership/MembershipManager.sol";
 import "@etherfi/withdrawals/WithdrawRequestNFT.sol";
 import "@etherfi/governance/Blacklister.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/deposits/interfaces/IDepositAdapter.sol";
 import "@etherfi/deposits/interfaces/ILiquifier.sol";
 import "@etherfi/core/interfaces/IeETH.sol";
 import "@etherfi/core/interfaces/IWeETH.sol";
@@ -33,15 +34,17 @@ contract BlacklistTest is TestSetup {
         // The exact token wirings don't matter for blacklist checks since the
         // modifier runs before any state-changing logic.
         DepositAdapter impl = new DepositAdapter(
-            address(liquidityPoolInstance),
-            address(liquifierInstance),
-            address(weEthInstance),
-            address(eETHInstance),
-            address(0),
-            address(0),
-            address(0),
-            address(roleRegistryInstance),
-            address(blacklisterInstance)
+            IDepositAdapter.ConstructorAddresses({
+                liquidityPool: address(liquidityPoolInstance),
+                liquifier: address(liquifierInstance),
+                weETH: address(weEthInstance),
+                eETH: address(eETHInstance),
+                wETH: address(0),
+                stETH: address(0),
+                wstETH: address(0),
+                blacklister: address(blacklisterInstance),
+                roleRegistry: address(roleRegistryInstance)
+            })
         );
         UUPSProxy proxy = new UUPSProxy(address(impl), "");
         depositAdapter = DepositAdapter(payable(address(proxy)));

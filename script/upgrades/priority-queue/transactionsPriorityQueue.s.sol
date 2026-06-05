@@ -255,7 +255,7 @@ contract PriorityQueueTransactions is Script, Utils {
         console2.log("");
 
         LiquidityPool newLiquidityPoolImpl = new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: address(0),
                 nodesManager: address(0),
                 eETH: EETH,
@@ -267,8 +267,7 @@ contract PriorityQueueTransactions is Script, Utils {
                 blacklister: address(0),
                 etherFiAdminContract: address(0),
                 membershipManager: address(0)
-            }),
-            0
+            })
         );
         // blacklister immutable added to PWQ; placeholder address(0) here mirrors the
         // pattern used elsewhere in this script — the operator must substitute the

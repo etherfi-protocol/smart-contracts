@@ -12,13 +12,6 @@ interface ILiquidityPool {
         uint8 v;
         bytes32 r;
         bytes32 s;
-    } 
-
-    enum SourceOfFunds {
-        UNDEFINED,
-        EETH,
-        ETHER_FAN,
-        DELEGATED_STAKING
     }
 
     struct FundStatistics {
@@ -41,6 +34,27 @@ interface ILiquidityPool {
         bool registered;
     }
 
+    struct ConstructorAddresses {
+        address stakingManager;
+        address nodesManager;
+        address eETH;
+        address withdrawRequestNFT;
+        address liquifier;
+        address etherFiRedemptionManager;
+        address roleRegistry;
+        address priorityWithdrawalQueue;
+        address blacklister;
+        address etherFiAdminContract;
+        address membershipManager;
+    }
+
+    enum SourceOfFunds {
+        UNDEFINED,
+        EETH,
+        ETHER_FAN,
+        DELEGATED_STAKING
+    }
+
     function totalValueOutOfLp() external view returns (uint128);
     function totalValueInLp() external view returns (uint128);
     function validatorSizeWei() external view returns (uint256);
@@ -58,7 +72,7 @@ interface ILiquidityPool {
     function deposit(address _user, address _referral) external payable returns (uint256);
     function depositToRecipient(address _recipient, uint256 _amount, address _referral) external returns (uint256);
     function withdraw(address _recipient, uint256 _amount) external returns (uint256);
-    function withdraw(uint256 _amount, uint256 _rate, uint256 _shareOfEEth) external returns (uint256);
+    function withdraw(uint256 _amount, uint256 _amountOfEEth, uint256 _rate, uint256 _shareOfEEth) external returns (uint256);
     function burnEEthSharesForNonETHWithdrawal(uint256 _amountSharesToBurn, uint256 _withdrawalValueInETH) external;
     function requestWithdraw(address recipient, uint256 amount) external returns (uint256);
     function requestWithdrawWithPermit(address _owner, uint256 _amount, PermitInput calldata _permit) external returns (uint256);
@@ -77,11 +91,6 @@ interface ILiquidityPool {
     function transferLockedEthForPriority(uint128 _amount) external;
     function returnLockedEth(uint128 _amount) external payable;
 
-    function pauseContract() external;
     function burnEEthShares(uint256 shares) external;
-    function unPauseContract() external; 
-    function pauseContractUntil() external;
-    function unpauseContractUntil() external;
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external; 
     function setValidatorSizeWei(uint256 _size) external;
 }

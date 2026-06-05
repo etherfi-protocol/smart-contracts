@@ -322,7 +322,7 @@ contract RedemptionManagerHandler is StdUtils {
     /// @notice Pause/unpause exercises the whenNotPaused gate.
     function admin_pause_and_attempt_redeem(uint256 actorSeed) external {
         vm.prank(adminSigner);
-        try erm.pauseContract() {
+        try erm.pause() {
             callCounts["pause"]++;
         } catch (bytes memory err) {
             _recordRevert("pause", err);
@@ -339,7 +339,7 @@ contract RedemptionManagerHandler is StdUtils {
             }
         }
         vm.prank(adminSigner);
-        try erm.unPauseContract() {
+        try erm.unpause() {
             callCounts["unpause"]++;
         } catch {}
     }

@@ -52,7 +52,7 @@ contract RestakingRewardsRouterTest is Test {
 
         // Deploy LiquidityPool
         liquidityPoolImpl = new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: address(0),
                 nodesManager: address(0),
                 eETH: address(0),
@@ -64,8 +64,7 @@ contract RestakingRewardsRouterTest is Test {
                 blacklister: address(0),
                 etherFiAdminContract: address(0),
                 membershipManager: address(0)
-            }),
-            0
+            })
         );
         liquidityPoolProxy = new UUPSProxy(address(liquidityPoolImpl), "");
         liquidityPool = LiquidityPool(payable(address(liquidityPoolProxy)));

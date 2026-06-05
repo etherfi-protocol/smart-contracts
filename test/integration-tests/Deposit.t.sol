@@ -49,7 +49,7 @@ contract DepositIntegrationTest is TestSetup {
 
     function test_Deposit_Liquifier_depositWithERC20WithPermit_stETH() public {
         if (liquifierInstance.isDepositCapReached(address(stEth), 1 ether)) {
-            vm.startPrank(liquifierInstance.owner());
+            vm.startPrank(roleRegistryInstance.owner());
             liquifierInstance.updateDepositCap(address(stEth), type(uint32).max, type(uint32).max);
             vm.stopPrank();
         }
@@ -240,7 +240,7 @@ contract DepositIntegrationTest is TestSetup {
         stEth.transfer(address(etherFiRestakerInstance), stEthAmount);
 
         uint256 stETHAmountOfRestakerBeforeDeposit = stEth.balanceOf(address(etherFiRestakerInstance));
-        vm.prank(etherFiRestakerInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         uint256 shares = etherFiRestakerInstance.depositIntoStrategy(address(stEth), stEthAmount);
 
         assertGt(shares, 0);

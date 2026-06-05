@@ -3,7 +3,6 @@ pragma solidity ^0.8.13;
 
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
@@ -14,12 +13,14 @@ import "@etherfi/core/interfaces/ILiquidityPool.sol";
 import "@etherfi/oracle/interfaces/IEtherFiAdmin.sol";
 import "@etherfi/governance/interfaces/IBlacklister.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
+import "@etherfi/governance/utils/Pausable.sol";
+import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
 
 import "@etherfi/membership/libraries/GlobalIndexLibrary.sol";
 
 import "forge-std/console.sol";
 
-contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable, IMembershipManager, RolesLibrary {
+contract MembershipManager is Initializable, OwnableUpgradeable, DeprecatedOZPausable, UUPSUpgradeable, IMembershipManager, Pausable {
     using SafeERC20 for IERC20;
 
     //--------------------------------------------------------------------------------------
@@ -224,16 +225,6 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     /// @dev set how many blocks a token is locked from trading for after withdrawing
     function setWithdrawalLockBlocks(uint32 _blocks) external onlyOperatingMultisig {
         withdrawalLockBlocks = _blocks;
-    }
-
-    //Pauses the contract
-    function pauseContract() external onlyOperatingMultisig {
-        _pause();
-    }
-
-    //Unpauses the contract
-    function unPauseContract() external onlyOperatingMultisig {
-        _unpause();
     }
 
     //--------------------------------------------------------------------------------------

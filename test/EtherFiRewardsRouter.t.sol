@@ -77,10 +77,7 @@ contract EtherFiRewardsRouterTest is Test {
             abi.encodeWithSelector(EtherFiRewardsRouter.initialize.selector)
         );
         rewardsRouter = EtherFiRewardsRouter(payable(address(proxy)));
-        
-        // Transfer ownership to owner address
-        rewardsRouter.transferOwnership(owner);
-        
+
         // Deploy test tokens
         testToken = new TestERC20("Test Token", "TEST");
         testNFT = new TestERC721("Test NFT", "TNFT");
@@ -106,8 +103,9 @@ contract EtherFiRewardsRouterTest is Test {
     // ============ Initialization Tests ============
     
     function test_initialize_setsOwner() public {
-        // Owner is transferred to owner address in setUp
-        assertEq(rewardsRouter.owner(), owner);
+        // Ownership is now governed by the RoleRegistry rather than a per-contract
+        // Ownable owner; the router defers all access control to it.
+        assertEq(roleRegistry.owner(), owner);
     }
     
     function test_initialize_canOnlyBeCalledOnce() public {

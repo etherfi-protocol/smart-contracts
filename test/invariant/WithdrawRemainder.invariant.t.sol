@@ -41,7 +41,7 @@ contract WithdrawRemainderInvariantTest is TestSetup {
 
         // Unpause WRN; the FrozenRate suite's pattern.
         vm.prank(alice);
-        withdrawRequestNFTInstance.unPauseContract();
+        withdrawRequestNFTInstance.unpause();
 
         // 5 actors, each pre-funded with eETH + approved for WRN/PQ/weETH.
         for (uint256 i = 0; i < 5; i++) {
@@ -85,8 +85,7 @@ contract WithdrawRemainderInvariantTest is TestSetup {
         // request -> negative-rebase -> finalize -> claim chain that
         // produces a positive stranded-ETH delta (the property the suite
         // is built to assert).
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(int128(int256(uint256(200 ether))));
+        _rebaseUncapped(int128(int256(uint256(200 ether))));
 
         handler = new WithdrawRemainderHandler(
             liquidityPoolInstance,

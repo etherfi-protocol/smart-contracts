@@ -42,8 +42,4 @@ interface IWeETHWithdrawAdapter {
      * @return eETHAmount Equivalent amount of eETH
      */
     function getEETHByWeETH(uint256 weETHAmount) external view returns (uint256 eETHAmount);
-
-    function pauseContractUntil() external;
-    function unpauseContractUntil() external;
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external;
 }

@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
+import {ReentrancyGuardTransient} from "solady/utils/ReentrancyGuardTransient.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 import "@etherfi/staking/interfaces/IAuctionManager.sol";
@@ -11,15 +9,18 @@ import "@etherfi/staking/interfaces/INodeOperatorManager.sol";
 import "@etherfi/governance/interfaces/IBlacklister.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
+import "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
+import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
+import "@etherfi/governance/utils/DeprecatedOZReentrancyGuard.sol";
 
 contract AuctionManager is
     Initializable,
     IAuctionManager,
-    PausableUpgradeable,
-    OwnableUpgradeable,
+    DeprecatedOZPausable,
+    DeprecatedOZOwnable,
     PausableUntil,
-    RolesLibrary,
-    ReentrancyGuardUpgradeable,
+    DeprecatedOZReentrancyGuard,
+    ReentrancyGuardTransient,
     UUPSUpgradeable
 {
     //--------------------------------------------------------------------------------------
@@ -109,10 +110,7 @@ contract AuctionManager is
         numberOfBids = 1;
         whitelistEnabled = true;
 
-        __Pausable_init();
-        __Ownable_init();
         __UUPSUpgradeable_init();
-        __ReentrancyGuard_init();
     }
 
     /// @notice Creates bid(s) for the right to run a validator node when ETH is deposited
@@ -240,31 +238,6 @@ contract AuctionManager is
         emit WhitelistEnabled(whitelistEnabled);
     }
 
-    //Pauses the contract
-    function pauseContract() external onlyOperatingMultisig {
-        _pause();
-    }
-
-    //Unpauses the contract
-    function unPauseContract() external onlyOperatingMultisig {
-        _unpause();
-    }
-
-    // Pauses contract until MAX_PAUSE_DURATION
-    function pauseContractUntil() external onlyGuardian {
-        _pauseUntil();
-    }
-
-    // Unpauses contract from pauseUntil
-    function unpauseContractUntil() external onlyOperatingMultisig {
-        _unpauseUntil();
-    }
-
-    /// @notice Sets the pause duration for the contract
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
-        _setPauseUntilDuration(_pauseUntilDuration);
-    }
-
     //--------------------------------------------------------------------------------------
     //-------------------------------  INTERNAL FUNCTIONS   --------------------------------
     //--------------------------------------------------------------------------------------
@@ -283,11 +256,6 @@ contract AuctionManager is
         if (!sent) revert EtherTransferFailed();
 
         emit BidCancelled(_bidId);
-    }
-
-    function _requireNotPaused() internal override view {
-        _requireNotPausedUntil();
-        super._requireNotPaused();
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
