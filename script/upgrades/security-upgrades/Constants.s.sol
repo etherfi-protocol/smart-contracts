@@ -45,9 +45,6 @@ abstract contract SecurityUpgradesConstants is Deployed {
     // NOTE: These values are variable and would be further changed as needed.
     // ─────────────────────────────────────────────────────────────────────
 
-    // core — LiquidityPool dust guard (spec — minimum amount per share)
-    uint256 internal constant LP_MIN_AMOUNT_FOR_SHARE = 1 ether;
-
     // deposits — Liquifier
     address internal constant STETH_PRICE_FEED = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812; // Chainlink stETH/ETH
     address internal constant STETH_ETH_CURVE_POOL = 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022;
@@ -87,14 +84,6 @@ abstract contract SecurityUpgradesConstants is Deployed {
     uint256 internal constant RM_MAX_EXIT_FEE_SPLIT_TO_TREASURY_BPS = 10_000;
     uint256 internal constant RM_MAX_EXIT_FEE_BPS = 500;                  // 5% hardcoded ceiling
     uint256 internal constant RM_MAX_LOW_WATERMARK_BPS_OF_TVL = 500;    // 5% hardcoded ceiling
-
-    // withdrawals — WithdrawRequestNFT share-rate acceptance band
-    // Tightened band ~[0.9, 1.1] × the live LiquidityPool.amountPerShareCeil() snapshot
-    // at deploy time (~1.05 ether as of 2026-05-28). See H4 in PR #420 review.
-    // RE-VERIFY THESE BEFORE BROADCAST against the current `amountPerShareCeil()` —
-    // any drift > a few % suggests rate has moved and the band should be re-centered.
-    uint256 internal constant WNFT_MIN_ACCEPTABLE_SHARE_RATE = 1.05 ether;
-    uint256 internal constant WNFT_MAX_ACCEPTABLE_SHARE_RATE = 1.25 ether;
 
     // withdrawals — PriorityWithdrawalQueue — must match the constructor arg used at proxy genesis;
     // the proxy's existing impl was deployed with 1 hour, so the new impl must too.

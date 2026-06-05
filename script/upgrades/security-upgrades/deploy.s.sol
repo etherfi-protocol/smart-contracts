@@ -41,6 +41,12 @@ import {PriorityWithdrawalQueue} from "@etherfi/withdrawals/PriorityWithdrawalQu
 import {WeETHWithdrawAdapter} from "@etherfi/withdrawals/WeETHWithdrawAdapter.sol";
 import {WithdrawRequestNFT} from "@etherfi/withdrawals/WithdrawRequestNFT.sol";
 
+// interfaces — the ConstructorAddresses structs live on the interfaces (not the contracts)
+import {ILiquidityPool} from "@etherfi/core/interfaces/ILiquidityPool.sol";
+import {IDepositAdapter} from "@etherfi/deposits/interfaces/IDepositAdapter.sol";
+import {ILiquifier} from "@etherfi/deposits/interfaces/ILiquifier.sol";
+import {IEtherFiAdmin} from "@etherfi/oracle/interfaces/IEtherFiAdmin.sol";
+
 import {UUPSProxy} from "@etherfi/utils/UUPSProxy.sol";
 
 import {Utils, ICreate2Factory} from "@scripts/utils/utils.sol";
@@ -178,7 +184,7 @@ contract DeploySecurityUpgrades is Script, SecurityUpgradesConstants, Utils {
         }
         {
             string memory name = "LiquidityPool";
-            LiquidityPool.ConstructorAddresses memory lpAddrs = LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses memory lpAddrs = ILiquidityPool.ConstructorAddresses({
                 stakingManager: STAKING_MANAGER,
                 nodesManager: ETHERFI_NODES_MANAGER,
                 eETH: EETH,
@@ -191,7 +197,7 @@ contract DeploySecurityUpgrades is Script, SecurityUpgradesConstants, Utils {
                 etherFiAdminContract: ETHERFI_ADMIN,
                 membershipManager: MEMBERSHIP_MANAGER
             });
-            bytes memory args = abi.encode(lpAddrs, LP_MIN_AMOUNT_FOR_SHARE);
+            bytes memory args = abi.encode(lpAddrs);
             bytes memory bc = abi.encodePacked(type(LiquidityPool).creationCode, args);
             // logging=false because Utils.formatStaticParam can't pretty-print the
             // ConstructorAddresses struct (reverts "Unsupported static type"). Deployment
@@ -208,23 +214,25 @@ contract DeploySecurityUpgrades is Script, SecurityUpgradesConstants, Utils {
         // deposits
         {
             string memory name = "DepositAdapter";
-            bytes memory args = abi.encode(
-                LIQUIDITY_POOL,
-                LIQUIFIER,
-                WEETH,
-                EETH,
-                WETH,
-                STETH,
-                WSTETH,
-                ROLE_REGISTRY,
-                blacklisterProxy
-            );
+            IDepositAdapter.ConstructorAddresses memory daAddrs = IDepositAdapter.ConstructorAddresses({
+                liquidityPool: LIQUIDITY_POOL,
+                liquifier: LIQUIFIER,
+                weETH: WEETH,
+                eETH: EETH,
+                wETH: WETH,
+                stETH: STETH,
+                wstETH: WSTETH,
+                roleRegistry: ROLE_REGISTRY,
+                blacklister: blacklisterProxy
+            });
+            bytes memory args = abi.encode(daAddrs);
             bytes memory bc = abi.encodePacked(type(DepositAdapter).creationCode, args);
-            depositAdapterImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+            // logging=false: struct arg (formatStaticParam can't pretty-print ConstructorAddresses)
+            depositAdapterImpl = deploy(name, args, bc, commitHashSalt, false, factory);
         }
         {
             string memory name = "Liquifier";
-            Liquifier.ConstructorAddresses memory lqAddrs = Liquifier.ConstructorAddresses({
+            ILiquifier.ConstructorAddresses memory lqAddrs = ILiquifier.ConstructorAddresses({
                 liquidityPool: LIQUIDITY_POOL,
                 lidoWithdrawalQueue: LIDO_WITHDRAWAL_QUEUE,
                 lido: STETH,
@@ -282,7 +290,7 @@ contract DeploySecurityUpgrades is Script, SecurityUpgradesConstants, Utils {
         // oracle
         {
             string memory name = "EtherFiAdmin";
-            EtherFiAdmin.ConstructorAddresses memory adAddrs = EtherFiAdmin.ConstructorAddresses({
+            IEtherFiAdmin.ConstructorAddresses memory adAddrs = IEtherFiAdmin.ConstructorAddresses({
                 etherFiOracle: ETHERFI_ORACLE,
                 stakingManager: STAKING_MANAGER,
                 auctionManager: AUCTION_MANAGER,
@@ -419,6 +427,7 @@ contract DeploySecurityUpgrades is Script, SecurityUpgradesConstants, Utils {
                 LIQUIDITY_POOL,
                 EETH,
                 WEETH,
+                blacklisterProxy,
                 ROLE_REGISTRY,
                 WITHDRAW_REQUEST_NFT_BUYBACK_SAFE,
                 PWQ_MIN_DELAY
@@ -448,9 +457,7 @@ contract DeploySecurityUpgrades is Script, SecurityUpgradesConstants, Utils {
                 MEMBERSHIP_MANAGER,
                 ROLE_REGISTRY,
                 blacklisterProxy,
-                ETHERFI_ADMIN,
-                WNFT_MIN_ACCEPTABLE_SHARE_RATE,
-                WNFT_MAX_ACCEPTABLE_SHARE_RATE
+                ETHERFI_ADMIN
             );
             bytes memory bc = abi.encodePacked(type(WithdrawRequestNFT).creationCode, args);
             withdrawRequestNFTImpl = deploy(name, args, bc, commitHashSalt, true, factory);
@@ -464,8 +471,6 @@ contract DeploySecurityUpgrades is Script, SecurityUpgradesConstants, Utils {
     /// @dev Fail loudly the moment a deploy-time TBD constant is still unset.
     function _preflight() internal pure {
         require(GIT_COMMIT_SHA != bytes20(0), "preflight: GIT_COMMIT_SHA unset - set to first 20 bytes of release commit");
-        require(WNFT_MIN_ACCEPTABLE_SHARE_RATE > 0,                                    "preflight: WNFT_MIN_ACCEPTABLE_SHARE_RATE unset");
-        require(WNFT_MAX_ACCEPTABLE_SHARE_RATE > WNFT_MIN_ACCEPTABLE_SHARE_RATE,       "preflight: WNFT_MAX_ACCEPTABLE_SHARE_RATE <= MIN");
     }
 
     /// @dev Print every TBD/operational constant so the broadcaster can eyeball them before
@@ -476,8 +481,6 @@ contract DeploySecurityUpgrades is Script, SecurityUpgradesConstants, Utils {
         console2.log("================================================");
         console2.log("GIT_COMMIT_SHA (first 20B of commit, hex):", vm.toString(GIT_COMMIT_SHA));
         console2.log("commitHashSalt:                           ", vm.toString(commitHashSalt));
-        console2.log("");
-        console2.log("LP_MIN_AMOUNT_FOR_SHARE (LP dust):        ", LP_MIN_AMOUNT_FOR_SHARE);
         console2.log("");
         console2.log("LIQUIFIER_MIN_DISCOUNT_BPS:               ", LIQUIFIER_MIN_DISCOUNT_BPS);
         console2.log("LIQUIFIER_STALE_PRICE_WINDOW (sec):       ", LIQUIFIER_STALE_PRICE_WINDOW);
@@ -495,9 +498,6 @@ contract DeploySecurityUpgrades is Script, SecurityUpgradesConstants, Utils {
         console2.log("RM_MAX_EXIT_FEE_SPLIT_TO_TREASURY_BPS:    ", RM_MAX_EXIT_FEE_SPLIT_TO_TREASURY_BPS);
         console2.log("RM_MAX_EXIT_FEE_BPS:                      ", RM_MAX_EXIT_FEE_BPS);
         console2.log("RM_MAX_LOW_WATERMARK_BPS_OF_TVL:          ", RM_MAX_LOW_WATERMARK_BPS_OF_TVL);
-        console2.log("");
-        console2.log("WNFT_MIN_ACCEPTABLE_SHARE_RATE:           ", WNFT_MIN_ACCEPTABLE_SHARE_RATE);
-        console2.log("WNFT_MAX_ACCEPTABLE_SHARE_RATE:           ", WNFT_MAX_ACCEPTABLE_SHARE_RATE);
         console2.log("");
         console2.log("PWQ_MIN_DELAY (sec):                      ", PWQ_MIN_DELAY);
         console2.log("================================================");

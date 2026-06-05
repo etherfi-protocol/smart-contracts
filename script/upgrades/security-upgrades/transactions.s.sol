@@ -41,6 +41,12 @@ import {PriorityWithdrawalQueue} from "@etherfi/withdrawals/PriorityWithdrawalQu
 import {WeETHWithdrawAdapter} from "@etherfi/withdrawals/WeETHWithdrawAdapter.sol";
 import {WithdrawRequestNFT} from "@etherfi/withdrawals/WithdrawRequestNFT.sol";
 
+// interfaces — the ConstructorAddresses structs live on the interfaces (not the contracts)
+import {ILiquidityPool} from "@etherfi/core/interfaces/ILiquidityPool.sol";
+import {IDepositAdapter} from "@etherfi/deposits/interfaces/IDepositAdapter.sol";
+import {ILiquifier} from "@etherfi/deposits/interfaces/ILiquifier.sol";
+import {IEtherFiAdmin} from "@etherfi/oracle/interfaces/IEtherFiAdmin.sol";
+
 import {ContractCodeChecker} from "@scripts/ContractCodeChecker.sol";
 import {Utils} from "@scripts/utils/utils.sol";
 import {SecurityUpgradesConstants} from "./Constants.s.sol";
@@ -195,8 +201,6 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
     /// @dev Fail loudly the moment a required constant is unset.
     function _preflight() internal pure {
         require(GIT_COMMIT_SHA != bytes20(0), "preflight: GIT_COMMIT_SHA unset - set to first 20 bytes of release commit (MUST match deploy.s.sol)");
-        require(WNFT_MIN_ACCEPTABLE_SHARE_RATE > 0,                               "preflight: WNFT_MIN_ACCEPTABLE_SHARE_RATE unset");
-        require(WNFT_MAX_ACCEPTABLE_SHARE_RATE > WNFT_MIN_ACCEPTABLE_SHARE_RATE,  "preflight: WNFT_MAX_ACCEPTABLE_SHARE_RATE <= MIN");
         require(LP_MIN_WITHDRAW_AMOUNT > 0,                                       "preflight: LP_MIN_WITHDRAW_AMOUNT unset");
         require(LP_MAX_WITHDRAW_AMOUNT > LP_MIN_WITHDRAW_AMOUNT,                  "preflight: LP_MAX_WITHDRAW_AMOUNT <= MIN");
         // core
@@ -380,8 +384,6 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         console2.log("ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT (TBD):", ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT);
         console2.log("LP_MIN_WITHDRAW_AMOUNT (wei):                ", LP_MIN_WITHDRAW_AMOUNT);
         console2.log("LP_MAX_WITHDRAW_AMOUNT (wei):                ", LP_MAX_WITHDRAW_AMOUNT);
-        console2.log("WNFT_MIN_ACCEPTABLE_SHARE_RATE:              ", WNFT_MIN_ACCEPTABLE_SHARE_RATE);
-        console2.log("WNFT_MAX_ACCEPTABLE_SHARE_RATE:              ", WNFT_MAX_ACCEPTABLE_SHARE_RATE);
         console2.log("================================================");
         console2.log("");
     }
@@ -409,7 +411,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         codeChecker.verifyContractByteCodeMatch(eEthImpl, address(fresh));
 
         LiquidityPool fresh2 = new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: STAKING_MANAGER,
                 nodesManager: ETHERFI_NODES_MANAGER,
                 eETH: EETH,
@@ -421,8 +423,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
                 blacklister: blacklisterProxy,
                 etherFiAdminContract: ETHERFI_ADMIN,
                 membershipManager: MEMBERSHIP_MANAGER
-            }),
-            LP_MIN_AMOUNT_FOR_SHARE
+            })
         );
         codeChecker.verifyContractByteCodeMatch(liquidityPoolImpl, address(fresh2));
 
@@ -432,12 +433,22 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
 
     function _verifyDepositsBytecode() internal {
         DepositAdapter fresh = new DepositAdapter(
-            LIQUIDITY_POOL, LIQUIFIER, WEETH, EETH, WETH, STETH, WSTETH, ROLE_REGISTRY, blacklisterProxy
+            IDepositAdapter.ConstructorAddresses({
+                liquidityPool: LIQUIDITY_POOL,
+                liquifier: LIQUIFIER,
+                weETH: WEETH,
+                eETH: EETH,
+                wETH: WETH,
+                stETH: STETH,
+                wstETH: WSTETH,
+                roleRegistry: ROLE_REGISTRY,
+                blacklister: blacklisterProxy
+            })
         );
         codeChecker.verifyContractByteCodeMatch(depositAdapterImpl, address(fresh));
 
         Liquifier fresh2 = new Liquifier(
-            Liquifier.ConstructorAddresses({
+            ILiquifier.ConstructorAddresses({
                 liquidityPool: LIQUIDITY_POOL,
                 lidoWithdrawalQueue: LIDO_WITHDRAWAL_QUEUE,
                 lido: STETH,
@@ -475,7 +486,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
 
     function _verifyOracleBytecode() internal {
         EtherFiAdmin fresh = new EtherFiAdmin(
-            EtherFiAdmin.ConstructorAddresses({
+            IEtherFiAdmin.ConstructorAddresses({
                 etherFiOracle: ETHERFI_ORACLE,
                 stakingManager: STAKING_MANAGER,
                 auctionManager: AUCTION_MANAGER,
@@ -562,8 +573,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
 
         WithdrawRequestNFT fresh4 = new WithdrawRequestNFT(
             WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER,
-            ROLE_REGISTRY, blacklisterProxy, ETHERFI_ADMIN,
-            WNFT_MIN_ACCEPTABLE_SHARE_RATE, WNFT_MAX_ACCEPTABLE_SHARE_RATE
+            ROLE_REGISTRY, blacklisterProxy, ETHERFI_ADMIN
         );
         codeChecker.verifyContractByteCodeMatch(withdrawRequestNFTImpl, address(fresh4));
     }
@@ -658,7 +668,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         s[3] = bytes4(keccak256("rateLimiter()"));
     }
     function _lpImmSels() internal pure returns (bytes4[] memory s) {
-        s = new bytes4[](12);
+        s = new bytes4[](11);
         s[0]  = bytes4(keccak256("stakingManager()"));
         s[1]  = bytes4(keccak256("nodesManager()"));
         s[2]  = bytes4(keccak256("eETH()"));
@@ -670,7 +680,6 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         s[8]  = bytes4(keccak256("blacklister()"));
         s[9]  = bytes4(keccak256("etherFiAdminContract()"));
         s[10] = bytes4(keccak256("membershipManager()"));
-        s[11] = bytes4(keccak256("minAmountForShare()"));
     }
     function _weethImmSels() internal pure returns (bytes4[] memory s) {
         s = new bytes4[](5);
@@ -837,13 +846,15 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         s[11] = bytes4(keccak256("maxLowWatermarkInBpsOfTvl()"));
     }
     function _pwqImmSels() internal pure returns (bytes4[] memory s) {
-        s = new bytes4[](6);
+        s = new bytes4[](7);
         s[0] = bytes4(keccak256("liquidityPool()"));
         s[1] = bytes4(keccak256("eETH()"));
         s[2] = bytes4(keccak256("weETH()"));
         s[3] = bytes4(keccak256("treasury()"));
         s[4] = bytes4(keccak256("minDelay()"));
         s[5] = bytes4(keccak256("roleRegistry()"));
+        // blacklister immutable added by this PR; skipped pre-upgrade by _safeSnapshot
+        s[6] = bytes4(keccak256("blacklister()"));
     }
     function _weethWithdrawAdapterImmSels() internal pure returns (bytes4[] memory s) {
         s = new bytes4[](6);
@@ -855,7 +866,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         s[5] = bytes4(keccak256("roleRegistry()"));
     }
     function _nftImmSels() internal pure returns (bytes4[] memory s) {
-        s = new bytes4[](9);
+        s = new bytes4[](7);
         s[0] = bytes4(keccak256("treasury()"));
         s[1] = bytes4(keccak256("liquidityPool()"));
         s[2] = bytes4(keccak256("eETH()"));
@@ -863,8 +874,6 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         s[4] = bytes4(keccak256("roleRegistry()"));
         s[5] = bytes4(keccak256("blacklister()"));
         s[6] = bytes4(keccak256("etherFiAdmin()"));
-        s[7] = bytes4(keccak256("minAcceptableShareRate()"));
-        s[8] = bytes4(keccak256("maxAcceptableShareRate()"));
     }
 
     function _upgradedProxies() internal pure returns (address[22] memory list) {
@@ -1180,7 +1189,6 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(address(lp.blacklister())              == blacklisterProxy,           "LP.blacklister");
         require(lp.etherFiAdminContract()              == ETHERFI_ADMIN,              "LP.etherFiAdminContract");
         require(lp.membershipManager()                 == MEMBERSHIP_MANAGER,         "LP.membershipManager");
-        require(lp.minAmountForShare()                 == LP_MIN_AMOUNT_FOR_SHARE,    "LP.minAmountForShare");
 
         WeETHToken w = WeETHToken(WEETH);
         require(address(w.eETH())          == EETH,            "WeETH.eETH");
@@ -1338,6 +1346,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(pwq.treasury()    == WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, "PWQ.treasury");
         require(pwq.minDelay()               == PWQ_MIN_DELAY,                   "PWQ.minDelay");
         require(address(pwq.roleRegistry())  == ROLE_REGISTRY,                   "PWQ.roleRegistry");
+        require(address(pwq.blacklister())   == blacklisterProxy,                "PWQ.blacklister");
 
         WeETHWithdrawAdapter wwa = WeETHWithdrawAdapter(payable(WEETH_WITHDRAW_ADAPTER));
         require(address(wwa.weETH())              == WEETH,                "WeETHWA.weETH");
@@ -1355,8 +1364,6 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(address(n.roleRegistry())     == ROLE_REGISTRY,            "NFT.roleRegistry");
         require(address(n.blacklister())      == blacklisterProxy,         "NFT.blacklister");
         require(n.etherFiAdmin()              == ETHERFI_ADMIN,            "NFT.etherFiAdmin");
-        require(n.minAcceptableShareRate()    == WNFT_MIN_ACCEPTABLE_SHARE_RATE, "NFT.minAcceptableShareRate");
-        require(n.maxAcceptableShareRate()    == WNFT_MAX_ACCEPTABLE_SHARE_RATE, "NFT.maxAcceptableShareRate");
     }
 
     //--------------------------------------------------------------------------------------
