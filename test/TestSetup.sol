@@ -1625,15 +1625,15 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         uint256[] memory validatorsToExit = new uint256[](0);
         uint256[] memory exitedValidators = new uint256[](0);
         uint32[] memory  exitTimestamps = new uint32[](0);
-        reportAtPeriod2A = IEtherFiOracle.OracleReport(1, 0, 1024 - 1, 0, 1024 - 1, 1, 0,validatorsToApprove, 0, 0);
-        reportAtPeriod2B = IEtherFiOracle.OracleReport(1, 0, 1024 - 1, 0, 1024 - 1, 1, 0,validatorsToApprove, 1, 0);
-        reportAtPeriod2C = IEtherFiOracle.OracleReport(2, 0, 1024 - 1, 0, 1024 - 1, 1, 0, validatorsToApprove, 1, 0);
-        reportAtPeriod3 = IEtherFiOracle.OracleReport(1, 0, 2048 - 1, 0, 2048 - 1, 1, 0, validatorsToApprove, 1, 0);
-        reportAtPeriod3A = IEtherFiOracle.OracleReport(1, 0, 2048 - 1, 0, 3 * 1024 - 1, 1, 0, validatorsToApprove, 1, 0);
-        reportAtPeriod3B = IEtherFiOracle.OracleReport(1, 0, 2048 - 1, 1, 2 * 1024 - 1, 1, 0, validatorsToApprove, 1, 0);
-        reportAtPeriod4 = IEtherFiOracle.OracleReport(1, 2 * 1024, 1024 * 3 - 1, 2 * 1024, 3 * 1024 - 1, 0, 0, validatorsToApprove, 1, 0);
-        reportAtSlot3071 = IEtherFiOracle.OracleReport(1, 2048, 3072 - 1, 2048, 3072 - 1, 1, 0, validatorsToApprove, 1, 0);
-        reportAtSlot4287 = IEtherFiOracle.OracleReport(1, 3264, 4288 - 1, 3264, 4288 - 1, 1, 0, validatorsToApprove, 1, 0);
+        reportAtPeriod2A = IEtherFiOracle.OracleReport(1, 0, 1024 - 1, 0, 1024 - 1, 1, 0,validatorsToApprove, 0);
+        reportAtPeriod2B = IEtherFiOracle.OracleReport(1, 0, 1024 - 1, 0, 1024 - 1, 1, 0,validatorsToApprove, 1);
+        reportAtPeriod2C = IEtherFiOracle.OracleReport(2, 0, 1024 - 1, 0, 1024 - 1, 1, 0, validatorsToApprove, 1);
+        reportAtPeriod3 = IEtherFiOracle.OracleReport(1, 0, 2048 - 1, 0, 2048 - 1, 1, 0, validatorsToApprove, 1);
+        reportAtPeriod3A = IEtherFiOracle.OracleReport(1, 0, 2048 - 1, 0, 3 * 1024 - 1, 1, 0, validatorsToApprove, 1);
+        reportAtPeriod3B = IEtherFiOracle.OracleReport(1, 0, 2048 - 1, 1, 2 * 1024 - 1, 1, 0, validatorsToApprove, 1);
+        reportAtPeriod4 = IEtherFiOracle.OracleReport(1, 2 * 1024, 1024 * 3 - 1, 2 * 1024, 3 * 1024 - 1, 0, 0, validatorsToApprove, 1);
+        reportAtSlot3071 = IEtherFiOracle.OracleReport(1, 2048, 3072 - 1, 2048, 3072 - 1, 1, 0, validatorsToApprove, 1);
+        reportAtSlot4287 = IEtherFiOracle.OracleReport(1, 3264, 4288 - 1, 3264, 4288 - 1, 1, 0, validatorsToApprove, 1);
     }
 
     function _merkleSetup() internal {
@@ -1897,7 +1897,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         uint256[] memory emptyVals = new uint256[](0);
         uint32[] memory emptyVals32 = new uint32[](0);
         uint32 consensusVersion = etherFiOracleInstance.consensusVersion();
-        report = IEtherFiOracle.OracleReport(consensusVersion, 0, 0, 0, 0, 0, 0, emptyVals, 0, 0);
+        report = IEtherFiOracle.OracleReport(consensusVersion, 0, 0, 0, 0, 0, 0, emptyVals, 0);
     }
 
     function calculatePermitDigest(address _owner, address spender, uint256 value, uint256 nonce, uint256 deadline, bytes32 domainSeparator) public pure returns (bytes32) {

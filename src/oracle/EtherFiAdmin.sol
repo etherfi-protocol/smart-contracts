@@ -443,8 +443,8 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
      * @param _lastFinalizedRequestId The last finalized request id
      */
     function _finalizeWithdrawals(uint32 _lastFinalizedRequestId) internal {
-        withdrawRequestNft.finalizeRequests(_lastFinalizedRequestId);
         liquidityPool.addEthAmountLockedForWithdrawal(withdrawRequestNft.getFinalizedWithdrawalAmount(_lastFinalizedRequestId));
+        withdrawRequestNft.finalizeRequests(_lastFinalizedRequestId);
     }
 
     /**
