@@ -338,17 +338,10 @@ contract WithdrawEscrowE2ETest is TestSetup {
         uint128 preLocked      = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
         uint256 userEthPre     = user.balance;
 
-        // Capture the actual claimable amount before the call.
-        // getClaimableAmount returns min(amountOfEEth, amountForShare(shareOfEEth)) - fee,
-        // which can be 1 wei less than withdrawAmt due to share-rate rounding.
-        uint256 claimable = withdrawRequestNFTInstance.getClaimableAmount(reqId);
-        // Share burn at claim is computed against the rate frozen at finalize via
-        // ceil(claimable * 1e18 / frozenRate). For pre-upgrade requests the rate is 0
-        // and the contract falls back to live `sharesForWithdrawalAmount`.
-        uint224 frozenRate = withdrawRequestNFTInstance.frozenRateFor(reqId);
-        uint256 expectedSharesBurned = frozenRate == 0
-            ? liquidityPoolInstance.sharesForWithdrawalAmount(claimable)
-            : Math.mulDiv(claimable, 1e18, uint256(frozenRate), Math.Rounding.Up);
+        // The claim burns the request's FULL share allocation (request.shareOfEEth), not a
+        // rate-derived subset — this is what eliminates the old share-remainder dust. So
+        // totalShares decreases by exactly shareOfEEth. Capture it before the claim deletes the request.
+        uint256 expectedSharesBurned = withdrawRequestNFTInstance.getRequest(reqId).shareOfEEth;
 
         vm.prank(user);
         withdrawRequestNFTInstance.claimWithdraw(reqId);

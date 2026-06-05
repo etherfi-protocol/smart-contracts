@@ -266,7 +266,7 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         IEtherFiOracle.OracleReport memory report;
         uint256[] memory emptyVals = new uint256[](0);
         report = IEtherFiOracle.OracleReport(
-            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0, 0
+            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0
         );
 
         (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();

@@ -572,14 +572,18 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
      * @return _error The error message
      */
     function _validateWithdrawals(IEtherFiOracle.OracleReport calldata _report, uint256 elapsedTime) internal view returns (bool, string memory) {
+        // Validate the finalized request id BEFORE deriving the amount: a report that rolls the
+        // cursor backwards (R < lastFinalizedRequestId) would make getFinalizedWithdrawalAmount
+        // underflow (prefix[R] < prefix[lastFinalizedRequestId]), reverting canExecuteTasks/executeTasks
+        // with a panic instead of this clean error. This check must run first.
+        uint32 lastFinalizedRequestId = withdrawRequestNft.lastFinalizedRequestId();
+        if (_report.lastFinalizedWithdrawalRequestId < lastFinalizedRequestId) return (false, "EtherFiAdmin: finalized withdrawal request id is less than last finalized request id");
+
         uint256 finalizedWithdrawalAmount = withdrawRequestNft.getFinalizedWithdrawalAmount(_report.lastFinalizedWithdrawalRequestId);
         uint256 finalizedWithdrawalAmountPerDay = uint256(finalizedWithdrawalAmount).mulDiv(1 days, elapsedTime);
         if (finalizedWithdrawalAmountPerDay > maxFinalizedWithdrawalAmountPerDay) return (false, "EtherFiAdmin: finalized withdrawal amount exceeds max");
         if (finalizedWithdrawalAmount > liquidityPool.totalValueInLp()) return (false, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
 
-        // valdate finalized request id
-        uint32 lastFinalizedRequestId = withdrawRequestNft.lastFinalizedRequestId();
-        if (_report.lastFinalizedWithdrawalRequestId < lastFinalizedRequestId) return (false, "EtherFiAdmin: finalized withdrawal request id is less than last finalized request id");
         return (true, "");
     }
 

@@ -105,20 +105,6 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         vm.stopPrank();
     }
 
-    /// @dev Mirrors EtherFiAdmin._validateReport's sum-of-requests sanity check.
-    ///      On a realistic mainnet fork there are pending requests between
-    ///      `lastFinalizedRequestId()` and the test's new request, all of which
-    ///      contribute to the report's required `finalizedWithdrawalAmount`.
-    function _sumValidRequestAmounts(uint32 _lastFinalizedRequestIdInclusive) internal view returns (uint128) {
-        uint256 sum;
-        uint32 from = withdrawRequestNFTInstance.lastFinalizedRequestId() + 1;
-        for (uint256 i = from; i <= _lastFinalizedRequestIdInclusive; i++) {
-            IWithdrawRequestNFT.WithdrawRequest memory r = withdrawRequestNFTInstance.getRequest(i);
-            if (r.isValid) sum += r.amountOfEEth;
-        }
-        return uint128(sum);
-    }
-
     function test_Withdraw_EtherFiRedemptionManager_redeemEEth() public {
         // setUp();
         vm.startPrank(OPERATING_TIMELOCK);
@@ -327,10 +313,11 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         IEtherFiOracle.OracleReport memory report;
         uint256[] memory emptyVals = new uint256[](0);
         report = IEtherFiOracle.OracleReport(
-            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0, 0
+            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0
         );
         report.lastFinalizedWithdrawalRequestId = uint32(requestId);
-        report.finalizedWithdrawalAmount = _sumValidRequestAmounts(report.lastFinalizedWithdrawalRequestId);
+        // finalizedWithdrawalAmount is now derived on-chain from the request prefix-sum
+        // (WithdrawRequestNFT.getFinalizedWithdrawalAmount), so the report no longer carries it.
 
         (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();
         // Set refBlockTo to a block number that is < block.number and > lastAdminExecutionBlock
@@ -392,10 +379,11 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
                 IEtherFiOracle.OracleReport memory report;
         uint256[] memory emptyVals = new uint256[](0);
         report = IEtherFiOracle.OracleReport(
-            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0, 0
+            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0
         );
         report.lastFinalizedWithdrawalRequestId = uint32(requestId);
-        report.finalizedWithdrawalAmount = _sumValidRequestAmounts(report.lastFinalizedWithdrawalRequestId);
+        // finalizedWithdrawalAmount is now derived on-chain from the request prefix-sum
+        // (WithdrawRequestNFT.getFinalizedWithdrawalAmount), so the report no longer carries it.
 
         (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();
         // Set refBlockTo to a block number that is < block.number and > lastAdminExecutionBlock
@@ -465,10 +453,11 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         IEtherFiOracle.OracleReport memory report;
         uint256[] memory emptyVals = new uint256[](0);
         report = IEtherFiOracle.OracleReport(
-            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0, 0
+            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0
         );
         report.lastFinalizedWithdrawalRequestId = uint32(requestId);
-        report.finalizedWithdrawalAmount = _sumValidRequestAmounts(report.lastFinalizedWithdrawalRequestId);
+        // finalizedWithdrawalAmount is now derived on-chain from the request prefix-sum
+        // (WithdrawRequestNFT.getFinalizedWithdrawalAmount), so the report no longer carries it.
 
         (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();
         // Set refBlockTo to a block number that is < block.number and > lastAdminExecutionBlock
@@ -566,10 +555,11 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         IEtherFiOracle.OracleReport memory report;
         uint256[] memory emptyVals = new uint256[](0);
         report = IEtherFiOracle.OracleReport(
-            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0, 0
+            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0
         );
         report.lastFinalizedWithdrawalRequestId = uint32(requestId);
-        report.finalizedWithdrawalAmount = _sumValidRequestAmounts(report.lastFinalizedWithdrawalRequestId);
+        // finalizedWithdrawalAmount is now derived on-chain from the request prefix-sum
+        // (WithdrawRequestNFT.getFinalizedWithdrawalAmount), so the report no longer carries it.
 
         (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();
         // Set refBlockTo to a block number that is < block.number and > lastAdminExecutionBlock
@@ -652,10 +642,11 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         IEtherFiOracle.OracleReport memory report;
         uint256[] memory emptyVals = new uint256[](0);
         report = IEtherFiOracle.OracleReport(
-            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0, 0
+            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0
         );
         report.lastFinalizedWithdrawalRequestId = uint32(requestId);
-        report.finalizedWithdrawalAmount = _sumValidRequestAmounts(report.lastFinalizedWithdrawalRequestId);
+        // finalizedWithdrawalAmount is now derived on-chain from the request prefix-sum
+        // (WithdrawRequestNFT.getFinalizedWithdrawalAmount), so the report no longer carries it.
 
         (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();
         // Set refBlockTo to a block number that is < block.number and > lastAdminExecutionBlock

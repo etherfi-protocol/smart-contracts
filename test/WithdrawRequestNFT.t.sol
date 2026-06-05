@@ -22,11 +22,12 @@ contract WithdrawRequestNFTIntrusive is WithdrawRequestNFT {
     }
 
     /// @dev Test-only: zero out the `_finalizationRates` length so tests can re-exercise
-    ///      the `initializeShareRateFreezeUpgrade` flow from a "pre-init" state. Slot 311
-    ///      matches `forge inspect WithdrawRequestNFT storageLayout`; keep in sync if the
+    ///      the `initializeShareRateFreezeUpgrade` flow from a "pre-init" state. Slot 312
+    ///      matches `forge inspect WithdrawRequestNFT storageLayout` (shifted from 311 when the
+    ///      `totalRequestedWithdrawalAmount` mapping was added at slot 311); keep in sync if the
     ///      storage layout shifts.
     function clearFinalizationRatesForTest() external {
-        assembly { sstore(311, 0) }
+        assembly { sstore(312, 0) }
     }
 }
 
