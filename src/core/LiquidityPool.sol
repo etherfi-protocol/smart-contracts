@@ -319,7 +319,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
             revert IncorrectCaller();
         }
         if (_amount > type(uint128).max || _amount == 0 || _share == 0) revert InvalidAmount();
-        if (eETH.shares(msg.sender) < _share) revert InsufficientLiquidity();
 
         totalValueOutOfLp -= uint128(_amount);
         eETH.burnShares(msg.sender, _share);

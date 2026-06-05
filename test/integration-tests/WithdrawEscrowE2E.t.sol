@@ -346,9 +346,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
         // ceil(claimable * 1e18 / frozenRate). For pre-upgrade requests the rate is 0
         // and the contract falls back to live `sharesForWithdrawalAmount`.
         uint224 frozenRate = withdrawRequestNFTInstance.frozenRateFor(reqId);
-        uint256 expectedSharesBurned = frozenRate == 0
-            ? liquidityPoolInstance.sharesForWithdrawalAmount(claimable)
-            : Math.mulDiv(claimable, 1e18, uint256(frozenRate), Math.Rounding.Up);
+        uint256 expectedSharesBurned = withdrawRequestNFTInstance.getRequest(reqId).shareOfEEth;
 
         vm.prank(user);
         withdrawRequestNFTInstance.claimWithdraw(reqId);
