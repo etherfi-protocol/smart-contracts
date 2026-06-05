@@ -961,10 +961,10 @@ contract LiquidityPoolTest is TestSetup {
             vm.prank(bob);
             address(liquidityPoolInstance).call{value: 10 ether}("");
 
-            // Try to burn more eETH shares than the NFT escrow holds via the segregated entry.
-            // The NFT holds no eETH shares of its own here, so the solvency check reverts.
+            // Withdrawing more than the amount currently out of the LP underflows the
+            // `totalValueOutOfLp -= _amount` accounting, reverting with an arithmetic panic.
             vm.startPrank(address(withdrawRequestNFTInstance));
-            vm.expectRevert(LiquidityPool.InsufficientLiquidity.selector);
+            vm.expectRevert(stdError.arithmeticError);
             liquidityPoolInstance.withdraw(withdrawAmount * 2, withdrawAmount * 2);
             vm.stopPrank();
         } else {
@@ -2178,8 +2178,9 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.addEthAmountLockedForWithdrawal(lockAmount);
     }
 
-    /// @dev Solvency check: if the caller (NFT) holds fewer shares than the requested burn,
-    ///      LP must revert `InsufficientLiquidity` — *before* touching state.
+    /// @dev Solvency check: LP no longer pre-checks the caller's share balance, so when the caller
+    ///      (NFT) holds fewer shares than the requested burn, `eETH.burnShares` reverts
+    ///      `BurnAmountExceedsBalance`.
     function test_withdrawWithRate_revertsWhenCallerHasInsufficientShares() public {
         uint128 amount = 1 ether;
 
@@ -2193,9 +2194,9 @@ contract LiquidityPoolTest is TestSetup {
         eETHInstance.transfer(bob, nftBalance);
         assertEq(eETHInstance.shares(address(withdrawRequestNFTInstance)), 0, "NFT drained");
 
-        // NFT has 0 shares, so burning any positive share count reverts InsufficientLiquidity.
+        // NFT has 0 shares, so `eETH.burnShares` reverts BurnAmountExceedsBalance.
         vm.prank(address(withdrawRequestNFTInstance));
-        vm.expectRevert(LiquidityPool.InsufficientLiquidity.selector);
+        vm.expectRevert(EETH.BurnAmountExceedsBalance.selector);
         liquidityPoolInstance.withdraw(uint256(amount), uint256(amount));
     }
 
