@@ -73,13 +73,15 @@ import {SecurityUpgradesConstants} from "./Constants.s.sol";
  *                                    (b) upgrade RoleRegistry + every proxy + the EtherFiNode beacon,
  *                                    (c) the two onlyUpgradeTimelock initializers
  *                                        (LiquidityPool.initializeOnUpgradeV2, WithdrawRequestNFT.initializeShareRateFreezeUpgrade),
- *                                    (d) revoke every holder of the 31 legacy roles (owner-gated).
+ *                                    (d) unwhitelist cbETH + wBETH on Liquifier (EARN-1421),
+ *                                    (e) revoke every holder of the 31 legacy roles (owner-gated).
  *                                    Grants precede the initializers (which need UPGRADE_TIMELOCK_ROLE);
  *                                    revokes come last, once the legacy roles are orphaned.
  *   4. verifyUpgrades              — ERC1967 implementation slot == new impl
  *   5. verifyImmutablePreservation — immutables on each new impl match wiring
  *   6. verifyAccessControlPreservation — owner + paused + init state unchanged
  *   7. verifyLegacyRolesRevoked    — assert roleHolders() is empty for every legacy role
+ *  7b. verifyLiquifierWhitelistRemoved — assert cbETH + wBETH unwhitelisted on Liquifier (EARN-1421)
  *
  *   8. executeOperatingConfig      — Batch 2 (OPERATING_TIMELOCK, 2d): rate-limiter buckets,
  *                                    pause durations, EtherFiAdmin daily finalized-withdrawal cap
@@ -182,6 +184,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         verifyImmutablePreservation();
         verifyAccessControlPreservation();
         verifyLegacyRolesRevoked();
+        verifyLiquifierWhitelistRemoved();
 
         // ── Batch 2: the OPERATING_TIMELOCK batch (2d) ─────────────────────────────
         // Scheduled at the same time as Batch 1; executed after it. One schedule +
@@ -914,6 +917,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
     //   2. upgrade every proxy + the EtherFiNode beacon (gated by OLD RR.onlyProtocolUpgrader = owner check)
     //   3. swap RoleRegistry impl                       (gated by OLD RR._authorizeUpgrade = onlyOwner)
     //   4. run the two onlyUpgradeTimelock one-shot initializers (gated by NEW RR.onlyUpgradeTimelock)
+    //   4b. unwhitelist cbETH + wBETH on Liquifier (onlyUpgradeTimelock; EARN-1421)
     //   5. revoke every holder of the 31 legacy roles  (revokeRole is owner-gated; works on either RR impl)
     //
     // Grants come first so UPGRADE_TIMELOCK already holds UPGRADE_TIMELOCK_ROLE before the
@@ -927,7 +931,8 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
 
         uint256 revokeCount = _countLegacyRoleHolders();
 
-        // 9 grants + (21 proxy upgrades + 1 beacon + 1 RR swap + 2 initializers, <=50 headroom) + N legacy revokes.
+        // 9 grants + (21 proxy upgrades + 1 beacon + 1 RR swap + 2 initializers + 2 Liquifier
+        // token unwhitelists, <=50 headroom) + N legacy revokes.
         address[] memory targets = new address[](50 + revokeCount);
         bytes[]   memory data    = new bytes[](50 + revokeCount);
         uint256[] memory values  = new uint256[](50 + revokeCount);
@@ -1037,6 +1042,17 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
             abi.encodeWithSelector(LiquidityPool.initializeOnUpgradeV2.selector));                    i++;
         (targets[i], data[i]) = (WITHDRAW_REQUEST_NFT,
             abi.encodeWithSelector(WithdrawRequestNFT.initializeShareRateFreezeUpgrade.selector));    i++;
+
+        // ─── Phase D: unwhitelist deprecated Liquifier deposit tokens (EARN-1421) ─────────
+        // cbETH + wBETH (bETH) are no longer supported LSTs. updateWhitelistedToken is
+        // onlyUpgradeTimelock on the (now-upgraded) Liquifier impl → gated by NEW RR's
+        // onlyUpgradeTimelock → UPGRADE_TIMELOCK_ROLE (granted in step 1), so it rides this
+        // batch after Phase A (Liquifier proxy upgrade) and Phase B (RR swap). Blocks all
+        // future cbETH/wBETH deposits (depositWithERC20 reverts on !isTokenWhitelisted).
+        (targets[i], data[i]) = (LIQUIFIER,
+            abi.encodeWithSelector(Liquifier.updateWhitelistedToken.selector, CBETH, false));         i++;
+        (targets[i], data[i]) = (LIQUIFIER,
+            abi.encodeWithSelector(Liquifier.updateWhitelistedToken.selector, WBETH, false));         i++;
 
         return i;
     }
@@ -1720,6 +1736,35 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         }
         console2.log("[OK] all 31 legacy roles have zero holders");
         console2.log("");
+    }
+
+    //--------------------------------------------------------------------------------------
+    // STEP 7b: verifyLiquifierWhitelistRemoved (EARN-1421)
+    //
+    // Asserts cbETH + wBETH (bETH) are no longer whitelisted Liquifier deposit tokens after
+    // the upgrade batch, and surfaces any outstanding token balance the Liquifier still holds
+    // so the operator can confirm nothing needs migrating before go-live (acceptance item 3).
+    //--------------------------------------------------------------------------------------
+    function verifyLiquifierWhitelistRemoved() public view {
+        console2.log("=== Step 7b: Verifying Liquifier cbETH/wBETH unwhitelisted ===");
+        Liquifier l = Liquifier(payable(LIQUIFIER));
+        require(!l.isTokenWhitelisted(CBETH), "Liquifier: cbETH still whitelisted");
+        require(!l.isTokenWhitelisted(WBETH), "Liquifier: wBETH still whitelisted");
+
+        // Outstanding balances held directly by the Liquifier (operator eyeball — not a gate).
+        uint256 cbethBal = _erc20BalanceOf(CBETH, LIQUIFIER);
+        uint256 wbethBal = _erc20BalanceOf(WBETH, LIQUIFIER);
+        console2.log("Liquifier cbETH balance (confirm migration if non-zero):", cbethBal);
+        console2.log("Liquifier wBETH balance (confirm migration if non-zero):", wbethBal);
+
+        console2.log("[OK] cbETH + wBETH unwhitelisted on Liquifier");
+        console2.log("");
+    }
+
+    /// @dev Best-effort ERC20 balanceOf via staticcall (returns 0 if the call reverts/returns nothing).
+    function _erc20BalanceOf(address token, address holder) internal view returns (uint256) {
+        (bool ok, bytes memory ret) = token.staticcall(abi.encodeWithSignature("balanceOf(address)", holder));
+        return (ok && ret.length >= 32) ? abi.decode(ret, (uint256)) : 0;
     }
 
     /// @dev The 31 pre-upgrade granular roles (see the LEGACY ROLE IDs block above).

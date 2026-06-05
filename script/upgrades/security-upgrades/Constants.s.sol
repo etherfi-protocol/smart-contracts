@@ -48,6 +48,12 @@ abstract contract SecurityUpgradesConstants is Deployed {
     // deposits — Liquifier
     address internal constant STETH_PRICE_FEED = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812; // Chainlink stETH/ETH
     address internal constant STETH_ETH_CURVE_POOL = 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022;
+
+    // deposits — Liquifier deposit tokens to UNWHITELIST (EARN-1421). cbETH + wBETH (a.k.a. bETH)
+    // are no longer supported LSTs; transactions.s.sol calls updateWhitelistedToken(token, false)
+    // for each in the upgrade batch so new deposits revert.
+    address internal constant CBETH = 0xBe9895146f7AF43049ca1c1AE358B0541Ea49704; // Coinbase cbETH
+    address internal constant WBETH = 0xa2E3356610840701BDf5611a53974510Ae27E2e1; // Binance wBETH (bETH)
     uint256 internal constant LIQUIFIER_MIN_DISCOUNT_BPS = 0;
     uint256 internal constant LIQUIFIER_STALE_PRICE_WINDOW = 2 days; // 2 days (heartbeat to updated stETH price feed is 1 days)
     uint256 internal constant LIQUIFIER_MAX_PRICE_DEVIATION_BPS = 200;   // 2%
