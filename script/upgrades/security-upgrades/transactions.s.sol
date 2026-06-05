@@ -18,8 +18,8 @@ import {EtherFiTimelock} from "@etherfi/governance/EtherFiTimelock.sol";
 import {RoleRegistry} from "@etherfi/governance/RoleRegistry.sol";
 import {EtherFiRateLimiter} from "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
 // membership
-import {MembershipManager} from "@etherfi/membership/MembershipManager.sol";
-import {MembershipNFT} from "@etherfi/membership/MembershipNFT.sol";
+import {MembershipManager} from "@etherfi/archive/membership/MembershipManager.sol";
+import {MembershipNFT} from "@etherfi/archive/membership/MembershipNFT.sol";
 // oracle
 import {EtherFiAdmin} from "@etherfi/oracle/EtherFiAdmin.sol";
 import {EtherFiOracle} from "@etherfi/oracle/EtherFiOracle.sol";
@@ -474,7 +474,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
 
     function _verifyMembershipBytecode() internal {
         MembershipManager fresh = new MembershipManager(
-            EETH, LIQUIDITY_POOL, MEMBERSHIP_NFT, ETHERFI_ADMIN, ROLE_REGISTRY, blacklisterProxy
+            EETH, LIQUIDITY_POOL, MEMBERSHIP_NFT, ROLE_REGISTRY, blacklisterProxy
         );
         codeChecker.verifyContractByteCodeMatch(membershipManagerImpl, address(fresh));
 
@@ -492,7 +492,6 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
                 auctionManager: AUCTION_MANAGER,
                 etherFiNodesManager: ETHERFI_NODES_MANAGER,
                 liquidityPool: LIQUIDITY_POOL,
-                membershipManager: MEMBERSHIP_MANAGER,
                 withdrawRequestNft: WITHDRAW_REQUEST_NFT,
                 roleRegistry: ROLE_REGISTRY,
                 priorityWithdrawalQueue: PRIORITY_WITHDRAWAL_QUEUE
@@ -572,7 +571,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         codeChecker.verifyContractByteCodeMatch(weETHWithdrawAdapterImpl, address(fresh3));
 
         WithdrawRequestNFT fresh4 = new WithdrawRequestNFT(
-            WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER,
+            WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, EETH, LIQUIDITY_POOL,
             ROLE_REGISTRY, blacklisterProxy, ETHERFI_ADMIN
         );
         codeChecker.verifyContractByteCodeMatch(withdrawRequestNFTImpl, address(fresh4));
@@ -726,13 +725,12 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
     }
     // membership
     function _mmImmSels() internal pure returns (bytes4[] memory s) {
-        s = new bytes4[](6);
+        s = new bytes4[](5);
         s[0] = bytes4(keccak256("eETH()"));
         s[1] = bytes4(keccak256("liquidityPool()"));
         s[2] = bytes4(keccak256("membershipNFT()"));
-        s[3] = bytes4(keccak256("etherFiAdmin()"));
-        s[4] = bytes4(keccak256("roleRegistry()"));
-        s[5] = bytes4(keccak256("blacklister()"));
+        s[3] = bytes4(keccak256("roleRegistry()"));
+        s[4] = bytes4(keccak256("blacklister()"));
     }
     function _mnftImmSels() internal pure returns (bytes4[] memory s) {
         s = new bytes4[](4);
@@ -743,22 +741,21 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
     }
     // oracle
     function _adminImmSels() internal pure returns (bytes4[] memory s) {
-        s = new bytes4[](15);
+        s = new bytes4[](14);
         s[0]  = bytes4(keccak256("etherFiOracle()"));
         s[1]  = bytes4(keccak256("stakingManager()"));
         s[2]  = bytes4(keccak256("auctionManager()"));
         s[3]  = bytes4(keccak256("etherFiNodesManager()"));
         s[4]  = bytes4(keccak256("liquidityPool()"));
-        s[5]  = bytes4(keccak256("membershipManager()"));
-        s[6]  = bytes4(keccak256("withdrawRequestNft()"));
-        s[7]  = bytes4(keccak256("roleRegistry()"));
-        s[8]  = bytes4(keccak256("priorityWithdrawalQueue()"));
-        s[9]  = bytes4(keccak256("maxAcceptableRebaseAprInBps()"));
-        s[10] = bytes4(keccak256("maxValidatorTaskBatchSize()"));
-        s[11] = bytes4(keccak256("maxAcceptableFinalizedWithdrawalAmountPerDay()"));
-        s[12] = bytes4(keccak256("maxAcceptableNumValidatorsToApprovePerDay()"));
-        s[13] = bytes4(keccak256("staleOracleReportBlockWindow()"));
-        s[14] = bytes4(keccak256("maxNumberOfRequestsToFinalizePerReport()"));
+        s[5]  = bytes4(keccak256("withdrawRequestNft()"));
+        s[6]  = bytes4(keccak256("roleRegistry()"));
+        s[7]  = bytes4(keccak256("priorityWithdrawalQueue()"));
+        s[8]  = bytes4(keccak256("maxAcceptableRebaseAprInBps()"));
+        s[9]  = bytes4(keccak256("maxValidatorTaskBatchSize()"));
+        s[10] = bytes4(keccak256("maxAcceptableFinalizedWithdrawalAmountPerDay()"));
+        s[11] = bytes4(keccak256("maxAcceptableNumValidatorsToApprovePerDay()"));
+        s[12] = bytes4(keccak256("staleOracleReportBlockWindow()"));
+        s[13] = bytes4(keccak256("maxNumberOfRequestsToFinalizePerReport()"));
     }
     function _oracleImmSels() internal pure returns (bytes4[] memory s) {
         s = new bytes4[](3);
@@ -866,14 +863,13 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         s[5] = bytes4(keccak256("roleRegistry()"));
     }
     function _nftImmSels() internal pure returns (bytes4[] memory s) {
-        s = new bytes4[](7);
+        s = new bytes4[](6);
         s[0] = bytes4(keccak256("treasury()"));
         s[1] = bytes4(keccak256("liquidityPool()"));
         s[2] = bytes4(keccak256("eETH()"));
-        s[3] = bytes4(keccak256("membershipManager()"));
-        s[4] = bytes4(keccak256("roleRegistry()"));
-        s[5] = bytes4(keccak256("blacklister()"));
-        s[6] = bytes4(keccak256("etherFiAdmin()"));
+        s[3] = bytes4(keccak256("roleRegistry()"));
+        s[4] = bytes4(keccak256("blacklister()"));
+        s[5] = bytes4(keccak256("etherFiAdmin()"));
     }
 
     function _upgradedProxies() internal pure returns (address[22] memory list) {
@@ -1237,7 +1233,6 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(address(m.eETH())            == EETH,                "MM.eETH");
         require(address(m.liquidityPool())   == LIQUIDITY_POOL,      "MM.liquidityPool");
         require(address(m.membershipNFT())   == MEMBERSHIP_NFT,      "MM.membershipNFT");
-        require(address(m.etherFiAdmin())    == ETHERFI_ADMIN,       "MM.etherFiAdmin");
         require(address(m.roleRegistry())    == ROLE_REGISTRY,       "MM.roleRegistry");
         require(address(m.blacklister())     == blacklisterProxy,    "MM.blacklister");
 
@@ -1255,7 +1250,6 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(address(a.auctionManager())           == AUCTION_MANAGER,           "EFAdmin.auctionManager");
         require(address(a.etherFiNodesManager())      == ETHERFI_NODES_MANAGER,     "EFAdmin.etherFiNodesManager");
         require(address(a.liquidityPool())            == LIQUIDITY_POOL,            "EFAdmin.liquidityPool");
-        require(address(a.membershipManager())        == MEMBERSHIP_MANAGER,        "EFAdmin.membershipManager");
         require(address(a.withdrawRequestNft())       == WITHDRAW_REQUEST_NFT,      "EFAdmin.withdrawRequestNft");
         require(address(a.roleRegistry())             == ROLE_REGISTRY,             "EFAdmin.roleRegistry");
         require(address(a.priorityWithdrawalQueue())  == PRIORITY_WITHDRAWAL_QUEUE, "EFAdmin.priorityWithdrawalQueue");
@@ -1360,7 +1354,6 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(n.treasury()       == WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, "NFT.treasury");
         require(address(n.liquidityPool())    == LIQUIDITY_POOL,           "NFT.liquidityPool");
         require(address(n.eETH())             == EETH,                     "NFT.eETH");
-        require(address(n.membershipManager())== MEMBERSHIP_MANAGER,       "NFT.membershipManager");
         require(address(n.roleRegistry())     == ROLE_REGISTRY,            "NFT.roleRegistry");
         require(address(n.blacklister())      == blacklisterProxy,         "NFT.blacklister");
         require(n.etherFiAdmin()              == ETHERFI_ADMIN,            "NFT.etherFiAdmin");

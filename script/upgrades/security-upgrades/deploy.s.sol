@@ -18,8 +18,8 @@ import {RevokeAdmin} from "@etherfi/governance/RevokeAdmin.sol";
 import {RoleRegistry} from "@etherfi/governance/RoleRegistry.sol";
 import {EtherFiRateLimiter} from "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
 // membership
-import {MembershipManager} from "@etherfi/membership/MembershipManager.sol";
-import {MembershipNFT} from "@etherfi/membership/MembershipNFT.sol";
+import {MembershipManager} from "@etherfi/archive/membership/MembershipManager.sol";
+import {MembershipNFT} from "@etherfi/archive/membership/MembershipNFT.sol";
 // oracle
 import {EtherFiAdmin} from "@etherfi/oracle/EtherFiAdmin.sol";
 import {EtherFiOracle} from "@etherfi/oracle/EtherFiOracle.sol";
@@ -268,7 +268,6 @@ contract DeploySecurityUpgrades is Script, SecurityUpgradesConstants, Utils {
                 EETH,
                 LIQUIDITY_POOL,
                 MEMBERSHIP_NFT,
-                ETHERFI_ADMIN,
                 ROLE_REGISTRY,
                 blacklisterProxy
             );
@@ -296,7 +295,6 @@ contract DeploySecurityUpgrades is Script, SecurityUpgradesConstants, Utils {
                 auctionManager: AUCTION_MANAGER,
                 etherFiNodesManager: ETHERFI_NODES_MANAGER,
                 liquidityPool: LIQUIDITY_POOL,
-                membershipManager: MEMBERSHIP_MANAGER,
                 withdrawRequestNft: WITHDRAW_REQUEST_NFT,
                 roleRegistry: ROLE_REGISTRY,
                 priorityWithdrawalQueue: PRIORITY_WITHDRAWAL_QUEUE
@@ -454,7 +452,6 @@ contract DeploySecurityUpgrades is Script, SecurityUpgradesConstants, Utils {
                 WITHDRAW_REQUEST_NFT_BUYBACK_SAFE,
                 EETH,
                 LIQUIDITY_POOL,
-                MEMBERSHIP_MANAGER,
                 ROLE_REGISTRY,
                 blacklisterProxy,
                 ETHERFI_ADMIN
