@@ -43,8 +43,8 @@ import {WithdrawRequestNFT} from "@etherfi/withdrawals/WithdrawRequestNFT.sol";
 
 import {UUPSProxy} from "@etherfi/utils/UUPSProxy.sol";
 
-import {Deployed} from "@scripts/deploys/Deployed.s.sol";
 import {Utils, ICreate2Factory} from "@scripts/utils/utils.sol";
+import {SecurityUpgradesConstants} from "./Constants.s.sol";
 
 /**
  * 26Q2 Security Upgrades — Deployment
@@ -57,64 +57,12 @@ import {Utils, ICreate2Factory} from "@scripts/utils/utils.sol";
  *   forge script script/upgrades/security-upgrades/deploy.s.sol:DeploySecurityUpgrades \
  *       --fork-url $MAINNET_RPC_URL --verify --etherscan-api-key $ETHERSCAN_API_KEY
  */
-contract DeploySecurityUpgrades is Script, Deployed, Utils {
+contract DeploySecurityUpgrades is Script, SecurityUpgradesConstants, Utils {
     ICreate2Factory public constant factory = ICreate2Factory(0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99);
 
-    // ─────────────────────────────────────────────────────────────────────
-    // GIT_COMMIT_SHA — TBD; set to the first 20 bytes of the release commit SHA
-    // BEFORE broadcasting (see PR #420 review C3). The same value must be set in
-    // transactions.s.sol and revert.s.sol so the CREATE2 salt and timelock salts agree.
-    // _preflight() rejects bytes20(0).
-    // ─────────────────────────────────────────────────────────────────────
-    bytes20 public constant GIT_COMMIT_SHA = bytes20(hex"0000000000000000000000000000000000000000"); // TBD
-    bytes32 public constant commitHashSalt = bytes32(GIT_COMMIT_SHA);
-
-    // ----- Immutable params (set per spec / ops review) -----
-    // NOTE: These values are variable and would be further changed as per needed
-    // Ordered by src/ group: core, deposits, oracle, withdrawals.
-
-    // core — LiquidityPool dust guard (spec — minimum amount per share)
-    uint256 public constant LP_MIN_AMOUNT_FOR_SHARE = 1 ether;
-
-    // deposits — Liquifier
-    address public constant STETH_PRICE_FEED = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812; // Chainlink stETH/ETH
-    address public constant STETH_ETH_CURVE_POOL = 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022;
-    uint256 public constant LIQUIFIER_MIN_DISCOUNT_BPS = 100;          // 1% floor
-    uint256 public constant LIQUIFIER_STALE_PRICE_WINDOW = 7 days;
-    uint256 public constant LIQUIFIER_MAX_PRICE_DEVIATION_BPS = 500;   // 5%
-
-    // oracle — EtherFiAdmin immutable params
-    int256  public constant ADMIN_MAX_REBASE_APR_BPS = 1_000;           // 10% absolute ceiling
-    uint256 public constant ADMIN_MAX_VALIDATOR_TASK_BATCH_SIZE = 100; // 50 Currently
-    uint256 public constant ADMIN_STALE_ORACLE_REPORT_BLOCK_WINDOW = 7200 * 14; // ~14 days @ 12s blocks
-    uint256 public constant ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY = 100_000 ether;
-    uint256 public constant ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY = 1_000;
-    uint256 public constant ADMIN_MAX_REQUESTS_TO_FINALIZE_PER_REPORT = 2_000;
-
-    // oracle — EtherFiOracle immutable params
-    uint256 public constant ORACLE_MIN_QUORUM_SIZE = 3; // enforces min 3/5 quorum for consensus
-
-    // withdrawals — EtherFiRedemptionManager hardcoded ceilings (per spec §7.4.6 / §9)
-    // NOTE: the contract field is named `maxExitFeeSplitToTreasuryInBps`, but the actual
-    // destination address (passed as `_treasury` in the constructor) is the buyback safe.
-    // We standardize the BPS constant name on "TREASURY" to match the contract field;
-    // the destination address is WITHDRAW_REQUEST_NFT_BUYBACK_SAFE in BOTH deploy and
-    // transactions/verify (see C2 in PR #420 review).
-    uint256 public constant RM_MAX_EXIT_FEE_SPLIT_TO_TREASURY_BPS = 10_000;
-    uint256 public constant RM_MAX_EXIT_FEE_BPS = 500;                  // 5% hardcoded ceiling
-    uint256 public constant RM_MAX_LOW_WATERMARK_BPS_OF_TVL = 2_000;    // 20% hardcoded ceiling
-
-    // withdrawals — WithdrawRequestNFT share-rate acceptance band
-    // Tightened band ~[0.9, 1.1] × the live LiquidityPool.amountPerShareCeil() snapshot
-    // at deploy time (~1.05 ether as of 2026-05-28). See H4 in PR #420 review.
-    // RE-VERIFY THESE BEFORE BROADCAST against the current `amountPerShareCeil()` —
-    // any drift > a few % suggests rate has moved and the band should be re-centered.
-    uint256 public constant WNFT_MIN_ACCEPTABLE_SHARE_RATE = 0.95 ether;
-    uint256 public constant WNFT_MAX_ACCEPTABLE_SHARE_RATE = 1.15 ether;
-
-    // withdrawals — PriorityWithdrawalQueue — must match the constructor arg used at proxy genesis;
-    // the proxy's existing impl was deployed with 1 hour, so the new impl must too.
-    uint32  public constant PWQ_MIN_DELAY = 1 hours;
+    // All configuration constants (GIT_COMMIT_SHA / commitHashSalt and the immutable
+    // constructor params) live in Constants.s.sol (SecurityUpgradesConstants), shared
+    // with transactions.s.sol and revert.s.sol.
 
     // ----- Deployment outputs (ordered by src/ group) -----
     // core

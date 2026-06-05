@@ -42,8 +42,8 @@ import {WeETHWithdrawAdapter} from "@etherfi/withdrawals/WeETHWithdrawAdapter.so
 import {WithdrawRequestNFT} from "@etherfi/withdrawals/WithdrawRequestNFT.sol";
 
 import {ContractCodeChecker} from "@scripts/ContractCodeChecker.sol";
-import {Deployed} from "@scripts/deploys/Deployed.s.sol";
 import {Utils} from "@scripts/utils/utils.sol";
+import {SecurityUpgradesConstants} from "./Constants.s.sol";
 
 /**
  * 26Q2 Security Upgrades - Timelocked Upgrade + Configuration
@@ -80,7 +80,7 @@ import {Utils} from "@scripts/utils/utils.sol";
  *   9. executeLpWithdrawBounds     — Batch 3 (OPERATION_MULTISIG, instant): LP min/max withdraw bounds
  *  10. verifyOperatingConfig       — buckets + pause durations + role grants + LP bounds + finalized-withdrawal cap
  */
-contract SecurityUpgradesScript is Script, Deployed, Utils {
+contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
     // ─────────────────────────────────────────────────────────────────────
     // DEPLOYED IMPLEMENTATIONS - populate from deploy.s.sol output
     // ─────────────────────────────────────────────────────────────────────
@@ -124,219 +124,18 @@ contract SecurityUpgradesScript is Script, Deployed, Utils {
     address constant withdrawRequestNFTImpl       = address(0);
 
     // ─────────────────────────────────────────────────────────────────────
-    // CONSTRUCTOR PARAMS - MUST MATCH deploy.s.sol exactly.
-    // Re-stated here so verifyDeployedBytecode can rebuild each impl locally.
+    // All configuration constants — immutable constructor params, operational
+    // setpoints, role holders, role IDs, legacy role IDs, rate-limiter buckets,
+    // pause durations, bucket IDs, timelock/registry handles, delays, OUT_DIR
+    // and GIT_COMMIT_SHA / commitHashSalt — live in Constants.s.sol
+    // (SecurityUpgradesConstants), shared with deploy.s.sol and revert.s.sol.
+    // The constructor params there MUST match what deploy.s.sol baked into each
+    // impl; verifyDeployedBytecode rebuilds each impl from them locally.
+    //
+    // Only the deployed-implementation INPUT addresses (populated by hand from
+    // deploy.s.sol's output) remain declared above, since they are per-run
+    // deployment bookkeeping rather than shared configuration.
     // ─────────────────────────────────────────────────────────────────────
-    // core — LiquidityPool
-    uint256 constant LP_MIN_AMOUNT_FOR_SHARE = 1 ether;
-    // Bounds for LP.requestWithdraw (queued NFT-mint path). Default storage is 0/0,
-    // which bricks the path; seeded via the OPERATION_MULTISIG Safe tx (Batch 3) after
-    // the upgrade batch grants it OPERATION_MULTISIG_ROLE. Dummy values for now.
-    uint256 constant LP_MIN_WITHDRAW_AMOUNT = 100_000 gwei; // 0.0001 ether
-    uint256 constant LP_MAX_WITHDRAW_AMOUNT = 1_000 ether;
-
-    // deposits — Liquifier
-    address constant STETH_PRICE_FEED = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812;
-    address constant STETH_ETH_CURVE_POOL = 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022;
-    uint256 constant LIQUIFIER_MIN_DISCOUNT_BPS = 100;
-    uint256 constant LIQUIFIER_STALE_PRICE_WINDOW = 7 days;
-    uint256 constant LIQUIFIER_MAX_PRICE_DEVIATION_BPS = 500;
-
-    // oracle — EtherFiAdmin
-    int256  constant ADMIN_MAX_REBASE_APR_BPS                       = 1_000;
-    uint256 constant ADMIN_MAX_VALIDATOR_TASK_BATCH_SIZE            = 100;
-    uint256 constant ADMIN_STALE_ORACLE_REPORT_BLOCK_WINDOW         = 7200 * 14; // 14 days @ 12s blocks
-    uint256 constant ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY  = 100_000 ether;
-    uint256 constant ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY        = 1_000;
-    uint256 constant ADMIN_MAX_REQUESTS_TO_FINALIZE_PER_REPORT      = 2_000;
-
-    // oracle — EtherFiOracle
-    uint32  constant ORACLE_MIN_QUORUM_SIZE = 3;
-
-    // withdrawals — EtherFiRedemptionManager
-    uint256 constant RM_MAX_EXIT_FEE_SPLIT_TO_TREASURY_BPS = 10_000;
-    uint256 constant RM_MAX_EXIT_FEE_BPS                   = 500;
-    uint256 constant RM_MAX_LOW_WATERMARK_BPS_OF_TVL       = 2_000;
-
-    // withdrawals — WithdrawRequestNFT — must match deploy.s.sol exactly
-    // (tightened band ~[0.9, 1.1] × live amountPerShareCeil() snapshot; see H4)
-    uint256 constant WNFT_MIN_ACCEPTABLE_SHARE_RATE = 0.95 ether;
-    uint256 constant WNFT_MAX_ACCEPTABLE_SHARE_RATE = 1.15 ether;
-
-    // withdrawals — PriorityWithdrawalQueue — must match the value baked into the proxy at genesis.
-    uint32  constant PWQ_MIN_DELAY = 1 hours;
-
-    // ─────────────────────────────────────────────────────────────────────
-    // ROLE HOLDERS - 3 fixed + 6 user-set.
-    // ─────────────────────────────────────────────────────────────────────
-    address constant HOLDER_UPGRADE_TIMELOCK_ROLE   = 0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761; // UPGRADE_TIMELOCK
-    address constant HOLDER_OPERATION_TIMELOCK_ROLE = 0xcD425f44758a08BaAB3C4908f3e3dE5776e45d7a; // OPERATING_TIMELOCK
-    address constant HOLDER_OPERATION_MULTISIG_ROLE = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC; // ETHERFI_OPERATING_ADMIN
-
-    address constant HOLDER_SUPER_GUARDIAN_ROLE          = address(0);
-    address constant HOLDER_GUARDIAN_ROLE                = address(0);
-    address constant HOLDER_ORACLE_OPERATIONS_ROLE       = address(0);
-    address constant HOLDER_HOUSEKEEPING_OPERATIONS_ROLE = address(0);
-    address constant HOLDER_EXECUTOR_OPERATIONS_ROLE     = address(0);
-    address constant HOLDER_EIGENPOD_OPERATIONS_ROLE     = address(0);
-
-    // ─────────────────────────────────────────────────────────────────────
-    // ROLE IDs — hardcoded keccak256 of the role name. Mirror the constants in
-    // src/governance/RoleRegistry.sol EXACTLY. Hardcoded (not read via
-    // roleRegistry.<ROLE>()) because executeRoleGrants runs BEFORE the registry
-    // upgrade, and the pre-upgrade impl doesn't expose these getters. Resolved
-    // hex shown for `cast` cross-checks.
-    // ─────────────────────────────────────────────────────────────────────
-    bytes32 constant UPGRADE_TIMELOCK_ROLE        = keccak256("UPGRADE_TIMELOCK_ROLE");        // 0x5ba17a247620ef8426ae0fffc28eee4ee4b18eb3b8bcfa95664565c35371dfb5
-    bytes32 constant OPERATION_TIMELOCK_ROLE      = keccak256("OPERATION_TIMELOCK_ROLE");      // 0xe6bda0fc5c63b525e475d178ed9c7fa9913b3429ade866197b11eb0f2c18c673
-    bytes32 constant OPERATION_MULTISIG_ROLE      = keccak256("OPERATION_MULTISIG_ROLE");      // 0x9e4e6873d7e5b4630066665503d42d0314a7e21ea9ee5a05704b5b8c7148d3fb
-    bytes32 constant SUPER_GUARDIAN_ROLE          = keccak256("SUPER_GUARDIAN_ROLE");          // 0xd79525443f4852b5f09ad4110de858f17068636090fc71aac61dd76a51bc2d1a
-    bytes32 constant GUARDIAN_ROLE                = keccak256("GUARDIAN_ROLE");                // 0x55435dd261a4b9b3364963f7738a7a662ad9c84396d64be3365284bb7f0a5041
-    bytes32 constant ORACLE_OPERATIONS_ROLE       = keccak256("ORACLE_OPERATIONS_ROLE");       // 0xe04627ac7a10b0a9db5fa2746383dd87425afe4c7fe0a07b97e3996bc31be8cf
-    bytes32 constant HOUSEKEEPING_OPERATIONS_ROLE = keccak256("HOUSEKEEPING_OPERATIONS_ROLE"); // 0x6a220c67787309b57c3b5be766e6a2ee58f627b61610a5769482ab82dd198c87
-    bytes32 constant EXECUTOR_OPERATIONS_ROLE     = keccak256("EXECUTOR_OPERATIONS_ROLE");     // 0x8d94a233c9c242689a785911ca9060f0c5e06f317a3ec55d9a79ce4f7991d669
-    bytes32 constant EIGENPOD_OPERATIONS_ROLE     = keccak256("EIGENPOD_OPERATIONS_ROLE");     // 0x1d35f3653d06c44a47eae771269a6fec1babec5f5c25127bb524f5fefc5673e7
-
-    // ─────────────────────────────────────────────────────────────────────
-    // LEGACY ROLE IDs — the pre-upgrade granular roles, enumerated from every
-    // keccak256("..._ROLE") / PROTOCOL_PAUSER/UNPAUSER constant declared across
-    // the master-branch src/ contracts (the currently-deployed code). After this
-    // upgrade every gated function routes through the 9 RolesLibrary roles above,
-    // so these 31 are orphaned; _appendLegacyRevokeCalls (part of the upgrade batch)
-    // revokes their holders. NONE of these collide with the 9 new role IDs (distinct
-    // strings), so revoking them never touches the fresh grants from _appendGrantCalls.
-    // ─────────────────────────────────────────────────────────────────────
-    bytes32 constant L_PROTOCOL_PAUSER                                       = keccak256("PROTOCOL_PAUSER");
-    bytes32 constant L_PROTOCOL_UNPAUSER                                     = keccak256("PROTOCOL_UNPAUSER");
-    bytes32 constant L_EETH_OPERATING_ADMIN_ROLE                             = keccak256("EETH_OPERATING_ADMIN_ROLE");
-    bytes32 constant L_WEETH_OPERATING_ADMIN_ROLE                            = keccak256("WEETH_OPERATING_ADMIN_ROLE");
-    bytes32 constant L_LIQUIDITY_POOL_ADMIN_ROLE                             = keccak256("LIQUIDITY_POOL_ADMIN_ROLE");
-    bytes32 constant L_LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE                = keccak256("LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE");
-    bytes32 constant L_LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE                 = keccak256("LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE");
-    bytes32 constant L_STAKING_MANAGER_ADMIN_ROLE                            = keccak256("STAKING_MANAGER_ADMIN_ROLE");
-    bytes32 constant L_STAKING_MANAGER_NODE_CREATOR_ROLE                     = keccak256("STAKING_MANAGER_NODE_CREATOR_ROLE");
-    bytes32 constant L_STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE            = keccak256("STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE");
-    bytes32 constant L_ETHERFI_NODES_MANAGER_ADMIN_ROLE                      = keccak256("ETHERFI_NODES_MANAGER_ADMIN_ROLE");
-    bytes32 constant L_ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE           = keccak256("ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE");
-    bytes32 constant L_ETHERFI_NODES_MANAGER_POD_PROVER_ROLE                 = keccak256("ETHERFI_NODES_MANAGER_POD_PROVER_ROLE");
-    bytes32 constant L_ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE             = keccak256("ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE");
-    bytes32 constant L_ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE            = keccak256("ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE");
-    bytes32 constant L_ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE           = keccak256("ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE");
-    bytes32 constant L_ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE              = keccak256("ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE");
-    bytes32 constant L_ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE                    = keccak256("ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE");
-    bytes32 constant L_ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE             = keccak256("ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE");
-    bytes32 constant L_ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE                 = keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE");
-    bytes32 constant L_ETHERFI_RATE_LIMITER_ADMIN_ROLE                       = keccak256("ETHERFI_RATE_LIMITER_ADMIN_ROLE");
-    bytes32 constant L_WITHDRAW_REQUEST_NFT_ADMIN_ROLE                       = keccak256("WITHDRAW_REQUEST_NFT_ADMIN_ROLE");
-    bytes32 constant L_IMPLICIT_FEE_CLAIMER_ROLE                             = keccak256("IMPLICIT_FEE_CLAIMER_ROLE");
-    bytes32 constant L_PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE                  = keccak256("PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE");
-    bytes32 constant L_PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE      = keccak256("PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE");
-    bytes32 constant L_PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE        = keccak256("PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE");
-    bytes32 constant L_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE      = keccak256("CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE");
-    bytes32 constant L_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_CLAIM_DELAY_SETTER_ROLE = keccak256("CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_CLAIM_DELAY_SETTER_ROLE");
-    bytes32 constant L_ETHERFI_REWARDS_ROUTER_ADMIN_ROLE                     = keccak256("ETHERFI_REWARDS_ROUTER_ADMIN_ROLE");
-    bytes32 constant L_ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE            = keccak256("ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE");
-    bytes32 constant L_WEETH_WITHDRAW_ADAPTER_ADMIN_ROLE                     = keccak256("WEETH_WITHDRAW_ADAPTER_ADMIN_ROLE");
-
-    // ─────────────────────────────────────────────────────────────────────
-    // OPERATIONAL PARAMETERS
-    // ─────────────────────────────────────────────────────────────────────
-    // core — Token-side global buckets (consumeToken on eETH/weETH paths).
-    // Transfer is now per-address (consumeForAddressIfConfigured); no global TRANSFER bucket.
-    uint64 constant EETH_MINT_CAPACITY    = 0;
-    uint64 constant EETH_MINT_REFILL_RATE = 0;
-    uint64 constant EETH_BURN_CAPACITY    = 0;
-    uint64 constant EETH_BURN_REFILL_RATE = 0;
-    uint64 constant WEETH_MINT_CAPACITY   = 0;
-    uint64 constant WEETH_MINT_REFILL_RATE = 0;
-    uint64 constant WEETH_BURN_CAPACITY   = 0;
-    uint64 constant WEETH_BURN_REFILL_RATE = 0;
-
-    // restaking — EtherFiRestaker buckets (consume).
-    uint64 constant STETH_REQUEST_WITHDRAWAL_CAPACITY    = 0;
-    uint64 constant STETH_REQUEST_WITHDRAWAL_REFILL_RATE = 0;
-    uint64 constant QUEUE_WITHDRAWALS_CAPACITY           = 0;
-    uint64 constant QUEUE_WITHDRAWALS_REFILL_RATE        = 0;
-    uint64 constant DEPOSIT_INTO_STRATEGY_CAPACITY       = 0;
-    uint64 constant DEPOSIT_INTO_STRATEGY_REFILL_RATE    = 0;
-
-    // staking — EtherFiNodesManager buckets (consume).
-    // NOTE: UNRESTAKING / EXIT_REQUEST / CONSOLIDATION_REQUEST buckets already exist on
-    // mainnet from a prior deployment (limitExists() == true). Batch 2 calls
-    // setCapacity + setRefillRate for these 3 rather than createNewLimiter; the 7 token
-    // and restaker buckets are still newly-created. See F2 in PR #420 review.
-    uint64 constant UNRESTAKING_CAPACITY            = 0;
-    uint64 constant UNRESTAKING_REFILL_RATE         = 0;
-    uint64 constant EXIT_REQUEST_CAPACITY           = 0;
-    uint64 constant EXIT_REQUEST_REFILL_RATE        = 0;
-    uint64 constant CONSOLIDATION_REQUEST_CAPACITY  = 0;
-    uint64 constant CONSOLIDATION_REQUEST_REFILL_RATE = 0;
-
-    // oracle — EtherFiAdmin daily finalized-withdrawal cap (operational setpoint).
-    // Set post-upgrade via updateMaxFinalizedWithdrawalAmountPerDay, which is
-    // onlyAdmin = OPERATION_TIMELOCK_ROLE — so it rides the operating-timelock batch
-    // (Batch 2), NOT the upgrade batch with the LP/WRN initializers (those are
-    // onlyUpgradeTimelock; the upgrade timelock can't satisfy onlyAdmin).
-    // The storage var maxFinalizedWithdrawalAmountPerDay defaults to 0, which makes
-    // _validateReport reject EVERY finalized withdrawal, so it must be seeded.
-    // Must satisfy 0 < value <= ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY
-    // (the immutable acceptable ceiling baked into the EtherFiAdmin impl).
-    uint256 constant ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT = 0;
-
-    // PAUSE_UNTIL_* targets are gated to contracts that mix in PausableUntil. The
-    // four ex-targets (EtherFiAdmin, MembershipManager, MembershipNFT, NodeOperatorManager)
-    // have no setPauseUntilDuration and were dropped.
-    // core
-    uint256 constant PAUSE_UNTIL_EETH                                 = 0;
-    uint256 constant PAUSE_UNTIL_LIQUIDITY_POOL                       = 0;
-    uint256 constant PAUSE_UNTIL_WEETH                                = 0;
-    // deposits
-    uint256 constant PAUSE_UNTIL_LIQUIFIER                            = 0;
-    // rewards
-    uint256 constant PAUSE_UNTIL_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR = 0;
-    // staking
-    uint256 constant PAUSE_UNTIL_AUCTION_MANAGER                      = 0;
-    uint256 constant PAUSE_UNTIL_ETHERFI_NODES_MANAGER                = 0;
-    // withdrawals
-    uint256 constant PAUSE_UNTIL_ETHERFI_REDEMPTION_MGR               = 0;
-    uint256 constant PAUSE_UNTIL_PRIORITY_WITHDRAWAL_QUEUE             = 0;
-    uint256 constant PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER               = 0;
-    uint256 constant PAUSE_UNTIL_WITHDRAW_REQUEST_NFT                 = 0;
-
-    // Bucket IDs — must match the constants declared in the source contracts.
-    // core
-    bytes32 constant EETH_MINT_LIMIT_ID                = keccak256("EETH_MINT_LIMIT_ID");
-    bytes32 constant EETH_BURN_LIMIT_ID                = keccak256("EETH_BURN_LIMIT_ID");
-    bytes32 constant WEETH_MINT_LIMIT_ID               = keccak256("WEETH_MINT_LIMIT_ID");
-    bytes32 constant WEETH_BURN_LIMIT_ID               = keccak256("WEETH_BURN_LIMIT_ID");
-
-    // restaking
-    bytes32 constant STETH_REQUEST_WITHDRAWAL_LIMIT_ID = keccak256("STETH_REQUEST_WITHDRAWAL_LIMIT_ID");
-    bytes32 constant QUEUE_WITHDRAWALS_LIMIT_ID        = keccak256("QUEUE_WITHDRAWALS_LIMIT_ID");
-    bytes32 constant DEPOSIT_INTO_STRATEGY_LIMIT_ID    = keccak256("DEPOSIT_INTO_STRATEGY_LIMIT_ID");
-
-    // staking
-    bytes32 constant UNRESTAKING_LIMIT_ID              = keccak256("UNRESTAKING_LIMIT_ID");
-    bytes32 constant EXIT_REQUEST_LIMIT_ID             = keccak256("EXIT_REQUEST_LIMIT_ID");
-    bytes32 constant CONSOLIDATION_REQUEST_LIMIT_ID    = keccak256("CONSOLIDATION_REQUEST_LIMIT_ID");
-
-    EtherFiTimelock constant upgradeTimelock   = EtherFiTimelock(payable(UPGRADE_TIMELOCK));
-    EtherFiTimelock constant operatingTimelock = EtherFiTimelock(payable(OPERATING_TIMELOCK));
-    RoleRegistry    constant roleRegistry      = RoleRegistry(ROLE_REGISTRY);
-
-    uint256 constant UPGRADE_TIMELOCK_DELAY   = 10 days;
-    uint256 constant OPERATING_TIMELOCK_DELAY = 2 days;
-
-    string constant OUT_DIR = "script/upgrades/security-upgrades";
-
-    // ─────────────────────────────────────────────────────────────────────
-    // GIT_COMMIT_SHA — MUST match deploy.s.sol's value. Used to derive
-    // deterministic timelock salts so re-running this script across forks
-    // yields identical Safe JSONs (see PR #420 review C3 + C7).
-    // _preflight() rejects bytes20(0).
-    // ─────────────────────────────────────────────────────────────────────
-    bytes20 constant GIT_COMMIT_SHA = bytes20(hex"0000000000000000000000000000000000000000"); // TBD
-    bytes32 constant commitHashSalt = bytes32(GIT_COMMIT_SHA);
 
     // ─────────────────────────────────────────────────────────────────────
     // PRE-UPGRADE SNAPSHOTS
