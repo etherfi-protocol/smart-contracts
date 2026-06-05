@@ -61,17 +61,18 @@ abstract contract SecurityUpgradesConstants is Deployed {
     uint256 internal constant ADMIN_STALE_ORACLE_REPORT_BLOCK_WINDOW = 7200 * 14; // ~14 days @ 12s blocks
     uint256 internal constant ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY = 100_000 ether;
     uint256 internal constant ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY = 100;
-    uint256 internal constant ADMIN_MAX_REQUESTS_TO_FINALIZE_PER_REPORT = 2_000;
-
+    // rationale: 5000 requests x 2000 sload cost ~ 10M gas which we consider is max acceptable limit for grefining, 
+    // anyone making that many requests will be flagged for grefining and their requests can be invalidated
+    uint256 internal constant ADMIN_MAX_REQUESTS_TO_FINALIZE_PER_REPORT = 5_000;
     // oracle — EtherFiOracle immutable params
     /**
       * @dev for current setup, we have 2 of 3 set on oracle out of which 2 are internal and 1 is external.
-      * We need to rmeove one internal and one external and replace those with 2 external nodes with 3 of 3
+      * We need to remove one internal and one external and replace those with 2 external nodes with 3 of 3
       * setup. We will do the following executions:
-      * 1. Add new external member 1 with quorum size 3
-      * 2. Add new external member 2 with quorum size 3
-      * 3. Remove existing internal member 1 with quorum size 3
-      * 4. Remove existing external member 1 with quorum size 3
+      * 1. Add new external member 1 with quorum size 3 (setup: 3 of 4)
+      * 2. Add new external member 2 with quorum size 3 (setup: 3 of 5)
+      * 3. Remove existing internal member 1 with quorum size 3 (setup: 3 of 4)
+      * 4. Remove existing external member 1 with quorum size 3 (setup: 3 of 3)
       * This way, we replace the keys to the 3 operators: ether.fi, nonce and distrust
       * After this is successful we add two extra parties (member 3 and member 4 with quorum 3) to reach desired 3 of 5 setup.
      */
@@ -106,7 +107,7 @@ abstract contract SecurityUpgradesConstants is Deployed {
     // core — LiquidityPool.requestWithdraw bounds (queued NFT-mint path). Default storage
     // is 0/0, which bricks the path; seeded via the OPERATION_MULTISIG Safe tx (Batch 3)
     // after the upgrade batch grants it OPERATION_MULTISIG_ROLE. Dummy values for now.
-    uint256 internal constant LP_MIN_WITHDRAW_AMOUNT = 100_000 gwei; // 0.0001 ether
+    uint256 internal constant LP_MIN_WITHDRAW_AMOUNT = 1_000_000 gwei; // 0.001 ether
     uint256 internal constant LP_MAX_WITHDRAW_AMOUNT = 1_000 ether;
 
     // oracle — EtherFiAdmin daily finalized-withdrawal cap (operational setpoint).
