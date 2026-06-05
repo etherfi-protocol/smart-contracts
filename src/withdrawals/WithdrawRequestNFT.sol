@@ -63,7 +63,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     uint256[3] private __gap_3;
 
     uint128 public ethAmountLockedForWithdrawal;
-    mapping(uint256 => uint256) public totalRequestedWithdrawalAmount;
     // (requestId upperBound => amountPerShareCeil(1e18) at finalize time).
     // A value of 0 marks a "legacy" range that pre-dates the share-rate-freeze upgrade;
     // `_getClaimableAmount` locally substitutes `LP.amountPerShareCeil()` for those tokenIds,
@@ -166,14 +165,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     function initializeShareRateFreezeUpgrade() external onlyUpgradeTimelock {
         if (_finalizationRates.length() != 0) revert AlreadyInitialized();
         _finalizationRates.push(uint32(lastFinalizedRequestId), 0);
-        uint256 _totalRequestedWithdrawalAmount = 0;
-        uint256 _nextRequestId = nextRequestId;
-        for (uint256 requestId = lastFinalizedRequestId + 1; requestId < _nextRequestId; requestId++) {
-            if (_requests[requestId].isValid) {
-                _totalRequestedWithdrawalAmount += _requests[requestId].amountOfEEth;
-            }
-        }
-        totalRequestedWithdrawalAmount[_nextRequestId - 1] = _totalRequestedWithdrawalAmount;
     }
 
     //--------------------------------------------------------------------------------------
@@ -202,7 +193,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         uint256 requestId = nextRequestId++;
 
         _requests[requestId] = IWithdrawRequestNFT.WithdrawRequest(amountOfEEth, shareOfEEth, true, 0);
-        totalRequestedWithdrawalAmount[requestId] = totalRequestedWithdrawalAmount[requestId - 1] + amountOfEEth;
 
         _safeMint(recipient, requestId);
 
@@ -285,7 +275,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         if (requestId <= lastFinalizedRequestId) revert CannotInvalidateFinalizedRequest();
         if (!isValid(requestId)) revert RequestNotValid();
         _requests[requestId].isValid = false;
-        totalRequestedWithdrawalAmount[nextRequestId - 1] -= _requests[requestId].amountOfEEth;
 
         emit WithdrawRequestInvalidated(uint32(requestId));
     }
@@ -301,7 +290,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
             uint256 amount = _requests[requestId].amountOfEEth;
             if (amount > liquidityPool.totalValueInLp()) revert RequestAmountGreaterThanAvailableLiquidity();
             liquidityPool.addEthAmountLockedForWithdrawal(uint128(amount));
-            totalRequestedWithdrawalAmount[nextRequestId - 1] += _requests[requestId].amountOfEEth;
         }
         _requests[requestId].isValid = true;
 
@@ -355,6 +343,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
      */
     function _claimWithdraw(uint256 tokenId) internal {
         address recipient = ownerOf(tokenId);
+        blacklister.nonBlacklisted(recipient);
         IWithdrawRequestNFT.WithdrawRequest memory request = _requests[tokenId];
         if (!request.isValid) revert RequestNotValid();
 
@@ -438,10 +427,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
      */
     function getClaimableAmount(uint256 tokenId) public view returns (uint256) {
         return _getClaimableAmount(tokenId);
-    }
-
-    function getFinalizedWithdrawalAmount(uint32 requestId) external view returns (uint128) {
-        return uint128(totalRequestedWithdrawalAmount[requestId] - totalRequestedWithdrawalAmount[lastFinalizedRequestId]);
     }
 
     /**

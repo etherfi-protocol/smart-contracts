@@ -1477,28 +1477,51 @@ contract EtherFiOracleTest is TestSetup {
     // test_pause_unPause_edgeCases / test_pause_unPause_insufficientRole removed:
     // EtherFiAdmin.pause / unPause were deleted in the role-consolidation refactor.
 
-    // The finalized amount is now derived on-chain from the request prefix-sum
-    // (WithdrawRequestNFT.getFinalizedWithdrawalAmount), not carried in the report. Back it with a
-    // real request and lower the per-day cap below that amount so the per-day gate trips.
     function test_executeTasks_revertsWhenFinalizedWithdrawalExceedsCap() public {
-        _unpauseWithdrawNFT();
-        _seedLp(200 ether);
-        uint256 requestId = _makeWithdrawRequest(10 ether);
-
-        vm.prank(alice);
-        etherFiAdminInstance.updateMaxFinalizedWithdrawalAmountPerDay(0.001 ether);
-
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
-        report.lastFinalizedWithdrawalRequestId = uint32(requestId);
+        report.finalizedWithdrawalAmount = 20000 ether; // > 10000 ether/day cap
 
         _moveClock(1 days / 12);
         _executeAdminTasks(report, "EtherFiAdmin: finalized withdrawal amount exceeds max");
     }
 
-    // NOTE: the per-report range-cap gate (`maxNumberOfRequestsToFinalizePerReport`) was removed
-    // from `_validateWithdrawals`; that limit now only bounds the permissionless stale-finalization
-    // path (`maxNumberOfStaleRequestsToFinalizePerReport`). The old range-cap and boundary tests
-    // were deleted accordingly.
+    // EtherFiAdmin gained `maxNumberOfRequestsToFinalizePerReport` (configured to 1000 in
+    // setUpTests). A report claiming to finalize a range larger than that must be rejected
+    // even when every other gate (per-day cap, LP liquidity, ascending id) is satisfied.
+    // No actual requests need to exist — the cap check sits BEFORE the sum-of-requests loop.
+    function test_executeTasks_revertsWhenRequestRangeExceedsCap() public {
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        // delta from lastFinalizedRequestId(=0) = 1001 > cap(1000)
+        report.lastFinalizedWithdrawalRequestId = 1001;
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report, "EtherFiAdmin: number of requests to finalize exceeds max");
+    }
+
+    // Boundary check: a report with delta == cap (1000) must pass the new range gate.
+    // We pin the gate by submitting delta = 1000 and a single real request — finalizeRequests
+    // is happy because the underlying share rate is in range, and the validation loop walks
+    // requests [1, 1000] where only id=1 has non-zero amount (matches finalizedWithdrawalAmount).
+    function test_executeTasks_passesRangeCapAtBoundary() public {
+        _unpauseWithdrawNFT();
+        _seedLp(200 ether);
+        uint256 requestId = _makeWithdrawRequest(1 ether);
+        assertEq(requestId, 1);
+
+        // Move the next-request cursor up so report can point at id=1000 (delta = 1000 == cap).
+        bytes32 slot306 = vm.load(address(withdrawRequestNFTInstance), bytes32(uint256(306)));
+        uint256 cleared = uint256(slot306) & ~uint256(0xffffffff);          // clear nextRequestId
+        uint256 patched = cleared | uint256(1001);                           // nextRequestId = 1001
+        vm.store(address(withdrawRequestNFTInstance), bytes32(uint256(306)), bytes32(patched));
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.lastFinalizedWithdrawalRequestId = 1000;       // delta = 1000 - 0 == cap
+        report.finalizedWithdrawalAmount = 1 ether;           // backed by request #1 only
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report);
+        assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), 1000);
+    }
 
     function test_executeTasks_revertsWhenValidatorApprovalsExceedCap() public {
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
@@ -1515,8 +1538,8 @@ contract EtherFiOracleTest is TestSetup {
     // within the per-day cap processes cleanly and advances the LP's locked
     // accounting.
     function test_executeTasks_finalizedWithdrawalWithinCap_succeeds() public {
-        // Seed via bob so requestWithdraw caller has eETH; the on-chain finalized-amount
-        // derivation requires a real request to back the locked amount.
+        // Seed via bob so requestWithdraw caller has eETH; the sum-of-requests
+        // gate requires a real request to back the finalized amount.
         _unpauseWithdrawNFT();
         _seedLp(200 ether);
         uint256 requestId = _makeWithdrawRequest(10 ether);
@@ -1524,6 +1547,7 @@ contract EtherFiOracleTest is TestSetup {
         uint256 lockedBefore = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.finalizedWithdrawalAmount = 10 ether;
         report.lastFinalizedWithdrawalRequestId = uint32(requestId);
 
         _moveClock(1 days / 12);
@@ -1536,16 +1560,13 @@ contract EtherFiOracleTest is TestSetup {
     // existing LP lock + priority-queue lock must not exceed the LP's ETH
     // balance.
     function test_executeTasks_revertsWhenFinalizedWithdrawalExceedsLpLiquidity() public {
-        // Back the on-chain finalized amount with a real 6-ether request, then drop totalValueInLp
-        // below it so the liquidity gate trips.
-        _unpauseWithdrawNFT();
-        _seedLp(10 ether);
-        uint256 requestId = _makeWithdrawRequest(6 ether);
-
-        _forceLpBalanceAndTVIL(5 ether); // totalValueInLp (5) < finalized amount (6)
+        // Deposit a small amount so the LP balance is modest.
+        vm.deal(alice, 5 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 5 ether}();
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
-        report.lastFinalizedWithdrawalRequestId = uint32(requestId);
+        report.finalizedWithdrawalAmount = 6 ether; // 6 > LP balance (5)
 
         _moveClock(1 days / 12);
         _executeAdminTasks(report, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
@@ -1568,6 +1589,7 @@ contract EtherFiOracleTest is TestSetup {
         uint256 lockedBefore = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.finalizedWithdrawalAmount = 6 ether; // <= totalValueInLp (10)
         report.lastFinalizedWithdrawalRequestId = uint32(requestId);
 
         _moveClock(1 days / 12);
@@ -1765,16 +1787,8 @@ contract EtherFiOracleTest is TestSetup {
     }
 
     function test_canExecuteTasks_falseWhenWithdrawalRateAboveCap() public {
-        // On-chain finalized amount (from a real request) exceeds the lowered per-day cap.
-        _unpauseWithdrawNFT();
-        _seedLp(200 ether);
-        uint256 requestId = _makeWithdrawRequest(10 ether);
-
-        vm.prank(alice);
-        etherFiAdminInstance.updateMaxFinalizedWithdrawalAmountPerDay(0.001 ether);
-
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
-        report.lastFinalizedWithdrawalRequestId = uint32(requestId);
+        report.finalizedWithdrawalAmount = 20000 ether; // > 10000 ether/day cap
         _moveClock(1 days / 12);
         _submitForConsensus(report);
 
@@ -1785,14 +1799,12 @@ contract EtherFiOracleTest is TestSetup {
     }
 
     function test_canExecuteTasks_falseWhenFinalizedExceedsLpLiquidity() public {
-        _unpauseWithdrawNFT();
-        _seedLp(10 ether);
-        uint256 requestId = _makeWithdrawRequest(6 ether);
-
-        _forceLpBalanceAndTVIL(5 ether); // totalValueInLp (5) < finalized amount (6)
+        vm.deal(alice, 5 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 5 ether}();
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
-        report.lastFinalizedWithdrawalRequestId = uint32(requestId);
+        report.finalizedWithdrawalAmount = 6 ether; // 6 > LP balance (5)
         _moveClock(1 days / 12);
         _submitForConsensus(report);
 
@@ -1816,24 +1828,84 @@ contract EtherFiOracleTest is TestSetup {
     }
 
     // =====================================================================
-    // _validateReport: lastFinalizedWithdrawalRequestId / on-chain finalized-amount derivation
+    // _validateReport: lastFinalizedWithdrawalRequestId / sum-of-requests gate
     //
-    // The report no longer carries `finalizedWithdrawalAmount`. EtherFiAdmin derives it on-chain
-    // from WithdrawRequestNFT's request prefix-sum:
-    //   getFinalizedWithdrawalAmount(R) = totalRequestedWithdrawalAmount[R]
-    //                                     - totalRequestedWithdrawalAmount[lastFinalizedRequestId]
-    // i.e. the sum of (still-valid) request amounts in (lastFinalizedRequestId, R]. The
-    // report->on-chain sum-mismatch gate was removed (the amount is no longer caller-supplied, so
-    // it cannot disagree); the per-report range cap was also removed. The remaining gates are the
-    // per-day cap, the LP-liquidity bound, and the strict no-backwards-cursor check. Each test
-    // below pins one branch of that logic.
+    // The new sanity check sums valid request amounts in
+    // (state.lastFinalizedRequestId, report.lastFinalizedWithdrawalRequestId]
+    // and requires it to equal report.finalizedWithdrawalAmount. It also
+    // refuses to roll the on-chain cursor backwards. Each test pins one
+    // branch of that logic.
     // =====================================================================
 
-    // Equality edge, valid case: cursor == state, derived amount == 0. The steady-state
-    // "nothing finalized this period" report.
+    // Report claims more was finalized than the on-chain requests sum to.
+    // 1 ether of real request, report says 2 ether → mismatch.
+    function test_canExecuteTasks_falseWhenReportedAmountAboveSum() public {
+        _unpauseWithdrawNFT();
+        _seedLp(10 ether);
+        uint256 r1 = _makeWithdrawRequest(1 ether);
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.lastFinalizedWithdrawalRequestId = uint32(r1);
+        report.finalizedWithdrawalAmount = 2 ether;
+
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: sum of requests does not match finalized withdrawal amount"));
+        etherFiAdminInstance.executeTasks(report);
+    }
+
+    // Symmetric: report claims less than the on-chain sum.
+    // 2 ether of real request, report says 1 ether → mismatch.
+    function test_canExecuteTasks_falseWhenReportedAmountBelowSum() public {
+        _unpauseWithdrawNFT();
+        _seedLp(10 ether);
+        uint256 r1 = _makeWithdrawRequest(2 ether);
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.lastFinalizedWithdrawalRequestId = uint32(r1);
+        report.finalizedWithdrawalAmount = 1 ether;
+
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: sum of requests does not match finalized withdrawal amount"));
+        etherFiAdminInstance.executeTasks(report);
+    }
+
+    // Equality edge: report's cursor == state's cursor. The loop bounds
+    // collapse to zero iterations so sum is 0. A non-zero amount can't be
+    // explained by any request → mismatch. (LP is seeded so the
+    // exceeds-LP-liquidity gate ahead of the sum check doesn't trip first.)
+    function test_canExecuteTasks_falseWhenIdEqualsCursorButAmountNonZero() public {
+        _unpauseWithdrawNFT();
+        _seedLp(10 ether);
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        // state's lastFinalizedRequestId is 0 (fresh setup) and we report 0 too
+        report.lastFinalizedWithdrawalRequestId = 0;
+        report.finalizedWithdrawalAmount = 1 ether;
+
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: sum of requests does not match finalized withdrawal amount"));
+        etherFiAdminInstance.executeTasks(report);
+    }
+
+    // Equality edge, valid case: cursor == state, amount == 0. Loop is a
+    // no-op and sum 0 == amount 0. This is the steady-state "nothing
+    // happened this period" report.
     function test_canExecuteTasks_trueWhenIdEqualsCursorAndAmountZero() public {
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
         report.lastFinalizedWithdrawalRequestId = 0;
+        report.finalizedWithdrawalAmount = 0;
 
         _moveClock(1 days / 12);
         _submitForConsensus(report);
@@ -1841,14 +1913,15 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(etherFiAdminInstance.canExecuteTasks(report), true);
     }
 
-    // Happy path: single valid request, derived amount = its amountOfEEth.
-    function test_canExecuteTasks_trueWhenSingleRequest() public {
+    // Happy path: single valid request, sum matches.
+    function test_canExecuteTasks_trueWhenSumMatchesSingleRequest() public {
         _unpauseWithdrawNFT();
         _seedLp(10 ether);
         uint256 r1 = _makeWithdrawRequest(3 ether);
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
         report.lastFinalizedWithdrawalRequestId = uint32(r1);
+        report.finalizedWithdrawalAmount = 3 ether;
 
         _moveClock(1 days / 12);
         _submitForConsensus(report);
@@ -1859,8 +1932,8 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), uint32(r1));
     }
 
-    // Happy path: the prefix-sum spans many ids; derived amount = 1 + 2 + 3.
-    function test_canExecuteTasks_trueWhenMultipleRequests() public {
+    // Happy path: loop runs over many ids; sum across all of them matches.
+    function test_canExecuteTasks_trueWhenSumMatchesMultipleRequests() public {
         _unpauseWithdrawNFT();
         _seedLp(20 ether);
         _makeWithdrawRequest(1 ether);
@@ -1869,6 +1942,7 @@ contract EtherFiOracleTest is TestSetup {
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
         report.lastFinalizedWithdrawalRequestId = uint32(r3);
+        report.finalizedWithdrawalAmount = 6 ether; // 1 + 2 + 3
 
         _moveClock(1 days / 12);
         _submitForConsensus(report);
@@ -1876,9 +1950,9 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(etherFiAdminInstance.canExecuteTasks(report), true);
     }
 
-    // Invalidating a request decrements the head prefix-sum, so when the report finalizes up to
-    // the head (r3), the derived amount excludes the invalidated r2: 1 + 3 = 4.
-    function test_canExecuteTasks_trueWhenInvalidRequestExcludedFromHead() public {
+    // Invalidated requests are excluded from the sum (request.isValid gates
+    // the accumulator). The oracle must report only the valid total.
+    function test_canExecuteTasks_trueWhenInvalidRequestsExcludedFromSum() public {
         _unpauseWithdrawNFT();
         _seedLp(20 ether);
         _makeWithdrawRequest(1 ether);
@@ -1887,11 +1961,9 @@ contract EtherFiOracleTest is TestSetup {
 
         _invalidateRequest(r2);
 
-        // Derived amount = prefix[r3] - prefix[0] = (1 + 3) = 4 ether (r2 removed from head).
-        assertEq(withdrawRequestNFTInstance.getFinalizedWithdrawalAmount(uint32(r3)), 4 ether);
-
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
         report.lastFinalizedWithdrawalRequestId = uint32(r3);
+        report.finalizedWithdrawalAmount = 4 ether; // 1 + 3; r2 excluded
 
         _moveClock(1 days / 12);
         _submitForConsensus(report);
@@ -1899,8 +1971,32 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(etherFiAdminInstance.canExecuteTasks(report), true);
     }
 
-    // Cleanup scenario: every pending request was invalidated, so the head prefix-sum is 0 and the
-    // derived finalized amount is 0. Cursor still advances past them.
+    // Mirror: if the oracle accidentally counts an invalidated request's
+    // amount, the sum overshoots the on-chain total → revert.
+    function test_canExecuteTasks_falseWhenInvalidRequestIncludedInSum() public {
+        _unpauseWithdrawNFT();
+        _seedLp(20 ether);
+        _makeWithdrawRequest(1 ether);
+        uint256 r2 = _makeWithdrawRequest(2 ether);
+        uint256 r3 = _makeWithdrawRequest(3 ether);
+
+        _invalidateRequest(r2);
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.lastFinalizedWithdrawalRequestId = uint32(r3);
+        report.finalizedWithdrawalAmount = 6 ether; // wrong: still counts r2
+
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: sum of requests does not match finalized withdrawal amount"));
+        etherFiAdminInstance.executeTasks(report);
+    }
+
+    // Cleanup scenario: every pending request was invalidated. Cursor still
+    // advances past them but amount stays 0 and the sum check passes.
     function test_canExecuteTasks_trueWhenAllRequestsInvalidAndAmountZero() public {
         _unpauseWithdrawNFT();
         _seedLp(10 ether);
@@ -1910,10 +2006,9 @@ contract EtherFiOracleTest is TestSetup {
         _invalidateRequest(r1);
         _invalidateRequest(r2);
 
-        assertEq(withdrawRequestNFTInstance.getFinalizedWithdrawalAmount(uint32(r2)), 0);
-
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
         report.lastFinalizedWithdrawalRequestId = uint32(r2);
+        report.finalizedWithdrawalAmount = 0;
 
         _moveClock(1 days / 12);
         _submitForConsensus(report);
@@ -1921,8 +2016,9 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(etherFiAdminInstance.canExecuteTasks(report), true);
     }
 
-    // The cursor cannot move backwards. After processing r1 in a first report, a follow-up with
-    // lastFinalizedWithdrawalRequestId < state's cursor is rejected by the strict `<` guard.
+    // The cursor cannot move backwards. After processing r1 in a first
+    // report, a follow-up with lastFinalizedWithdrawalRequestId < state's
+    // cursor is rejected by the strict `<` guard before the sum loop runs.
     function test_canExecuteTasks_falseWhenIdLessThanStateCursor() public {
         _unpauseWithdrawNFT();
         _seedLp(20 ether);
@@ -1930,6 +2026,7 @@ contract EtherFiOracleTest is TestSetup {
 
         IEtherFiOracle.OracleReport memory firstReport = _emptyOracleReport();
         firstReport.lastFinalizedWithdrawalRequestId = uint32(r1);
+        firstReport.finalizedWithdrawalAmount = 2 ether;
         _moveClock(1 days / 12);
         _executeAdminTasks(firstReport);
 
@@ -1938,6 +2035,7 @@ contract EtherFiOracleTest is TestSetup {
         // Second report points to id 0, less than state's cursor (r1 = 1).
         IEtherFiOracle.OracleReport memory secondReport = _emptyOracleReport();
         secondReport.lastFinalizedWithdrawalRequestId = 0;
+        secondReport.finalizedWithdrawalAmount = 0;
         _moveClock(1 days / 12);
         _submitForConsensus(secondReport);
 
@@ -1947,8 +2045,9 @@ contract EtherFiOracleTest is TestSetup {
         etherFiAdminInstance.executeTasks(secondReport);
     }
 
-    // Cursor advances on each successful report. A second report finalizing only the newly-created
-    // request derives its amount over just the new range (prefix[r2] - prefix[r1]), not r1 again.
+    // Cursor advances on each successful report. A second report finalizing
+    // only the newly-created request sums only over the new range, not the
+    // already-finalized r1.
     function test_canExecuteTasks_trueOnSecondReportAfterCursorAdvances() public {
         _unpauseWithdrawNFT();
         _seedLp(20 ether);
@@ -1956,16 +2055,15 @@ contract EtherFiOracleTest is TestSetup {
 
         IEtherFiOracle.OracleReport memory firstReport = _emptyOracleReport();
         firstReport.lastFinalizedWithdrawalRequestId = uint32(r1);
+        firstReport.finalizedWithdrawalAmount = 1 ether;
         _moveClock(1 days / 12);
         _executeAdminTasks(firstReport);
 
         uint256 r2 = _makeWithdrawRequest(2 ether);
 
-        // Derived amount for the second report = prefix[r2] - prefix[r1] = (1 + 2) - 1 = 2 ether.
-        assertEq(withdrawRequestNFTInstance.getFinalizedWithdrawalAmount(uint32(r2)), 2 ether);
-
         IEtherFiOracle.OracleReport memory secondReport = _emptyOracleReport();
         secondReport.lastFinalizedWithdrawalRequestId = uint32(r2);
+        secondReport.finalizedWithdrawalAmount = 2 ether; // only the new request
 
         _moveClock(1 days / 12);
         _submitForConsensus(secondReport);
@@ -1974,6 +2072,36 @@ contract EtherFiOracleTest is TestSetup {
 
         etherFiAdminInstance.executeTasks(secondReport);
         assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), uint32(r2));
+    }
+
+    // Successive report mistakenly resums from id 0 instead of just the new
+    // range, so the amount double-counts r1 (already finalized). Mismatch
+    // trips the sum gate, not the "id less than cursor" gate.
+    function test_canExecuteTasks_falseOnSecondReportSummingFromZero() public {
+        _unpauseWithdrawNFT();
+        _seedLp(20 ether);
+        uint256 r1 = _makeWithdrawRequest(1 ether);
+
+        IEtherFiOracle.OracleReport memory firstReport = _emptyOracleReport();
+        firstReport.lastFinalizedWithdrawalRequestId = uint32(r1);
+        firstReport.finalizedWithdrawalAmount = 1 ether;
+        _moveClock(1 days / 12);
+        _executeAdminTasks(firstReport);
+
+        uint256 r2 = _makeWithdrawRequest(2 ether);
+
+        IEtherFiOracle.OracleReport memory secondReport = _emptyOracleReport();
+        secondReport.lastFinalizedWithdrawalRequestId = uint32(r2);
+        // Oracle bug: re-counted r1 (already finalized) into the new amount.
+        secondReport.finalizedWithdrawalAmount = 3 ether; // r1 + r2 instead of r2
+
+        _moveClock(1 days / 12);
+        _submitForConsensus(secondReport);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(secondReport), false);
+
+        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: sum of requests does not match finalized withdrawal amount"));
+        etherFiAdminInstance.executeTasks(secondReport);
     }
 
     // ========== EtherFiAdmin finalizeWithdrawalsWhenStale Tests ==========
