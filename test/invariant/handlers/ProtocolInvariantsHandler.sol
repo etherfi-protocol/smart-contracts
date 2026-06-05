@@ -737,11 +737,12 @@ contract ProtocolInvariantsHandler is StdUtils {
         }
     }
 
-    /// (F-007) EXEMPT path. Drives `LP.withdraw(amount, rate)` pranked as
-    /// WRN with an oracle-style rate. This is intentionally an exempt
+    /// (F-007) WRN/PWQ-gated path. Drives `LP.withdraw(amount, share)` pranked
+    /// as WRN, burning `share` of WRN's eETH shares against the OutOfLp budget.
+    /// `withdraw` no longer carries any rate guard, so this is an exempt
     /// rate-deflation vector; the test is that a subsequent non-exempt op
     /// in the SAME sequence still passes its own per-call rate-monotonicity
-    /// check (the deflation from the exempt path lowers (P0, S0) but the
+    /// check (the deflation from this path lowers (P0, S0) but the
     /// non-exempt op's (P0, S0) -> (P1, S1) delta is what matters).
     ///
     /// Pre-conditions:
@@ -790,11 +791,11 @@ contract ProtocolInvariantsHandler is StdUtils {
         uint256 ts = eETH.totalShares();
         if (sharesToBurn >= ts) { callCounts["segClaim_skipped"]++; return; }
 
-        // No `_checkNonExempt` here - this is the EXEMPT path.
-        // Pass `_shareOfEEth = sharesToBurn` so the new guards are no-ops and the handler
-        // reproduces the pre-Option-5 burn behavior exactly.
+        // No `_checkNonExempt` here - this is the gated WRN/PWQ path.
+        // `withdraw(amount, share)` decrements totalValueOutOfLp by `amount`
+        // and burns exactly `sharesToBurn` of WRN's eETH shares.
         vm.prank(wrn);
-        try lp.withdraw(amount, amount, rate, sharesToBurn) {
+        try lp.withdraw(amount, sharesToBurn) {
             ghost_ledgerTPE -= int256(amount);   // ETH leaves LP accounting
             callCounts["segClaim"]++;
         } catch (bytes memory err) {

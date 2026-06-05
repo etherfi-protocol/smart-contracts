@@ -346,9 +346,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
         // ceil(claimable * 1e18 / frozenRate). For pre-upgrade requests the rate is 0
         // and the contract falls back to live `sharesForWithdrawalAmount`.
         uint224 frozenRate = withdrawRequestNFTInstance.frozenRateFor(reqId);
-        uint256 expectedSharesBurned = frozenRate == 0
-            ? liquidityPoolInstance.sharesForWithdrawalAmount(claimable)
-            : Math.mulDiv(claimable, 1e18, uint256(frozenRate), Math.Rounding.Up);
+        uint256 expectedSharesBurned = withdrawRequestNFTInstance.getRequest(reqId).shareOfEEth;
 
         vm.prank(user);
         withdrawRequestNFTInstance.claimWithdraw(reqId);
@@ -561,8 +559,8 @@ contract WithdrawEscrowE2ETest is TestSetup {
         vm.prank(user);
         pQueue.claimWithdraw(req);
 
-        // User received ETH from queue balance. Fee ETH (amountOfEEth - amountWithFee) is
-        // returned to LP via returnLockedEth, so LP raw ETH may increase by up to feeEth.
+        // User received ETH from queue balance. Stranded ETH (amountOfEEth - amountWithFee) is
+        // swept back to LP via LP.receive(), so LP raw ETH may increase by up to that amount.
         assertApproxEqAbs(user.balance, userEthPre + expectedEth, 2,
             "step4: user ETH after claim (2-wei tolerance)");
         assertLt(address(pQueue).balance, preQ.rawEth,

@@ -68,8 +68,6 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         address eeth;
         uint32 nextId;
         uint32 lastFin;
-        uint16 split;
-        uint256 remainder;
         bool paused;
     }
 
@@ -98,8 +96,6 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         s.eeth = address(wrn.eETH());
         s.nextId = wrn.nextRequestId();
         s.lastFin = wrn.lastFinalizedRequestId();
-        s.split = wrn.shareRemainderSplitToTreasuryInBps();
-        s.remainder = wrn.totalRemainderEEthShares();
         s.paused = wrn.paused();
     }
 
@@ -124,8 +120,6 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         assertEq(a.eeth,       b.eeth,       "WRN.eETH");
         assertEq(a.nextId,     b.nextId,     "WRN.nextRequestId");
         assertEq(a.lastFin,    b.lastFin,    "WRN.lastFinalizedRequestId");
-        assertEq(a.split,      b.split,      "WRN.split");
-        assertEq(a.remainder,  b.remainder,  "WRN.remainder");
         assertEq(a.paused,     b.paused,     "WRN.paused");
     }
 

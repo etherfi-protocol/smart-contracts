@@ -197,6 +197,19 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     //--------------------------------------------------------------------------------------
+    //----------------------------  RECEIVE FUNCTIONS  -------------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Receive ETH
+     */
+    receive() external payable {
+        if (msg.value > type(uint128).max) revert InvalidAmount();
+        totalValueOutOfLp -= uint128(msg.value);
+        totalValueInLp += uint128(msg.value);
+        _checkTotalValueInLp();
+    }
+
+    //--------------------------------------------------------------------------------------
     //----------------------------  DEPOSIT FUNCTIONS  -------------------------------------
     //--------------------------------------------------------------------------------------
     /**
@@ -285,71 +298,30 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     /**
      * @notice Settles a finalized claim for withdrawRequestNFT or priorityWithdrawalQueue.
-     * @param _amount The amount of ETH paid to the claimer
-     * @param _amountOfEEth The fulfill-time credit to remove from `totalValueOutOfLp`. Must
-     *        equal what was credited at fulfill/lock, not `_amount` (the two diverge on a
-     *        down-rebase). See the trust-model note below.
-     * @param _rate The rate of the withdraw
-     * @param _shareOfEEth The share of eETH to withdraw
-     * @return uint256 The amount of eETH burned
-     * @dev Only callable by the withdrawRequestNFT or the priorityWithdrawalQueue
-     * Caller supplies the snapshotted rate and the request's share allocation;
-     * LP derives the share burn defensively from both inputs and current live rate.
-     * Three guards bound caller-supplied inputs without trusting any single one:
-     * (1) `_amount <= _shareOfEEth * _rate / SHARE_UNIT` — caps `_amount` at the
-     *     rate-implied value of `_shareOfEEth`. Defeats isolated `_amount` inflation
-     *     when `_rate` is honest. (Does NOT catch proportional `_amount`/`_rate`
-     *     co-inflation — see residual below.)
-     * (2) Burn at `max(amount/_rate, amount/live)` shares — Lido-pattern worse-for-
-     *     protocol clamp. An inflated `_rate` is silently floored to live; the protocol
-     *     burns at the honest live rate regardless of what the caller passed.
-     * (3) Share burn capped at `_shareOfEEth` — per-call cap on burn. Un-DoSes
-     *     legitimate down-rebase claims (where `amount/live > shareOfEEth`).
-     * `_shareOfEEth` MUST be the request-time share snapshot, not a live-derived value.
-     * If a future caller refactor breaks this invariant, Guard 3's cap silently loosens.
-     * LP cannot independently verify this — the caller (WRN / PWQ) is trusted to pass
-     * the snapshot honestly. The downstream `eETH.shares(msg.sender) < share` solvency
-     * check is the only bound against caller-asserted `_shareOfEEth` exceeding the
-     * caller's actual share holdings; it does NOT enforce a per-request bound.
-     * Residual: a caller corrupted in MULTIPLE inputs simultaneously (e.g. proportional
-     * `_amount` and `_rate` inflation) can bypass Guard 1 and Guard 2. The remaining
-     * bound is `eETH.shares(msg.sender)` (aggregate caller holdings), not per-request.
-     * This is the documented limit of LP-local defense; tighter bounds would require
-     * a per-request ledger on the LP side.
+     * @param _amount The amount of ETH paid to the claimer; the credit removed from `totalValueOutOfLp`.
+     * @param _share The full share allocation of the request, burned in its entirety.
+     * @dev Only callable by the withdrawRequestNFT or the priorityWithdrawalQueue.
+     * The caller (WRN / PWQ) supplies the request's full share snapshot and the ETH amount to pay;
+     * LP burns the full `_share` and unwinds the matching `_amount` from `totalValueOutOfLp`.
+     * Burning the full share (rather than a rate-derived subset) removes the dust/remainder
+     * that the prior rate-based burn left behind, so no separate remainder-handling flow is needed.
+     * `_share` MUST be the request-time share snapshot; LP cannot independently verify this and
+     * trusts the caller to pass it honestly. The `eETH.shares(msg.sender) < _share` solvency check
+     * is the only bound against the caller burning more than its actual holdings.
      * ETH was already segregated to the caller at finalize/fulfill via
      * `addEthAmountLockedForWithdrawal` / `transferLockedEthForPriority`; LP only
      * performs accounting (burn + `totalValueOutOfLp -=`).
-     * `_amountOfEEth` is trusted caller state, not bounded by Guards 1-3; the checked
-     * `totalValueOutOfLp -= _amountOfEEth` is the only backstop (reverts on over-assertion).
-     * A negative rebase that drops `totalValueOutOfLp` below it reverts the claim
+     * A negative rebase that drops `totalValueOutOfLp` below `_amount` reverts the claim
      * (finalized-withdrawal DoS, bounded by EtherFiAdmin's rebase-APR cap).
     */
-    function withdraw(uint256 _amount, uint256 _amountOfEEth, uint256 _rate, uint256 _shareOfEEth) external nonReentrant returns (uint256) {
+    function withdraw(uint256 _amount, uint256 _share) external nonReentrant {
         if (msg.sender != address(withdrawRequestNFT) && msg.sender != address(priorityWithdrawalQueue)) {
             revert IncorrectCaller();
         }
-        if (_amount > type(uint128).max || _amount == 0) revert InvalidAmount();
-        if (_rate == 0) revert InvalidRate();
+        if (_amount > type(uint128).max || _amount == 0 || _share == 0) revert InvalidAmount();
 
-        // Guard 1: amount-cap against rate-implied entitlement of the request's allocation.
-        uint256 amountCap = Math.mulDiv(_shareOfEEth, _rate, SHARE_UNIT, Math.Rounding.Down);
-        if (_amount > amountCap) revert InvalidAmount();
-
-        // Guard 2: burn at the worse-for-protocol rate (the higher share count).
-        uint256 shareAtFrozen = Math.mulDiv(_amount, SHARE_UNIT, _rate, Math.Rounding.Up);
-        uint256 shareAtLive = Math.mulDiv(_amount, SHARE_UNIT, amountPerShareCeil(), Math.Rounding.Up);
-        uint256 share = Math.max(shareAtFrozen, shareAtLive);
-
-        // Guard 3: cap at the caller-asserted per-request allocation.
-        if (share > _shareOfEEth) share = _shareOfEEth;
-
-        if (share == 0) revert InvalidAmount();
-        if (eETH.shares(msg.sender) < share) revert InsufficientLiquidity();
-
-        totalValueOutOfLp -= uint128(_amountOfEEth);
-        eETH.burnShares(msg.sender, share);
-
-        return share;
+        totalValueOutOfLp -= uint128(_amount);
+        eETH.burnShares(msg.sender, _share);
     }
 
     /**
@@ -545,20 +517,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     /**
-     * @notice Returns ETH from the priority queue back to LP on a finalized cancel. Inverse of transferLockedEthForPriority.
-     * @param _amount The amount of ETH to return
-     * @dev Only callable by the priorityWithdrawalQueue
-     */
-    function returnLockedEth(uint128 _amount) external payable {
-        if (msg.sender != address(priorityWithdrawalQueue)) revert IncorrectCaller();
-        if (msg.value != _amount || _amount == 0) revert InvalidAmount();
-        totalValueOutOfLp -= uint128(_amount);
-        totalValueInLp    += uint128(_amount);
-
-        _checkTotalValueInLp();
-    }
-
-    /**
      * @notice Burns eETH shares
      * @param shares The amount of eETH shares to burn
      * @dev Only callable by the etherFiRedemptionManager, the withdrawRequestNFT or the priorityWithdrawalQueue
@@ -586,16 +544,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
         eETH.burnShares(msg.sender, _amountSharesToBurn);
         emit EEthSharesBurnedForNonETHWithdrawal(_amountSharesToBurn, _withdrawalValueInETH);
-    }
-
-    /**
-     * @notice Receive ETH
-     */
-    receive() external payable {
-        if (msg.value > type(uint128).max) revert InvalidAmount();
-        totalValueOutOfLp -= uint128(msg.value);
-        totalValueInLp += uint128(msg.value);
-        _checkTotalValueInLp();
     }
 
     //--------------------------------------------------------------------------------------

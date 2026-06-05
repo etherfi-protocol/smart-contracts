@@ -45,10 +45,8 @@ contract PriorityWithdrawalQueue is
     mapping(address => bool) public isWhitelisted;
 
     uint32 public nonce;
-    uint16 public shareRemainderSplitToTreasuryInBps;
     // deprecated storage slot
-    uint8 private __gap_0;
-    uint96 public totalRemainderShares;
+    uint120 private __gap_0;
     uint128 public ethAmountLockedForPriorityWithdrawal;
 
     //--------------------------------------------------------------------------------------
@@ -66,8 +64,6 @@ contract PriorityWithdrawalQueue is
     //--------------------------------------------------------------------------------------
     uint96 public constant MIN_AMOUNT = 0.01 ether;
     uint96 public constant MAX_AMOUNT = 1000 ether;
-    uint256 private constant _BASIS_POINT_SCALE = 1e4;
-    uint256 public constant SHARE_UNIT = 1e18;
     uint256 private constant _TOLERANCE_BUFFER = 10; // in wei to account for rounding errors
 
     //--------------------------------------------------------------------------------------
@@ -87,8 +83,6 @@ contract PriorityWithdrawalQueue is
     event WithdrawRequestClaimed(bytes32 indexed requestId, address indexed user, uint96 amountOfETHtoWithdraw, uint96 sharesBurned, uint32 nonce, uint32 timestamp);
     event WithdrawRequestInvalidated(bytes32 indexed requestId, uint96 amountOfEEth, uint96 sharesOfEEth, uint32 nonce, uint32 timestamp);
     event WhitelistUpdated(address indexed user, bool status);
-    event RemainderHandled(uint96 amountToTreasury, uint96 sharesOfEEthToBurn);
-    event ShareRemainderSplitUpdated(uint16 newSplitInBps);
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ERRORS  ---------------------------------------
@@ -153,7 +147,6 @@ contract PriorityWithdrawalQueue is
         __UUPSUpgradeable_init();
 
         nonce = 1;
-        shareRemainderSplitToTreasuryInBps = uint16(_BASIS_POINT_SCALE); // 100%
     }
 
     //--------------------------------------------------------------------------------------
@@ -377,38 +370,6 @@ contract PriorityWithdrawalQueue is
         }
     }
 
-    /**
-     * @notice Handle remainder shares (from rounding differences)
-     * @param eEthAmount Amount of eETH remainder to handle
-     * @dev Splits the remainder into two parts:
-     *      - Treasury: gets a percentage of the remainder based on shareRemainderSplitToTreasuryInBps
-     *      - Burn: the rest of the remainder is burned
-     */
-    function handleRemainder(uint256 eEthAmount) external onlyHousekeepingOperations {
-        if (eEthAmount == 0) revert BadInput();
-        if (eEthAmount > liquidityPool.amountForShare(totalRemainderShares)) revert BadInput();
-
-        uint256 beforeEEthShares = eETH.shares(address(this));
-
-        uint256 eEthAmountToTreasury = eEthAmount.mulDiv(
-            shareRemainderSplitToTreasuryInBps,
-            _BASIS_POINT_SCALE,
-            Math.Rounding.Up
-        );
-        uint256 eEthAmountToBurn = eEthAmount - eEthAmountToTreasury;
-        uint256 eEthSharesToBurn = liquidityPool.sharesForAmount(eEthAmountToBurn);
-        uint256 eEthSharesMoved = eEthSharesToBurn + liquidityPool.sharesForAmount(eEthAmountToTreasury);
-
-        totalRemainderShares -= uint96(eEthSharesMoved);
-
-        if (eEthAmountToTreasury > 0) IERC20(address(eETH)).safeTransfer(treasury, eEthAmountToTreasury);
-        if (eEthSharesToBurn > 0) liquidityPool.burnEEthShares(eEthSharesToBurn);
-
-        if (beforeEEthShares - eEthSharesMoved != eETH.shares(address(this))) revert InvalidEEthSharesAfterRemainderHandling();
-
-        emit RemainderHandled(uint96(eEthAmountToTreasury), uint96(eEthSharesToBurn));
-    }
-
     //--------------------------------------------------------------------------------------
     //-----------------------------------  ADMIN FUNCTIONS  --------------------------------
     //--------------------------------------------------------------------------------------
@@ -443,16 +404,6 @@ contract PriorityWithdrawalQueue is
             isWhitelisted[users[i]] = statuses[i];
             emit WhitelistUpdated(users[i], statuses[i]);
         }
-    }
-
-    /**
-     * @notice Update the share remainder split to treasury
-     * @param _shareRemainderSplitToTreasuryInBps The new share remainder split to treasury in basis points
-     */
-    function updateShareRemainderSplitToTreasury(uint16 _shareRemainderSplitToTreasuryInBps) external onlyAdmin {
-        if (_shareRemainderSplitToTreasuryInBps > _BASIS_POINT_SCALE) revert BadInput();
-        shareRemainderSplitToTreasuryInBps = _shareRemainderSplitToTreasuryInBps;
-        emit ShareRemainderSplitUpdated(_shareRemainderSplitToTreasuryInBps);
     }
 
     //--------------------------------------------------------------------------------------
@@ -521,7 +472,7 @@ contract PriorityWithdrawalQueue is
         uint256 userEthBefore,
         address user
     ) internal view {
-        // LP ETH balance may increase by feeEth (returned from queue to LP via returnLockedEth).
+        // LP ETH balance may increase by the stranded ETH swept from the queue back to LP (via LP.receive()).
         if (liquidityPool.totalValueInLp() < lpEthBefore) revert UnexpectedBalanceChange();
         if (eETH.shares(address(this)) >= queueEEthSharesBefore) revert UnexpectedBalanceChange();
         // Queue paid ETH to the user (and optionally fee back to LP) from its own escrow balance.
@@ -591,7 +542,11 @@ contract PriorityWithdrawalQueue is
         if (!removedFromPending) revert RequestNotFound();
     }
 
-    /// @dev On a finalized cancel, returns the locked ETH to LP via LP.returnLockedEth. Pending cancels do not move ETH.
+     /**
+      * @notice On a finalized cancel, returns the locked ETH to LP via a plain ETH transfer (LP's receive() re-credits it). Pending cancels do not move ETH.
+      * @param request The withdrawal request to cancel
+      * @return requestId The hash-based ID of the cancelled withdrawal request
+      */
     function _cancelWithdrawRequest(WithdrawRequest calldata request) internal returns (bytes32 requestId) {
         requestId = keccak256(abi.encode(request));
         
@@ -601,7 +556,8 @@ contract PriorityWithdrawalQueue is
 
         if (wasFinalized) {
             ethAmountLockedForPriorityWithdrawal -= uint128(request.amountOfEEth);
-            liquidityPool.returnLockedEth{value: request.amountOfEEth}(request.amountOfEEth);
+            (bool ok, ) = payable(address(liquidityPool)).call{value: request.amountOfEEth}("");
+            if (!ok) revert EthTransferFailed();
             _checkEthAmountLockedForPriorityWithdrawal();
         }
 
@@ -634,39 +590,26 @@ contract PriorityWithdrawalQueue is
 
         ethAmountLockedForPriorityWithdrawal -= uint128(request.amountOfEEth);
 
-        // Derive `rate` from the request's own (amountWithFee, shareOfEEth) instead of using
-        // the live rate. This makes LP's Guard 1 (`_amount <= _shareOfEEth * _rate / SHARE_UNIT`)
-        // admit `amountToWithdraw` by construction (ceiling rounding ensures
-        // `shareOfEEth * derivedRate / SHARE_UNIT >= amountWithFee`), eliminating a sub-tolerance
-        // rate-drop DoS where PWQ's 10-wei `_TOLERANCE_BUFFER` admits but Guard 1's tighter
-        // ceil/floor combo reverts. Burn semantics are unchanged: Guard 2's max-clamp picks
-        // `shareAtLive` if live dropped, and Guard 3 caps at `shareOfEEth` — the request's
-        // own allocation, which is also the existing PWQ-side expectation.
-        uint256 rate = Math.mulDiv(amountToWithdraw, SHARE_UNIT, request.shareOfEEth, Math.Rounding.Up);
-        // `withdraw` unwinds only its share of the fulfill-time `totalValueOutOfLp` credit
-        // (`amountToWithdraw`); the remaining `feeEth` is unwound below by `returnLockedEth`.
-        // Together they sum to `request.amountOfEEth` — the amount credited at fulfill. Passing
-        // the full `amountOfEEth` here would double-count `feeEth` (once here, once in returnLockedEth).
-        uint256 burnedShares = liquidityPool.withdraw(amountToWithdraw, amountToWithdraw, rate, request.shareOfEEth);
-
-        uint256 remainder = request.shareOfEEth > burnedShares 
-            ? request.shareOfEEth - burnedShares 
-            : 0;
-        totalRemainderShares += uint96(remainder);
+        // `withdraw` pays out `amountToWithdraw` and unwinds the matching `totalValueOutOfLp` credit,
+        // while burning the request's full `shareOfEEth`. Any escrowed ETH beyond `amountToWithdraw`
+        // (e.g. the fee portion of the fulfill-time credit) is swept back to LP below as stranded ETH.
+        liquidityPool.withdraw(amountToWithdraw, request.shareOfEEth);
 
         if (address(this).balance < amountToWithdraw) revert InsufficientEscrow();
         (bool ok, ) = payable(request.user).call{value: amountToWithdraw}("");
         if (!ok) revert EthTransferFailed();
 
-        // Return fee ETH (amountOfEEth - amountWithFee) to LP to keep queue balance clean
-        // and unwind the over-credited totalValueOutOfLp from fulfillRequests time.
-        uint128 feeEth = uint128(request.amountOfEEth) - amountToWithdraw;
-        if (feeEth > 0) {
-            liquidityPool.returnLockedEth{value: feeEth}(feeEth);
+        // Return any stranded ETH (balance above what is still locked) to LP. Guarded so an
+        // under-funded queue (balance < locked) reverts cleanly via the invariant check below
+        // rather than underflowing here.
+        if (address(this).balance > ethAmountLockedForPriorityWithdrawal) {
+            uint256 strandedEth = address(this).balance - ethAmountLockedForPriorityWithdrawal;
+            (bool okStranded, ) = payable(address(liquidityPool)).call{value: strandedEth}("");
+            if (!okStranded) revert EthTransferFailed();
         }
         _checkEthAmountLockedForPriorityWithdrawal();
 
-        emit WithdrawRequestClaimed(requestId, request.user, uint96(amountToWithdraw), uint96(burnedShares), request.nonce, uint32(block.timestamp));
+        emit WithdrawRequestClaimed(requestId, request.user, uint96(amountToWithdraw), request.shareOfEEth, request.nonce, uint32(block.timestamp));
     }
 
     /**
@@ -783,14 +726,6 @@ contract PriorityWithdrawalQueue is
      */
     function totalActiveRequests() external view returns (uint256) {
         return _withdrawRequests.length();
-    }
-
-    /**
-     * @notice Gets the remainder amount
-     * @return remainderAmount The remainder amount
-     */
-    function getRemainderAmount() external view returns (uint256) {
-        return liquidityPool.amountForShare(totalRemainderShares);
     }
 
     /**
