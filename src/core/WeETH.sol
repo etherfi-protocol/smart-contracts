@@ -174,51 +174,6 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
     }
 
     //--------------------------------------------------------------------------------------
-    //----------------------  PER-ADDRESS RATE LIMIT MANAGEMENT  ---------------------------
-    //--------------------------------------------------------------------------------------
-    // Thin role-gated wrappers around the internal helpers in RateLimitedToken.
-    // For a single user, pass a length-1 array.
-
-    /**
-     * @notice Tightens the address rate limits
-     * @param users the addresses of the users
-     * @param capacities the capacities of the users
-     * @param refillRates the refill rates of the users
-     * @dev Only callable by the guardian
-     */
-    function tightenAddressRateLimits(
-        address[] calldata users,
-        uint64[] calldata capacities,
-        uint64[] calldata refillRates
-    ) external onlyGuardian {
-        _tightenAddressRateLimits(users, capacities, refillRates);
-    }
-
-    /**
-     * @notice Sets the address rate limits
-     * @param users the addresses of the users
-     * @param capacities the capacities of the users
-     * @param refillRates the refill rates of the users
-     * @dev Only callable by the operating multisig
-     */
-    function setAddressRateLimits(
-        address[] calldata users,
-        uint64[] calldata capacities,
-        uint64[] calldata refillRates
-    ) external onlyOperatingMultisig {
-        _setAddressRateLimits(users, capacities, refillRates);
-    }
-
-    /**
-     * @notice Deletes the address rate limits
-     * @param users the addresses of the users
-     * @dev Only callable by the operating multisig
-     */
-    function deleteAddressRateLimits(address[] calldata users) external onlyOperatingMultisig {
-        _deleteAddressRateLimits(users);
-    }
-
-    //--------------------------------------------------------------------------------------
     //--------------------------------  PAUSING FUNCTIONS  ---------------------------------
     //--------------------------------------------------------------------------------------
     /**
@@ -288,7 +243,6 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
         blacklister.nonBlacklisted(to);
         blacklister.nonBlacklisted(msg.sender);
 
-        uint64 amt = toBucketUnit(amount);
         bytes32 slot = _WRAP_CTX_SLOT;
         uint256 wrapCtx;
         assembly { wrapCtx := tload(slot) }
@@ -296,17 +250,12 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
         if (from == address(0)) {
             // mint: value-neutral wraps skip the global; everything else (bridge,
             // future mint authority, exploit) trips the global circuit breaker.
-            if (wrapCtx == 0) rateLimiter.consumeToken(WEETH_MINT_LIMIT_ID, amt);
-            rateLimiter.consumeForAddressIfConfigured(to, amt);
+            if (wrapCtx == 0) rateLimiter.consumeToken(WEETH_MINT_LIMIT_ID, toBucketUnit(amount));
         } else if (to == address(0)) {
             // burn: same — unwrap is value-neutral; anything else trips global BURN.
-            if (wrapCtx == 0) rateLimiter.consumeToken(WEETH_BURN_LIMIT_ID, amt);
-            rateLimiter.consumeForAddressIfConfigured(from, amt);
-        } else {
-            // transfer: no supply change, per-address only.
-            rateLimiter.consumeForAddressIfConfigured(from, amt);
-            rateLimiter.consumeForAddressIfConfigured(to,   amt);
+            if (wrapCtx == 0) rateLimiter.consumeToken(WEETH_BURN_LIMIT_ID, toBucketUnit(amount));
         }
+        // transfer (from != 0 && to != 0): no supply change, not rate-limited.
     }
 
     /**

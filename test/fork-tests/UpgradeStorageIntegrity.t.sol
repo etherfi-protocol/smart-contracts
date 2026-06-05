@@ -66,11 +66,8 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
     struct WRNSnap {
         address lp;
         address eeth;
-        address membership;
         uint32 nextId;
         uint32 lastFin;
-        uint16 split;
-        uint256 remainder;
         bool paused;
     }
 
@@ -97,11 +94,8 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
     function _snapWRN(WithdrawRequestNFT wrn) internal view returns (WRNSnap memory s) {
         s.lp = address(wrn.liquidityPool());
         s.eeth = address(wrn.eETH());
-        s.membership = address(wrn.membershipManager());
         s.nextId = wrn.nextRequestId();
         s.lastFin = wrn.lastFinalizedRequestId();
-        s.split = wrn.shareRemainderSplitToTreasuryInBps();
-        s.remainder = wrn.totalRemainderEEthShares();
         s.paused = wrn.paused();
     }
 
@@ -124,11 +118,8 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
     function _assertWRNEq(WRNSnap memory a, WRNSnap memory b) internal {
         assertEq(a.lp,         b.lp,         "WRN.liquidityPool");
         assertEq(a.eeth,       b.eeth,       "WRN.eETH");
-        assertEq(a.membership, b.membership, "WRN.membershipManager");
         assertEq(a.nextId,     b.nextId,     "WRN.nextRequestId");
         assertEq(a.lastFin,    b.lastFin,    "WRN.lastFinalizedRequestId");
-        assertEq(a.split,      b.split,      "WRN.split");
-        assertEq(a.remainder,  b.remainder,  "WRN.remainder");
         assertEq(a.paused,     b.paused,     "WRN.paused");
     }
 
@@ -227,7 +218,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
                 membershipManager: MEMBERSHIP_MANAGER
             })
         ));
-        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), ETHERFI_ADMIN));
+        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, EETH, LIQUIDITY_POOL, ROLE_REGISTRY, address(blacklisterInstance), ETHERFI_ADMIN));
 
         // ------------------------------------------------------------------
         // 3. Upgrade the proxies in place
@@ -416,7 +407,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
                 membershipManager: MEMBERSHIP_MANAGER
             })
         ));
-        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), ETHERFI_ADMIN));
+        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, EETH, LIQUIDITY_POOL, ROLE_REGISTRY, address(blacklisterInstance), ETHERFI_ADMIN));
         address newPQ = address(new PriorityWithdrawalQueue(
             LIQUIDITY_POOL, EETH, WEETH, address(blacklisterInstance), ROLE_REGISTRY, TREASURY, 1 hours
         ));

@@ -34,8 +34,8 @@ import "@etherfi/deposits/Liquifier.sol";
 import "@etherfi/restaking/EtherFiRestaker.sol";
 import "@etherfi/core/EETH.sol";
 import "@etherfi/core/WeETH.sol";
-import "@etherfi/membership/MembershipManager.sol";
-import "@etherfi/membership/MembershipNFT.sol";
+import "@etherfi/archive/membership/MembershipManager.sol";
+import "@etherfi/archive/membership/MembershipNFT.sol";
 import "@etherfi/archive/EarlyAdopterPool.sol";
 import "@etherfi/archive/TVLOracle.sol";
 import "@etherfi/utils/UUPSProxy.sol";
@@ -45,7 +45,7 @@ import "@tests/common/DepositDataGeneration.sol";
 import "@tests/common/DepositContract.sol";
 import "@tests/TestERC20.sol";
 
-import "@etherfi/archive/MembershipManagerV0.sol";
+import "@etherfi/archive/membership/MembershipManagerV0.sol";
 import "@etherfi/oracle/EtherFiOracle.sol";
 import "@etherfi/oracle/EtherFiAdmin.sol";
 import "@etherfi/oracle/interfaces/IEtherFiAdmin.sol";
@@ -616,7 +616,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             deployed.WITHDRAW_REQUEST_NFT_BUYBACK_SAFE(),
             address(eETHInstance),
             address(liquidityPoolInstance),
-            address(membershipManagerV1Instance),
             address(roleRegistryInstance),
             address(blacklisterInstance),
             address(etherFiAdminInstance)
@@ -644,7 +643,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 auctionManager: address(auctionInstance),
                 etherFiNodesManager: address(managerInstance),
                 liquidityPool: address(liquidityPoolInstance),
-                membershipManager: address(membershipManagerV1Instance),
                 withdrawRequestNft: address(withdrawRequestNFTInstance),
                 roleRegistry: address(roleRegistryInstance),
                 priorityWithdrawalQueue: address(priorityQueueInstance)
@@ -1214,7 +1212,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(treasuryInstance),
             address(eETHProxy),
             address(liquidityPoolProxy),
-            address(membershipManagerProxy),
             address(roleRegistryInstance),
             address(blacklisterInstance),
             address(etherFiAdminProxy)
@@ -1248,7 +1245,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 auctionManager: address(auctionManagerProxy),
                 etherFiNodesManager: address(etherFiNodeManagerProxy),
                 liquidityPool: address(liquidityPoolProxy),
-                membershipManager: address(membershipManagerProxy),
                 withdrawRequestNft: address(withdrawRequestNFTProxy),
                 roleRegistry: address(roleRegistryInstance),
                 priorityWithdrawalQueue: address(priorityQueueProxy)
@@ -1346,18 +1342,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // guard requires. We're inside an active `vm.startPrank(owner)` block here and
         // `owner` was granted UPGRADE_TIMELOCK_ROLE in Phase 1, so no extra prank needed.
         withdrawRequestNFTInstance.initializeShareRateFreezeUpgrade();
-        // initializeOnUpgrade now reverts (checks immutable roleRegistry == 0). Set the
-        // share-remainder split + paused state it used to bootstrap directly.
-        withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(1000);
-        {
-            // Slot 306 packs (nextRequestId, lastFinalizedRequestId, shareRemainderSplit,
-            // _unused_gap, currentRequestIdToScanFromForShareRemainder, lastRequestIdToScanUntilForShareRemainder).
-            // currentRequestIdToScanFromForShareRemainder sits at bytes 12-15 (bits 96-127).
-            bytes32 slot306 = vm.load(address(withdrawRequestNFTInstance), bytes32(uint256(306)));
-            uint256 mask = ~(uint256(0xffffffff) << 96);
-            bytes32 updated = bytes32((uint256(slot306) & mask) | (uint256(1) << 96));
-            vm.store(address(withdrawRequestNFTInstance), bytes32(uint256(306)), updated);
-        }
 
         membershipManagerInstance.initialize(
             address(eETHInstance),
@@ -1556,7 +1540,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 auctionManager: address(auctionInstance),
                 etherFiNodesManager: address(managerInstance),
                 liquidityPool: address(liquidityPoolInstance),
-                membershipManager: address(membershipManagerInstance),
                 withdrawRequestNft: address(withdrawRequestNFTInstance),
                 roleRegistry: address(roleRegistryInstance),
                 priorityWithdrawalQueue: address(priorityQueueInstance)
@@ -1579,7 +1562,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 auctionManager: address(auctionInstance),
                 etherFiNodesManager: address(managerInstance),
                 liquidityPool: address(liquidityPoolInstance),
-                membershipManager: address(membershipManagerInstance),
                 withdrawRequestNft: address(withdrawRequestNFTInstance),
                 roleRegistry: address(roleRegistryInstance),
                 priorityWithdrawalQueue: address(priorityQueueInstance)
@@ -1755,7 +1737,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(eETHInstance),
             address(liquidityPoolInstance),
             address(membershipNftInstance),
-            address(etherFiAdminInstance),
             address(roleRegistryInstance),
             address(blacklisterInstance)
         );
@@ -1891,13 +1872,13 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     ///         so applying the chunks back-to-back leaves the final TVL and share rate
     ///         identical to a single rebase of `_amount` — every post-rebase assertion holds.
     ///         Negative/zero rebases are applied in a single call (no positive cap applies).
-    /// @dev Pranks the LP's registered membership manager, so it works in both the unit
+    /// @dev Pranks the LP's registered etherFiAdmin contract, so it works in both the unit
     ///      setup and mainnet-fork setups regardless of which instance is wired in.
     function _rebaseUncapped(int128 _amount) internal {
-        address mm = liquidityPoolInstance.membershipManager();
+        address admin = liquidityPoolInstance.etherFiAdminContract();
         if (_amount <= 0) {
-            vm.prank(mm);
-            liquidityPoolInstance.rebase(_amount);
+            vm.prank(admin);
+            liquidityPoolInstance.rebase(_amount, 0);
             return;
         }
         uint256 remaining = uint256(uint128(_amount));
@@ -1906,8 +1887,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 * liquidityPoolInstance.MAX_POSITIVE_REBASE_BPS()) / 10_000;
             require(maxIncrease > 0, "_rebaseUncapped: TVL too small for a positive rebase");
             uint256 chunk = remaining < maxIncrease ? remaining : maxIncrease;
-            vm.prank(mm);
-            liquidityPoolInstance.rebase(int128(uint128(chunk)));
+            vm.prank(admin);
+            liquidityPoolInstance.rebase(int128(uint128(chunk)), 0);
             remaining -= chunk;
         }
     }

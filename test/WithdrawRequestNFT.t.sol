@@ -13,7 +13,7 @@ contract WithdrawRequestNFTIntrusive is WithdrawRequestNFT {
 
     // roleRegistry must be non-zero — _authorizeUpgrade now defers to it for upgrade auth,
     // so a zero immutable would brick the swap-back step in updateParam.
-    constructor(address _roleRegistry) WithdrawRequestNFT(address(0), address(0), address(0), address(0), _roleRegistry, address(0), address(0)) {}
+    constructor(address _roleRegistry) WithdrawRequestNFT(address(0), address(0), address(0), _roleRegistry, address(0), address(0)) {}
 
     /// @dev Test-only: advance `lastFinalizedRequestId` without going through `finalizeRequests`,
     ///      simulating the pre-upgrade state where no rate snapshot was captured.
@@ -137,7 +137,9 @@ contract WithdrawRequestNFTTest is TestSetup {
         withdrawRequestNFTInstance.claimWithdraw(requestId);
     }
 
-    function test_ClaimWithdrawOfOthers() public {
+    // Claims are now permissionless: a non-owner caller succeeds and the NFT owner is paid.
+    // (Was test_ClaimWithdrawOfOthers, which asserted a NotTheOwner revert.)
+    function test_PermissionlessClaim_PaysOwner() public {
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 10 ether}();
         vm.stopPrank();
@@ -152,9 +154,19 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.prank(bob);
         uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, amountOfEEth);
 
-        vm.expectRevert(WithdrawRequestNFT.NotTheOwner.selector);
+        _finalizeWithdrawalRequest(requestId);
+
+        uint256 bobBalanceBefore = address(bob).balance;
+
+        // alice (not the owner) claims; the owner (bob) must receive the ETH.
         vm.prank(alice);
         withdrawRequestNFTInstance.claimWithdraw(requestId);
+
+        assertEq(address(bob).balance - bobBalanceBefore, 1 ether, "Owner (bob) should receive the ETH");
+
+        // NFT is burned after claim.
+        vm.expectRevert("ERC721: invalid token ID");
+        withdrawRequestNFTInstance.ownerOf(requestId);
     }
 
     function test_ValidClaimWithdraw1() public {
@@ -197,7 +209,8 @@ contract WithdrawRequestNFTTest is TestSetup {
         uint256 bobsEndingBalance = address(bob).balance;
 
         assertEq(bobsEndingBalance, bobsStartingBalance + 1 ether, "Bobs balance should be 1 ether higher");
-        assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 1 ether, "eETH balance should be 1 ether");
+        // The claim now burns the request's FULL share allocation (1 share), leaving no remainder.
+        assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 0 ether, "eETH balance should be 0 after full-share burn");
     }
 
     function test_ValidClaimWithdrawWithNegativeRebase() public {
@@ -222,8 +235,8 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.prank(bob);
         uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
 
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(-35 ether);
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.rebase(-35 ether, 0);
 
         assertEq(withdrawRequestNFTInstance.balanceOf(bob), 1, "Bobs balance should be 1");
         assertEq(withdrawRequestNFTInstance.ownerOf(requestId), bob, "Bobs should own the NFT");
@@ -347,26 +360,6 @@ contract WithdrawRequestNFTTest is TestSetup {
         _finalizeWithdrawalRequest(requestId);
     }
 
-    function test_handleRemainder() public {
-        initializeRealisticFork(MAINNET_FORK);
-        vm.startPrank(address(roleRegistryInstance.owner()));
-        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(
-            address(buybackWallet),
-            address(eETHInstance),
-            address(liquidityPoolInstance),
-            address(membershipManagerInstance),
-            address(roleRegistryInstance),
-            address(blacklisterInstance),
-            address(etherFiAdminInstance)
-        )));
-        // IMPLICIT_FEE_CLAIMER_ROLE consolidated into HOUSEKEEPING_OPERATIONS_ROLE.
-        roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), alice);
-        vm.stopPrank();
-        uint256 implicitFee = withdrawRequestNFTInstance.getEEthRemainderAmount();
-        vm.prank(alice);
-        withdrawRequestNFTInstance.handleRemainder(implicitFee);
-    }
-
     function testFuzz_RequestWithdraw(uint96 depositAmount, uint96 withdrawAmount, address recipient) public {
         // Assume valid conditions — withdraw amount must satisfy [minWithdrawAmount, maxWithdrawAmount].
         vm.assume(depositAmount >= 1 ether && depositAmount <= 1000 ether);
@@ -417,7 +410,6 @@ contract WithdrawRequestNFTTest is TestSetup {
         uint96 depositAmount,
         uint96 withdrawAmount,
         uint96 rebaseAmount,
-        uint16 remainderSplitBps,
         address recipient
     ) public {
         // Bound to valid ranges. withdrawAmount is bounded against the new
@@ -429,7 +421,6 @@ contract WithdrawRequestNFTTest is TestSetup {
         uint96 withdrawCeil = depositAmount < maxWithdraw ? depositAmount : maxWithdraw;
         withdrawAmount = uint96(bound(withdrawAmount, minWithdraw, withdrawCeil));
         rebaseAmount = uint96(bound(rebaseAmount, 0.5 ether, depositAmount));
-        remainderSplitBps = uint16(bound(remainderSplitBps, 0, 10000));
         vm.assume(recipient != address(0) && recipient != address(liquidityPoolInstance));
         // Filter out contracts that don't implement IERC721Receiver - only allow EOAs.
         vm.assume(recipient.code.length == 0);
@@ -441,16 +432,11 @@ contract WithdrawRequestNFTTest is TestSetup {
         // Setup initial balance for recipient
         vm.deal(recipient, depositAmount);
 
-        // Configure remainder split
-        vm.prank(roleRegistryInstance.owner());
-        withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(remainderSplitBps);
-
         // First deposit ETH to get eETH
         vm.startPrank(recipient);
         liquidityPoolInstance.deposit{value: depositAmount}();
 
         // Record initial balances
-        uint256 treasuryEEthBefore = eETHInstance.balanceOf(address(treasuryInstance));
         uint256 recipientBalanceBefore = address(recipient).balance;
 
         // Request withdraw
@@ -461,55 +447,38 @@ contract WithdrawRequestNFTTest is TestSetup {
         // Get initial request state
         WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(requestId);
 
-        // Simulate rebase after request but before claim
+        // Simulate rebase after request but before finalize. Claim uses the rate frozen at
+        // finalize time, so the rebase must happen before finalize to influence the payout.
         _rebaseUncapped(int128(uint128(rebaseAmount)));
-
-        // Calculate expected withdrawal amounts after rebase
-        uint256 sharesValue = liquidityPoolInstance.amountForShare(request.shareOfEEth);
-        uint256 expectedWithdrawAmount = withdrawAmount < sharesValue ? withdrawAmount : sharesValue;
-        uint256 expectedBurnedShares = liquidityPoolInstance.sharesForWithdrawalAmount(expectedWithdrawAmount);
-        uint256 expectedDustShares = request.shareOfEEth - expectedBurnedShares;
 
         // Track initial shares and total supply
         uint256 initialTotalShares = eETHInstance.totalShares();
 
         _finalizeWithdrawalRequest(requestId);
-        
+
+        // Expected payout is computed at the frozen (finalize-time) rate.
+        uint256 expectedWithdrawAmount = withdrawRequestNFTInstance.getClaimableAmount(requestId);
+
         vm.prank(recipient);
         withdrawRequestNFTInstance.claimWithdraw(requestId);
 
-        // Calculate expected burnt shares
+        // The claim now burns the request's FULL shareOfEEth, leaving no share remainder.
         uint256 burnedShares = initialTotalShares - eETHInstance.totalShares();
-
-        // Verify share burning
-        assertLe(burnedShares, request.shareOfEEth, "Burned shares should be less than or equal to requested shares");
-        assertApproxEqAbs(
-            burnedShares,
-            expectedBurnedShares,
-            1e3,
-            "Incorrect amount of shares burnt"
-        );
-        
+        assertEq(burnedShares, request.shareOfEEth, "Claim must burn the full request shares");
 
         // Verify total supply reduction
-        assertApproxEqAbs(
+        assertEq(
             eETHInstance.totalShares(),
-            initialTotalShares - burnedShares,
-            1,
+            initialTotalShares - request.shareOfEEth,
             "Total shares not reduced correctly"
-        );
-        assertGe(
-            eETHInstance.totalShares(),
-            initialTotalShares - burnedShares,
-            "Total shares should be greater than or equal to initial shares minus burned shares"
         );
 
         // Verify the withdrawal results
         WithdrawRequestNFT.WithdrawRequest memory requestAfter = withdrawRequestNFTInstance.getRequest(requestId);
-        
+
         // Request should be cleared
         assertEq(requestAfter.amountOfEEth, 0, "Request should be cleared after claim");
-        
+
         // NFT should be burned
         vm.expectRevert("ERC721: invalid token ID");
         withdrawRequestNFTInstance.ownerOf(requestId);
@@ -520,38 +489,6 @@ contract WithdrawRequestNFTTest is TestSetup {
             recipientBalanceBefore + expectedWithdrawAmount,
             "Recipient should receive correct ETH amount"
         );
-
-        // Drift bound derived from the math, not a flat tolerance.
-        //
-        // expected: shareOfEEth - ceil(amount * TS / TPE)              [live rate]
-        // actual:   shareOfEEth - ceil(amount * 1e18 / R_ceil)         [frozen rate, ceil(1e18*TPE/TS)]
-        //
-        // R_ceil >= R_exact = 1e18*TPE/TS, with R_ceil - R_exact < 1. So `actualBurn <= liveBurn`
-        // and the gap is bounded by `amount * 1e18 / R_exact^2 ≈ amount / 1e18` for rates near 1.
-        // Add a small +2 absorbs the two ceiling roundings.
-        uint256 driftBound = expectedWithdrawAmount / 1e18 + 2;
-        assertApproxEqAbs(
-            withdrawRequestNFTInstance.totalRemainderEEthShares(),
-            expectedDustShares,
-            driftBound,
-            "Incorrect remainder shares"
-        );
-
-        // Only test handleRemainder if there's actually remainder to handle
-        uint256 dustEEthAmount = withdrawRequestNFTInstance.getEEthRemainderAmount();
-        if (dustEEthAmount > 0) {
-            // Grant the required role to admin
-            vm.startPrank(address(roleRegistryInstance.owner()));
-            roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), admin);
-            vm.stopPrank();
-            
-            // Handle remainder (use half to avoid edge cases)
-            uint256 amountToHandle = dustEEthAmount / 2;
-            if (amountToHandle > 0) {
-                vm.prank(admin);
-                withdrawRequestNFTInstance.handleRemainder(amountToHandle);
-            }
-        }
     }
 
     function testFuzz_InvalidateRequest(uint96 depositAmount, uint96 withdrawAmount, address recipient) public {
@@ -827,25 +764,6 @@ contract WithdrawRequestNFTTest is TestSetup {
         liquidityPoolInstance.addEthAmountLockedForWithdrawal(1 ether);
     }
 
-    function test_updateShareRemainderSplitToTreasuryInBps() public {
-        uint16 newSplit = 5000; // 50%
-        
-        vm.prank(roleRegistryInstance.owner());
-        withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(newSplit);
-        
-        assertEq(withdrawRequestNFTInstance.shareRemainderSplitToTreasuryInBps(), newSplit, "Split should be updated");
-
-        // Test invalid value (> 10000)
-        vm.prank(roleRegistryInstance.owner());
-        vm.expectRevert(WithdrawRequestNFT.InvalidShareRemainderSplit.selector);
-        withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(10001);
-
-        // Test non-owner cannot update
-        vm.prank(bob);
-        vm.expectRevert();
-        withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(3000);
-    }
-
     function test_pauseContract() public {
         assertFalse(withdrawRequestNFTInstance.paused(), "Contract should not be paused initially");
 
@@ -1097,116 +1015,50 @@ contract WithdrawRequestNFTTest is TestSetup {
         liquidityPoolInstance.requestWithdraw(bob, 1 ether);
     }
 
-    function test_getEEthRemainderAmount() public {
+    /// @dev Stranded ETH (when a negative rebase between request and finalize leaves the
+    ///      segregated escrow above the frozen-rate claimable) is now swept back to the LP at
+    ///      claim time — NOT to the treasury, and there is no longer a handleRemainder step.
+    function test_claimWithdraw_sweepsNegativeRebaseStrandedEthToLp() public {
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 10 ether}();
         vm.stopPrank();
 
+        // Positive rebase pumps TVOL so we have headroom to rebase negative later.
+        _rebaseUncapped(60 ether);
+
+        // Request at the current (high) rate, then drop TVOL so finalize-rate < request-rate.
+        // request.shareOfEEth priced at the high rate, finalize-rate values them less → claim
+        // sends < amountOfEEth, the unspent escrow ETH is swept back to the LP.
         vm.prank(bob);
         eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+        vm.prank(bob);
+        uint256 reqId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.rebase(-int128(int256(7 ether)), 0);
+
+        _finalizeWithdrawalRequest(reqId);
+
+        uint256 lpBalBefore = address(liquidityPoolInstance).balance;
+        uint256 claimable = withdrawRequestNFTInstance.getClaimableAmount(reqId);
 
         vm.prank(bob);
-        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+        withdrawRequestNFTInstance.claimWithdraw(reqId);
 
-        // Rebase to create remainder
-        _rebaseUncapped(5 ether);
+        // No ETH should be stranded on the NFT (escrow fully drained for this single request).
+        assertEq(address(withdrawRequestNFTInstance).balance, 0, "NFT balance should be zero after claim");
 
-        _finalizeWithdrawalRequest(requestId);
-
-        vm.prank(bob);
-        withdrawRequestNFTInstance.claimWithdraw(requestId);
-
-        uint256 remainderAmount = withdrawRequestNFTInstance.getEEthRemainderAmount();
-        assertGe(remainderAmount, 0, "Remainder amount should be >= 0");
-    }
-
-    /// @dev L-01: After a negative rebase between request and finalize, the request was locked
-    ///      at the original (higher) amount but the frozen rate at finalize values the shares lower.
-    ///      The delta sits in the NFT as stranded ETH (locked > amountToWithdraw). handleRemainder
-    ///      must sweep that stranded ETH to the treasury (NOT back to LP — that would inflate the
-    ///      LP and double-count the shares already burned during claim).
-    function test_handleRemainder_sweepsNegativeRebaseStrandedEthToTreasury() public {
-        // Pure negative-rebase claims burn the full request.shareOfEEth → no share remainder,
-        // so handleRemainder cannot be invoked stand-alone. Pair the strand-prone request with
-        // a positive-rebase request that DOES leave share remainder, so handleRemainder has fuel
-        // for its first half and the new sweep block fires at the end.
-        startHoax(bob);
-        liquidityPoolInstance.deposit{value: 10 ether}();
-        vm.stopPrank();
-
-        // First positive rebase pumps TVOL so we have headroom to rebase negative later.
-        // After: TPE=15, shares=10e18, rate=1.5
-        _rebaseUncapped(5 ether);
-
-        // Request A — priced at rate=1.5; another positive rebase before finalize leaves share
-        // remainder during claim (burnedShares = ceil(amountOfEEth/frozenRate) < shareOfEEth).
-        vm.prank(bob);
-        eETHInstance.approve(address(liquidityPoolInstance), 2 ether);
-        vm.prank(bob);
-        uint256 reqA = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
-
-        // Second positive rebase: rate climbs to ~2.0
-        _rebaseUncapped(5 ether);
-
-        _finalizeWithdrawalRequest(reqA);
-        vm.prank(bob);
-        withdrawRequestNFTInstance.claimWithdraw(reqA);
-
-        assertGt(
-            withdrawRequestNFTInstance.totalRemainderEEthShares(),
-            0,
-            "claim A should leave eETH share remainder"
-        );
-
-        // Request B at current (high) rate, then drop TVOL so finalize-rate < request-rate.
-        // request.shareOfEEth priced at the high rate, finalize-rate values them less → claim
-        // sends < amountOfEEth, the unspent ETH sits in NFT as stranded.
-        vm.prank(bob);
-        uint256 reqB = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
-
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(-int128(int256(7 ether)));
-
-        _finalizeWithdrawalRequest(reqB);
-
-        uint256 treasuryEthBefore = address(treasuryInstance).balance;
-        uint128 lockedBefore = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
-
-        vm.prank(bob);
-        withdrawRequestNFTInstance.claimWithdraw(reqB);
-
-        // NFT.balance now carries the stranded ETH delta (locked - amountToWithdraw).
-        uint256 strandedEth = address(withdrawRequestNFTInstance).balance;
-        assertGt(strandedEth, 0, "stranded ETH should exist after negative-rebase claim");
-        assertEq(
-            withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(),
-            lockedBefore - 1 ether,
-            "lock counter decremented by gross request amount"
-        );
-
-        // Sweep via handleRemainder.
-        vm.startPrank(owner);
-        roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), admin);
-        vm.stopPrank();
-
-        uint256 remainderAmount = withdrawRequestNFTInstance.getEEthRemainderAmount();
-        assertGt(remainderAmount, 0, "remainder must remain to drive handleRemainder");
-
-        vm.prank(admin);
-        withdrawRequestNFTInstance.handleRemainder(remainderAmount);
-
-        // Stranded ETH must have flowed to the treasury, NOT back to LP.
-        assertEq(address(withdrawRequestNFTInstance).balance, 0, "NFT balance should be zero after sweep");
-        assertEq(
-            address(treasuryInstance).balance - treasuryEthBefore,
-            strandedEth,
-            "treasury should receive the full stranded ETH"
-        );
+        // The unspent escrow (locked 1 ether - claimable) is returned to the LP. Net LP balance
+        // delta = strandedSweptBack - claimablePaidOut, since claimable came from the LP's own
+        // segregated escrow originally. Just assert the sweep direction: LP balance did not lose
+        // more than the claimable amount.
+        uint256 stranded = 1 ether - claimable;
+        assertEq(address(liquidityPoolInstance).balance, lpBalBefore + stranded, "stranded ETH should be swept back to LP");
     }
 
     /// @dev Counter-case: when there is no rebase divergence, claim consumes the full locked ETH
-    ///      and no stranded ETH remains. handleRemainder must complete without doing an ETH sweep.
-    function test_handleRemainder_noStrandedEthWhenNoRebase() public {
+    ///      and no stranded ETH remains on the NFT contract.
+    function test_claimWithdraw_noStrandedEthWhenNoRebase() public {
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 10 ether}();
         vm.stopPrank();
@@ -1222,55 +1074,6 @@ contract WithdrawRequestNFTTest is TestSetup {
         withdrawRequestNFTInstance.claimWithdraw(requestId);
 
         assertEq(address(withdrawRequestNFTInstance).balance, 0, "no stranded ETH expected");
-    }
-
-    /// @dev L-01: handleRemainder must not touch ethAmountLockedForWithdrawal — the sweep
-    ///      decrements only the surplus above the lock counter. Pin this so future refactors
-    ///      can't accidentally double-debit the escrow accounting.
-    function test_handleRemainder_doesNotTouchLockedCounter() public {
-        startHoax(bob);
-        liquidityPoolInstance.deposit{value: 10 ether}();
-        vm.stopPrank();
-
-        // Seed TVOL so the later negative rebase has headroom (rebase touches TVOL, not TVIL).
-        _rebaseUncapped(10 ether);
-
-        // Two requests — finalize+claim one to generate remainder shares while the other
-        // keeps `ethAmountLockedForWithdrawal` non-zero.
-        vm.prank(bob);
-        eETHInstance.approve(address(liquidityPoolInstance), 2 ether);
-        vm.prank(bob);
-        uint256 reqA = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
-        vm.prank(bob);
-        uint256 reqB = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
-
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(-8 ether);
-
-        _finalizeWithdrawalRequest(reqA);
-        _finalizeWithdrawalRequest(reqB);
-
-        vm.prank(bob);
-        withdrawRequestNFTInstance.claimWithdraw(reqA);
-
-        uint128 lockedBefore = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
-        assertGt(lockedBefore, 0, "reqB lock should still cover the remaining request");
-
-        vm.startPrank(owner);
-        roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), admin);
-        vm.stopPrank();
-
-        uint256 remainderAmount = withdrawRequestNFTInstance.getEEthRemainderAmount();
-        if (remainderAmount > 0) {
-            vm.prank(admin);
-            withdrawRequestNFTInstance.handleRemainder(remainderAmount);
-        }
-
-        assertEq(
-            withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(),
-            lockedBefore,
-            "handleRemainder must not mutate ethAmountLockedForWithdrawal"
-        );
     }
 
     /// @dev L-02: seizeInvalidRequest is now gated by UPGRADE_TIMELOCK_ROLE (was the operating
@@ -1330,57 +1133,6 @@ contract WithdrawRequestNFTTest is TestSetup {
         withdrawRequestNFTInstance.seizeInvalidRequest(requestId, recipient);
         
         assertEq(withdrawRequestNFTInstance.ownerOf(requestId), recipient, "NFT should be transferred to recipient");
-    }
-
-    function test_handleRemainder_EdgeCases() public {
-        startHoax(bob);
-        liquidityPoolInstance.deposit{value: 10 ether}();
-        vm.stopPrank();
-
-        vm.prank(bob);
-        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
-
-        vm.prank(bob);
-        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
-
-        // Rebase to create remainder
-        _rebaseUncapped(5 ether);
-
-        _finalizeWithdrawalRequest(requestId);
-
-        vm.prank(bob);
-        withdrawRequestNFTInstance.claimWithdraw(requestId);
-
-        uint256 remainderAmount = withdrawRequestNFTInstance.getEEthRemainderAmount();
-        
-        if (remainderAmount > 0) {
-            // Grant role
-            vm.startPrank(address(roleRegistryInstance.owner()));
-            roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), admin);
-            vm.stopPrank();
-
-            // Cannot handle zero amount
-            vm.prank(admin);
-            vm.expectRevert(WithdrawRequestNFT.EETHAmountCannotBeZero.selector);
-            withdrawRequestNFTInstance.handleRemainder(0);
-
-            // Cannot handle more than available
-            vm.prank(admin);
-            vm.expectRevert(WithdrawRequestNFT.NotEnoughEEthRemainder.selector);
-            withdrawRequestNFTInstance.handleRemainder(remainderAmount + 1);
-
-            // Can handle partial amount
-            uint256 partialAmount = remainderAmount / 2;
-            if (partialAmount > 0) {
-                uint256 treasuryBalanceBefore = eETHInstance.balanceOf(address(treasuryInstance));
-                
-                vm.prank(admin);
-                withdrawRequestNFTInstance.handleRemainder(partialAmount);
-                
-                uint256 treasuryBalanceAfter = eETHInstance.balanceOf(address(treasuryInstance));
-                assertGe(treasuryBalanceAfter, treasuryBalanceBefore, "Treasury should receive portion of remainder");
-            }
-        }
     }
 
     function test_finalizeRequests_EdgeCases() public {
@@ -1905,8 +1657,8 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Negative rebase AFTER finalize. Pre-freeze behavior would drop the claim amount;
         // post-freeze behavior must not — the rate is locked in.
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(-5 ether);
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.rebase(-5 ether, 0);
 
         uint256 claimableAfterNegativeRebase = withdrawRequestNFTInstance.getClaimableAmount(requestId);
         assertEq(
@@ -2063,8 +1815,8 @@ contract WithdrawRequestNFTTest is TestSetup {
         // Negative rebase post-init. With live-rate fallback, the claim is reduced. If the path
         // were instead a (non-existent) frozen snapshot, the claim would be shielded — so a
         // reduced amount proves the legacy branch is in use.
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(-5 ether);
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.rebase(-5 ether, 0);
 
         uint256 liveAmountForShares = liquidityPoolInstance.amountForShare(
             withdrawRequestNFTInstance.getRequest(legacyId).shareOfEEth
@@ -2175,8 +1927,8 @@ contract WithdrawRequestNFTTest is TestSetup {
         );
 
         // 6. apply negative rebase
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(-15 ether);
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.rebase(-15 ether, 0);
 
         // 7. assert getClaimableAmount unchanged after negative rebase
         assertEq(

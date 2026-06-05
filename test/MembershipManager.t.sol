@@ -1418,33 +1418,4 @@ contract MembershipManagerTest is TestSetup {
         setUpTests();
     }
 
-    /// @dev M-06: rebase() must early-return when the MembershipManager holds zero eETH shares.
-    /// Pre-fix, the `1 ether * thresholdAmount / etherFanEEthShares` expression panicked with
-    /// division-by-zero whenever the fan-boost branch was entered and shares were zero
-    /// (e.g. fresh deployment, or after every NFT exited ether.fan).
-    function test_rebase_earlyReturnsWhenEtherFanSharesAreZero() public {
-        // Sanity: fresh deployment → MembershipManager has 0 eETH shares.
-        assertEq(eETHInstance.shares(address(membershipManagerInstance)), 0, "precondition: no fan shares");
-
-        // Send a small ETH balance to the MM so the fan-boost branch (`balance >= threshold`)
-        // would otherwise enter and divide by zero. `fanBoostThreshold` is 0 in fresh setup,
-        // so balance >= threshold even with 0 wei — but pump 1 wei to be safe across configs.
-        vm.deal(address(membershipManagerInstance), 1 wei);
-
-        // Seed LP with some pool funds so rebase math doesn't fail upstream.
-        startHoax(bob);
-        liquidityPoolInstance.deposit{value: 5 ether}();
-        vm.stopPrank();
-
-        // rebase must succeed (no division-by-zero) AND the underlying LP rebase must apply.
-        uint256 tvolBefore = liquidityPoolInstance.totalValueOutOfLp();
-        // rebase within the 25 bps cap (0.25% of the 5 ETH pool = 0.0125 ETH)
-        vm.prank(address(etherFiAdminInstance));
-        membershipManagerInstance.rebase(0.01 ether);
-        assertEq(
-            liquidityPoolInstance.totalValueOutOfLp(),
-            tvolBefore + 0.01 ether,
-            "LP rebase still applied even on early-return"
-        );
-    }
 }

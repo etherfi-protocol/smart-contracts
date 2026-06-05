@@ -139,7 +139,6 @@ contract WithdrawEscrowE2ETest is TestSetup {
             0x2f5301a3D59388c509C65f8698f521377D41Fd0F,
             address(eETHInstance),
             address(liquidityPoolInstance),
-            address(membershipManagerInstance),
             address(roleRegistryInstance),
             address(blacklisterInstance)
         , address(etherFiAdminInstance)));
@@ -347,9 +346,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
         // ceil(claimable * 1e18 / frozenRate). For pre-upgrade requests the rate is 0
         // and the contract falls back to live `sharesForWithdrawalAmount`.
         uint224 frozenRate = withdrawRequestNFTInstance.frozenRateFor(reqId);
-        uint256 expectedSharesBurned = frozenRate == 0
-            ? liquidityPoolInstance.sharesForWithdrawalAmount(claimable)
-            : Math.mulDiv(claimable, 1e18, uint256(frozenRate), Math.Rounding.Up);
+        uint256 expectedSharesBurned = withdrawRequestNFTInstance.getRequest(reqId).shareOfEEth;
 
         vm.prank(user);
         withdrawRequestNFTInstance.claimWithdraw(reqId);
@@ -562,8 +559,8 @@ contract WithdrawEscrowE2ETest is TestSetup {
         vm.prank(user);
         pQueue.claimWithdraw(req);
 
-        // User received ETH from queue balance. Fee ETH (amountOfEEth - amountWithFee) is
-        // returned to LP via returnLockedEth, so LP raw ETH may increase by up to feeEth.
+        // User received ETH from queue balance. Stranded ETH (amountOfEEth - amountWithFee) is
+        // swept back to LP via LP.receive(), so LP raw ETH may increase by up to that amount.
         assertApproxEqAbs(user.balance, userEthPre + expectedEth, 2,
             "step4: user ETH after claim (2-wei tolerance)");
         assertLt(address(pQueue).balance, preQ.rawEth,
@@ -692,8 +689,8 @@ contract WithdrawEscrowE2ETest is TestSetup {
         // Use ~5% of the live TPE so we don't trip `_checkMinAmountForShare`.
         uint256 totalPooled = liquidityPoolInstance.getTotalPooledEther();
         int128 slash = -int128(uint128(totalPooled / 20));
-        vm.prank(liquidityPoolInstance.membershipManager());
-        liquidityPoolInstance.rebase(slash);
+        vm.prank(liquidityPoolInstance.etherFiAdminContract());
+        liquidityPoolInstance.rebase(slash, 0);
 
         uint256 claimableAfter = withdrawRequestNFTInstance.getClaimableAmount(reqId);
         assertEq(claimableAfter, claimableBefore,

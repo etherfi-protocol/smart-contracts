@@ -47,11 +47,6 @@ import "@etherfi/withdrawals/interfaces/IPriorityWithdrawalQueue.sol";
 ///         `amountForShare(shares) + TOLERANCE >= amountWithFee` check is
 ///         exercised at the edge.
 ///
-///         (F-023) Housekeeping-side `wrn_handleRemainder` + `pq_handleRemainder`
-///         ops. Without these, stranded eETH only accumulates and the
-///         lock-covers-unclaimed invariant has slack the production system
-///         doesn't.
-///
 ///         (F-026) `pq_invalidate` (oracle ops) + `wrn_invalidate` (guardian)
 ///         + `wrn_validate` (admin) ops. State-machine bookkeeping for
 ///         invalidated-but-finalized requests is now exercised.
@@ -320,21 +315,6 @@ contract FrozenRateWithdrawalHandler is StdUtils {
         }
     }
 
-    /// (F-023) WRN handleRemainder. Sweeps stranded eETH to treasury +
-    /// burns the remainder. Pranked as housekeeping role.
-    function wrn_handleRemainder() external {
-        uint256 remainderShares = wrn.totalRemainderEEthShares();
-        if (remainderShares == 0) { callCounts["wrn_remainder_skipped"]++; return; }
-        uint256 remainderAmount = wrn.getEEthRemainderAmount();
-        if (remainderAmount == 0) { callCounts["wrn_remainder_skipped"]++; return; }
-        vm.prank(housekeepingActor);
-        try wrn.handleRemainder(remainderAmount) {
-            callCounts["wrn_remainder"]++;
-        } catch {
-            callCounts["wrn_remainder_revert"]++;
-        }
-    }
-
     // =====================================================================
     // PQ flow
     // =====================================================================
@@ -539,17 +519,6 @@ contract FrozenRateWithdrawalHandler is StdUtils {
         }
     }
 
-    /// (F-023) PQ handleRemainder.
-    function pq_handleRemainder() external {
-        uint96 rs = pq.totalRemainderShares();
-        if (rs == 0) { callCounts["pq_remainder_skipped"]++; return; }
-        uint256 amt = pq.getRemainderAmount();
-        if (amt == 0) { callCounts["pq_remainder_skipped"]++; return; }
-        vm.prank(housekeepingActor);
-        try pq.handleRemainder(amt) { callCounts["pq_remainder"]++; }
-        catch { callCounts["pq_remainder_revert"]++; }
-    }
-
     // =====================================================================
     // Shared
     // =====================================================================
@@ -570,8 +539,8 @@ contract FrozenRateWithdrawalHandler is StdUtils {
             maxD = int256(cap);
         }
         delta = int128(bound(int256(delta), minD, maxD));
-        vm.prank(membershipManager);
-        try lp.rebase(delta) {
+        vm.prank(etherFiAdminContract);
+        try lp.rebase(delta, 0) {
             callCounts[delta < 0 ? bytes32("rebase_negative") : bytes32("rebase_positive")]++;
         } catch { callCounts["rebase_revert"]++; }
     }
@@ -588,8 +557,8 @@ contract FrozenRateWithdrawalHandler is StdUtils {
             maxD = int256(cap);
         }
         delta = int128(bound(int256(delta), minD, maxD));
-        vm.prank(membershipManager);
-        try lp.rebase(delta) { callCounts["rebaseExtreme"]++; }
+        vm.prank(etherFiAdminContract);
+        try lp.rebase(delta, 0) { callCounts["rebaseExtreme"]++; }
         catch { callCounts["rebaseExtreme_revert"]++; }
     }
 

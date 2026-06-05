@@ -7,7 +7,7 @@ import "@etherfi/deposits/DepositAdapter.sol";
 import "@etherfi/withdrawals/EtherFiRedemptionManager.sol";
 import "@etherfi/core/LiquidityPool.sol";
 import "@etherfi/deposits/Liquifier.sol";
-import "@etherfi/membership/MembershipManager.sol";
+import "@etherfi/archive/membership/MembershipManager.sol";
 import "@etherfi/withdrawals/WithdrawRequestNFT.sol";
 import "@etherfi/governance/Blacklister.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
