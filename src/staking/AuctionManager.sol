@@ -2,7 +2,6 @@
 pragma solidity ^0.8.13;
 
 import {ReentrancyGuardTransient} from "solady/utils/ReentrancyGuardTransient.sol";
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 import "@etherfi/staking/interfaces/IAuctionManager.sol";
@@ -10,6 +9,7 @@ import "@etherfi/staking/interfaces/INodeOperatorManager.sol";
 import "@etherfi/governance/interfaces/IBlacklister.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
+import "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
 import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
 import "@etherfi/governance/utils/DeprecatedOZReentrancyGuard.sol";
 
@@ -17,7 +17,7 @@ contract AuctionManager is
     Initializable,
     IAuctionManager,
     DeprecatedOZPausable,
-    OwnableUpgradeable,
+    DeprecatedOZOwnable,
     PausableUntil,
     DeprecatedOZReentrancyGuard,
     ReentrancyGuardTransient,
@@ -110,7 +110,6 @@ contract AuctionManager is
         numberOfBids = 1;
         whitelistEnabled = true;
 
-        __Ownable_init();
         __UUPSUpgradeable_init();
     }
 

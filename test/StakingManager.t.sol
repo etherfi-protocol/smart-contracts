@@ -1360,7 +1360,7 @@ contract StakingManagerTest is TestSetup {
     }
 
     function test_upgradeEtherFiNodeFailsIfZeroAddress() public {
-        vm.prank(stakingManagerInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         vm.expectRevert(IStakingManager.InvalidUpgrade.selector);
         stakingManagerInstance.upgradeEtherFiNode(address(0));
     } 

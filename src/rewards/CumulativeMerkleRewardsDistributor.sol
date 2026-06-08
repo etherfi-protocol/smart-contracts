@@ -2,14 +2,14 @@
 pragma solidity ^0.8.24;
 
 import { SafeERC20, IERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {OwnableUpgradeable} from "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {AssetRecovery} from "@etherfi/utils/AssetRecovery.sol";
 import {PausableUntil} from "@etherfi/governance/utils/PausableUntil.sol";
 import {RolesLibrary} from "@etherfi/governance/utils/RolesLibrary.sol";
+import {DeprecatedOZOwnable} from "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
 import {ICumulativeMerkleRewardsDistributor}  from "@etherfi/rewards/interfaces/ICumulativeMerkleRewardsDistributor.sol";
 
-contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistributor, OwnableUpgradeable, UUPSUpgradeable, PausableUntil, AssetRecovery {
+contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistributor, DeprecatedOZOwnable, UUPSUpgradeable, PausableUntil, AssetRecovery {
     using SafeERC20 for IERC20;
 
     //--------------------------------------------------------------------------------------
@@ -49,7 +49,6 @@ contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistribut
      * @notice Initialize the CumulativeMerkleRewardsDistributor
      */
     function initialize() external initializer {
-        __Ownable_init();
         __UUPSUpgradeable_init();
         claimDelay = 2 days; // 48 hours
     }

@@ -17,7 +17,7 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         // so its NODE_OPERATOR_MANAGER_ADMIN_ROLE() getter doesn't exist on-chain.
         // Upgrade in place so the new role getters used by _ensureValCreationRoles are reachable.
         NodeOperatorManager nodeOperatorManagerImpl = new NodeOperatorManager(address(roleRegistryInstance), address(auctionInstance));
-        vm.prank(nodeOperatorManagerInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         nodeOperatorManagerInstance.upgradeTo(address(nodeOperatorManagerImpl));
 
         // Upgrade LiquidityPool to the consolidated role model — the on-chain impl
@@ -35,13 +35,13 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
             etherFiAdminContract: address(etherFiAdminInstance),
             membershipManager: address(membershipManagerInstance)
         }));
-        address lpOwner = liquidityPoolInstance.owner();
+        address lpOwner = roleRegistryInstance.owner();
         vm.prank(lpOwner);
         liquidityPoolInstance.upgradeTo(address(newLpImpl));
 
         // Upgrade WithdrawRequestNFT so it has a receive() function and accepts the
         // ETH-escrow transfer triggered by initializeOnUpgradeV2.
-        address wrnOwner = withdrawRequestNFTInstance.owner();
+        address wrnOwner = roleRegistryInstance.owner();
         // Deploy the impl BEFORE pranking — the inlined `new` is a CREATE that
         // would otherwise consume the single-shot vm.prank (OnlyUpgradeTimelock).
         address newWrnImpl = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(eETHInstance), address(liquidityPoolInstance), address(roleRegistryInstance), address(blacklisterInstance), address(etherFiAdminInstance)));
@@ -106,7 +106,7 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         // addCommitteeMember() resets CommitteeMemberState to
         // (registered=true, enabled=true, lastReportRefSlot=0, numReports=0), clearing any stale
         // submission from mainnet without adding new committee members.
-        address oracleOwner = etherFiOracleInstance.owner();
+        address oracleOwner = roleRegistryInstance.owner();
         // Each add/remove now requires a _quorumSize that satisfies the strict-majority
         // invariant for the resulting numActive. Compute a fresh value at each step
         // so this works regardless of mainnet's current quorum.
@@ -147,7 +147,7 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         // does not expose NODE_OPERATOR_MANAGER_ADMIN_ROLE(). Upgrade in place
         // so the new role getter and role-gated modifier are reachable, then
         // grant the role used by whitelist ops.
-        address nodeOpMgrOwner = nodeOperatorManagerInstance.owner();
+        address nodeOpMgrOwner = roleRegistryInstance.owner();
         vm.startPrank(nodeOpMgrOwner);
         NodeOperatorManager newNodeOpMgrImpl = new NodeOperatorManager(address(roleRegistryInstance), address(auctionInstance));
         nodeOperatorManagerInstance.upgradeTo(address(newNodeOpMgrImpl));

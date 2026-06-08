@@ -132,7 +132,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
     }
 
     function _upgradeWithdrawRequestNFT() internal {
-        address wrnOwner = withdrawRequestNFTInstance.owner();
+        address wrnOwner = roleRegistryInstance.owner();
         // Deploy the impl BEFORE pranking — the inlined `new` is a CREATE that
         // would otherwise consume the single-shot vm.prank (OnlyUpgradeTimelock).
         address newWrnImpl = address(new WithdrawRequestNFT(

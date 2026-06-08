@@ -2,16 +2,16 @@
 pragma solidity ^0.8.13;
 
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
 import "@etherfi/oracle/interfaces/IEtherFiOracle.sol";
 import "@etherfi/oracle/interfaces/IEtherFiAdmin.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
 import "@etherfi/governance/utils/Pausable.sol";
+import "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
 import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
 
 
-contract EtherFiOracle is Initializable, OwnableUpgradeable, DeprecatedOZPausable, UUPSUpgradeable, IEtherFiOracle, Pausable {
+contract EtherFiOracle is Initializable, DeprecatedOZOwnable, DeprecatedOZPausable, UUPSUpgradeable, IEtherFiOracle, Pausable {
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
@@ -116,7 +116,6 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, DeprecatedOZPausabl
         external
         initializer
     {
-        __Ownable_init();
         __UUPSUpgradeable_init();
 
         consensusVersion = 1;

@@ -150,13 +150,7 @@ contract DeployWeETHWithdrawAdapter is Script {
             
             // Wrap proxy in implementation interface
             WeETHWithdrawAdapter adapter = WeETHWithdrawAdapter(proxyAddress);
-            
-            // Verify ownership is already set to timelock (no transfer needed)
-            console.log("\nVerifying ownership...");
-            address currentOwner = adapter.owner();
-            require(currentOwner == timelockAddress, "Owner should be timelock");
-            console.log("Owner correctly set to timelock:", currentOwner);
-            
+
             // Final verification
             console.log("\nVerifying deployment...");
             verifyDeployment(adapter, implementationAddress);
@@ -297,10 +291,7 @@ contract DeployWeETHWithdrawAdapter is Script {
         // Verify initialization state
         require(!adapter.paused(), "Contract should not be paused");
         console.log("[PASS] Contract is not paused");
-        
-        require(adapter.owner() == timelockAddress, "Owner should be timelock");
-        console.log("[PASS] Owner is timelock");
-        
+
         // Verify implementation
         address actualImpl = adapter.getImplementation();
         require(actualImpl == implementationAddress, "Implementation address mismatch");

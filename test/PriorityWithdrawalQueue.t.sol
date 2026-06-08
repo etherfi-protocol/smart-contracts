@@ -74,7 +74,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         // Upgrade WithdrawRequestNFT so it has receive() and can accept ETH escrow.
         // WITHDRAW_REQUEST_NFT_BUYBACK_SAFE = 0x2f5301a3D59388c509C65f8698f521377D41Fd0F
-        address wrnOwner = withdrawRequestNFTInstance.owner();
+        address wrnOwner = roleRegistryInstance.owner();
         vm.stopPrank();
         vm.startPrank(wrnOwner);
         WithdrawRequestNFT newWrnImpl =

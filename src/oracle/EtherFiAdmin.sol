@@ -2,7 +2,6 @@
 pragma solidity ^0.8.13;
 
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
 import "@etherfi/oracle/interfaces/IEtherFiAdmin.sol";
@@ -16,12 +15,13 @@ import "@etherfi/withdrawals/interfaces/IWithdrawRequestNFT.sol";
 import "@etherfi/withdrawals/interfaces/IPriorityWithdrawalQueue.sol";
 
 import "@etherfi/governance/utils/RolesLibrary.sol";
+import "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
 
 interface IEtherFiPausable {
     function paused() external view returns (bool);
 }
 
-contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, RolesLibrary, IEtherFiAdmin {
+contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, RolesLibrary, IEtherFiAdmin {
     using Math for uint256;
 
     //--------------------------------------------------------------------------------------
@@ -201,7 +201,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable, Rol
         int32 _acceptableRebaseAprInBps,
         uint16 _postReportWaitTimeInSlots
     ) external initializer {
-        __Ownable_init();
         __UUPSUpgradeable_init();
 
         acceptableRebaseAprInBps = _acceptableRebaseAprInBps;

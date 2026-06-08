@@ -1993,7 +1993,7 @@ contract LiquidityPoolTest is TestSetup {
         uint256 sharesBefore = eETHInstance.totalShares();
 
         // Run migration as owner.
-        address ownerAddr = liquidityPoolInstance.owner();
+        address ownerAddr = roleRegistryInstance.owner();
         vm.prank(ownerAddr);
         liquidityPoolInstance.initializeOnUpgradeV2();
 
