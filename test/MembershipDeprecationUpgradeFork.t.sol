@@ -2,8 +2,8 @@
 pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
-import "@etherfi/membership/MembershipManager.sol";
-import "@etherfi/membership/MembershipNFT.sol";
+import "@etherfi/archive/membership/MembershipManager.sol";
+import "@etherfi/archive/membership/MembershipNFT.sol";
 import "@etherfi/governance/Blacklister.sol";
 import "@etherfi/utils/UUPSProxy.sol";
 
@@ -15,7 +15,10 @@ import "@etherfi/utils/UUPSProxy.sol";
 ///   (a) unwrap a V1 NFT for eETH (`unwrapForEEthAndBurn`)
 ///   (b) request a queued withdrawal of a V1 NFT (`requestWithdrawAndBurn`)
 ///   (c) request a partial withdrawal that keeps the NFT alive (`requestWithdraw`)
-///   (d) the protocol's `rebase` keeps working post-trim
+///
+/// Rebase routing is no longer a MembershipManager concern (EARN-1440 routes
+/// rebase EtherFiAdmin → LiquidityPool directly); it is covered separately by
+/// the EtherFiOracle `executeTasks` and LiquidityPool rebase tests.
 ///
 /// Real on-chain owners are used for each test NFT (queried via the Alchemy
 /// NFT API at the time this test was authored). Three NFTs are exercised:
@@ -78,7 +81,6 @@ contract MembershipDeprecationUpgradeForkTest is Test {
             EETH,
             LIQUIDITY_POOL,
             MNFT_PROXY,
-            ETHERFI_ADMIN,
             ROLE_REGISTRY,
             blacklister
         );
@@ -158,15 +160,6 @@ contract MembershipDeprecationUpgradeForkTest is Test {
         emit log_named_uint("partial withdraw: WithdrawRequestNFT id", withdrawRequestId);
     }
 
-    // ---- (d) rebase still works post-trim across zero/+/- accrual ----
-    function test_rebase_postTrim_allAccrualBranches() public {
-        ILP lp = ILP(LIQUIDITY_POOL);
-
-        _rebaseAndAssertRateDir(lp, 0, 0);
-        _rebaseAndAssertRateDir(lp, int128(1 ether), 1);
-        _rebaseAndAssertRateDir(lp, -int128(1 ether), -1);
-    }
-
     // ----- helpers -----
 
     function _runUnwrap(uint256 tokenId, address owner) internal {
@@ -189,25 +182,6 @@ contract MembershipDeprecationUpgradeForkTest is Test {
         emit log_named_uint("unwrap tokenId", tokenId);
         emit log_named_uint("unwrap eETH received (wei)", received);
     }
-
-    function _rebaseAndAssertRateDir(ILP lp, int128 accrual, int8 sign) internal {
-        uint256 rateBefore = lp.amountForShare(1 ether);
-        vm.prank(ETHERFI_ADMIN);
-        mm.rebase(accrual);
-        uint256 rateAfter = lp.amountForShare(1 ether);
-
-        if (sign > 0) {
-            assertGt(rateAfter, rateBefore, "LP rate did not rise on +accrual");
-        } else if (sign < 0) {
-            assertLt(rateAfter, rateBefore, "LP rate did not fall on -accrual");
-        } else {
-            uint256 drift = rateAfter > rateBefore ? rateAfter - rateBefore : rateBefore - rateAfter;
-            assertLt(drift, 1e6, "LP rate drifted on zero accrual");
-        }
-        emit log_named_int("accrual", accrual);
-        emit log_named_uint("rate before", rateBefore);
-        emit log_named_uint("rate after", rateAfter);
-    }
 }
 
 interface IUUPS {
@@ -220,8 +194,4 @@ interface IERC1155Like {
 
 interface IERC20Like {
     function balanceOf(address account) external view returns (uint256);
-}
-
-interface ILP {
-    function amountForShare(uint256 _share) external view returns (uint256);
 }

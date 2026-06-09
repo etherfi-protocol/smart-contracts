@@ -6,19 +6,14 @@ import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@etherfi/governance/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
 
 /// @title  RateLimitedToken
-/// @notice Token-side helpers for the per-address rate-limit feature on EtherFiRateLimiter.
-///         Holds the `rateLimiter` immutable, the gwei conversion helper, and `internal`
-///         primitives for the six per-address bucket operations. eETH and weETH inherit
-///         this and wrap the internals with their own role-gated `external` functions —
-///         this contract intentionally exposes no `external` surface and performs no
-///         access control. Access control is the inheriting token's responsibility (via
-///         the modifiers in RolesLibrary), so the rate-limit semantics stay single-sourced
-///         while role-gating decisions remain co-located with the rest of the token's
-///         access model.
+/// @notice Token-side helper for the global mint/burn rate-limit buckets on
+///         EtherFiRateLimiter. Holds the `rateLimiter` immutable and the gwei
+///         conversion helper used when consuming from those buckets. eETH and weETH
+///         inherit this; the actual consume calls live in the token mint/burn paths.
+///         This contract intentionally exposes no `external` surface and performs no
+///         access control.
 abstract contract RateLimitedToken {
     IEtherFiRateLimiter public immutable rateLimiter;
-
-    error LengthMismatch();
 
     constructor(address _rateLimiter) {
         rateLimiter = IEtherFiRateLimiter(_rateLimiter);
@@ -37,49 +32,5 @@ abstract contract RateLimitedToken {
     function toBucketUnit(uint256 amount) internal pure returns (uint64) {
         uint256 gweiAmount = Math.ceilDiv(amount, 1 gwei);
         return gweiAmount > type(uint64).max ? type(uint64).max : uint64(gweiAmount);
-    }
-
-    //--------------------------------------------------------------------------
-    //                        Internal Guardian-side helpers
-    //--------------------------------------------------------------------------
-
-    /// @dev Token must gate this to the Guardian. See EtherFiRateLimiter for the
-    ///      tightening invariant: new capacity / refill ≤ current; `cap = 0` = freeze.
-    ///      Use a length-1 array for the single-user case — there's no separate
-    ///      single-address entry point.
-    function _tightenAddressRateLimits(
-        address[] calldata users,
-        uint64[] calldata capacities,
-        uint64[] calldata refillRates
-    ) internal {
-        if (users.length != capacities.length || users.length != refillRates.length) revert LengthMismatch();
-        for (uint256 i; i < users.length; ++i) {
-            rateLimiter.tightenAddressLimit(users[i], capacities[i], refillRates[i]);
-        }
-    }
-
-    //--------------------------------------------------------------------------
-    //                       Internal Multisig-side helpers
-    //--------------------------------------------------------------------------
-
-    /// @dev Token must gate this to the Operating Multisig. Fully resets the bucket
-    ///      (`remaining` returns to capacity); this is the unfreeze / raise path.
-    function _setAddressRateLimits(
-        address[] calldata users,
-        uint64[] calldata capacities,
-        uint64[] calldata refillRates
-    ) internal {
-        if (users.length != capacities.length || users.length != refillRates.length) revert LengthMismatch();
-        for (uint256 i; i < users.length; ++i) {
-            rateLimiter.setAddressLimit(users[i], capacities[i], refillRates[i]);
-        }
-    }
-
-    /// @dev Token must gate this to the Operating Multisig. Deletes the bucket entirely;
-    ///      the user returns to the unrestricted default.
-    function _deleteAddressRateLimits(address[] calldata users) internal {
-        for (uint256 i; i < users.length; ++i) {
-            rateLimiter.deleteAddressLimit(users[i]);
-        }
     }
 }

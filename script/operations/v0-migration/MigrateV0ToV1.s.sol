@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Script.sol";
 import "forge-std/StdJson.sol";
-import "@etherfi/membership/interfaces/IMembershipManager.sol";
+import "@etherfi/archive/membership/interfaces/IMembershipManager.sol";
 import "@scripts/operations/v0-migration/MembershipV0Migrator.sol";
 
 /// @notice Deploys MembershipV0Migrator and walks the remaining V0 membership

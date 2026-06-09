@@ -13,7 +13,6 @@ interface IEtherFiAdmin {
         address auctionManager;
         address etherFiNodesManager;
         address liquidityPool;
-        address membershipManager;
         address withdrawRequestNft;
         address roleRegistry;
         address priorityWithdrawalQueue;

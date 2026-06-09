@@ -7,16 +7,13 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "@etherfi/core/interfaces/IeETH.sol";
-import "@etherfi/membership/interfaces/IMembershipManager.sol";
-import "@etherfi/membership/interfaces/IMembershipNFT.sol";
+import "@etherfi/archive/membership/interfaces/IMembershipManager.sol";
+import "@etherfi/archive/membership/interfaces/IMembershipNFT.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
-import "@etherfi/oracle/interfaces/IEtherFiAdmin.sol";
 import "@etherfi/governance/interfaces/IBlacklister.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
 import "@etherfi/governance/utils/Pausable.sol";
 import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
-
-import "@etherfi/membership/libraries/GlobalIndexLibrary.sol";
 
 import "forge-std/console.sol";
 
@@ -69,7 +66,6 @@ contract MembershipManager is Initializable, OwnableUpgradeable, DeprecatedOZPau
     IeETH public immutable eETH;
     ILiquidityPool public immutable liquidityPool;
     IMembershipNFT public immutable membershipNFT;
-    IEtherFiAdmin public immutable etherFiAdmin;
     IBlacklister public immutable blacklister;
 
     //--------------------------------------------------------------------------------------
@@ -88,11 +84,10 @@ contract MembershipManager is Initializable, OwnableUpgradeable, DeprecatedOZPau
     event NftUnwrappedForEEth(address indexed _user, uint256 indexed _tokenId, uint256 _amountOfEEth, uint40 _loyaltyPoints, uint256 _feeAmount);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _eETH, address _liquidityPool, address _membershipNFT, address _etherFiAdmin, address _roleRegistry, address _blacklister) RolesLibrary(_roleRegistry) {
+    constructor(address _eETH, address _liquidityPool, address _membershipNFT, address _roleRegistry, address _blacklister) RolesLibrary(_roleRegistry) {
         eETH = IeETH(_eETH);
         liquidityPool = ILiquidityPool(_liquidityPool);
         membershipNFT = IMembershipNFT(_membershipNFT);
-        etherFiAdmin = IEtherFiAdmin(_etherFiAdmin);
         blacklister = IBlacklister(_blacklister);
         _disableInitializers();
     }
@@ -127,7 +122,6 @@ contract MembershipManager is Initializable, OwnableUpgradeable, DeprecatedOZPau
     }
 
     error ExceededMaxWithdrawal();
-    error InvalidCaller();
     error TierLimitExceeded();
     error OutOfBound();
     error WrongTokenMinted();
@@ -190,35 +184,9 @@ contract MembershipManager is Initializable, OwnableUpgradeable, DeprecatedOZPau
         _emitNftUpdateEvent(_tokenId);
     }
 
-    function rebase(int128 _accruedRewards) external {
-        if (msg.sender != address(etherFiAdmin)) revert InvalidCaller();
-        uint256 ethRewardsPerEEthShareBeforeRebase = liquidityPool.amountForShare(1 ether);
-        liquidityPool.rebase(_accruedRewards);
-        uint256 ethRewardsPerEEthShareAfterRebase = liquidityPool.amountForShare(1 ether);
-
-        // The balance of MembershipManager contract is used to reward ether.fan stakers (not eETH stakers)
-        // Eth Rewards Amount per NFT = (eETH share amount of the NFT) * (total rewards ETH amount) / (total eETH share amount in ether.fan)
-        uint256 etherFanEEthShares = eETH.shares(address(this));
-        if (etherFanEEthShares == 0) return;
-        uint256 thresholdAmount = fanBoostThresholdEthAmount();
-        if (address(this).balance >= thresholdAmount) {
-            uint256 mintedShare = liquidityPool.deposit{value: thresholdAmount}(address(this), address(0));
-            ethRewardsPerEEthShareAfterRebase += 1 ether * thresholdAmount / etherFanEEthShares;
-        }
-
-        _distributeStakingRewardsV1(ethRewardsPerEEthShareBeforeRebase, ethRewardsPerEEthShareAfterRebase);
-    }
-
     function claimBatch(uint256[] calldata _tokenIds) public whenNotPaused {
         for (uint256 i = 0; i < _tokenIds.length; i++) {
             claim(_tokenIds[i]);
-        }
-    }
-
-    function _distributeStakingRewardsV1(uint256 _ethRewardsPerEEthShareBeforeRebase, uint256 _ethRewardsPerEEthShareAfterRebase) internal {
-        uint128[] memory vaultTotalPooledEEthShares = globalIndexLibrary.calculateVaultEEthShares(address(this), address(liquidityPool), _ethRewardsPerEEthShareBeforeRebase, _ethRewardsPerEEthShareAfterRebase);
-        for (uint256 i = 0; i < tierDeposits.length; i++) {
-            tierVaults[i].totalPooledEEthShares = vaultTotalPooledEEthShares[i];
         }
     }
 

@@ -65,5 +65,4 @@ interface IMembershipManager {
     function vaultShareForEthAmount(uint8 _tier, uint256 _ethAmount) external view returns (uint256);
 
     function setWithdrawalLockBlocks(uint32 _blocks) external;
-    function rebase(int128 _accruedRewards) external;
 }

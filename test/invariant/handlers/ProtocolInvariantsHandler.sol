@@ -351,8 +351,8 @@ contract ProtocolInvariantsHandler is StdUtils {
     function burnEEthSharesForNonETHWithdrawal(uint128 valueETH, uint128 extra) external {
         uint256 outOfLp = lp.totalValueOutOfLp();
         if (outOfLp < 1 ether) {
-            vm.prank(membershipManager);
-            try lp.rebase(int128(10 ether)) {
+            vm.prank(lp.etherFiAdminContract());
+            try lp.rebase(int128(10 ether), 0) {
                 ghost_ledgerTPE += int256(uint256(10 ether));
             } catch {
                 callCounts["bForNon_skipped"]++;
@@ -433,8 +433,8 @@ contract ProtocolInvariantsHandler is StdUtils {
         }
         delta = int128(bound(int256(delta), minD, maxD));
 
-        vm.prank(membershipManager);
-        try lp.rebase(delta) {
+        vm.prank(lp.etherFiAdminContract());
+        try lp.rebase(delta, 0) {
             ghost_ledgerTPE += int256(delta);
             callCounts[delta < 0 ? bytes32("rebase_negative") : bytes32("rebase_positive")]++;
         } catch (bytes memory err) {
@@ -461,8 +461,8 @@ contract ProtocolInvariantsHandler is StdUtils {
         }
         delta = int128(bound(int256(delta), minD, maxD));
 
-        vm.prank(membershipManager);
-        try lp.rebase(delta) {
+        vm.prank(lp.etherFiAdminContract());
+        try lp.rebase(delta, 0) {
             ghost_ledgerTPE += int256(delta);
             callCounts["rebaseExtreme"]++;
         } catch (bytes memory err) {
@@ -737,11 +737,12 @@ contract ProtocolInvariantsHandler is StdUtils {
         }
     }
 
-    /// (F-007) EXEMPT path. Drives `LP.withdraw(amount, rate)` pranked as
-    /// WRN with an oracle-style rate. This is intentionally an exempt
+    /// (F-007) WRN/PWQ-gated path. Drives `LP.withdraw(amount, share)` pranked
+    /// as WRN, burning `share` of WRN's eETH shares against the OutOfLp budget.
+    /// `withdraw` no longer carries any rate guard, so this is an exempt
     /// rate-deflation vector; the test is that a subsequent non-exempt op
     /// in the SAME sequence still passes its own per-call rate-monotonicity
-    /// check (the deflation from the exempt path lowers (P0, S0) but the
+    /// check (the deflation from this path lowers (P0, S0) but the
     /// non-exempt op's (P0, S0) -> (P1, S1) delta is what matters).
     ///
     /// Pre-conditions:
@@ -750,8 +751,8 @@ contract ProtocolInvariantsHandler is StdUtils {
     function claimSegregated(uint128 amountSeed, uint128 rateSeed) external {
         uint256 outOfLp = lp.totalValueOutOfLp();
         if (outOfLp < 1 ether) {
-            vm.prank(membershipManager);
-            try lp.rebase(int128(int256(uint256(2 ether)))) {
+            vm.prank(lp.etherFiAdminContract());
+            try lp.rebase(int128(int256(uint256(2 ether))), 0) {
                 ghost_ledgerTPE += int256(2 ether);
             } catch { callCounts["segClaim_skipped"]++; return; }
             outOfLp = lp.totalValueOutOfLp();
@@ -790,11 +791,11 @@ contract ProtocolInvariantsHandler is StdUtils {
         uint256 ts = eETH.totalShares();
         if (sharesToBurn >= ts) { callCounts["segClaim_skipped"]++; return; }
 
-        // No `_checkNonExempt` here - this is the EXEMPT path.
-        // Pass `_shareOfEEth = sharesToBurn` so the new guards are no-ops and the handler
-        // reproduces the pre-Option-5 burn behavior exactly.
+        // No `_checkNonExempt` here - this is the gated WRN/PWQ path.
+        // `withdraw(amount, share)` decrements totalValueOutOfLp by `amount`
+        // and burns exactly `sharesToBurn` of WRN's eETH shares.
         vm.prank(wrn);
-        try lp.withdraw(amount, amount, rate, sharesToBurn) {
+        try lp.withdraw(amount, sharesToBurn) {
             ghost_ledgerTPE -= int256(amount);   // ETH leaves LP accounting
             callCounts["segClaim"]++;
         } catch (bytes memory err) {

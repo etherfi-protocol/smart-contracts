@@ -267,8 +267,8 @@ contract LiquidityPoolTest is TestSetup {
         vm.stopPrank();
 
         vm.deal(owner, 100 ether);
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(2 ether); // 0.25% of 800 ETH TVL — exactly at the cap
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.rebase(2 ether, 0); // 0.25% of 800 ETH TVL — exactly at the cap
         assertEq(eETHInstance.balanceOf(alice), 401 ether);
         assertEq(eETHInstance.balanceOf(bob), 401 ether);
 
@@ -303,8 +303,8 @@ contract LiquidityPoolTest is TestSetup {
         vm.stopPrank();
 
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 400 ether);
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(1 ether); // 0.25% of 400 ETH — exactly at the cap
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.rebase(1 ether, 0); // 0.25% of 400 ETH — exactly at the cap
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 401 ether);
 
         vm.deal(alice, 3 ether);
@@ -961,13 +961,11 @@ contract LiquidityPoolTest is TestSetup {
             vm.prank(bob);
             address(liquidityPoolInstance).call{value: 10 ether}("");
 
-            // Try to withdraw more eETH than the NFT escrow holds via the segregated entry.
-            // Pass `_shareOfEEth = withdrawAmount * 2` (matches `_amount` at live rate) so
-            // Guard 1 (amount-cap) admits the call and we hit the solvency branch.
-            uint256 liveRate = liquidityPoolInstance.amountPerShareCeil();
+            // Withdrawing more than the amount currently out of the LP underflows the
+            // `totalValueOutOfLp -= _amount` accounting, reverting with an arithmetic panic.
             vm.startPrank(address(withdrawRequestNFTInstance));
-            vm.expectRevert(LiquidityPool.InsufficientLiquidity.selector);
-            liquidityPoolInstance.withdraw(withdrawAmount * 2, withdrawAmount * 2, liveRate, withdrawAmount * 2);
+            vm.expectRevert(stdError.arithmeticError);
+            liquidityPoolInstance.withdraw(withdrawAmount * 2, withdrawAmount * 2);
             vm.stopPrank();
         } else {
             vm.stopPrank();
@@ -1146,8 +1144,8 @@ contract LiquidityPoolTest is TestSetup {
         uint256 totalPooledBefore = liquidityPoolInstance.getTotalPooledEther();
 
         // rebase within the 25 bps per-report cap (0.25% of 100 ETH TVL = 0.25 ETH)
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(0.25 ether);
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.rebase(0.25 ether, 0);
 
         uint256 totalPooledAfter = liquidityPoolInstance.getTotalPooledEther();
         assertEq(totalPooledAfter, totalPooledBefore + 0.25 ether);
@@ -1167,27 +1165,51 @@ contract LiquidityPoolTest is TestSetup {
         uint256 cap = (tvl * 25) / 10_000;
 
         // one wei over the cap reverts
-        vm.prank(address(membershipManagerInstance));
+        vm.prank(address(etherFiAdminInstance));
         vm.expectRevert(LiquidityPool.RebaseExceedsPositiveCap.selector);
-        liquidityPoolInstance.rebase(int128(uint128(cap + 1)));
+        liquidityPoolInstance.rebase(int128(uint128(cap + 1)), 0);
 
         // exactly at the cap succeeds
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(int128(uint128(cap)));
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.rebase(int128(uint128(cap)), 0);
 
         // a negative rebase (slashing) is not bounded by this LP-side cap — the oracle
         // path (EtherFiAdmin negative cap) owns that direction
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(-int128(uint128(cap)));
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.rebase(-int128(uint128(cap)), 0);
     }
 
-    function test_RebaseFailsIfNotMembershipManager() public {
-        vm.startPrank(alice);
+    // EARN-1440: rebase is now driven directly by EtherFiAdmin; the MembershipManager hop is
+    // removed, so MembershipManager is no longer an authorized rebase caller.
+    function test_RebaseFailsIfNotEtherFiAdmin() public {
+        // arbitrary unauthorized caller reverts
+        vm.prank(alice);
         vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
-        liquidityPoolInstance.rebase(5 ether);
-        vm.stopPrank();
+        liquidityPoolInstance.rebase(5 ether, 0);
+
+        // the old caller (MembershipManager) is now rejected too — the hop is gone
+        vm.prank(address(membershipManagerInstance));
+        vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
+        liquidityPoolInstance.rebase(5 ether, 0);
+
+        // establish TVL, then the etherFiAdmin contract can rebase the LP directly
+        vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+
+        uint256 totalPooledBefore = liquidityPoolInstance.getTotalPooledEther();
+        uint256 mmSharesBefore = eETHInstance.shares(address(membershipManagerInstance));
+
+        // within the 25 bps cap (0.25% of 100 ETH = 0.25 ETH)
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.rebase(0.25 ether, 0);
+
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), totalPooledBefore + 0.25 ether);
+        // no reward distribution touches MembershipManager: its eETH shares are unchanged
+        assertEq(eETHInstance.shares(address(membershipManagerInstance)), mmSharesBefore, "MM must not be touched by rebase");
     }
 
+    // Protocol fees are now paid inside rebase(): rebase(0, fees) is a fee-only call.
     function test_PayProtocolFees() public {
         vm.deal(address(etherFiAdminInstance), 10 ether);
         vm.startPrank(address(etherFiAdminInstance));
@@ -1195,7 +1217,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.stopPrank();
 
         vm.startPrank(address(etherFiAdminInstance));
-        liquidityPoolInstance.payProtocolFees(5 ether);
+        liquidityPoolInstance.rebase(0, 5 ether);
         assertEq(eETHInstance.balanceOf(bob), 5 ether);
         vm.stopPrank();
     }
@@ -1203,7 +1225,7 @@ contract LiquidityPoolTest is TestSetup {
     function test_PayProtocolFeesFailsIfNotEtherFiAdmin() public {
         vm.startPrank(alice);
         vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
-        liquidityPoolInstance.payProtocolFees(5 ether);
+        liquidityPoolInstance.rebase(0, 5 ether);
         vm.stopPrank();
     }
 
@@ -1358,8 +1380,8 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.deposit{value: 100 ether}();
         vm.stopPrank();
 
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(0.25 ether); // within 25 bps cap
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.rebase(0.25 ether, 0); // within 25 bps cap
 
         uint256 claim = liquidityPoolInstance.getTotalEtherClaimOf(alice);
         assertGt(claim, 100 ether);
@@ -1543,8 +1565,8 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.deposit{value: 100 ether}();
         vm.stopPrank();
 
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(0.25 ether); // within 25 bps cap
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.rebase(0.25 ether, 0); // within 25 bps cap
 
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 100.25 ether);
     }
@@ -1919,83 +1941,19 @@ contract LiquidityPoolTest is TestSetup {
         uint128 lpOutBefore        = liquidityPoolInstance.totalValueOutOfLp();
         uint256 lockedBefore       = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
 
-        // Use the live rate via `amountPerShareCeil()` — the canonical snapshot LP exposes for
-        // consumers. `rate=0` is no longer accepted; consumers resolve legacy snapshots locally.
-        uint256 liveRate = liquidityPoolInstance.amountPerShareCeil();
+        // The segregated `withdraw(amount, share)` burns `share` shares from the NFT (msg.sender)
+        // and debits `amount` from totalValueOutOfLp — it does not move ETH itself.
+        uint256 share = liquidityPoolInstance.sharesForAmount(amount);
         vm.prank(address(withdrawRequestNFTInstance));
-        liquidityPoolInstance.withdraw(amount, amount, liveRate, amount);
+        liquidityPoolInstance.withdraw(amount, share);
 
         assertEq(address(liquidityPoolInstance).balance, lpEthBefore, "LP ETH should not change on segregated withdraw");
-        assertEq(address(withdrawRequestNFTInstance).balance, nftEthBefore, "NFT ETH unchanged by LP withdraw(amount, rate) alone");
+        assertEq(address(withdrawRequestNFTInstance).balance, nftEthBefore, "NFT ETH unchanged by LP withdraw(amount, share) alone");
         assertEq(bob.balance, recipientEthBefore, "recipient should NOT receive ETH from LP on segregated path");
         assertEq(liquidityPoolInstance.totalValueInLp(),  lpInBefore, "totalValueInLp should not change");
         assertEq(liquidityPoolInstance.totalValueOutOfLp(), lpOutBefore - amount, "totalValueOutOfLp not decreased");
         // NFT's counter is decremented by _claimWithdraw before LP is called; here we bypassed _claimWithdraw.
         assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), lockedBefore, "locked counter unchanged when calling LP directly");
-    }
-
-    // ───────────────────────────────────────────────────────────────────────────
-    // Fuzz: LP.withdraw(amount, rate) — boundary correctness for the freeze path
-    // ───────────────────────────────────────────────────────────────────────────
-
-    /// @dev Math property of the (amount, rate) overload's burn derivation, isolated from LP
-    ///      state (caller checks, eETH balance, etc). Covers full uint128 amount × uint224 rate
-    ///      range and confirms `Math.mulDiv` produces a coherent ceiling result without overflow.
-    function testFuzz_withdrawWithRate_shareMathBounds(uint128 amount, uint224 rate) public pure {
-        amount = uint128(bound(uint256(amount), 1, type(uint128).max));
-        rate   = uint224(bound(uint256(rate), 1, type(uint224).max));
-
-        uint256 share = Math.mulDiv(uint256(amount), 1e18, uint256(rate), Math.Rounding.Up);
-
-        // Ceiling: share is never 0 when both inputs are positive.
-        assertGt(share, 0, "ceil(>0 * 1e18 / >0) > 0");
-
-        // Tight ceiling: floor(amount*1e18/rate) <= share <= floor + 1.
-        uint256 floorShare = Math.mulDiv(uint256(amount), 1e18, uint256(rate), Math.Rounding.Down);
-        assertGe(share, floorShare, "ceil >= floor");
-        assertLe(share, floorShare + 1, "ceil <= floor + 1");
-
-        // Round-trip: `share * rate / 1e18` recovers `amount` up to 1 wei loss from the ceiling.
-        // (We only check the inequality when the recovered value fits in uint256 — always true here.)
-        uint256 recovered = Math.mulDiv(share, uint256(rate), 1e18, Math.Rounding.Down);
-        assertGe(recovered + 1, uint256(amount), "ceil(a*U/r)*r/U recovers >= a-1");
-    }
-
-    /// @dev Concrete boundary smoke test of `withdraw(amount, rate)` at uint128/uint224 maxima.
-    ///      Confirms the function doesn't revert from intermediate overflow inside `Math.mulDiv`.
-    function test_withdrawWithRate_maxBoundsDoNotOverflow() public view {
-        // We only exercise the pure math the function does (Math.mulDiv) — not the side effects —
-        // because routing a `type(uint128).max` amount through the NFT escrow requires more state
-        // setup than is meaningful here. The math being safe is the boundary property we care about.
-        uint256 maxAmount = uint256(type(uint128).max);
-        uint256 maxRate   = uint256(type(uint224).max);
-
-        // Largest amount, smallest meaningful rate.
-        uint256 s1 = Math.mulDiv(maxAmount, 1e18, 1, Math.Rounding.Up);
-        assertGt(s1, 0, "max amount / rate=1");
-
-        // Largest amount AND largest rate.
-        uint256 s2 = Math.mulDiv(maxAmount, 1e18, maxRate, Math.Rounding.Up);
-        assertGt(s2, 0, "max amount / max rate");
-    }
-
-    /// @dev `rate == 0` is rejected by LP — consumers (WRNFT / Queue) are required to resolve
-    ///      pre-upgrade legacy snapshots to a live rate locally via `amountPerShareCeil()`
-    ///      before invoking the (amount, rate) overload. Pins the InvalidRate revert.
-    function test_withdrawWithRate_zeroRateReverts_InvalidRate() public {
-        // Deposit so eETH shares exist; transfer to NFT so the solvency precondition is met.
-        vm.deal(alice, 1000 ether);
-        vm.prank(alice);
-        liquidityPoolInstance.deposit{value: 1000 ether}();
-        vm.prank(alice);
-        eETHInstance.transfer(address(withdrawRequestNFTInstance), 1 ether);
-
-        vm.prank(address(etherFiAdminInstance));
-        liquidityPoolInstance.addEthAmountLockedForWithdrawal(uint128(1 ether));
-
-        vm.prank(address(withdrawRequestNFTInstance));
-        vm.expectRevert(LiquidityPool.InvalidRate.selector);
-        liquidityPoolInstance.withdraw(uint256(1 ether), uint256(1 ether), uint256(0), uint256(1 ether));
     }
 
     function test_initializeOnUpgradeV2_sweepsLockedEth() public {
@@ -2199,21 +2157,16 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     // ───────────────────────────────────────────────────────────────────────────
-    // LP.withdraw(amount, rate) — PR A coverage for the OZ Math.mulDiv(Up) swap
+    // LP.withdraw(amount, share) — segregated burn-path coverage
     //
-    // The implementation already uses `Math.mulDiv(_amount, 1e18, _rate, Math.Rounding.Up)`
-    // (replacing a hand-rolled `(a * 1e18 + r - 1) / r` ceiling). These tests pin:
-    //   1. rate>0 path matches mulDiv(Up) on the *actual* contract call
-    //   2. ceiling round-trip: burned_shares * rate / 1e18 >= amount
-    //   3. concrete edge case amount=1, rate=1.5e18 → burns 1 share (ceiling kicks in)
-    //   4. solvency revert when caller's shares < computed burn
-    //   5. access control consistency: random EOA + cross-overload calls both revert
-    //      with `IncorrectCaller`
+    // These tests pin the retained behavior of the segregated overload:
+    //   1. solvency revert when caller's shares < requested burn
+    //   2. access control: random EOA + cross-overload callers revert `IncorrectCaller`
     // ───────────────────────────────────────────────────────────────────────────
 
-    /// @dev Helper: seeds the NFT escrow with `amount` eETH shares so the (amount, rate)
-    ///      overload's solvency check (`eETH.shares(msg.sender) >= share`) is satisfied,
-    ///      and increments `totalValueOutOfLp` so the burn accounting doesn't underflow.
+    /// @dev Helper: seeds the NFT escrow with `depositAmount` eETH shares so the
+    ///      (amount, share) overload's solvency check (`eETH.shares(msg.sender) >= share`)
+    ///      is satisfied, and increments `totalValueOutOfLp` so the burn accounting doesn't underflow.
     function _seedNftEscrow(uint256 depositAmount, uint128 lockAmount) internal {
         vm.deal(alice, depositAmount);
         vm.startPrank(alice);
@@ -2225,74 +2178,9 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.addEthAmountLockedForWithdrawal(lockAmount);
     }
 
-    /// @dev Rate>0 path with frozen-rate <= live-rate: the contract picks the worse-for-protocol
-    ///      branch (`max(shareAtFrozen, shareAtLive)`). With `rate < liveRate`, `shareAtFrozen`
-    ///      is larger and the burn matches `Math.mulDiv(amount, 1e18, rate, Up)` exactly. This
-    ///      pins the ceiling-math invariant in the branch where the frozen rate dominates.
-    function test_withdrawWithRate_rateNonZero_burnMatchesMulDivUp() public {
-        uint128 amount = 7 ether;
-        // Pick a rate STRICTLY BELOW the live rate so shareAtFrozen > shareAtLive and the
-        // Lido-clamp picks the frozen branch. Live rate at fresh setup is ~1e18.
-        uint256 rate   = 0.5e18;
-        uint256 expectedBurn = Math.mulDiv(uint256(amount), 1e18, rate, Math.Rounding.Up);
-
-        // Seed the NFT with enough shares to cover the burn (shareOfEEth must clear Guard 3 cap).
-        _seedNftEscrow(100 ether, amount);
-
-        uint256 sharesBefore = eETHInstance.shares(address(withdrawRequestNFTInstance));
-
-        // Pass a large `_shareOfEEth` (100 ether worth of shares) so Guard 1/3 don't cap and
-        // we observe the raw burn computation. Guard 1 admits any `_amount <= 100e18*rate/1e18`.
-        vm.prank(address(withdrawRequestNFTInstance));
-        uint256 burned = liquidityPoolInstance.withdraw(uint256(amount), uint256(amount), rate, 100 ether);
-
-        assertEq(burned, expectedBurn, "burned shares must equal mulDiv(amount, 1e18, rate, Up)");
-        assertEq(
-            sharesBefore - eETHInstance.shares(address(withdrawRequestNFTInstance)),
-            expectedBurn,
-            "NFT share delta must equal the mulDiv(Up) burn"
-        );
-
-        // Ceiling round-trip: the eETH value recovered from `burned` shares at the
-        // snapshotted rate must be >= the amount the caller withdrew. The protocol
-        // never under-collects eETH for a given ETH payout.
-        assertGe(
-            Math.mulDiv(burned, rate, 1e18, Math.Rounding.Down),
-            uint256(amount),
-            "ceiling round-trip: burned * rate / 1e18 >= amount"
-        );
-    }
-
-    /// @dev Concrete edge case: `amount = 1 wei, rate = 1.5e18`.
-    ///      Hand math: ceil(1 * 1e18 / 1.5e18) = ceil(0.666...) = 1, and ceil(1/live) = 1 too.
-    ///      `max(1, 1) = 1`. Pin the ceiling-math invariant against a refactor that drops
-    ///      the ceiling on either branch.
-    function test_withdrawWithRate_edge_oneWeiAtRate1p5_burnsOneShare() public {
-        uint256 amount = 1; // 1 wei
-        uint256 rate   = 1.5e18;
-
-        uint256 expected = Math.mulDiv(amount, 1e18, rate, Math.Rounding.Up);
-        assertEq(expected, 1, "precondition: ceiling rounds 0.666... up to 1");
-
-        // Seed NFT with > 1 share (deposit a small amount, transfer to NFT).
-        _seedNftEscrow(1 ether, uint128(amount));
-
-        uint256 nftSharesBefore = eETHInstance.shares(address(withdrawRequestNFTInstance));
-
-        // Pass `_shareOfEEth = 1 ether` so Guard 1/3 admit and we observe the raw 1-wei burn.
-        vm.prank(address(withdrawRequestNFTInstance));
-        uint256 burned = liquidityPoolInstance.withdraw(amount, amount, rate, 1 ether);
-
-        assertEq(burned, 1, "1 wei at rate 1.5e18 must burn exactly 1 share (ceiling)");
-        assertEq(
-            nftSharesBefore - eETHInstance.shares(address(withdrawRequestNFTInstance)),
-            1,
-            "NFT share delta is 1"
-        );
-    }
-
-    /// @dev Solvency check: if the caller (NFT) holds fewer shares than the computed burn,
-    ///      LP must revert `InsufficientLiquidity` — *before* touching state.
+    /// @dev Solvency check: LP no longer pre-checks the caller's share balance, so when the caller
+    ///      (NFT) holds fewer shares than the requested burn, `eETH.burnShares` reverts
+    ///      `BurnAmountExceedsBalance`.
     function test_withdrawWithRate_revertsWhenCallerHasInsufficientShares() public {
         uint128 amount = 1 ether;
 
@@ -2306,18 +2194,17 @@ contract LiquidityPoolTest is TestSetup {
         eETHInstance.transfer(bob, nftBalance);
         assertEq(eETHInstance.shares(address(withdrawRequestNFTInstance)), 0, "NFT drained");
 
-        // rate>0 path: any positive rate produces a positive burn; NFT has 0 shares.
-        // Pass `_shareOfEEth = amount` so Guard 1/3 admit; we want to hit the solvency revert.
+        // NFT has 0 shares, so `eETH.burnShares` reverts BurnAmountExceedsBalance.
         vm.prank(address(withdrawRequestNFTInstance));
-        vm.expectRevert(LiquidityPool.InsufficientLiquidity.selector);
-        liquidityPoolInstance.withdraw(uint256(amount), uint256(amount), 1e18, uint256(amount));
+        vm.expectRevert(EETH.BurnAmountExceedsBalance.selector);
+        liquidityPoolInstance.withdraw(uint256(amount), uint256(amount));
     }
 
-    /// @dev Random EOA must not be able to call the (amount, rate) overload.
+    /// @dev Random EOA must not be able to call the (amount, share) segregated overload.
     function test_withdrawWithRate_randomEoaReverts_IncorrectCaller() public {
         vm.prank(bob);
         vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
-        liquidityPoolInstance.withdraw(uint256(1 ether), uint256(1 ether), uint256(1e18), uint256(1 ether));
+        liquidityPoolInstance.withdraw(uint256(1 ether), uint256(1 ether));
     }
 
     /// @dev Random EOA must not be able to call the (recipient, amount) overload.
@@ -2337,252 +2224,28 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.withdraw(alice, uint256(1 ether));
     }
 
-    /// @dev membershipManager may not call the *(amount, rate)* segregated overload —
+    /// @dev membershipManager may not call the *(amount, share)* segregated overload —
     ///      that entry point is reserved for withdrawRequestNFT / priorityWithdrawalQueue.
     function test_withdrawWithRate_membershipManagerReverts_IncorrectCaller() public {
         vm.prank(address(membershipManagerInstance));
         vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
-        liquidityPoolInstance.withdraw(uint256(1 ether), uint256(1 ether), uint256(1e18), uint256(1 ether));
+        liquidityPoolInstance.withdraw(uint256(1 ether), uint256(1 ether));
     }
 
-    // ───────────────────────────────────────────────────────────────────────────
-    // Three-guard tests for the Lido-pattern segregated withdraw.
-    //
-    // Guard 1 — amount-cap:  `_amount <= _shareOfEEth * _rate / SHARE_UNIT`
-    // Guard 2 — max-burn:    `share = max(amount/_rate, amount/live)`
-    // Guard 3 — share-cap:   `share <= _shareOfEEth`
-    //
-    // The threat model is: WRN can return inflated `_amount`, `_rate`, or
-    // `_shareOfEEth`. Each single-variable inflation is bounded by one of the
-    // three guards. Multi-variable inflation is bounded by `eETH.shares(WRN)`
-    // solvency, which is checked downstream.
-    // ───────────────────────────────────────────────────────────────────────────
+    /// @dev Regression for PR #454: `withdraw` must debit `totalValueOutOfLp` by the
+    ///      `_amount` passed in (the value credited at fulfill/lock). This pins the LP
+    ///      boundary where the accounting drift bug lived.
+    function test_withdraw_debitsAmount() public {
+        uint128 amount = 100 ether;
+        _seedNftEscrow(1000 ether, amount);
 
-    /// @dev Guard 1: an `_amount` exceeding the rate-implied entitlement of the
-    ///      request's share allocation reverts `InvalidAmount`.
-    function test_withdrawGuard1_amountInflationReverts() public {
-        // shareOfEEth = 1e18; rate = 1e18 → amountCap = 1e18. Try amount = 1e18 + 1.
-        _seedNftEscrow(10 ether, 1 ether);
-        vm.prank(address(withdrawRequestNFTInstance));
-        vm.expectRevert(LiquidityPool.InvalidAmount.selector);
-        liquidityPoolInstance.withdraw(uint256(1 ether) + 1, uint256(1 ether) + 1, uint256(1e18), uint256(1 ether));
-    }
-
-    /// @dev Guard 1 boundary: `_amount` exactly equal to the rate-implied entitlement passes.
-    function test_withdrawGuard1_amountAtExactCapPasses() public {
-        _seedNftEscrow(10 ether, 1 ether);
-        vm.prank(address(withdrawRequestNFTInstance));
-        // _amount == 1e18 == _shareOfEEth * rate / 1e18 — boundary admits.
-        uint256 burned = liquidityPoolInstance.withdraw(uint256(1 ether), uint256(1 ether), uint256(1e18), uint256(1 ether));
-        assertGt(burned, 0, "boundary _amount must succeed");
-    }
-
-    /// @dev Guard 2: an inflated `_rate` (above live) is silently floored. The burn
-    ///      equals `ceil(_amount / live)`, NOT `ceil(_amount / _rate)`. This is the
-    ///      Lido-pattern worse-for-protocol clamp — single-corruption defeat.
-    function test_withdrawGuard2_inflatedRateFlooredAtLive() public {
-        uint128 amount = 1 ether;
-        _seedNftEscrow(10 ether, amount);
-
-        uint256 liveRate = liquidityPoolInstance.amountPerShareCeil();
-        // Pass a rate 3× above live — what an attacker would supply to under-burn shares.
-        uint256 inflatedRate = liveRate * 3;
-        // Loose _shareOfEEth so Guard 1 and Guard 3 admit; we want to observe Guard 2.
-        uint256 looseShare = 10 ether;
-
-        uint256 expectedShareAtLive = Math.mulDiv(amount, 1e18, liveRate, Math.Rounding.Up);
-
-        vm.prank(address(withdrawRequestNFTInstance));
-        uint256 burned = liquidityPoolInstance.withdraw(uint256(amount), uint256(amount), inflatedRate, looseShare);
-
-        assertEq(burned, expectedShareAtLive, "burn must equal shareAtLive when _rate > live");
-    }
-
-    /// @dev Guard 2: `_rate` below live → `shareAtFrozen > shareAtLive` → max picks frozen.
-    ///      Standard down-rebase claim: protocol honors the higher frozen share count.
-    function test_withdrawGuard2_frozenBelowLiveBurnsAtFrozen() public {
-        uint128 amount = 1 ether;
-        _seedNftEscrow(10 ether, amount);
-
-        // Rate strictly below live → shareAtFrozen > shareAtLive → max picks frozen branch.
-        uint256 liveRate = liquidityPoolInstance.amountPerShareCeil();
-        uint256 frozenRate = liveRate / 2; // half of live → 2× shares
-        uint256 expectedShareAtFrozen = Math.mulDiv(amount, 1e18, frozenRate, Math.Rounding.Up);
-
-        vm.prank(address(withdrawRequestNFTInstance));
-        uint256 burned = liquidityPoolInstance.withdraw(uint256(amount), uint256(amount), frozenRate, 10 ether);
-
-        assertEq(burned, expectedShareAtFrozen, "burn must equal shareAtFrozen when _rate < live");
-    }
-
-    /// @dev Guard 3: when `frozenRate > live` (the Lido-clamp path picks `shareAtLive`),
-    ///      the burn is capped at `_shareOfEEth`. This is what un-DoSes legitimate
-    ///      down-rebase claims: WRN supplies its request's actual `shareOfEEth` and
-    ///      Guard 3 prevents Guard 2 from trying to burn more than that allocation.
-    ///
-    ///      Note: when `frozenRate < live`, Guard 1's amount-cap (`amount <= shareOfEEth*rate`)
-    ///      forces `shareOfEEth >= shareAtFrozen = max(shareAtFrozen, shareAtLive)`, so the
-    ///      Guard 3 cap is vacuous on that path. The cap is load-bearing only on the
-    ///      `frozenRate >= live` path.
-    function test_withdrawGuard3_burnCappedAtShareOfEEth() public {
-        uint128 amount = 1 ether;
-        _seedNftEscrow(10 ether, amount);
-
-        uint256 liveRate = liquidityPoolInstance.amountPerShareCeil();
-        // frozenRate > live → Lido-clamp picks shareAtLive = ceil(amount/live), which
-        // is the LARGER share count. shareAtFrozen = ceil(amount/frozenRate) is smaller.
-        uint256 frozenRate = liveRate * 2;
-        uint256 shareAtFrozen = Math.mulDiv(amount, 1e18, frozenRate, Math.Rounding.Up);
-        uint256 shareAtLive   = Math.mulDiv(amount, 1e18, liveRate, Math.Rounding.Up);
-        uint256 uncappedBurn  = shareAtFrozen > shareAtLive ? shareAtFrozen : shareAtLive;
-
-        // tightShare sits BETWEEN shareAtFrozen and uncappedBurn so Guard 1 admits AND Guard 3 fires.
-        uint256 tightShare = (shareAtFrozen + uncappedBurn) / 2;
-        require(tightShare > shareAtFrozen && tightShare < uncappedBurn, "test setup");
-
-        // Guard 1 admits iff amount <= tightShare * frozenRate / 1e18. By construction since
-        // tightShare > shareAtFrozen = ceil(amount/frozenRate), this holds.
-
-        vm.prank(address(withdrawRequestNFTInstance));
-        uint256 burned = liquidityPoolInstance.withdraw(uint256(amount), uint256(amount), frozenRate, tightShare);
-
-        assertEq(burned, tightShare, "burn must be capped at _shareOfEEth");
-    }
-
-    /// @dev Property test: across a wide grid of (amount, rate, shareOfEEth) values,
-    ///      the burn always equals `min(max(shareAtFrozen, shareAtLive), shareOfEEth)`,
-    ///      and the three guards never let the protocol be net-worse than today's code.
-    ///      Uses `vm.assume` (which Foundry surfaces in skipped-sample stats) instead
-    ///      of `return` so coverage degradation is observable.
-    function testFuzz_withdrawGuards_burnFollowsSpec(
-        uint128 amountSeed,
-        uint128 rateSeed,
-        uint128 shareSeed
-    ) public {
-        // Seed a fresh setup with generous NFT shares so solvency never blocks.
-        _seedNftEscrow(1000 ether, uint128(100 ether));
-
-        uint256 liveRate = liquidityPoolInstance.amountPerShareCeil();
-
-        // Bound inputs to plausible production ranges.
-        uint256 amount = bound(uint256(amountSeed), 1, 50 ether);
-        uint256 rate = bound(uint256(rateSeed), 0.5e18, 2e18);
-        uint256 shareOfEEth = bound(uint256(shareSeed), 1, 100 ether);
-
-        // Guard 1: assume the call would not revert on the amount-cap (covered separately).
-        uint256 amountCap = Math.mulDiv(shareOfEEth, rate, 1e18, Math.Rounding.Down);
-        vm.assume(amount <= amountCap);
-
-        uint256 shareAtFrozen = Math.mulDiv(amount, 1e18, rate, Math.Rounding.Up);
-        uint256 shareAtLive   = Math.mulDiv(amount, 1e18, liveRate, Math.Rounding.Up);
-        uint256 expectedBurn  = shareAtFrozen > shareAtLive ? shareAtFrozen : shareAtLive;
-        if (expectedBurn > shareOfEEth) expectedBurn = shareOfEEth;
-        vm.assume(expectedBurn > 0);
-        vm.assume(eETHInstance.shares(address(withdrawRequestNFTInstance)) >= expectedBurn);
-
-        vm.prank(address(withdrawRequestNFTInstance));
-        uint256 burned = liquidityPoolInstance.withdraw(amount, amount, rate, shareOfEEth);
-        assertEq(burned, expectedBurn, "burn must match three-guard spec");
-
-        // Differential oracle for the up-rebase case (`rate >= liveRate`): the burn must
-        // match the live-rate ceiling closed-form, NOT the frozen-rate one. Independent
-        // computation guards against the test re-implementing the same bug as production.
-        if (rate >= liveRate) {
-            uint256 oracleBurn = Math.mulDiv(amount, 1e18, liveRate, Math.Rounding.Up);
-            if (oracleBurn > shareOfEEth) oracleBurn = shareOfEEth;
-            assertEq(burned, oracleBurn, "up-rebase oracle: burn = ceil(amount/live), capped at shareOfEEth");
-        }
-    }
-
-    /// @dev Regression test for Cursor Bugbot finding on commit `6c3f4bf`:
-    ///      PWQ claims could DoS under a tiny rate drop because PWQ's 10-wei
-    ///      `_TOLERANCE_BUFFER` admits values that Guard 1's ceil/floor combo rejects.
-    ///      Fix: PWQ derives `_rate` from `(amountWithFee, shareOfEEth)` instead of
-    ///      using the live rate, so Guard 1 admits `amountWithFee` by construction.
-    ///
-    ///      This test verifies the underlying LP invariant: passing
-    ///      `_rate = ceil(amount * 1e18 / shareOfEEth)` always admits `_amount`,
-    ///      regardless of how the live rate has moved relative to the request's queue-time rate.
-    function test_withdrawGuard1_pwqDerivedRateAdmitsAnyTolerableAmount() public {
-        // Seed NFT with shares. Lock 20 ether worth in totalValueOutOfLp so the burn's
-        // `totalValueOutOfLp -= _amount` does not underflow.
-        _seedNftEscrow(100 ether, 20 ether);
-
-        // Pretend the request was queued at rate 1.0, shareOfEEth = 10e18, amountWithFee = 10e18 + 7 wei
-        // (the 7 wei is within PWQ's 10-wei tolerance buffer — a tiny rate drop happened).
-        uint256 shareOfEEth = 10 ether;
-        uint256 amountWithFee = 10 ether + 7; // 7 wei over what shareOfEEth justifies at rate 1.0
-
-        // PWQ's pre-fix code would compute `rate = amountPerShareCeil()`. After a small
-        // rate drop, `amountCap = floor(shareOfEEth * rate / 1e18)` would fall below
-        // `amountWithFee`, tripping Guard 1's `InvalidAmount`.
-
-        // Post-fix code computes `rate = ceil(amountWithFee * 1e18 / shareOfEEth)`.
-        // This makes `amountCap >= amountWithFee` by construction (ceiling rounding).
-        uint256 derivedRate = Math.mulDiv(amountWithFee, 1e18, shareOfEEth, Math.Rounding.Up);
-
-        // The call must succeed.
-        vm.prank(address(withdrawRequestNFTInstance));
-        uint256 burned = liquidityPoolInstance.withdraw(amountWithFee, amountWithFee, derivedRate, shareOfEEth);
-        assertGt(burned, 0, "claim must succeed with derived rate");
-        assertLe(burned, shareOfEEth, "Guard 3 must cap burn at shareOfEEth");
-    }
-
-    /// @dev Guard 1 negative path: the fuzz above skips Guard-1 violations via `vm.assume`.
-    ///      This dedicated fuzz asserts the REVERT side: any `_amount` strictly above
-    ///      `_shareOfEEth * _rate / SHARE_UNIT` reverts `InvalidAmount`.
-    function testFuzz_withdrawGuard1_amountAboveCapReverts(
-        uint128 amountSeed,
-        uint128 rateSeed,
-        uint128 shareSeed
-    ) public {
-        _seedNftEscrow(1000 ether, uint128(100 ether));
-
-        uint256 amount = bound(uint256(amountSeed), 1, 50 ether);
-        uint256 rate = bound(uint256(rateSeed), 0.5e18, 2e18);
-        uint256 shareOfEEth = bound(uint256(shareSeed), 1, 100 ether);
-
-        uint256 amountCap = Math.mulDiv(shareOfEEth, rate, 1e18, Math.Rounding.Down);
-        vm.assume(amount > amountCap);
-
-        vm.prank(address(withdrawRequestNFTInstance));
-        vm.expectRevert(LiquidityPool.InvalidAmount.selector);
-        liquidityPoolInstance.withdraw(amount, amount, rate, shareOfEEth);
-    }
-
-    /// @dev Regression for PR #454: `withdraw` must debit `totalValueOutOfLp` by
-    ///      `_amountOfEEth` (the value credited at fulfill/lock), NOT by `_amount` (the
-    ///      ETH actually paid). On a down-rebase between finalize and claim the two diverge
-    ///      (`_amount < _amountOfEEth`); the pre-fix code debited `_amount`, leaving a
-    ///      permanent upward drift in `totalValueOutOfLp` and over-counting
-    ///      `getTotalPooledEther`. Every other `withdraw` test passes the two args equal,
-    ///      so none distinguishes the fix — this one pins the divergent case at the LP
-    ///      boundary where the bug lived. With the old code this asserts a debit of
-    ///      `amountPaid` (the bug) and fails on the second assertion below.
-    function test_withdraw_debitsAmountOfEEth_notAmountPaid() public {
-        // `_seedNftEscrow` locks `amountOfEEth` into totalValueOutOfLp, mirroring the
-        // fulfill-time `addEthAmountLockedForWithdrawal(request.amountOfEEth)` credit.
-        uint128 amountOfEEth = 100 ether;
-        _seedNftEscrow(1000 ether, amountOfEEth);
-
-        // Simulate a down-rebase: the finalized claim pays out less ETH than was locked.
-        uint256 amountPaid  = 80 ether;   // < amountOfEEth
-        uint256 shareOfEEth = 100 ether;  // generous; Guard 3 does not bind
-        uint256 rate        = 1e18;       // Guard 1 admits amountPaid <= shareOfEEth*rate/1e18
-        assertTrue(amountPaid != uint256(amountOfEEth), "setup must exercise the divergent case");
-
+        uint256 share = liquidityPoolInstance.sharesForAmount(amount);
         uint256 outLpBefore = liquidityPoolInstance.totalValueOutOfLp();
 
         vm.prank(address(withdrawRequestNFTInstance));
-        liquidityPoolInstance.withdraw(amountPaid, uint256(amountOfEEth), rate, shareOfEEth);
+        liquidityPoolInstance.withdraw(uint256(amount), share);
 
         uint256 debit = outLpBefore - liquidityPoolInstance.totalValueOutOfLp();
-
-        // The debit unwinds exactly the fulfill-time credit, restoring the baseline...
-        assertEq(debit, uint256(amountOfEEth),
-            "withdraw must debit totalValueOutOfLp by _amountOfEEth (the fulfill credit)");
-        // ...and must NOT track the smaller ETH amount paid out (the pre-fix bug).
-        assertTrue(debit != amountPaid,
-            "regression: debit must not follow _amount when it diverges from _amountOfEEth");
+        assertEq(debit, uint256(amount), "withdraw must debit totalValueOutOfLp by _amount");
     }
 }
