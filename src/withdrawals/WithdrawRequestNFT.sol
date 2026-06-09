@@ -350,7 +350,9 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, DeprecatedOZO
         _burn(tokenId);
         delete _requests[tokenId];
 
-        if (ethAmountLockedForWithdrawal < amountToWithdraw) revert InsufficientEscrow();
+        // Guard against the value actually subtracted (the full escrowed amount), not the (possibly smaller)
+        // payout, so the check protects its own subtraction instead of letting it underflow.
+        if (ethAmountLockedForWithdrawal < request.amountOfEEth) revert InsufficientEscrow();
         ethAmountLockedForWithdrawal -= uint128(request.amountOfEEth);
 
         liquidityPool.withdraw(amountToWithdraw, request.shareOfEEth);

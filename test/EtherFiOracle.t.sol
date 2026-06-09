@@ -1771,6 +1771,22 @@ contract EtherFiOracleTest is TestSetup {
         etherFiAdminInstance.executeTasks(report);
     }
 
+    // Regression pin: protocolFees is uint128, but the 20% cap arithmetic is signed. A value above
+    // int128 max must be rejected outright. Before the fix, the cap math cast it to int128, wrapping
+    // it negative so `5*pf > totalRewards` was false and the cap was silently bypassed.
+    function test_canExecuteTasks_falseWhenFeesExceedInt128Max() public {
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.accruedRewards = 0;
+        report.protocolFees = uint128(type(int128).max) + 1; // wraps negative on an int128 cast
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: protocol fees exceed int128 max"));
+        etherFiAdminInstance.executeTasks(report);
+    }
+
     function test_canExecuteTasks_falseWhenValidatorRateAboveCap() public {
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
         report.validatorsToApprove = new uint256[](400); // > 200/day cap

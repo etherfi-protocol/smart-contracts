@@ -545,9 +545,14 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
      * @return _error The error message
      */
     function _validateProtocolFees(IEtherFiOracle.OracleReport calldata _report) internal pure returns (bool, string memory) {
-        int128 totalRewards = int128(_report.protocolFees) + _report.accruedRewards;
+        // protocolFees is uint128, but the cap arithmetic below is signed. A value above int128 max would
+        // wrap negative on an int128 cast and silently bypass the 20% cap, so reject it up front and run the
+        // comparison in int256 to avoid any truncation.
+        if (_report.protocolFees > uint128(type(int128).max)) return (false, "EtherFiAdmin: protocol fees exceed int128 max");
+        int256 protocolFees = int256(uint256(_report.protocolFees));
+        int256 totalRewards = protocolFees + int256(_report.accruedRewards);
         // protocol fees are less than 20% of total rewards
-        if (_report.protocolFees > 0 && int128(_report.protocolFees) * int256(uint256(MAX_PROTOCOL_FEE_INV_RATIO)) > totalRewards) return (false, "EtherFiAdmin: protocol fees exceed 20% total rewards");
+        if (protocolFees > 0 && protocolFees * int256(uint256(MAX_PROTOCOL_FEE_INV_RATIO)) > totalRewards) return (false, "EtherFiAdmin: protocol fees exceed 20% total rewards");
         return (true, "");
     }
 
