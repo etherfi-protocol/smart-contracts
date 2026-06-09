@@ -144,7 +144,7 @@ contract EtherFiNodesManager is
      * @notice Queues a beaconETH withdrawal for a given node
      * @param node The node to queue the beaconETH withdrawal for
      * @param amount The amount of beaconETH to withdraw
-     * @return The withdrawal root
+     * @return withdrawalRoot The withdrawal root
      */
     function queueETHWithdrawal(address node, uint256 amount) public onlyExecutorOperations whenNotPaused returns (bytes32 withdrawalRoot) {
         _validateNode(node);
@@ -156,7 +156,7 @@ contract EtherFiNodesManager is
      * @notice Queues a beaconETH withdrawal for a given node
      * @param id The id of the node to queue the beaconETH withdrawal for
      * @param amount The amount of beaconETH to withdraw
-     * @return The withdrawal root
+     * @return withdrawalRoot The withdrawal root
      */
     function queueETHWithdrawal(uint256 id, uint256 amount) external onlyExecutorOperations whenNotPaused returns (bytes32 withdrawalRoot) {
         return queueETHWithdrawal(etherfiNodeAddress(id), amount);
@@ -429,7 +429,6 @@ contract EtherFiNodesManager is
      * @param data The data to forward the call with
      * @return returnData The return data from the call
      * @dev This serves to allow us to support minor eigenlayer upgrades without needing to immediately upgrade our contracts.
-     * @return The return data from the call
      */
     function forwardEigenPodCall(address[] calldata nodes, bytes[] calldata data) external onlyEigenpodOperations whenNotPaused returns (bytes[] memory returnData) {
         if (nodes.length != data.length) revert InvalidForwardedCall();

@@ -109,7 +109,7 @@ contract EtherFiNode is IEtherFiNode {
      * @notice Transfers any funds held by the node to the liquidity pool.
      * @dev Under normal operations it is not expected for eth to accumulate in the nodes,
      *      this is just to handle any exceptional cases such as someone sending directly to the node.
-     * @return The balance of the node
+     * @return balance The balance of the node
      */
     function sweepFunds() external onlyEtherFiNodesManager returns (uint256 balance) {
         return _sweepToLiquidityPool();
@@ -141,7 +141,7 @@ contract EtherFiNode is IEtherFiNode {
      * @param amount The amount of beaconETH to withdraw
      * @dev You must wait EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS before claiming.
      *      It is fine to queue a withdrawal before validators have finished exiting on the beacon chain.
-     * @return The withdrawal root
+     * @return withdrawalRoot The withdrawal root
      */
     function queueETHWithdrawal(uint256 amount) external onlyEtherFiNodesManager returns (bytes32 withdrawalRoot) {
 
@@ -168,7 +168,7 @@ contract EtherFiNode is IEtherFiNode {
      * @dev Note that since the node is usually delegated to an operator,
      *      most of the time this should be called with "receiveAsTokens" = true because
      *      receiving shares while delegated will simply redelegate the shares.
-     * @return The balance of the node
+     * @return balance The balance of the node
      */
     function completeQueuedETHWithdrawals(bool receiveAsTokens) external onlyEtherFiNodesManager returns (uint256 balance) {
 
@@ -198,7 +198,7 @@ contract EtherFiNode is IEtherFiNode {
      * @param params The parameters to queue the withdrawal with
      * @dev You must wait EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS before claiming.
      *      For the general case of queuing a beaconETH withdrawal you can use queueETHWithdrawal instead.
-     * @return The withdrawal roots
+     * @return withdrawalRoots The withdrawal roots
      */
     function queueWithdrawals(IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyEtherFiNodesManager returns (bytes32[] memory withdrawalRoots) {
         return delegationManager.queueWithdrawals(params);
@@ -212,7 +212,7 @@ contract EtherFiNode is IEtherFiNode {
      * @dev For the general case of claiming beaconETH withdrawals you can use completeQueuedETHWithdrawals instead.
      *      Any ETH that lands on this node as a result of the completion is auto-swept to the liquidity pool;
      *      the swept amount is returned so the manager can emit FundsTransferred at the wrapper level too.
-     * @return The balance of the node
+     * @return balance The balance of the node
      */
     function completeQueuedWithdrawals(
         IDelegationManager.Withdrawal[] calldata withdrawals,
@@ -254,7 +254,7 @@ contract EtherFiNode is IEtherFiNode {
     /**
      * @notice Forwards the lesser of (node balance, liquidityPool.totalValueOutOfLp()) to the liquidity pool.
      * @dev Shared by sweepFunds and completeQueued*Withdrawals.
-     * @return The balance of the node
+     * @return balance The balance of the node
      */
     function _sweepToLiquidityPool() private returns (uint256 balance) {
         uint256 contractBalance = address(this).balance;
