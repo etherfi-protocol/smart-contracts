@@ -308,15 +308,23 @@ contract EtherFiNodesManagerTest is TestSetup {
         if (!_isEIP4788Available()) {
             vm.skip(true);
         }
+        // startCheckpoint passes revertIfNoBalance=true; on a latest-block fork the
+        // real pod may have no excess native ETH, so seed it to give a checkpointable balance.
+        address pod = managerInstance.getEigenPod(testNode);
+        vm.deal(pod, pod.balance + 100 ether);
         vm.prank(podProver);
         managerInstance.startCheckpoint(testNode);
     }
-    
+
     function test_startCheckpoint_byId() public {
         // Skip if EIP-4788 not available (e.g., Tenderly VNET)
         if (!_isEIP4788Available()) {
             vm.skip(true);
         }
+        // See note in test_startCheckpoint_byAddress: seed the pod with native ETH so
+        // there is a balance to checkpoint (revertIfNoBalance=true).
+        address pod = managerInstance.getEigenPod(testLegacyId);
+        vm.deal(pod, pod.balance + 100 ether);
         vm.prank(podProver);
         managerInstance.startCheckpoint(testLegacyId);
     }
