@@ -386,11 +386,12 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, DeprecatedOZO
      *      - the transfer is not allowed if the from or to is blacklisted
      */
     function _beforeTokenTransfer(address from, address to, uint256 firstTokenId, uint256 batchSize) internal view override {
-        blacklister.nonBlacklisted(from);
+        blacklister.nonBlacklisted(msg.sender);
         blacklister.nonBlacklisted(to);
         for (uint256 i = 0; i < batchSize; i++) {
             uint256 tokenId = firstTokenId + i;
-            if (!_requests[tokenId].isValid) roleRegistry.onlyUpgradeTimelock(msg.sender);
+            if (_requests[tokenId].isValid) blacklister.nonBlacklisted(from);
+            else roleRegistry.onlyUpgradeTimelock(msg.sender);
         }
     }
 

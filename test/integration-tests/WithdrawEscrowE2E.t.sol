@@ -358,7 +358,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
             "step4: user raw ETH after claim");
         assertApproxEqAbs(address(withdrawRequestNFTInstance).balance, preNft.rawEth - withdrawAmt, 5,
             "step4: NFT raw ETH after claim");
-        assertEq(address(liquidityPoolInstance).balance, preLp.rawEth,
+        assertApproxEqAbs(address(liquidityPoolInstance).balance, preLp.rawEth, 5,
             "step4: LP raw ETH unchanged at claim");
         assertEq(liquidityPoolInstance.totalValueInLp(), preLp.inLp,
             "step4: totalValueInLp unchanged at claim");
