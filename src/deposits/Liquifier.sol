@@ -393,8 +393,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
         if (_token == address(lido)) {
             if (quoteStEthWithCurve) {
                 // check market value from curve pool, stETH price is on avrage always lower than ETH (this is essentially the capital efficiency of the protocol)
-                // if stETH price is temporarily larger than underlying ETH value, we set market value as 1:1 
-                _marketValue = Math.min(_amount, ICurvePoolQuoter1(address(stEth_Eth_Pool)).get_dy(1, 0, _amount));
+                _marketValue = ICurvePoolQuoter1(address(stEth_Eth_Pool)).get_dy(1, 0, _amount);
 
                 // We also validate against chainlink price feed to ensure there's no significant price deviation
                 // If price feed is stale, we BLOCK the stETH deposit (revert StalePriceFeed) — we do NOT skip the check
@@ -406,6 +405,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
                 uint256 pricefeedValue = uint256(answer).mulDiv(_amount, SHARE_UNIT);
                 uint256 deviation = pricefeedValue > _marketValue ? pricefeedValue - _marketValue : _marketValue - pricefeedValue;
                 if (deviation.mulDiv(BASIS_POINT_SCALE, _marketValue) > maxPriceDeviationInBps) revert InvalidStEthPrice();
+                // if stETH price is temporarily larger than underlying ETH value, we set market value as 1:1
+                _marketValue = Math.min(_marketValue, _amount);
             } else {
                 _marketValue = _amount; /// 1:1 from stETH to eETH
             }

@@ -147,21 +147,23 @@ contract LiquifierStEthPriceFeedForkTest is TestSetup {
         uint256 curveOut =
             ICurvePoolQuoter1(address(liquifierInstance.stEth_Eth_Pool())).get_dy(1, 0, amount);
 
-        uint256 marketValue = curveOut < amount ? curveOut : amount;
+        // Deviation is measured against the RAW curve quote; the 1:1 cap is applied
+        // only after the check passes.
         uint256 chainlinkValue = (uint256(answer) * amount) / 1e18;
         bool fresh = updatedAt + staleWindow >= block.timestamp;
-        uint256 deviation = chainlinkValue > marketValue ? chainlinkValue - marketValue : marketValue - chainlinkValue;
+        uint256 deviation = chainlinkValue > curveOut ? chainlinkValue - curveOut : curveOut - chainlinkValue;
+        uint256 cappedValue = curveOut < amount ? curveOut : amount;
         uint256 bps = liquifierInstance.BASIS_POINT_SCALE();
 
         if (!fresh) {
             vm.expectRevert(Liquifier.StalePriceFeed.selector);
             liquifierInstance.quoteByMarketValue(address(stEth), amount);
-        } else if ((deviation * bps) / marketValue > liquifierInstance.maxPriceDeviationInBps()) {
+        } else if ((deviation * bps) / curveOut > liquifierInstance.maxPriceDeviationInBps()) {
             vm.expectRevert(Liquifier.InvalidStEthPrice.selector);
             liquifierInstance.quoteByMarketValue(address(stEth), amount);
         } else {
             uint256 q = liquifierInstance.quoteByMarketValue(address(stEth), amount);
-            assertEq(q, marketValue);
+            assertEq(q, cappedValue);
         }
     }
 
