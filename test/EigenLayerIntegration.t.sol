@@ -8,7 +8,7 @@ import "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPodManager.sol";
 import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 import "@etherfi/interfaces/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
-import "@etherfi/eigenlayer-libraries/BeaconChainProofs.sol";
+import "@eigenlayer-libraries/BeaconChainProofs.sol";
 
 import "@tests/eigenlayer-utils/ProofParsing.sol";
 import "@tests/eigenlayer-mocks/BeaconChainOracleMock.sol";

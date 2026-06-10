@@ -10,7 +10,7 @@ import {IDelegationManagerTypes} from "@etherfi/interfaces/eigenlayer-interfaces
 import {IEigenPodManager} from "@etherfi/interfaces/eigenlayer-interfaces/IEigenPodManager.sol";
 import {IEigenPod} from "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 import {IStrategy} from "@etherfi/interfaces/eigenlayer-interfaces/IStrategy.sol";
-import {BeaconChainProofs} from "@etherfi/eigenlayer-libraries/BeaconChainProofs.sol";
+import {BeaconChainProofs} from "@eigenlayer-libraries/BeaconChainProofs.sol";
 
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {LibCall} from "solady/utils/LibCall.sol";

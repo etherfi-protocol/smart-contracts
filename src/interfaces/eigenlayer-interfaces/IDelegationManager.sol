@@ -4,7 +4,7 @@ pragma solidity >=0.5.0;
 import "@etherfi/interfaces/eigenlayer-interfaces/IStrategy.sol";
 import "@etherfi/interfaces/eigenlayer-interfaces/IPauserRegistry.sol";
 import "@etherfi/interfaces/eigenlayer-interfaces/ISignatureUtilsMixin.sol";
-import "@etherfi/eigenlayer-libraries/SlashingLib.sol";
+import "@eigenlayer-libraries/SlashingLib.sol";
 
 interface IDelegationManagerErrors {
     /// @dev Thrown when caller is neither the StrategyManager or EigenPodManager contract.

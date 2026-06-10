@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity >=0.5.0;
 
-import {OperatorSet} from "@etherfi/eigenlayer-libraries/OperatorSetLib.sol";
+import {OperatorSet} from "@eigenlayer-libraries/OperatorSetLib.sol";
 import "@etherfi/interfaces/eigenlayer-interfaces/IPauserRegistry.sol";
 import "@etherfi/interfaces/eigenlayer-interfaces/IStrategy.sol";
 import "@etherfi/interfaces/eigenlayer-interfaces/IAVSRegistrar.sol";

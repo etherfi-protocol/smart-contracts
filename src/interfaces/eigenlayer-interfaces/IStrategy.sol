@@ -2,7 +2,7 @@
 pragma solidity >=0.5.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@etherfi/eigenlayer-libraries/SlashingLib.sol";
+import "@eigenlayer-libraries/SlashingLib.sol";
 import "@etherfi/interfaces/eigenlayer-interfaces/ISemVerMixin.sol";
 
 interface IStrategyErrors {

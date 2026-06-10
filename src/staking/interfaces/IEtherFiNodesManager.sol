@@ -5,7 +5,7 @@ import "@etherfi/staking/interfaces/IEtherFiNode.sol";
 import "@etherfi/staking/interfaces/IStakingManager.sol";
 import "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
 import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
-import {BeaconChainProofs} from "@etherfi/eigenlayer-libraries/BeaconChainProofs.sol";
+import {BeaconChainProofs} from "@eigenlayer-libraries/BeaconChainProofs.sol";
 
 interface IEtherFiNodesManager {
 

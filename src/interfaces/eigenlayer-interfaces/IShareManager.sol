@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import "@etherfi/eigenlayer-libraries/SlashingLib.sol";
+import "@eigenlayer-libraries/SlashingLib.sol";
 import "@etherfi/interfaces/eigenlayer-interfaces/IStrategy.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 

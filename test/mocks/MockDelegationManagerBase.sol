@@ -6,7 +6,7 @@ import "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
 import "@etherfi/interfaces/eigenlayer-interfaces/IStrategy.sol";
 import "@etherfi/interfaces/eigenlayer-interfaces/IPauserRegistry.sol";
 import "@etherfi/interfaces/eigenlayer-interfaces/ISignatureUtilsMixin.sol";
-import "@etherfi/eigenlayer-libraries/SlashingLib.sol";
+import "@eigenlayer-libraries/SlashingLib.sol";
 
 // IDelegationManager but with all functions made virtual
 contract MockDelegationManagerBase is IDelegationManager {

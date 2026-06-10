@@ -3,7 +3,7 @@ pragma solidity >=0.5.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import "@etherfi/eigenlayer-libraries/BeaconChainProofs.sol";
+import "@eigenlayer-libraries/BeaconChainProofs.sol";
 import "@etherfi/interfaces/eigenlayer-interfaces/ISemVerMixin.sol";
 import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPodManager.sol";
 

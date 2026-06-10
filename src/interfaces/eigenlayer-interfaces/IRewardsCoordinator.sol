@@ -2,7 +2,7 @@
 pragma solidity ^0.8.27;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@etherfi/eigenlayer-libraries/OperatorSetLib.sol";
+import "@eigenlayer-libraries/OperatorSetLib.sol";
 
 import "@etherfi/interfaces/eigenlayer-interfaces/IAllocationManager.sol";
 import "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
