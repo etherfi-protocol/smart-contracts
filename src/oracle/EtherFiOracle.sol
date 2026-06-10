@@ -10,7 +10,6 @@ import "@etherfi/governance/utils/Pausable.sol";
 import "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
 import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
 
-
 contract EtherFiOracle is Initializable, DeprecatedOZOwnable, DeprecatedOZPausable, UUPSUpgradeable, IEtherFiOracle, Pausable {
 
     //--------------------------------------------------------------------------------------
@@ -83,6 +82,8 @@ contract EtherFiOracle is Initializable, DeprecatedOZOwnable, DeprecatedOZPausab
     error InvalidReportPeriod();
     error InvalidConsensusVersion();
     error InvalidQuorum();
+    error InvalidMembersLength();
+    error MemberNotParticipated();
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  CONSTRUCTOR  ----------------------------------
@@ -261,10 +262,24 @@ contract EtherFiOracle is Initializable, DeprecatedOZOwnable, DeprecatedOZPausab
      * @notice Unpublish a report
      * @param _report The report
      */
-    function unpublishReport(OracleReport calldata _report) public onlyOperatingMultisig {
+    function unpublishReport(OracleReport calldata _report, address[] calldata _members) public onlyOperatingMultisig {
         bytes32 _hash = generateReportHash(_report);
         if (!consensusStates[_hash].consensusReached) revert ConsensusNotReached();
         if (_report.refSlotTo <= etherFiAdmin.lastHandledReportRefSlot()) revert ReportExecuted();
+        if (_members.length < quorumSize) revert InvalidMembersLength();
+        for (uint256 i = 0; i < _members.length; i++) {
+            CommitteeMemberState storage memberState = committeeMemberStates[_members[i]];
+            if (memberState.lastReportRefSlot != _report.refSlotTo) revert MemberNotParticipated();
+            memberState.numReports = memberState.numReports == 0 ? 0 : memberState.numReports - 1;
+            // `lastReportRefSlot` marks the most recent slot this member submitted for (set on
+            // every submit, not just consensus-winning ones); it gates re-submission via
+            // shouldSubmitReport's `slot > lastReportRefSlot`. Rolling it back to refSlotFrom - 1
+            // re-enables re-submission of the unpublished report. That equals the member's true
+            // prior value only if they submitted the contiguous previous report; if they skipped
+            // it we set this slightly higher than the real value, which is harmless because every
+            // period before refSlotFrom is already handled and can never need a submission.
+            memberState.lastReportRefSlot = _report.refSlotFrom - 1;
+        }
         consensusStates[_hash].support = 0;
         consensusStates[_hash].consensusReached = false;
         lastPublishedReportRefSlot = _report.refSlotFrom - 1;
