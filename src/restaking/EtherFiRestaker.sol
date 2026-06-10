@@ -14,9 +14,9 @@ import "@etherfi/governance/utils/PausableUntil.sol";
 import "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
 import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
 
-import "@etherfi/eigenlayer-interfaces/IStrategyManager.sol";
-import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
-import "@etherfi/eigenlayer-interfaces/IRewardsCoordinator.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IStrategyManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IRewardsCoordinator.sol";
 
 import "@etherfi/deposits/interfaces/ILiquifier.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";

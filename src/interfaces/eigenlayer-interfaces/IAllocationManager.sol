@@ -2,10 +2,10 @@
 pragma solidity >=0.5.0;
 
 import {OperatorSet} from "@etherfi/eigenlayer-libraries/OperatorSetLib.sol";
-import "@etherfi/eigenlayer-interfaces/IPauserRegistry.sol";
-import "@etherfi/eigenlayer-interfaces/IStrategy.sol";
-import "@etherfi/eigenlayer-interfaces/IAVSRegistrar.sol";
-import "@etherfi/eigenlayer-interfaces/ISemVerMixin.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IPauserRegistry.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IStrategy.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IAVSRegistrar.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/ISemVerMixin.sol";
 
 interface IAllocationManagerErrors {
     /// Input Validation

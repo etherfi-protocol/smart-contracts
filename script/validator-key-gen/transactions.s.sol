@@ -19,7 +19,7 @@ import "@etherfi/staking/AuctionManager.sol";
 import "@etherfi/staking/interfaces/IEtherFiNode.sol";
 import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
 import "@etherfi/staking/interfaces/IStakingManager.sol";
-import {IEigenPod, IEigenPodTypes} from "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
+import {IEigenPod, IEigenPodTypes} from "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 import "@openzeppelin/contracts/access/IAccessControl.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "forge-std/Script.sol";

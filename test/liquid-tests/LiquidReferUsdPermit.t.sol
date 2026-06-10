@@ -2,7 +2,7 @@
 pragma solidity ^0.8.22;
 
 import {LiquidReferPermitFuzzBaseTest} from "@tests/liquid-tests/base/liquidReferPermitBase.t.sol";
-import {ILayerZeroTellerWithRateLimiting} from "@etherfi/liquid-interfaces/ILayerZeroTellerWithRateLimiting.sol";
+import {ILayerZeroTellerWithRateLimiting} from "@etherfi/interfaces/liquid-interfaces/ILayerZeroTellerWithRateLimiting.sol";
 
 // Only USDC supports permit; WETH and WBTC lack EIP-2612.
 contract LiquidReferUsdPermitTest is LiquidReferPermitFuzzBaseTest {

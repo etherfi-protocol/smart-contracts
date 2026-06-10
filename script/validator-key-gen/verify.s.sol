@@ -11,7 +11,7 @@ import {EtherFiRestaker} from "@etherfi/restaking/EtherFiRestaker.sol";
 
 import {IEtherFiNodesManager} from "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
 import {IStakingManager} from "@etherfi/staking/interfaces/IStakingManager.sol";
-import {IEigenPodTypes} from "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
+import {IEigenPodTypes} from "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 
 interface ICreate2Factory {
     function deploy(bytes memory code, bytes32 salt) external payable returns (address);

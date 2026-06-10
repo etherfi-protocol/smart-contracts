@@ -5,7 +5,7 @@ import "@etherfi/governance/EtherFiTimelock.sol";
 import "@etherfi/staking/interfaces/IEtherFiNode.sol";
 // import {IEtherFiNodesManager} from "../../../src/interfaces/IEtherFiNodesManager.sol";
 import "@etherfi/staking/EtherFiNodesManager.sol";
-import {IEigenPod, IEigenPodTypes} from "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
+import {IEigenPod, IEigenPodTypes} from "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 

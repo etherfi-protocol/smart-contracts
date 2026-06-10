@@ -2,7 +2,7 @@
 pragma solidity ^0.8.27;
 
 import "@etherfi/eigenlayer-libraries/SlashingLib.sol";
-import "@etherfi/eigenlayer-interfaces/IStrategy.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IStrategy.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**

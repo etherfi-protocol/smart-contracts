@@ -4,13 +4,13 @@ pragma solidity ^0.8.13;
 import "@tests/TestSetup.sol";
 import "@etherfi/staking/EtherFiNode.sol";
 import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
-import "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
-import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
-import "@etherfi/eigenlayer-interfaces/IStrategy.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IStrategy.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 import {BeaconChainProofs} from "@etherfi/eigenlayer-libraries/BeaconChainProofs.sol";
-import {IDelegationManagerTypes} from "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
-import {IEigenPodTypes} from "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
+import {IDelegationManagerTypes} from "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
+import {IEigenPodTypes} from "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 import {EigenPodTestHelpers} from "@tests/utils/EigenPodTestHelpers.sol";
 import "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity >=0.5.0;
 
-import "@etherfi/eigenlayer-interfaces/IStrategy.sol";
-import "@etherfi/eigenlayer-interfaces/IPauserRegistry.sol";
-import "@etherfi/eigenlayer-interfaces/ISignatureUtilsMixin.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IStrategy.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IPauserRegistry.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/ISignatureUtilsMixin.sol";
 import "@etherfi/eigenlayer-libraries/SlashingLib.sol";
 
 interface IDelegationManagerErrors {

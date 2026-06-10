@@ -15,7 +15,7 @@ import "@etherfi/governance/EtherFiTimelock.sol";
 import "@etherfi/governance/interfaces/IRoleRegistry.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
 import "@etherfi/staking/interfaces/IStakingManager.sol";
-import {IEigenPod, IEigenPodTypes } from "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
+import {IEigenPod, IEigenPodTypes } from "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 
 interface IUpgradable {
     function upgradeTo(address newImplementation) external;

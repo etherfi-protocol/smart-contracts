@@ -5,11 +5,11 @@ import {IEtherFiNode} from "@etherfi/staking/interfaces/IEtherFiNode.sol";
 import {IEtherFiNodesManager} from "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
 import {ILiquidityPool} from "@etherfi/core/interfaces/ILiquidityPool.sol";
 
-import {IDelegationManager} from "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
-import {IDelegationManagerTypes} from "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
-import {IEigenPodManager} from "@etherfi/eigenlayer-interfaces/IEigenPodManager.sol";
-import {IEigenPod} from "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
-import {IStrategy} from "@etherfi/eigenlayer-interfaces/IStrategy.sol";
+import {IDelegationManager} from "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
+import {IDelegationManagerTypes} from "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
+import {IEigenPodManager} from "@etherfi/interfaces/eigenlayer-interfaces/IEigenPodManager.sol";
+import {IEigenPod} from "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
+import {IStrategy} from "@etherfi/interfaces/eigenlayer-interfaces/IStrategy.sol";
 import {BeaconChainProofs} from "@etherfi/eigenlayer-libraries/BeaconChainProofs.sol";
 
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";

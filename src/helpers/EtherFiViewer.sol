@@ -6,9 +6,9 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
 import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
-import "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
-import "@etherfi/eigenlayer-interfaces/IEigenPodManager.sol";
-import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPodManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
 
 import "@etherfi/helpers/AddressProvider.sol";
 
