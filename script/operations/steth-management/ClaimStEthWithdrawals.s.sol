@@ -6,10 +6,11 @@ import "forge-std/console2.sol";
 import {Deployed} from "../../deploys/Deployed.s.sol";
 import {EtherFiRestaker} from "../../../src/EtherFiRestaker.sol";
 import {ILidoWithdrawalQueue} from "../../../src/interfaces/ILiquifier.sol";
+import {Utils} from "../../utils/utils.sol";
 
 // forge script script/operations/steth-management/ClaimStEthWithdrawals.s.sol --fork-url $MAINNET_RPC_URL -vvvv
 
-contract ClaimStEthWithdrawals is Script, Deployed {
+contract ClaimStEthWithdrawals is Script, Deployed, Utils {
 
     EtherFiRestaker constant etherFiRestaker = EtherFiRestaker(payable(ETHERFI_RESTAKER));
 
@@ -92,6 +93,15 @@ contract ClaimStEthWithdrawals is Script, Deployed {
         console2.log("LiquidityPool balance before:", lpBalanceBefore / 1e18);
         vm.prank(ETHERFI_OPERATING_ADMIN);
         etherFiRestaker.stEthClaimWithdrawals(requestIds, hints);
+        writeSafeJson(
+            "script/operations/steth-management",
+            "claim-steth-withdrawals.json",
+            ETHERFI_OPERATING_ADMIN,
+            address(etherFiRestaker),
+            0,
+            callData,
+            block.chainid
+        );
         uint256 lpBalanceAfter = LIQUIDITY_POOL.balance;
         console2.log("LiquidityPool balance after:", lpBalanceAfter / 1e18);
         console2.log("ETH claimed:", (lpBalanceAfter - lpBalanceBefore) / 1e18);

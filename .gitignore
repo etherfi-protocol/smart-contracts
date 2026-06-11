@@ -40,3 +40,6 @@ simulation-*.log
 tenderly-simulation-*.log
 __pycache__/
 *.pyc
+
+# Claude files
+CLAUDE.*
