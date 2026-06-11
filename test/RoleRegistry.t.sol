@@ -132,7 +132,7 @@ contract RoleRegistryTest is Test {
     
     function test_Upgradeability() public {
         // Deploy new implementation
-        RoleRegistry newImplementation = new RoleRegistry(address(0));
+        RoleRegistry newImplementation = new RoleRegistry(address(0xdead));
         
         // Only owner can upgrade
         vm.prank(user1);

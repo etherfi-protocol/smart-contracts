@@ -45,7 +45,7 @@ contract LiquifierStEthPriceFeedTest is Test {
         // arbitrary ages from it without underflow.
         vm.warp(1_700_000_000);
 
-        RoleRegistry rrImpl = new RoleRegistry(address(0));
+        RoleRegistry rrImpl = new RoleRegistry(address(0xdead));
         UUPSProxy rrProxy = new UUPSProxy(
             address(rrImpl),
             abi.encodeWithSelector(RoleRegistry.initialize.selector, owner)

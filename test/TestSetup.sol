@@ -701,7 +701,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // Deploy the new impl BEFORE pranking: a `new` inside the upgradeTo
         // argument is a CREATE that would consume the single-shot vm.prank,
         // leaving upgradeTo to run as the test contract (Ownable revert).
-        address newRoleRegistryImpl = address(new RoleRegistry(address(0)));
+        address newRoleRegistryImpl = address(new RoleRegistry(address(0xdead)));
         vm.prank(roleRegistryInstance.owner());
         roleRegistryInstance.upgradeTo(newRoleRegistryImpl);
 
@@ -823,7 +823,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // Now swap RoleRegistry and grant roles used by tests.
         vm.startPrank(roleRegistryInstance.owner());
         if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
-            roleRegistryInstance.upgradeTo(address(new RoleRegistry(address(0))));
+            roleRegistryInstance.upgradeTo(address(new RoleRegistry(address(0xdead))));
         }
         roleRegistryInstance.grantRole(roleRegistryInstance.UPGRADE_TIMELOCK_ROLE(), owner);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), owner);
@@ -900,7 +900,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // Phase 1: deploy infrastructure with no circular deps
         // =====================================================================
 
-        roleRegistryImplementation = new RoleRegistry(address(0));
+        roleRegistryImplementation = new RoleRegistry(address(0xdead));
         roleRegistryProxy = new UUPSProxy(address(roleRegistryImplementation), abi.encodeWithSelector(RoleRegistry.initialize.selector, owner));
         roleRegistryInstance = RoleRegistry(address(roleRegistryProxy));
 
@@ -1581,7 +1581,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         if (address(liquidityPoolInstance.roleRegistry()) == address(0x0)) {
             // deploy new versions of role registry
-            roleRegistryImplementation = new RoleRegistry(address(0));
+            roleRegistryImplementation = new RoleRegistry(address(0xdead));
             bytes memory initializerData =  abi.encodeWithSelector(RoleRegistry.initialize.selector, admin);
             roleRegistryInstance = RoleRegistry(address(new UUPSProxy(address(roleRegistryImplementation), initializerData)));
             superAdmin = admin;
