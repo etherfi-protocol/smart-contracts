@@ -70,15 +70,7 @@ contract LiquifierStEthPriceFeedTest is Test {
         UUPSProxy proxy = new UUPSProxy(address(impl), "");
         liquifier = Liquifier(payable(address(proxy)));
 
-        liquifier.initialize(
-            address(0xCAFE),    // treasury
-            address(0xCAFF),    // liquidityPool
-            address(0xCAFFEE),  // strategyManager
-            address(0xCAFFFE),  // lidoWithdrawalQueue
-            stEth,
-            address(curve),
-            uint32(1 hours)
-        );
+        liquifier.initialize(uint32(1 hours));
 
         // Grant the consolidated admin role before any admin-gated call.
         // updateWhitelistedToken now requires UPGRADE_TIMELOCK_ROLE (onlyUpgradeTimelock);

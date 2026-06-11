@@ -50,7 +50,6 @@ contract WeETHWithdrawAdapter is
     //--------------------------------------------------------------------------------------
     error ZeroAmount();
     error ZeroAddress();
-    error InvalidAmount();
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  CONSTRUCTOR  ---------------------------------------
@@ -94,11 +93,9 @@ contract WeETHWithdrawAdapter is
     //---------------------------------  INITIALIZERS  ---------------------------------------
     //--------------------------------------------------------------------------------------
     /**
-     * @notice Initialize the adapter contract with initial owner
-     * @param _initialOwner Address that will be set as the contract owner
+     * @notice Initialize the adapter contract
      */
-    function initialize(address _initialOwner) external initializer {
-        if (_initialOwner == address(0)) revert ZeroAddress();
+    function initialize() external initializer {
         __UUPSUpgradeable_init();
     }
 

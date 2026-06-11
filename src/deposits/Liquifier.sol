@@ -155,17 +155,9 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
     //--------------------------------------------------------------------------------------
     /**
      * @notice Initialize the Liquifier
-     * @param _treasury The address of the treasury
-     * @param _liquidityPool The address of the liquidity pool
-     * @param _eigenLayerStrategyManager The address of the eigen layer strategy manager
-     * @param _lidoWithdrawalQueue The address of the lido withdrawal queue
-     * @param _stEth The address of the stEth
-     * @param _stEth_Eth_Pool The address of the stEth_Eth_Pool
      * @param _timeBoundCapRefreshInterval The time bounded cap refresh interval
     */
-    function initialize(address _treasury, address _liquidityPool, address _eigenLayerStrategyManager, address _lidoWithdrawalQueue, 
-                        address _stEth, address _stEth_Eth_Pool,
-                        uint32 _timeBoundCapRefreshInterval) initializer external {
+    function initialize(uint32 _timeBoundCapRefreshInterval) external initializer {
         __UUPSUpgradeable_init();
 
         timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;

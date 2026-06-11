@@ -21,7 +21,7 @@ contract AuctionManagerTest is TestSetup {
     function test_DisableInitializer() public {
         vm.expectRevert("Initializable: contract is already initialized");
         vm.prank(owner);
-        auctionImplementation.initialize(address(nodeOperatorManagerInstance));
+        auctionImplementation.initialize();
     }
     
 

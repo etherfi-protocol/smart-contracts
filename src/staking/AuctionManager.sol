@@ -64,7 +64,6 @@ contract AuctionManager is
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ERRORS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-    error AddressZero();
     error InvalidBidSize();
     error NotWhitelisted();
     error IncorrectBidValue();
@@ -103,13 +102,8 @@ contract AuctionManager is
     //--------------------------------------------------------------------------------------
     /**
      * @notice Initialize to set variables on deployment
-     * @param _nodeOperatorManagerContract The address of the node operator manager contract
      */
-    function initialize(
-        address _nodeOperatorManagerContract
-    ) external initializer {
-        if (_nodeOperatorManagerContract == address(0)) revert AddressZero();
-        
+    function initialize() external initializer {
         whitelistBidAmount = 0.001 ether;
         minBidAmount = 0.01 ether;
         maxBidAmount = 5 ether;

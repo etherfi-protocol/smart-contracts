@@ -104,7 +104,6 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
     error InvalidAmount();
     error InvalidWithdrawalAmount();
     error InvalidShareAmount();
-    error DataNotSet();
     error InsufficientLiquidity();
     error SendFail();
     error InvalidValidatorSize();
@@ -143,17 +142,8 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
     //--------------------------------------------------------------------------------------
     /**
      * @notice Initialize the Liquidity Pool
-     * @param _eEthAddress The address of the eETH contract
-     * @param _stakingManagerAddress The address of the staking manager contract
-     * @param _nodesManagerAddress The address of the nodes manager contract
-     * @param _membershipManagerAddress The address of the membership manager contract
-     * @param _tNftAddress The address of the tNFT contract
-     * @param _etherFiAdminContract The address of the etherFi admin contract
-     * @param _withdrawRequestNFT The address of the withdraw request NFT contract
      */
-    function initialize(address _eEthAddress, address _stakingManagerAddress, address _nodesManagerAddress, address _membershipManagerAddress, address _tNftAddress, address _etherFiAdminContract, address _withdrawRequestNFT) external initializer {
-        if (_eEthAddress == address(0) || _stakingManagerAddress == address(0) || _nodesManagerAddress == address(0) || _membershipManagerAddress == address(0) || _tNftAddress == address(0)) revert DataNotSet();
-        
+    function initialize() external initializer {
         __UUPSUpgradeable_init();
     }
 

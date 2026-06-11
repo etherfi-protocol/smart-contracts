@@ -79,7 +79,6 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
     //--------------------------------------------------------------------------------------
     error InvalidAmount();
     error InvalidOutputToken();
-    error InvalidBps();
     error ExceedsMaxExitFee();
     error ExceedsMaxLowWatermark();
     error ExceedsMaxExitFeeSplit();
@@ -139,13 +138,8 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
     //--------------------------------------------------------------------------------------
     /**
      * @notice Initialize the EtherFiRedemptionManager
-     * @param _exitFeeSplitToTreasuryInBps The exit fee split to treasury in basis points
-     * @param _exitFeeInBps The exit fee in basis points
-     * @param _lowWatermarkInBpsOfTvl The low watermark in basis points of the total value of the liquidity pool
      */
-    function initialize(uint16 _exitFeeSplitToTreasuryInBps, uint16 _exitFeeInBps, uint16 _lowWatermarkInBpsOfTvl, uint256 _bucketCapacity, uint256 _bucketRefillRate) external initializer {
-        if (_exitFeeInBps > BASIS_POINT_SCALE || _exitFeeSplitToTreasuryInBps > BASIS_POINT_SCALE || _lowWatermarkInBpsOfTvl > BASIS_POINT_SCALE) revert InvalidBps();
-
+    function initialize() external initializer {
         __UUPSUpgradeable_init();
     }
 

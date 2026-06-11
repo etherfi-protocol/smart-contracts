@@ -98,7 +98,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, DeprecatedOZO
     //-------------------------------------  ERRORS  ---------------------------------------
     //--------------------------------------------------------------------------------------
     error IncorrectCaller();
-    error AddressZero();
     error RequestValid();
     error RequestNotValid();
     error RequestNotFound();
@@ -140,12 +139,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, DeprecatedOZO
     //--------------------------------------------------------------------------------------
     /**
      * @notice Initialize the contract
-     * @param _liquidityPoolAddress The address of the liquidity pool.
-     * @param _eEthAddress The address of the eETH token.
-     * @param _membershipManagerAddress The address of the membership manager.
      */
-    function initialize(address _liquidityPoolAddress, address _eEthAddress, address _membershipManagerAddress) initializer external {
-        if (_liquidityPoolAddress == address(0) || _eEthAddress == address(0) || _membershipManagerAddress == address(0)) revert AddressZero();
+    function initialize() external initializer {
         __ERC721_init("Withdraw Request NFT", "WithdrawRequestNFT");
         __UUPSUpgradeable_init();
 

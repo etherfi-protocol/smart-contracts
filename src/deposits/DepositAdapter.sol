@@ -71,7 +71,7 @@ contract DepositAdapter is UUPSUpgradeable, DeprecatedOZOwnable, RolesLibrary, I
     /**
      * @notice Initialize the contract
      */
-    function initialize() initializer external {
+    function initialize() external initializer {
         __UUPSUpgradeable_init();
     }
 

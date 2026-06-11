@@ -180,24 +180,10 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
     //--------------------------------------------------------------------------------------
     /**
      * @notice Initialize the EtherFiAdmin
-     * @param _etherFiOracle The address of the etherFiOracle contract
-     * @param _stakingManager The address of the stakingManager contract
-     * @param _auctionManager The address of the auctionManager contract
-     * @param _etherFiNodesManager The address of the etherFiNodesManager contract
-     * @param _liquidityPool The address of the liquidityPool contract
-     * @param _membershipManager The address of the membershipManager contract
-     * @param _withdrawRequestNft The address of the withdrawRequestNFT contract
      * @param _acceptableRebaseAprInBps The acceptable rebase APR in basis points
      * @param _postReportWaitTimeInSlots The post report wait time in slots
      */
     function initialize(
-        address _etherFiOracle,
-        address _stakingManager,
-        address _auctionManager,
-        address _etherFiNodesManager,
-        address _liquidityPool,
-        address _membershipManager,
-        address _withdrawRequestNft,
         int32 _acceptableRebaseAprInBps,
         uint16 _postReportWaitTimeInSlots
     ) external initializer {

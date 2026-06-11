@@ -94,12 +94,8 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
     //--------------------------------------------------------------------------------------
     /**
      * @notice Initialize the WeETH contract
-     * @param _liquidityPool The address of the liquidity pool contract
-     * @param _eETH The address of the eETH contract
      */
-    function initialize(address _liquidityPool, address _eETH) external initializer {
-        if (_liquidityPool == address(0) || _eETH == address(0)) revert ZeroAddress();
-
+    function initialize() external initializer {
         __ERC20_init("Wrapped eETH", "weETH");
         __ERC20Permit_init("Wrapped eETH");
         __UUPSUpgradeable_init();

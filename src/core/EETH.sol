@@ -114,11 +114,8 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
     //--------------------------------------------------------------------------------------
     /**
      * @notice Initialize the EETH contract
-     * @param _liquidityPool The address of the liquidity pool contract
      */
-    function initialize(address _liquidityPool) external initializer {
-        if (_liquidityPool == address(0)) revert AddressZero();
-
+    function initialize() external initializer {
         __UUPSUpgradeable_init();
     }
 

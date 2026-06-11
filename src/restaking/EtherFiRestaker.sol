@@ -126,10 +126,8 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, DeprecatedOZOwnable,
     //--------------------------------------------------------------------------------------
     /**
      * @notice Initialize the EtherFiRestaker
-     * @param _liquidityPool The address of the liquidity pool
-     * @param _liquifier The address of the liquifier
      */
-    function initialize(address _liquidityPool, address _liquifier) initializer external {
+    function initialize() external initializer {
         __UUPSUpgradeable_init();
 
         (,, IStrategy strategy,,,,,,,,) = liquifier.tokenInfos(address(lido));

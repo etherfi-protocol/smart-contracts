@@ -33,7 +33,7 @@ contract WeETHWithdrawAdapterTest is TestSetup {
         );
         UUPSProxy proxy = new UUPSProxy(address(impl), "");
         adapter = WeETHWithdrawAdapter(address(proxy));
-        adapter.initialize(owner);
+        adapter.initialize();
     }
 
     function _grantPauseUntilRoles() internal {

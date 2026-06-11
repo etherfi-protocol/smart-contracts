@@ -1017,15 +1017,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             l1SyncPool: address(0xA6)
         }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS);
         liquifierInstance.upgradeTo(address(liquifierImplementation));
-        liquifierInstance.initialize(
-            address(treasuryInstance),
-            address(liquidityPoolProxy),
-            address(eigenLayerStrategyManager),
-            address(lidoWithdrawalQueue),
-            address(stEth),
-            address(stEth_Eth_Pool),
-            3600
-        );
+        liquifierInstance.initialize(3600);
 
         // EtherFiNode (non-proxy beacon impl used by StakingManager)
         node = new EtherFiNode(
@@ -1049,7 +1041,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(treasuryInstance)
         );
         auctionInstance.upgradeTo(address(auctionImplementation));
-        auctionInstance.initialize(address(nodeOperatorManagerInstance));
+        auctionInstance.initialize();
 
         // StakingManager
         stakingManagerImplementation = new StakingManager(
@@ -1166,22 +1158,16 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // TODO - not sure what `name` and `versiona` are for
         eETHImplementation = new EETH(address(liquidityPoolProxy), address(roleRegistryInstance), address(blacklisterInstance), address(rateLimiterInstance));
         vm.expectRevert("Initializable: contract is already initialized");
-        eETHImplementation.initialize(payable(address(liquidityPoolProxy)));
+        eETHImplementation.initialize();
         eETHInstance.upgradeTo(address(eETHImplementation));
-        vm.expectRevert(EETH.AddressZero.selector);
-        eETHInstance.initialize(payable(address(0)));
-        eETHInstance.initialize(payable(address(liquidityPoolProxy)));
+        eETHInstance.initialize();
 
         // WeETH
         weEthImplementation = new WeETH(address(eETHProxy), address(liquidityPoolProxy), address(roleRegistryInstance), address(blacklisterInstance), address(rateLimiterInstance));
         vm.expectRevert("Initializable: contract is already initialized");
-        weEthImplementation.initialize(payable(address(liquidityPoolProxy)), address(eETHProxy));
+        weEthImplementation.initialize();
         weEthInstance.upgradeTo(address(weEthImplementation));
-        vm.expectRevert(WeETH.ZeroAddress.selector);
-        weEthInstance.initialize(address(0), address(eETHProxy));
-        vm.expectRevert(WeETH.ZeroAddress.selector);
-        weEthInstance.initialize(payable(address(liquidityPoolProxy)), address(0));
-        weEthInstance.initialize(payable(address(liquidityPoolProxy)), address(eETHProxy));
+        weEthInstance.initialize();
 
         // EETH/WEETH operating admin consolidated into OPERATION_MULTISIG_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), admin);
@@ -1323,21 +1309,13 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         //   - NodeOperatorManager.setAuctionContractAddress (removed)
         //   - AuctionManager.setStakingManagerContractAddress (removed)
         // =====================================================================
-        liquidityPoolInstance.initialize(
-            address(eETHProxy),
-            address(stakingManagerProxy),
-            address(etherFiNodeManagerProxy),
-            address(membershipManagerProxy),
-            address(TNFTInstance),
-            address(etherFiAdminProxy),
-            address(withdrawRequestNFTProxy)
-        );
+        liquidityPoolInstance.initialize();
         // Bootstrap escrow migration flag (no `must be zero` check on immutables).
         liquidityPoolInstance.initializeOnUpgradeV2();
 
         membershipNftInstance.initialize("https://etherfi-cdn/{id}.json", address(membershipManagerInstance));
 
-        withdrawRequestNFTInstance.initialize(payable(address(liquidityPoolProxy)), payable(address(eETHProxy)), payable(address(membershipManagerProxy)));
+        withdrawRequestNFTInstance.initialize();
         // Push the share-rate-freeze sentinel checkpoint that the new finalizeRequests
         // guard requires. We're inside an active `vm.startPrank(owner)` block here and
         // `owner` was granted UPGRADE_TIMELOCK_ROLE in Phase 1, so no extra prank needed.
@@ -1387,13 +1365,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         tvlOracle = new TVLOracle(alice);
 
         etherFiAdminInstance.initialize(
-            address(etherFiOracleProxy),
-            address(stakingManagerProxy),
-            address(auctionManagerProxy),
-            address(etherFiNodeManagerProxy),
-            address(liquidityPoolProxy),
-            address(membershipManagerProxy),
-            address(withdrawRequestNFTProxy),
             10000,
             0
         );
@@ -1599,7 +1570,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             EtherFiRedemptionManager etherFiRedemptionManagerImplementation = new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance), address(etherFiRestakerInstance), address(priorityQueueInstance), address(blacklisterInstance), 10_000, 100, 10_000);
             etherFiRedemptionManagerProxy = new UUPSProxy(address(etherFiRedemptionManagerImplementation), "");
             etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
-            etherFiRedemptionManagerInstance.initialize(10_00, 1_00, 1_00, 5 ether, 0.001 ether); // 10% fee split to treasury, 1% exit fee, 1% low watermark  
+            etherFiRedemptionManagerInstance.initialize();
         }
 
         vm.startPrank(admin);
