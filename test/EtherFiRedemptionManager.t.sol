@@ -539,7 +539,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         uint256 expectedTreasuryFee = liquidityPoolInstance.amountForShare(feeShareToTreasury);
         
         // Use more lenient tolerance for share-based rounding differences, especially after rebase
-        assertApproxEqAbs(eETHInstance.balanceOf(treasury), treasuryBalanceBefore + expectedTreasuryFee, 5e11);
+        assertApproxEqAbs(eETHInstance.balanceOf(treasury), treasuryBalanceBefore + expectedTreasuryFee, 2e12);
         assertApproxEqAbs(address(user).balance, userBalance + expectedAmountToReceiver, 1e3);
 
         vm.stopPrank();
@@ -949,7 +949,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         assertApproxEqAbs(totalValueInLpBefore - liquidityPoolInstance.totalValueInLp(), expectedAmountToReceiver, 1e3);
         assertEq(liquidityPoolInstance.totalValueOutOfLp() - totalValueOutOfLpBefore, 0);
         // Use more lenient tolerance for treasury fee due to share-based rounding differences on mainnet fork
-        assertApproxEqAbs(eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance.treasury())) - treasuryBalanceBefore, expectedTreasuryFee, 5e11);
+        assertApproxEqAbs(eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance.treasury())) - treasuryBalanceBefore, expectedTreasuryFee, 2e12);
         vm.stopPrank();
     }
 

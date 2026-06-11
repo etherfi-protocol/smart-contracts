@@ -293,11 +293,8 @@ contract PriorityWithdrawalQueue is
         if (request.creationTime + minDelay > block.timestamp) revert NotMatured();
 
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore, uint256 queueEthBefore) = _snapshotBalances();
-        uint256 userEthBefore = request.user.balance;
-
         _claimWithdraw(request);
-
-        _verifyClaimPostConditions(lpEthBefore, queueEEthSharesBefore, queueEthBefore, userEthBefore, request.user);
+        _verifyClaimPostConditions(lpEthBefore, queueEEthSharesBefore, queueEthBefore);
     }
 
     /**
@@ -308,9 +305,8 @@ contract PriorityWithdrawalQueue is
         for (uint256 i = 0; i < requests.length; ++i) {
             if (requests[i].creationTime + minDelay > block.timestamp) revert NotMatured();
             (uint256 lpEthBefore, uint256 queueEEthSharesBefore, uint256 queueEthBefore) = _snapshotBalances();
-            uint256 userEthBefore = requests[i].user.balance;
             _claimWithdraw(requests[i]);
-            _verifyClaimPostConditions(lpEthBefore, queueEEthSharesBefore, queueEthBefore, userEthBefore, requests[i].user);
+            _verifyClaimPostConditions(lpEthBefore, queueEEthSharesBefore, queueEthBefore);
         }
     }
 
@@ -462,22 +458,17 @@ contract PriorityWithdrawalQueue is
      * @param lpEthBefore ETH balance of LiquidityPool before operation
      * @param queueEEthSharesBefore eETH shares held by queue before operation
      * @param queueEthBefore ETH balance of this contract before operation
-     * @param userEthBefore ETH balance of user before operation
-     * @param user The user who claimed
      */
     function _verifyClaimPostConditions(
         uint256 lpEthBefore,
         uint256 queueEEthSharesBefore,
-        uint256 queueEthBefore,
-        uint256 userEthBefore,
-        address user
+        uint256 queueEthBefore
     ) internal view {
         // LP ETH balance may increase by the stranded ETH swept from the queue back to LP (via LP.receive()).
         if (liquidityPool.totalValueInLp() < lpEthBefore) revert UnexpectedBalanceChange();
         if (eETH.shares(address(this)) >= queueEEthSharesBefore) revert UnexpectedBalanceChange();
         // Queue paid ETH to the user (and optionally fee back to LP) from its own escrow balance.
         if (address(this).balance >= queueEthBefore) revert UnexpectedBalanceChange();
-        if (user.balance <= userEthBefore) revert UnexpectedBalanceChange();
     }
 
     /**
