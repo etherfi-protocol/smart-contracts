@@ -25,7 +25,7 @@ interface IDepositAdapter {
 
     function depositETHForWeETH(address _referral) external payable returns (uint256);
     function depositWETHForWeETH(uint256 _amount, address _referral) external returns (uint256);
-    function depositStETHForWeETHWithPermit(uint256 _amount, address _referral, ILiquifier.PermitInput calldata _permit) external returns (uint256);
-    function depositWstETHForWeETHWithPermit(uint256 _amount, address _referral, ILiquifier.PermitInput calldata _permit) external returns (uint256);
+    function depositStETHForWeETHWithPermit(uint256 _amount, uint256 _minOutAmount, address _referral, ILiquifier.PermitInput calldata _permit) external returns (uint256);
+    function depositWstETHForWeETHWithPermit(uint256 _amount, uint256 _minOutAmount, address _referral, ILiquifier.PermitInput calldata _permit) external returns (uint256);
     function sweepDust(address _token, address _to) external;
 }

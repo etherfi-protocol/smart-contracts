@@ -108,7 +108,7 @@ contract LiquifierStEthPriceFeedForkTest is TestSetup {
         vm.startPrank(alice);
         stEth.approve(address(liquifierInstance), 1 ether);
         vm.expectRevert(Liquifier.InvalidStEthPrice.selector);
-        liquifierInstance.depositWithERC20(address(stEth), 1 ether, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), 1 ether, 0, address(0));
         vm.stopPrank();
     }
 
@@ -122,7 +122,7 @@ contract LiquifierStEthPriceFeedForkTest is TestSetup {
         vm.startPrank(alice);
         stEth.approve(address(liquifierInstance), 1 ether);
         vm.expectRevert(Liquifier.StalePriceFeed.selector);
-        liquifierInstance.depositWithERC20(address(stEth), 1 ether, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), 1 ether, 0, address(0));
         vm.stopPrank();
     }
 

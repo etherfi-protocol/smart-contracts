@@ -170,6 +170,6 @@ interface ILiquifier {
     function lidoWithdrawalQueue() external view returns (ILidoWithdrawalQueue);
     function tokenInfos(address _token) external view returns (uint128, uint128, IStrategy, bool, uint16, uint32, uint32, uint32, uint96, uint96, bool);
 
-    function depositWithERC20(address _token, uint256 _amount, address _referral) external returns (uint256);
+    function depositWithERC20(address _token, uint256 _amount, uint256 _minOutAmount, address _referral) external returns (uint256);
     function quoteByFairValue(address _token, uint256 _amount) external view returns (uint256);
 }

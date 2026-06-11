@@ -225,21 +225,6 @@ contract AuctionManager is
         }
     }
 
-    /**
-     * @notice Lets a bid that was matched to a cancelled stake re-enter the auction
-     * @param _bidId the ID of the bid which was matched to the cancelled stake.
-     */
-    function reEnterAuction(
-        uint256 _bidId
-    ) external onlyStakingManagerContract {
-        Bid storage bid = bids[_bidId];
-        if (bid.isActive) revert BidAlreadyActive();
-
-        bid.isActive = true;
-        numberOfActiveBids++;
-        emit BidReEnteredAuction(_bidId);
-    }
-
     //--------------------------------------------------------------------------------------
     //------------------------------- ADMIN FUNCTIONS  -------------------------------------
     //--------------------------------------------------------------------------------------

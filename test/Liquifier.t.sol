@@ -79,7 +79,7 @@ contract LiquifierTest is TestSetup {
         stEth.approve(address(liquifierInstance), amount);
 
         vm.expectRevert(Liquifier.Capped.selector);
-        liquifierInstance.depositWithERC20(address(stEth), amount, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), amount, 0, address(0));
 
         vm.stopPrank();
     }
@@ -99,14 +99,73 @@ contract LiquifierTest is TestSetup {
         vm.startPrank(alice);
         stEth.submit{value: 10 ether}(address(0));
         stEth.approve(address(liquifierInstance), 10 ether);
-        liquifierInstance.depositWithERC20(address(stEth), 10 ether, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), 10 ether, 0, address(0));
         vm.stopPrank();
 
         assertApproxEqAbs(eETHInstance.balanceOf(alice), 10 ether - 0.5 ether, 0.1 ether);
 
-        uint256 aliceQuotedEETH = liquifierInstance.quoteByDiscountedValue(address(stEth), 10 ether);
+        uint256 aliceQuotedEETH = liquifierInstance.quoteByDiscountedValue(address(stEth), 10 ether, 0);
         // alice will actually receive 1 wei less due to the infamous 1 wei rounding corner case
         assertApproxEqAbs(eETHInstance.balanceOf(alice), aliceQuotedEETH, 1e1);
+    }
+
+    /// @dev Slippage guard at the quote level: quoteByDiscountedValue must revert when the
+    ///      discounted output would fall below the caller-supplied `_minOutAmount`, and must
+    ///      return normally (unchanged value) when the floor is met.
+    function test_quoteByDiscountedValue_revertsBelowMinOut() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+        _mockFreshStEthFeed();
+
+        vm.startPrank(roleRegistryInstance.owner());
+        liquifierInstance.updateQuoteStEthWithCurve(true);
+        liquifierInstance.updateDiscountInBasisPoints(address(stEth), 500); // 5%
+        vm.stopPrank();
+
+        // Reference discounted value with no floor.
+        uint256 quoted = liquifierInstance.quoteByDiscountedValue(address(stEth), 10 ether, 0);
+        assertGt(quoted, 0);
+
+        // A floor one wei above the achievable output trips the slippage guard.
+        vm.expectRevert(Liquifier.InvalidSlippage.selector);
+        liquifierInstance.quoteByDiscountedValue(address(stEth), 10 ether, quoted + 1);
+
+        // A floor exactly at the output passes and returns the same value (>= is allowed).
+        assertEq(liquifierInstance.quoteByDiscountedValue(address(stEth), 10 ether, quoted), quoted);
+    }
+
+    /// @dev Slippage guard through the full deposit path: depositWithERC20 must revert
+    ///      InvalidSlippage when `_minOutAmount` exceeds the discounted credit, and succeed
+    ///      (minting ~the discounted value) when the floor is satisfiable.
+    function test_depositWithERC20_revertsWhenBelowMinOut() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+        _mockFreshStEthFeed();
+
+        vm.deal(alice, 100 ether);
+
+        vm.startPrank(roleRegistryInstance.owner());
+        liquifierInstance.updateQuoteStEthWithCurve(true);
+        liquifierInstance.updateDiscountInBasisPoints(address(stEth), 500); // 5%
+        vm.stopPrank();
+
+        // ~9.5 eETH expected for 10 stETH at a 5% discount.
+        uint256 quoted = liquifierInstance.quoteByDiscountedValue(address(stEth), 10 ether, 0);
+
+        vm.startPrank(alice);
+        stEth.submit{value: 11 ether}(address(0));
+        stEth.approve(address(liquifierInstance), 10 ether);
+
+        // Floor above the achievable discounted output -> reverts, no mint.
+        vm.expectRevert(Liquifier.InvalidSlippage.selector);
+        liquifierInstance.depositWithERC20(address(stEth), 10 ether, quoted + 1 ether, address(0));
+        assertEq(eETHInstance.balanceOf(alice), 0, "no eETH should be minted on a slippage revert");
+
+        // Floor just below the output (covers stETH's 1-2 wei transfer rounding) -> succeeds.
+        liquifierInstance.depositWithERC20(address(stEth), 10 ether, quoted - 0.01 ether, address(0));
+        vm.stopPrank();
+
+        assertApproxEqAbs(eETHInstance.balanceOf(alice), quoted, 0.01 ether);
     }
 
     function test_deopsit_stEth_and_swap() internal {
@@ -119,7 +178,7 @@ contract LiquifierTest is TestSetup {
         vm.startPrank(alice);
         stEth.submit{value: 20 ether}(address(0));
         stEth.approve(address(liquifierInstance), 2 ether);
-        liquifierInstance.depositWithERC20(address(stEth), 2 ether, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), 2 ether, 0, address(0));
 
         assertGe(eETHInstance.balanceOf(alice), 2 ether - 0.1 ether);
         assertGe(liquifierInstance.getTotalPooledEther(), 2 ether - 0.1 ether);
@@ -152,20 +211,20 @@ contract LiquifierTest is TestSetup {
         // Deposit 1 stETH after approvals
         stEth.approve(address(liquifierInstance), 1 ether - 1);
         vm.expectRevert("ALLOWANCE_EXCEEDED");
-        liquifierInstance.depositWithERC20(address(stEth), 1 ether, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), 1 ether, 0, address(0));
 
         stEth.approve(address(liquifierInstance), 1 ether);
-        liquifierInstance.depositWithERC20(address(stEth), 1 ether, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), 1 ether, 0, address(0));
 
         // Deposit 1 stETH with the approval signature
         ILiquidityPool.PermitInput memory permitInput = createPermitInput(2, address(liquifierInstance), 1 ether - 1, stEth.nonces(alice), 2**256 - 1, stEth.DOMAIN_SEPARATOR());
         ILiquifier.PermitInput memory permitInput2 = ILiquifier.PermitInput({value: permitInput.value, deadline: permitInput.deadline, v: permitInput.v, r: permitInput.r, s: permitInput.s});
         vm.expectRevert("ALLOWANCE_EXCEEDED");
-        liquifierInstance.depositWithERC20WithPermit(address(stEth), 1 ether, address(0), permitInput2);
+        liquifierInstance.depositWithERC20WithPermit(address(stEth), 1 ether, 0, address(0), permitInput2);
 
         permitInput = createPermitInput(2, address(liquifierInstance), 1 ether, stEth.nonces(alice), 2**256 - 1, stEth.DOMAIN_SEPARATOR());
         permitInput2 = ILiquifier.PermitInput({value: permitInput.value, deadline: permitInput.deadline, v: permitInput.v, r: permitInput.r, s: permitInput.s});
-        liquifierInstance.depositWithERC20WithPermit(address(stEth), 1 ether, address(0), permitInput2);
+        liquifierInstance.depositWithERC20WithPermit(address(stEth), 1 ether, 0, address(0), permitInput2);
     }
 
     /// On realistic mainnet fork, the live stETH/ETH feed has a ~24h heartbeat
@@ -213,7 +272,7 @@ contract LiquifierTest is TestSetup {
 
         vm.startPrank(l1SyncPool);
         DummyERC20(_token).approve(address(liquifierInstance), _x);
-        liquifierInstance.depositWithERC20(_token, _x, address(0));
+        liquifierInstance.depositWithERC20(_token, _x, 0, address(0));
         vm.stopPrank();
     }
 
@@ -236,7 +295,7 @@ contract LiquifierTest is TestSetup {
         vm.startPrank(l1SyncPool);
         dummyToken.approve(address(liquifierInstance), _x);
         vm.expectRevert(Liquifier.NotAllowed.selector);
-        liquifierInstance.depositWithERC20(address(randomToken), _x, address(0));
+        liquifierInstance.depositWithERC20(address(randomToken), _x, 0, address(0));
         vm.stopPrank();
     }
 
@@ -251,7 +310,7 @@ contract LiquifierTest is TestSetup {
         vm.startPrank(alice);
         dummyToken.approve(address(liquifierInstance), _x);
         vm.expectRevert(Liquifier.NotAllowed.selector);
-        liquifierInstance.depositWithERC20(address(dummyToken), _x, address(0));
+        liquifierInstance.depositWithERC20(address(dummyToken), _x, 0, address(0));
         vm.stopPrank();
     }
 
@@ -587,7 +646,7 @@ contract LiquifierTest is TestSetup {
         vm.expectRevert(
             abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _liqPausedUntil())
         );
-        liquifierInstance.depositWithERC20(address(stEth), 1 ether, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), 1 ether, 0, address(0));
     }
 
     function test_depositWithERC20WithPermit_blockedByPauseContractUntil() public {
@@ -603,7 +662,7 @@ contract LiquifierTest is TestSetup {
         vm.expectRevert(
             abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _liqPausedUntil())
         );
-        liquifierInstance.depositWithERC20WithPermit(address(stEth), 1 ether, address(0), emptyPermit);
+        liquifierInstance.depositWithERC20WithPermit(address(stEth), 1 ether, 0, address(0), emptyPermit);
     }
 
     function test_pauseContract_allowedWhilePauseUntilActive() public {
@@ -641,7 +700,7 @@ contract LiquifierTest is TestSetup {
         _mockFreshStEthFeed();
 
         vm.prank(alice);
-        liquifierInstance.depositWithERC20(address(stEth), 1 ether, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), 1 ether, 0, address(0));
     }
 
     function test_depositWithERC20_unblockedAfterExplicitUnpause() public {
@@ -662,7 +721,7 @@ contract LiquifierTest is TestSetup {
         liquifierInstance.unpauseUntil();
 
         vm.prank(alice);
-        liquifierInstance.depositWithERC20(address(stEth), 1 ether, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), 1 ether, 0, address(0));
     }
 
     // ---------------------------------------------------------------------
@@ -823,6 +882,6 @@ contract LiquifierTest is TestSetup {
         uint256 amount = 10 ether;
         uint256 marketValue = liquifierInstance.quoteByMarketValue(address(stEth), amount);
         uint256 expected = (10_000 - 500) * marketValue / 10_000;
-        assertEq(liquifierInstance.quoteByDiscountedValue(address(stEth), amount), expected);
+        assertEq(liquifierInstance.quoteByDiscountedValue(address(stEth), amount, 0), expected);
     }
 }

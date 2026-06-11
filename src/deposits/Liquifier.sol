@@ -112,6 +112,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
     error Capped();
     error AddressZero();
     error InvalidTotalSupply();
+    error InvalidSlippage();
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  CONSTRUCTOR  ----------------------------------
@@ -178,11 +179,12 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
      * @notice Deposit Liquid Staking Token such as stETH and Mint eETH
      * @param _token The address of the token to deposit
      * @param _amount The amount of the token to deposit
+     * @param _minOutAmount The minimum out amount
      * @param _referral The referral address
      * @return mintedAmount the amount of eETH minted to the caller (= msg.sender)
      * @dev If the token is l2Eth, only the l1SyncPool can call this function
      */
-    function depositWithERC20(address _token, uint256 _amount, address _referral) public nonReentrant whenNotPaused nonBlacklisted returns (uint256) {        
+    function depositWithERC20(address _token, uint256 _amount, uint256 _minOutAmount, address _referral) public nonReentrant whenNotPaused nonBlacklisted returns (uint256) {        
         if (!isTokenWhitelisted(_token) || (tokenInfos[_token].isL2Eth && msg.sender != l1SyncPool)) revert NotAllowed();
 
         // Measure actual amount received to handle stETH's 1-2 wei rounding issue
@@ -200,7 +202,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
         // The L1SyncPool's `_anticipatedDeposit` should be the only place to mint the `token` and always send its entirety to the Liquifier contract
         if(tokenInfos[_token].isL2Eth) _L2SanityChecks(_token);
     
-        uint256 dx = quoteByDiscountedValue(_token, amountReceived);
+        uint256 dx = quoteByDiscountedValue(_token, amountReceived, _minOutAmount);
         if (isDepositCapReached(_token, dx)) revert Capped();
 
         uint256 eEthShare = liquidityPool.depositToRecipient(msg.sender, dx, _referral);
@@ -215,15 +217,16 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
      * @notice Deposit Liquid Staking Token such as stETH and Mint eETH with Permit
      * @param _token The address of the token to deposit
      * @param _amount The amount of the token to deposit
+     * @param _minOutAmount The minimum out amount
      * @param _referral The referral address
      * @param _permit The permit input
      * @return mintedAmount the amount of eETH minted to the caller (= msg.sender)
      * @dev Only callable when contract is not paused
      * @dev Only callable when sender is not blacklisted
      */
-    function depositWithERC20WithPermit(address _token, uint256 _amount, address _referral, PermitInput calldata _permit) external whenNotPaused nonBlacklisted returns (uint256) {
+    function depositWithERC20WithPermit(address _token, uint256 _amount, uint256 _minOutAmount, address _referral, PermitInput calldata _permit) external whenNotPaused nonBlacklisted returns (uint256) {
         try IERC20Permit(_token).permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} catch {}
-        return depositWithERC20(_token, _amount, _referral);
+        return depositWithERC20(_token, _amount, _minOutAmount, _referral);
     }
 
     //--------------------------------------------------------------------------------------
@@ -414,12 +417,15 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
      * @notice Quote the discounted value of the token
      * @param _token The address of the token to quote
      * @param _amount The amount of the token to quote
+     * @param _minOutAmount The minimum out amount
      * @return The discounted value of the token
      */
-    function quoteByDiscountedValue(address _token, uint256 _amount) public view returns (uint256) {
+    function quoteByDiscountedValue(address _token, uint256 _amount, uint256 _minOutAmount) public view returns (uint256) {
         uint256 marketValue = quoteByMarketValue(_token, _amount);
 
-        return (BASIS_POINT_SCALE - tokenInfos[_token].discountInBasisPoints).mulDiv(marketValue, BASIS_POINT_SCALE);
+        uint256 discountedValue = (BASIS_POINT_SCALE - tokenInfos[_token].discountInBasisPoints).mulDiv(marketValue, BASIS_POINT_SCALE);
+        if (discountedValue < _minOutAmount) revert InvalidSlippage();
+        return discountedValue;
     }
 
     /**

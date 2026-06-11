@@ -593,7 +593,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         stEth.submit{value: 2100 ether}(address(0));
         uint256 stEthAmount = stEth.balanceOf(funder);
         stEth.approve(address(liquifierInstance), stEthAmount);
-        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, 0, address(0));
         vm.stopPrank();
         
         vm.deal(user, 2010 ether);
@@ -667,7 +667,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         stEth.submit{value: 5 ether}(address(0));
         uint256 stEthAmount = stEth.balanceOf(funder);
         stEth.approve(address(liquifierInstance), stEthAmount);
-        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, 0, address(0));
         vm.stopPrank();
 
         vm.deal(alice, 50000 ether);
@@ -726,7 +726,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         stEth.submit{value: 5 ether}(address(0));
         uint256 stEthAmount = stEth.balanceOf(funder);
         stEth.approve(address(liquifierInstance), stEthAmount);
-        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, 0, address(0));
         vm.stopPrank();
 
         vm.expectRevert(EtherFiRestaker.IncorrectCaller.selector);
@@ -783,7 +783,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         stEth.submit{value: 5 ether}(address(0));
         uint256 stEthAmount = stEth.balanceOf(funder);
         stEth.approve(address(liquifierInstance), stEthAmount);
-        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, 0, address(0));
         vm.stopPrank();
 
         //test low watermark works
@@ -824,7 +824,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         stEth.submit{value: 5 ether}(address(0));
         uint256 stEthAmount = stEth.balanceOf(funder);
         stEth.approve(address(liquifierInstance), stEthAmount);
-        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, 0, address(0));
         vm.stopPrank();
 
         vm.startPrank(user);
@@ -875,7 +875,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         stEth.submit{value: 5 ether}(address(0));
         uint256 stEthAmount = stEth.balanceOf(funder);
         stEth.approve(address(liquifierInstance), stEthAmount);
-        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, 0, address(0));
         vm.stopPrank();
         
         vm.startPrank(user);
@@ -1012,7 +1012,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         stEth.submit{value: 10000 ether}(address(0));
         uint256 stEthAmount = stEth.balanceOf(funder);
         stEth.approve(address(liquifierInstance), stEthAmount);
-        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, 0, address(0));
         vm.stopPrank();
 
         vm.deal(user, 100 ether);
@@ -1067,7 +1067,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         stEth.submit{value: 50 ether}(address(0));
         uint256 stEthAmount = stEth.balanceOf(funder);
         stEth.approve(address(liquifierInstance), stEthAmount);
-        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, 0, address(0));
         vm.stopPrank();
 
         uint256 instantLiquidity = etherFiRedemptionManagerInstance.getInstantLiquidityAmount(address(stEth));

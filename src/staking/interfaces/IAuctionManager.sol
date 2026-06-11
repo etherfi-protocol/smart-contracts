@@ -26,7 +26,5 @@ interface IAuctionManager {
 
     function cancelBid(uint256 _bidId) external;
 
-    function reEnterAuction(uint256 _bidId) external;
-
     function updateSelectedBidInformation(uint256 _bidId) external;
 }

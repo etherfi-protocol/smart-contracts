@@ -107,7 +107,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, DeprecatedOZO
     error RequestAmountGreaterThanAvailableLiquidity();
     error InsufficientEscrow();
     error EthTransferFailed();
-    error AlreadyClaimed();
     error RequestNotFinalized();
     error AlreadyInitialized();
     error NotInitialized();
@@ -303,7 +302,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, DeprecatedOZO
      */
     function _getClaimableAmount(uint256 tokenId) internal view returns (uint256 amountToWithdraw) {
         if (tokenId > lastFinalizedRequestId) revert RequestNotFinalized();
-        if (ownerOf(tokenId) == address(0)) revert AlreadyClaimed();
 
         IWithdrawRequestNFT.WithdrawRequest memory request = _requests[tokenId];
 
