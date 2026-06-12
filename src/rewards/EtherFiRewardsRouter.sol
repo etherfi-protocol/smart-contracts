@@ -23,7 +23,6 @@ contract EtherFiRewardsRouter is DeprecatedOZOwnable, UUPSUpgradeable, RolesLibr
     //--------------------------------------------------------------------------------------
     event EthReceived(address indexed from, uint256 value);
     event EthSent(address indexed from, address indexed to, uint256 value);
-    event UpdatedTreasury(address indexed treasury);
     event Erc20Sent(address indexed caller, address indexed token, uint256 amount);
     event Erc721Sent(address indexed caller, address indexed token, uint256 tokenId);
 

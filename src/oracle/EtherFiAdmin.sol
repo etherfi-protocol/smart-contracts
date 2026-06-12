@@ -98,7 +98,6 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-    event AdminUpdated(address _address, bool _isAdmin);
     event MaxNegativeRebaseBpsUpdated(uint256 bps);
     event AdminOperationsExecuted(address indexed _address, bytes32 indexed _reportHash);
     event ValidatorApprovalTaskCreated(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators);

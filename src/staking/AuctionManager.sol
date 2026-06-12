@@ -56,7 +56,6 @@ contract AuctionManager is
     //--------------------------------------------------------------------------------------
     event BidCreated(address indexed bidder, uint256 amountPerBid, uint256[] bidIdArray, uint64[] ipfsIndexArray);
     event BidCancelled(uint256 indexed bidId);
-    event BidReEnteredAuction(uint256 indexed bidId);
     event BidRevenueForwarded(uint256 indexed bidId, address indexed treasury, uint256 amount);
     event WhitelistDisabled(bool whitelistStatus);
     event WhitelistEnabled(bool whitelistStatus);
@@ -69,7 +68,6 @@ contract AuctionManager is
     error IncorrectBidValue();
     error InsufficientPublicKeys();
     error BidNotActive();
-    error BidAlreadyActive();
     error EtherTransferFailed();
     error InvalidBid();
     error BidAlreadyCancelled();

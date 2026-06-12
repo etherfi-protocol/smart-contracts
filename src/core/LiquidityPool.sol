@@ -81,19 +81,12 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
     event Deposit(address indexed sender, uint256 amount, SourceOfFunds source, address referral);
     event Withdraw(address indexed sender, address recipient, uint256 amount, SourceOfFunds source);
     event EEthSharesBurnedForNonETHWithdrawal(uint256 amountSharesToBurn, uint256 withdrawalValueInETH);
-    event UpdatedWhitelist(address userAddress, bool value);
-    event UpdatedTreasury(address newTreasury); 
     event UpdatedFeeRecipient(address newFeeRecipient);
-    event BnftHolderDeregistered(address user, uint256 index);
-    event BnftHolderRegistered(address user, uint256 index);
     event ValidatorSpawnerRegistered(address user);
     event ValidatorSpawnerUnregistered(address user);
     event ValidatorRegistered(uint256 indexed validatorId, bytes signature, bytes pubKey, bytes32 depositRoot);
-    event ValidatorApproved(uint256 indexed validatorId);
-    event ValidatorRegistrationCanceled(uint256 indexed validatorId);
     event Rebase(uint256 totalEthLocked, uint256 totalEEthShares);
     event ProtocolFeePaid(uint128 protocolFees);
-    event WhitelistStatusUpdated(bool value);
     event MinWithdrawAmountSet(uint256 minWithdrawAmount);
     event MaxWithdrawAmountSet(uint256 maxWithdrawAmount);
 
@@ -107,7 +100,6 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
     error InsufficientLiquidity();
     error SendFail();
     error InvalidValidatorSize();
-    error InvalidRate();
     error RebaseExceedsPositiveCap();
     error AlreadyMigrated();
     error MigrationNotComplete();

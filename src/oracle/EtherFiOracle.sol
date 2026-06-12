@@ -53,7 +53,6 @@ contract EtherFiOracle is Initializable, DeprecatedOZOwnable, DeprecatedOZPausab
     event QuorumUpdated(uint32 newQuorumSize);
     event ConsensusVersionUpdated(uint32 newConsensusVersion);
     event OracleReportPeriodUpdated(uint32 newOracleReportPeriod);
-    event ReportStartSlotUpdated(uint32 reportStartSlot);
 
     event ReportPublished(uint32 consensusVersion, uint32 refSlotFrom, uint32 refSlotTo, uint32 refBlockFrom, uint32 refBlockTo, bytes32 indexed hash);
     event ReportSubmitted(uint32 consensusVersion, uint32 refSlotFrom, uint32 refSlotTo, uint32 refBlockFrom, uint32 refBlockTo, bytes32 indexed hash, address indexed committeeMember);

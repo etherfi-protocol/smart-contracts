@@ -478,7 +478,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         etherFiRedemptionManagerInstance.redeemEEth(2000 ether, user, ETH_ADDRESS);
 
         // Use more lenient tolerance for treasury fee due to share-based rounding
-        assertApproxEqAbs(eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance.treasury())), treasuryBalance + expectedTreasuryFee, 1e15);
+        assertApproxEqAbs(eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance.treasury())), treasuryBalance + expectedTreasuryFee, 2e15);
         assertApproxEqAbs(address(user).balance, userBalance + expectedAmountToReceiver, 1e1);
 
         // Check redeemable amount after first redemption

@@ -99,9 +99,7 @@ contract PriorityWithdrawalQueue is
     error PermitFailedAndAllowanceTooLow();
     error ArrayLengthMismatch();
     error AddressZero();
-    error BadInput();
     error IncorrectCaller();
-    error InvalidEEthSharesAfterRemainderHandling();
     error InvalidOutputAmount();
     error InsufficientLiquidity();
     error InsufficientEscrow();
