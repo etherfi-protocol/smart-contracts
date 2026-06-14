@@ -1,0 +1,267 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.13;
+
+import "../TestSetup.sol";
+import "../../script/deploys/Deployed.s.sol";
+import "../../src/interfaces/IStakingManager.sol";
+import "../../src/interfaces/IEtherFiNode.sol";
+import "../../src/libraries/DepositDataRootGenerator.sol";
+import "../../src/LiquidityPool.sol";
+import "../../src/StakingManager.sol";
+import "../../src/NodeOperatorManager.sol";
+import "../../src/WithdrawRequestNFT.sol";
+import "../../src/PriorityWithdrawalQueue.sol";
+import "./handlers/ValidatorStateMachineHandler.sol";
+
+/// @notice FORK stateful-invariant suite for the validator-creation state machine (I10).
+///         NOT_REGISTERED -> REGISTERED -> CONFIRMED, or REGISTERED -> INVALIDATED;
+///         CONFIRMED/INVALIDATED terminal; no skip/reverse/illegal edge.
+///         Reuses the mainnet-fork scaffolding from ValidatorFlowsIntegrationTest
+///         (duplicated here because that contract's setUp is non-virtual).
+///         Requires MAINNET_RPC_URL.
+///
+/// forge-config: default.invariant.runs = 16
+/// forge-config: default.invariant.depth = 24
+/// forge-config: default.invariant.fail-on-revert = false
+contract ValidatorStateMachineInvariantTest is TestSetup, Deployed {
+    ValidatorStateMachineHandler internal handler;
+    uint256 internal constant POOL = 4;
+    function setUp() public {
+        initializeRealisticFork(MAINNET_FORK);
+
+        // Mainnet NodeOperatorManager hasn't been upgraded to the role-based ACL yet,
+        // so its NODE_OPERATOR_MANAGER_ADMIN_ROLE() getter doesn't exist on-chain.
+        // Upgrade in place so the new role getters used by _ensureValCreationRoles are reachable.
+        NodeOperatorManager nodeOperatorManagerImpl = new NodeOperatorManager(address(roleRegistryInstance), address(auctionInstance));
+        vm.prank(nodeOperatorManagerInstance.owner());
+        nodeOperatorManagerInstance.upgradeTo(address(nodeOperatorManagerImpl));
+
+        // Upgrade LiquidityPool to the consolidated role model — the on-chain impl
+        // still checks LIQUIDITY_POOL_ADMIN_ROLE on registerValidatorSpawner.
+        LiquidityPool newLpImpl = new LiquidityPool(LiquidityPool.ConstructorAddresses({
+            stakingManager: address(stakingManagerInstance),
+            nodesManager: address(managerInstance),
+            eETH: address(eETHInstance),
+            withdrawRequestNFT: address(withdrawRequestNFTInstance),
+            liquifier: address(liquifierInstance),
+            etherFiRedemptionManager: address(etherFiRedemptionManagerInstance),
+            roleRegistry: address(roleRegistryInstance),
+            priorityWithdrawalQueue: address(priorityQueueInstance),
+            blacklister: address(blacklisterInstance),
+            etherFiAdminContract: address(etherFiAdminInstance),
+            membershipManager: address(membershipManagerInstance)
+        }), 0);
+        address lpOwner = liquidityPoolInstance.owner();
+        vm.prank(lpOwner);
+        liquidityPoolInstance.upgradeTo(address(newLpImpl));
+
+        // Upgrade WithdrawRequestNFT so it has a receive() function and accepts the
+        // ETH-escrow transfer triggered by initializeOnUpgradeV2.
+        address wrnOwner = withdrawRequestNFTInstance.owner();
+        vm.prank(wrnOwner);
+        withdrawRequestNFTInstance.upgradeTo(
+            address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(eETHInstance), address(liquidityPoolInstance), address(membershipManagerInstance), address(roleRegistryInstance), address(blacklisterInstance), address(etherFiAdminInstance), 1, 4e18))
+        );
+
+        // The production queue proxy on mainnet still runs the master impl which
+        // has no receive(); initializeOnUpgradeV2 below sweeps queue-locked ETH
+        // into the queue and would revert with SendFail. Upgrade the queue first.
+        address newPQ = address(new PriorityWithdrawalQueue(
+            address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance),
+            address(roleRegistryInstance), treasuryInstance, 1 hours
+        ));
+        vm.prank(UPGRADE_TIMELOCK);
+        PriorityWithdrawalQueue(payable(PRIORITY_WITHDRAWAL_QUEUE)).upgradeTo(newPQ);
+
+        // One-shot migration: move pre-existing locked ETH into NFT escrow so the
+        // post-upgrade LP can route through addEthAmountLockedForWithdrawal.
+        if (!liquidityPoolInstance.escrowMigrationCompleted()) {
+            vm.prank(lpOwner);
+            liquidityPoolInstance.initializeOnUpgradeV2();
+        }
+
+        // Upgrade Oracle and Admin to local impls so the new OracleReport ABI matches.
+        _upgradeOracleAndAdminForFork();
+
+        // Raise the per-day approval cap so executeTasks doesn't reject the validator approval.
+        address rrOwner = roleRegistryInstance.owner();
+        vm.startPrank(rrOwner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), rrOwner);
+        // ORACLE_OPERATIONS_ROLE (formerly ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE) is required by
+        // EtherFiAdmin.executeValidatorApprovalTask.
+        roleRegistryInstance.grantRole(roleRegistryInstance.ORACLE_OPERATIONS_ROLE(), ADMIN_EOA);
+        etherFiAdminInstance.updateMaxNumValidatorsToApprovePerDay(etherFiAdminInstance.maxAcceptableNumValidatorsToApprovePerDay());
+        vm.stopPrank();
+
+        // Handle any pending oracle report that hasn't been processed yet
+        _syncOracleReportState();
+
+        _provisionPoolAndTarget();
+    }
+
+    /// @dev Advances the admin's lastHandledReportRefSlot to match the oracle's lastPublishedReportRefSlot.
+    function _syncOracleReportState() internal {
+        // Step A: sync admin to oracle so submitReport doesn't fail with
+        // "Last published report is not handled yet".
+        uint32 lastPublished = etherFiOracleInstance.lastPublishedReportRefSlot();
+        uint32 lastHandled = etherFiAdminInstance.lastHandledReportRefSlot();
+
+        if (lastPublished != lastHandled) {
+            uint32 lastPublishedBlock = etherFiOracleInstance.lastPublishedReportRefBlock();
+
+            // EtherFiAdmin slot 209 packs: lastHandledReportRefSlot (4B @ offset 0) +
+            //   lastHandledReportRefBlock (4B @ offset 4) + other fields in higher bytes
+            bytes32 slot209 = vm.load(address(etherFiAdminInstance), bytes32(uint256(209)));
+            uint256 val = uint256(slot209);
+            val &= ~uint256(0xFFFFFFFFFFFFFFFF); // clear low 64 bits (both uint32 fields)
+            val |= uint256(lastPublished);
+            val |= uint256(lastPublishedBlock) << 32;
+            vm.store(address(etherFiAdminInstance), bytes32(uint256(209)), bytes32(val));
+        }
+
+        // Step B: unconditionally reset operator submissions by removing and re-adding each one.
+        // addCommitteeMember() resets CommitteeMemberState to
+        // (registered=true, enabled=true, lastReportRefSlot=0, numReports=0), clearing any stale
+        // submission from mainnet without adding new committee members.
+        address oracleOwner = etherFiOracleInstance.owner();
+        // Each add/remove now requires a _quorumSize that satisfies the strict-majority
+        // invariant for the resulting numActive. Compute a fresh value at each step
+        // so this works regardless of mainnet's current quorum.
+        vm.startPrank(oracleOwner);
+        uint32 active = etherFiOracleInstance.numActiveCommitteeMembers();
+        uint32 quorumAfterRemove = active > 1 ? (active - 1) / 2 + 1 : 1;
+        uint32 quorumAfterAdd = active / 2 + 1;
+        etherFiOracleInstance.removeCommitteeMember(AVS_OPERATOR_1, quorumAfterRemove);
+        etherFiOracleInstance.addCommitteeMember(AVS_OPERATOR_1, quorumAfterAdd);
+        etherFiOracleInstance.removeCommitteeMember(AVS_OPERATOR_2, quorumAfterRemove);
+        etherFiOracleInstance.addCommitteeMember(AVS_OPERATOR_2, quorumAfterAdd);
+        vm.stopPrank();
+    }
+
+    function _toArray(IStakingManager.DepositData memory d) internal pure returns (IStakingManager.DepositData[] memory arr) {
+        arr = new IStakingManager.DepositData[](1);
+        arr[0] = d;
+    }
+
+    function _toArrayU256(uint256 x) internal pure returns (uint256[] memory arr) {
+        arr = new uint256[](1);
+        arr[0] = x;
+    }
+
+    function _ensureValCreationRoles() internal {
+        address roleOwner = roleRegistryInstance.owner();
+
+        // Ensure the operating admin can manage LP spawners + create validators.
+        vm.startPrank(roleOwner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), ETHERFI_OPERATING_ADMIN);
+        roleRegistryInstance.grantRole(roleRegistryInstance.ORACLE_OPERATIONS_ROLE(), ETHERFI_OPERATING_ADMIN);
+
+        // Ensure operating timelock can create nodes.
+        roleRegistryInstance.grantRole(roleRegistryInstance.EXECUTOR_OPERATIONS_ROLE(), OPERATING_TIMELOCK);
+        vm.stopPrank();
+
+        // The mainnet NodeOperatorManager implementation predates this PR and
+        // does not expose NODE_OPERATOR_MANAGER_ADMIN_ROLE(). Upgrade in place
+        // so the new role getter and role-gated modifier are reachable, then
+        // grant the role used by whitelist ops.
+        address nodeOpMgrOwner = nodeOperatorManagerInstance.owner();
+        vm.startPrank(nodeOpMgrOwner);
+        NodeOperatorManager newNodeOpMgrImpl = new NodeOperatorManager(address(roleRegistryInstance), address(auctionInstance));
+        nodeOperatorManagerInstance.upgradeTo(address(newNodeOpMgrImpl));
+        vm.stopPrank();
+
+        vm.startPrank(roleOwner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), ETHERFI_OPERATING_ADMIN);
+        vm.stopPrank();
+    }
+
+    function _prepareSingleValidator(address spawner)
+        internal
+        returns (IStakingManager.DepositData memory depositData, uint256 bidId, address etherFiNode)
+    {
+        _ensureValCreationRoles();
+
+        // Step 1: Whitelist + register node operator.
+        vm.prank(ETHERFI_OPERATING_ADMIN);
+        nodeOperatorManagerInstance.addToWhitelist(spawner);
+
+        vm.deal(spawner, 10 ether);
+        vm.startPrank(spawner);
+        if (!nodeOperatorManagerInstance.registered(spawner)) {
+            nodeOperatorManagerInstance.registerNodeOperator("test_ipfs_hash", 1000);
+        }
+        uint256[] memory bidIds = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
+        vm.stopPrank();
+        bidId = bidIds[0];
+
+        // Step 2: Create a new EtherFiNode (with EigenPod) for compounding withdrawal creds.
+        vm.prank(OPERATING_TIMELOCK);
+        etherFiNode = stakingManagerInstance.instantiateEtherFiNode(true /*createEigenPod*/);
+        address eigenPod = address(IEtherFiNode(etherFiNode).getEigenPod());
+
+        // Step 3: Register validator spawner.
+        vm.prank(ETHERFI_OPERATING_ADMIN);
+        liquidityPoolInstance.registerValidatorSpawner(spawner);
+
+        // Step 4: Build 1-ETH deposit data (must match compounding withdrawal creds).
+        bytes memory pubkey = vm.randomBytes(48);
+        bytes memory signature = vm.randomBytes(96);
+        bytes memory withdrawalCredentials = managerInstance.addressToCompoundingWithdrawalCredentials(eigenPod);
+        bytes32 depositDataRoot =
+            depositDataRootGenerator.generateDepositDataRoot(pubkey, signature, withdrawalCredentials, stakingManagerInstance.INITIAL_DEPOSIT_AMOUNT());
+
+        depositData = IStakingManager.DepositData({
+            publicKey: pubkey,
+            signature: signature,
+            depositDataRoot: depositDataRoot,
+            ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
+        });
+    }
+    // ---- invariants ----
+    function invariant_I10_only_legal_status_transitions() public view {
+        assertFalse(handler.sawIllegalTransition(), handler.illegalReason());
+    }
+
+    /// Non-vacuity: the fuzzer must actually have driven real transitions, not just
+    /// bounced off reverts — otherwise "no illegal transition" would be trivially true.
+    /// Checked once at the END of the run (afterInvariant), not per-step.
+    function afterInvariant() public view {
+        assertGt(handler.register_ok(), 0, "no REGISTERED transition ever fired");
+        assertGt(handler.create_ok() + handler.invalidate_ok(), 0, "no terminal transition ever fired");
+    }
+
+    function invariant_call_coverage_summary() public view {
+        handler.register_ok();
+        handler.create_ok();
+        handler.invalidate_ok();
+    }
+
+    // ---- pool provisioning, invoked at end of setUp ----
+    function _provisionPoolAndTarget() internal {
+        // _prepareSingleValidator registers the spawner as a validator spawner, which
+        // reverts AlreadyRegistered on reuse — so use a DISTINCT spawner per validator.
+        handler = new ValidatorStateMachineHandler(
+            stakingManagerInstance,
+            address(liquidityPoolInstance),
+            address(0), // unused: each validator carries its own spawner via the LP registration
+            ETHERFI_OPERATING_ADMIN,
+            ETHERFI_OPERATING_ADMIN
+        );
+        for (uint256 i = 0; i < POOL; i++) {
+            address spawner = vm.addr(uint256(keccak256(abi.encodePacked("spawner", i))));
+            (IStakingManager.DepositData memory d, uint256 bidId, address node) = _prepareSingleValidator(spawner);
+            bytes32 h = keccak256(
+                abi.encode(d.publicKey, d.signature, d.depositDataRoot, d.ipfsHashForEncryptedValidatorKey, bidId, node)
+            );
+            handler.addValidator(d, bidId, node, spawner, h);
+        }
+        vm.deal(address(liquidityPoolInstance), address(liquidityPoolInstance).balance + 100 ether);
+        targetContract(address(handler));
+        // Only fuzz the three transition actions — exclude addValidator (setup-only).
+        bytes4[] memory sels = new bytes4[](3);
+        sels[0] = handler.doRegister.selector;
+        sels[1] = handler.doCreate.selector;
+        sels[2] = handler.doInvalidate.selector;
+        targetSelector(FuzzSelector({addr: address(handler), selectors: sels}));
+    }
+}
