@@ -268,13 +268,33 @@ contract OracleIntegrityHandler is Test {
         ok = true;
     }
 
+    /// @dev Largest rebase reward that keeps |APR| strictly under the cap for the
+    ///      given report range, i.e. the boundary reward at which apr == cap.
+    ///      A valid "apply" must stay BELOW this; we use half of it for safe margin.
+    function _maxSafeReward(IEtherFiOracle.OracleReport memory r) internal view returns (int256) {
+        int256 tvl = int128(uint128(lp.getTotalPooledEther()));
+        uint256 elapsedTime = (uint256(r.refSlotTo) - uint256(admin.lastHandledReportRefSlot())) * SECONDS_PER_SLOT;
+        if (tvl <= 0 || elapsedTime == 0) return 0;
+        int256 cap = admin.acceptableRebaseAprInBps();
+        // reward at apr==cap boundary: cap = 10000 * (reward*365d)/(tvl*elapsedTime)
+        return cap * tvl * int256(elapsedTime) / (int256(BASIS_POINTS_DENOMINATOR) * int256(365 days));
+    }
+
     /// APPLY: valid report, all three gates hold => MUST advance state.
     function _scenarioApply(uint256 magnitude) internal {
         if (oracle.lastPublishedReportRefSlot() != admin.lastHandledReportRefSlot()) return;
         (bool ok, IEtherFiOracle.OracleReport memory r) = _freshRange();
         if (!ok) return;
         uint16 wait = admin.postReportWaitTimeInSlots();
-        r.accruedRewards = int128(int256(bound(magnitude, 0, 0.5 ether)));
+        // SOUNDNESS: the APR gate caps |reward| relative to the (short) elapsed
+        // window for this range. Bound the reward to HALF the cap-boundary so the
+        // apply is guaranteed under the APR cap regardless of the fuzzed magnitude
+        // and the range length the clock happens to produce. Without this, a large
+        // reward over a short range trips the APR gate and the "valid" apply
+        // reverts -> report stays published-but-unapplied -> oracle bricked.
+        int256 safeMax = _maxSafeReward(r);
+        if (safeMax <= 1) return; // range too short to carry any reward safely
+        r.accruedRewards = int128(int256(bound(magnitude, 0, uint256(safeMax / 2))));
         r = _resyncStamps(r);
         vm.prank(memberA);
         try oracle.submitReport(r) {} catch { return; }
@@ -347,7 +367,11 @@ contract OracleIntegrityHandler is Test {
         if (wait == 0) return;
         (bool ok, IEtherFiOracle.OracleReport memory r) = _freshRange();
         if (!ok) return;
-        r.accruedRewards = int128(int256(bound(magnitude, 0, 0.5 ether)));
+        // Same APR-safety bound as _scenarioApply: this report is applied after the
+        // freshness window elapses, so it must stay under the APR cap.
+        int256 safeMax = _maxSafeReward(r);
+        if (safeMax <= 1) return;
+        r.accruedRewards = int128(int256(bound(magnitude, 0, uint256(safeMax / 2))));
         r = _resyncStamps(r);
         vm.prank(memberA);
         try oracle.submitReport(r) {} catch { return; }
