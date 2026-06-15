@@ -97,6 +97,7 @@ contract RewardsDistributorHandler is StdUtils {
 
         vm.prank(admin);
         dist.finalizeMerkleRoot(token, block.number);
+        callCounts["finalize_ok"]++;
         // Post-finalize: claimable root must equal what we set pending.
         if (dist.claimableMerkleRoots(token) != root) ghost_finalizeRootMismatch = true;
         ghost_hasPending = false;
@@ -154,7 +155,13 @@ contract RewardsDistributorHandler is StdUtils {
 
     /// @notice Full deterministic claim: establish a single-leaf root for the
     ///         chosen claimant at a strictly higher cumulative amount, then
-    ///         claim. Proves I12 monotonicity + exact payout.
+    ///         claim. Proves I12 monotonicity + exact payout. Self-contained: a
+    ///         SINGLE call drives the entire lifecycle (setPending -> finalize
+    ///         after delay -> claim -> replay-rejected), so the suite is
+    ///         non-vacuous even on a 1-call sequence (Foundry shrinks a failing
+    ///         run to its minimal subsequence and re-evaluates afterInvariant on
+    ///         that replay; a self-contained action keeps the non-vacuity gates
+    ///         satisfiable there).
     function doClaim(uint256 acctSeed, uint128 amt) external {
         address account = _claimant(acctSeed);
         uint256 preCum = dist.cumulativeClaimed(token, account);
@@ -182,6 +189,20 @@ contract RewardsDistributorHandler is StdUtils {
             ghostPaid[account] += (postCum - preCum);
             lastSeenCumulative[account] = postCum;
             callCounts["claim_ok"]++;
+
+            // Inline replay against the SAME (already-claimed) cumulative: must
+            // revert (NothingToClaim). Doing it here makes a single doClaim call
+            // exercise finalize + claim + replay-rejection together, so the
+            // non-vacuity gates hold even under sequence shrinking.
+            uint256 preBalReplay = account.balance;
+            try dist.claim(token, account, newCum, leaf, proof) {
+                // A successful replay at an equal cumulative is a double-pay.
+                ghost_doublePayViolated = true;
+                if (account.balance != preBalReplay) ghost_doublePayViolated = true;
+                callCounts["replay_unexpected_ok"]++;
+            } catch {
+                callCounts["replay_revert"]++;
+            }
         } catch {
             callCounts["claim_revert"]++;
         }

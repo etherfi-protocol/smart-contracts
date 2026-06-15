@@ -49,7 +49,12 @@ contract ValidatorStateMachineInvariantTest is TestSetup, Deployed {
             priorityWithdrawalQueue: address(priorityQueueInstance),
             blacklister: address(blacklisterInstance),
             etherFiAdminContract: address(etherFiAdminInstance),
-            membershipManager: address(membershipManagerInstance)
+            // Use the REAL deployed membership manager, not the V0-typed
+            // `membershipManagerInstance` which is never populated on a realistic
+            // fork (only `membershipManagerV1Instance` is, from deployed.MEMBERSHIP_MANAGER()).
+            // Passing address(0) here would diverge the immutable from the production
+            // bootstrap and mis-auth any membership-routed LP path.
+            membershipManager: MEMBERSHIP_MANAGER
         }), 0);
         address lpOwner = liquidityPoolInstance.owner();
         vm.prank(lpOwner);
@@ -60,7 +65,7 @@ contract ValidatorStateMachineInvariantTest is TestSetup, Deployed {
         address wrnOwner = withdrawRequestNFTInstance.owner();
         vm.prank(wrnOwner);
         withdrawRequestNFTInstance.upgradeTo(
-            address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(eETHInstance), address(liquidityPoolInstance), address(membershipManagerInstance), address(roleRegistryInstance), address(blacklisterInstance), address(etherFiAdminInstance), 1, 4e18))
+            address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(eETHInstance), address(liquidityPoolInstance), MEMBERSHIP_MANAGER, address(roleRegistryInstance), address(blacklisterInstance), address(etherFiAdminInstance), 1, 4e18))
         );
 
         // The production queue proxy on mainnet still runs the master impl which

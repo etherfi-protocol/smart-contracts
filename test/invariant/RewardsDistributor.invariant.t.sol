@@ -39,6 +39,21 @@ contract RewardsDistributorInvariantTest is TestSetup {
         // Fund the distributor with ETH so ETH-token claims can pay out.
         vm.deal(address(cumulativeMerkleRewardsDistributorInstance), 1_000_000 ether);
 
+        // Restrict fuzzing to the handler's ACTION functions. Without an explicit
+        // selector list the engine also targets the handler's public view getters
+        // (numClaimants / claimants / callCounts / ghost*), wasting the call budget
+        // on no-ops so the lifecycle (setPending -> finalize -> claim) is never
+        // driven and the run is vacuous (all counters 0). Curate the selectors so
+        // every call advances the state machine.
+        bytes4[] memory selectors = new bytes4[](7);
+        selectors[0] = handler.doSetPendingRoot.selector;
+        selectors[1] = handler.doFinalize.selector;
+        selectors[2] = handler.doClaim.selector;
+        selectors[3] = handler.doReplayClaim.selector;
+        selectors[4] = handler.doSetClaimDelay.selector;
+        selectors[5] = handler.doWarp.selector;
+        selectors[6] = handler.doRoll.selector;
+        targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
         targetContract(address(handler));
     }
 
@@ -77,6 +92,30 @@ contract RewardsDistributorInvariantTest is TestSetup {
             handler.ghost_finalizeRootMismatch(),
             "I13: claimable root != root that was pending for >= claimDelay"
         );
+    }
+
+    // =====================================================================
+    // Non-vacuity: the run MUST have actually exercised the merkle-delay and
+    // payout logic this suite defends. Without this, the I12/I13 ghost flags
+    // stay false and balances stay zero if those paths are never hit, so the
+    // invariants could pass without proving anything. Asserted once at the end.
+    // =====================================================================
+    function afterInvariant() public {
+        // I13 path: at least one root must have been finalized after its delay.
+        assertGt(handler.callCounts("finalize_ok"), 0, "non-vacuity: no merkle root was ever finalized (I13 unexercised)");
+        // I12 path: at least one successful claim must have paid out.
+        assertGt(handler.callCounts("claim_ok"), 0, "non-vacuity: no claim ever succeeded (I12 payout unexercised)");
+        // Double-pay defense: at least one replay must have been attempted AND rejected.
+        assertGt(handler.callCounts("replay_revert"), 0, "non-vacuity: replay/double-pay path never exercised");
+
+        // And the run must have actually moved ETH: total ghost-paid across all
+        // claimants > 0 (independent of the counters above).
+        uint256 totalPaid;
+        uint256 n = handler.numClaimants();
+        for (uint256 i = 0; i < n; i++) {
+            totalPaid += handler.ghostPaid(handler.claimants(i));
+        }
+        assertGt(totalPaid, 0, "non-vacuity: zero ETH paid across the whole run (claims never settled)");
     }
 
     // =====================================================================
