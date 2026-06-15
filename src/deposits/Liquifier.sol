@@ -266,7 +266,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
      * @param _totalCapInEther The total cap in ether
      * @dev Only callable by the admin
      */
-    function updateDepositCap(address _token, uint32 _timeBoundCapInEther, uint32 _totalCapInEther) public onlyAdmin {
+    function updateDepositCap(address _token, uint32 _timeBoundCapInEther, uint32 _totalCapInEther) public onlyOperatingTimelock {
         if (_timeBoundCapInEther > MAX_TIME_BOUND_CAP_IN_ETHER || _totalCapInEther > MAX_TOTAL_CAP_IN_ETHER) revert InvalidDepositCap();
         tokenInfos[_token].timeBoundCapInEther = _timeBoundCapInEther;
         tokenInfos[_token].totalCapInEther = _totalCapInEther;
@@ -302,7 +302,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
      * @param _timeBoundCapRefreshInterval The time bound cap refresh interval
      * @dev Only callable by the admin
      */
-    function updateTimeBoundCapRefreshInterval(uint32 _timeBoundCapRefreshInterval) external onlyAdmin {
+    function updateTimeBoundCapRefreshInterval(uint32 _timeBoundCapRefreshInterval) external onlyOperatingTimelock {
         timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
     }
 
@@ -312,7 +312,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
      * @param _discountInBasisPoints The discount in basis points
      * @dev Only callable by the admin
      */
-    function updateDiscountInBasisPoints(address _token, uint16 _discountInBasisPoints) external onlyAdmin {
+    function updateDiscountInBasisPoints(address _token, uint16 _discountInBasisPoints) external onlyOperatingTimelock {
         if (_discountInBasisPoints < minDiscountRateInBps || _discountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
         tokenInfos[_token].discountInBasisPoints = _discountInBasisPoints;
     }
@@ -322,7 +322,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
      * @param _quoteStEthWithCurve The boolean value to set the quote stEth with curve
      * @dev Only callable by the admin
      */
-    function updateQuoteStEthWithCurve(bool _quoteStEthWithCurve) external onlyAdmin {
+    function updateQuoteStEthWithCurve(bool _quoteStEthWithCurve) external onlyOperatingTimelock {
         quoteStEthWithCurve = _quoteStEthWithCurve;
     }
 

@@ -180,7 +180,7 @@ contract EtherFiOracle is Initializable, DeprecatedOZOwnable, DeprecatedOZPausab
      * @param _address The address of the committee member
      * @param _quorumSize The quorum size
      */
-    function addCommitteeMember(address _address, uint32 _quorumSize) public onlyAdmin {
+    function addCommitteeMember(address _address, uint32 _quorumSize) public onlyOperatingTimelock {
         if (committeeMemberStates[_address].registered) revert AlreadyRegistered();
         numCommitteeMembers++;
         numActiveCommitteeMembers++;
@@ -195,7 +195,7 @@ contract EtherFiOracle is Initializable, DeprecatedOZOwnable, DeprecatedOZPausab
      * @param _address The address of the committee member
      * @param _quorumSize The quorum size
      */
-    function removeCommitteeMember(address _address, uint32 _quorumSize) public onlyAdmin {
+    function removeCommitteeMember(address _address, uint32 _quorumSize) public onlyOperatingTimelock {
         if (!committeeMemberStates[_address].registered) revert NotRegistered();
         numCommitteeMembers--;
         if (committeeMemberStates[_address].enabled) numActiveCommitteeMembers--;
@@ -229,7 +229,7 @@ contract EtherFiOracle is Initializable, DeprecatedOZOwnable, DeprecatedOZPausab
      * @notice Set the quorum size
      * @param _quorumSize The quorum size
      */
-    function setQuorumSize(uint32 _quorumSize) public onlyAdmin {
+    function setQuorumSize(uint32 _quorumSize) public onlyOperatingTimelock {
         quorumSize = _quorumSize;
         _checkQuorum();
         emit QuorumUpdated(_quorumSize);
@@ -239,7 +239,7 @@ contract EtherFiOracle is Initializable, DeprecatedOZOwnable, DeprecatedOZPausab
      * @notice Set the oracle report period
      * @param _reportPeriodSlot The report period slot
      */
-    function setOracleReportPeriod(uint32 _reportPeriodSlot) public onlyAdmin {
+    function setOracleReportPeriod(uint32 _reportPeriodSlot) public onlyOperatingTimelock {
         if (_reportPeriodSlot == 0 || _reportPeriodSlot % SLOTS_PER_EPOCH != 0) revert InvalidReportPeriod();
         reportPeriodSlot = _reportPeriodSlot;
 
@@ -250,7 +250,7 @@ contract EtherFiOracle is Initializable, DeprecatedOZOwnable, DeprecatedOZPausab
      * @notice Set the consensus version
      * @param _consensusVersion The consensus version
      */
-    function setConsensusVersion(uint32 _consensusVersion) public onlyAdmin {
+    function setConsensusVersion(uint32 _consensusVersion) public onlyOperatingTimelock {
         if (_consensusVersion <= consensusVersion) revert InvalidConsensusVersion();
         consensusVersion = _consensusVersion;
 

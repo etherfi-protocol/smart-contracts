@@ -427,7 +427,7 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
      * @param _user The address of the Validator Spawner to register
      * @dev The admin can register an address to become a BNFT holder
      */
-    function registerValidatorSpawner(address _user) public onlyAdmin {
+    function registerValidatorSpawner(address _user) public onlyOperatingTimelock {
         if (validatorSpawner[_user].registered) revert AlreadyRegistered();  
         validatorSpawner[_user] = ValidatorSpawner({registered: true});
         emit ValidatorSpawnerRegistered(_user);
@@ -537,7 +537,7 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
      *      forwards into confirmAndFundBeaconValidators(). In a future upgrade this will be a
      *      parameter to that call but was done like this to limit changes to other dependent contracts.
      */
-    function setValidatorSizeWei(uint256 _validatorSizeWei) external onlyAdmin {
+    function setValidatorSizeWei(uint256 _validatorSizeWei) external onlyOperatingTimelock {
         _requireValidValidatorSize(_validatorSizeWei);
         validatorSizeWei = _validatorSizeWei;
     }
@@ -547,7 +547,7 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
      * @param _feeRecipient The address to set as the fee recipient
      * @dev Only callable by the admin
      */
-    function setFeeRecipient(address _feeRecipient) external onlyAdmin {
+    function setFeeRecipient(address _feeRecipient) external onlyOperatingTimelock {
         feeRecipient = _feeRecipient;
         emit UpdatedFeeRecipient(_feeRecipient);
     }

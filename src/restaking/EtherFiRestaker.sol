@@ -230,7 +230,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, DeprecatedOZOwnable,
      * @notice Set the claimer of the restaking rewards of this contract
      * @param _claimer The address of the claimer
      */
-    function setRewardsClaimer(address _claimer) external onlyAdmin {
+    function setRewardsClaimer(address _claimer) external onlyOperatingTimelock {
         rewardsCoordinator.setClaimerFor(_claimer);
     }
 

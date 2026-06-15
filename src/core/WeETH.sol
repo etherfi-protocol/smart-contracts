@@ -190,7 +190,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
      * @param amount The amount of ETH to recover
      * @dev Only callable by the admin
      */
-    function recoverETH(address payable to, uint256 amount) external onlyAdmin {
+    function recoverETH(address payable to, uint256 amount) external onlyOperatingTimelock {
         _recoverETH(to, amount);
     }
 
@@ -201,7 +201,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
      * @param amount The amount of tokens to recover
      * @dev Only callable by the admin
      */
-    function recoverERC20(address token, address to, uint256 amount) external onlyAdmin {
+    function recoverERC20(address token, address to, uint256 amount) external onlyOperatingTimelock {
         if (token == address(eETH)) revert CannotRecoverEETH();
         _recoverERC20(token, to, amount);
     }
@@ -213,7 +213,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
      * @param tokenId The ID of the token to recover
      * @dev Only callable by the admin
      */
-    function recoverERC721(address token, address to, uint256 tokenId) external onlyAdmin {
+    function recoverERC721(address token, address to, uint256 tokenId) external onlyOperatingTimelock {
         _recoverERC721(token, to, tokenId);
     }
 

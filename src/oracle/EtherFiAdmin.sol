@@ -199,7 +199,7 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
      * @notice Set the validator task batch size
      * @param _batchSize The batch size
      */
-    function setValidatorTaskBatchSize(uint16 _batchSize) external onlyAdmin {
+    function setValidatorTaskBatchSize(uint16 _batchSize) external onlyOperatingTimelock {
         if (_batchSize == 0 || _batchSize > maxValidatorTaskBatchSize) revert InvalidValidatorTaskBatchSize();
         validatorTaskBatchSize = _batchSize;
     }
@@ -208,7 +208,7 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
      * @notice Update the maximum finalized withdrawal amount per day
      * @param _maxFinalizedWithdrawalAmountPerDay The maximum finalized withdrawal amount per day
      */
-    function updateMaxFinalizedWithdrawalAmountPerDay(uint256 _maxFinalizedWithdrawalAmountPerDay) external onlyAdmin {
+    function updateMaxFinalizedWithdrawalAmountPerDay(uint256 _maxFinalizedWithdrawalAmountPerDay) external onlyOperatingTimelock {
         if (_maxFinalizedWithdrawalAmountPerDay == 0 || _maxFinalizedWithdrawalAmountPerDay > maxAcceptableFinalizedWithdrawalAmountPerDay) revert InvalidMaxFinalizedWithdrawalAmountPerDay();
         maxFinalizedWithdrawalAmountPerDay = _maxFinalizedWithdrawalAmountPerDay;
     }
@@ -217,7 +217,7 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
      * @notice Update the maximum number of validators to approve per day
      * @param _maxNumValidatorsToApprovePerDay The maximum number of validators to approve per day
      */
-    function updateMaxNumValidatorsToApprovePerDay(uint256 _maxNumValidatorsToApprovePerDay) external onlyAdmin {
+    function updateMaxNumValidatorsToApprovePerDay(uint256 _maxNumValidatorsToApprovePerDay) external onlyOperatingTimelock {
         if (_maxNumValidatorsToApprovePerDay > maxAcceptableNumValidatorsToApprovePerDay) revert InvalidMaxNumValidatorsToApprovePerDay();
         maxNumValidatorsToApprovePerDay = _maxNumValidatorsToApprovePerDay;
     }
@@ -226,7 +226,7 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
      * @notice Update the acceptable rebase APR in basis points
      * @param _acceptableRebaseAprInBps The acceptable rebase APR in basis points
      */
-    function updateAcceptableRebaseApr(int32 _acceptableRebaseAprInBps) external onlyAdmin {
+    function updateAcceptableRebaseApr(int32 _acceptableRebaseAprInBps) external onlyOperatingTimelock {
         if (_acceptableRebaseAprInBps < 0 || _acceptableRebaseAprInBps > maxAcceptableRebaseAprInBps) revert InvalidAcceptableRebaseApr();
         acceptableRebaseAprInBps = _acceptableRebaseAprInBps;
     }
@@ -235,7 +235,7 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
      * @notice Update the post report wait time in slots
      * @param _postReportWaitTimeInSlots The post report wait time in slots
      */
-    function updatePostReportWaitTimeInSlots(uint16 _postReportWaitTimeInSlots) external onlyAdmin {
+    function updatePostReportWaitTimeInSlots(uint16 _postReportWaitTimeInSlots) external onlyOperatingTimelock {
         postReportWaitTimeInSlots = _postReportWaitTimeInSlots;
     }
 
@@ -246,7 +246,7 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
      *      at 100% so it can be raised during a real correlated-slashing event but never
      *      set to a nonsensical value.
      */
-    function setMaxNegativeRebaseBps(uint256 _bps) external onlyAdmin {
+    function setMaxNegativeRebaseBps(uint256 _bps) external onlyOperatingTimelock {
         if (_bps > BASIS_POINTS_DENOMINATOR) revert InvalidMaxNegativeRebaseBps();
         maxNegativeRebaseBps = _bps;
         emit MaxNegativeRebaseBpsUpdated(_bps);

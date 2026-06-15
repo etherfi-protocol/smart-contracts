@@ -145,7 +145,7 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
         __UUPSUpgradeable_init();
     }
 
-    function initializeTokenParameters(address[] memory _tokens, uint16[] memory _exitFeeSplitToTreasuryInBps, uint16[] memory _exitFeeInBps, uint16[] memory _lowWatermarkInBpsOfTvl, uint256[] memory _bucketCapacity, uint256[] memory _bucketRefillRate)  external onlyAdmin {
+    function initializeTokenParameters(address[] memory _tokens, uint16[] memory _exitFeeSplitToTreasuryInBps, uint16[] memory _exitFeeInBps, uint16[] memory _lowWatermarkInBpsOfTvl, uint256[] memory _bucketCapacity, uint256[] memory _bucketRefillRate)  external onlyOperatingTimelock {
         for(uint256 i = 0; i < _exitFeeSplitToTreasuryInBps.length; i++) {
             if (_exitFeeSplitToTreasuryInBps[i] > maxExitFeeSplitToTreasuryInBps) revert ExceedsMaxExitFeeSplit();
             if (_exitFeeInBps[i] > maxExitFeeInBps) revert ExceedsMaxExitFee();
@@ -214,7 +214,7 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
      * @param capacity The capacity of the bucket.
      * @param token The token to set the capacity for
      */
-    function setCapacity(uint256 capacity, address token) external onlyAdmin {
+    function setCapacity(uint256 capacity, address token) external onlyOperatingTimelock {
         // max capacity = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether, which is practically enough
         uint64 bucketUnit = _convertToBucketUnit(capacity, Math.Rounding.Down);
         BucketLimiter.setCapacity(tokenToRedemptionInfo[token].limit, bucketUnit);
@@ -225,7 +225,7 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
      * @param refillRate The rate at which the bucket is refilled per second.
      * @param token The token to set the refill rate for
      */
-    function setRefillRatePerSecond(uint256 refillRate, address token) external onlyAdmin {
+    function setRefillRatePerSecond(uint256 refillRate, address token) external onlyOperatingTimelock {
         // max refillRate = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether per second, which is practically enough
         uint64 bucketUnit = _convertToBucketUnit(refillRate, Math.Rounding.Down);
         BucketLimiter.setRefillRate(tokenToRedemptionInfo[token].limit, bucketUnit);
@@ -236,7 +236,7 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
      * @param _exitFeeInBps The exit fee.
      * @param token The token to set the exit fee for
      */
-    function setExitFeeBasisPoints(uint16 _exitFeeInBps, address token) external onlyAdmin {
+    function setExitFeeBasisPoints(uint16 _exitFeeInBps, address token) external onlyOperatingTimelock {
         if (_exitFeeInBps > maxExitFeeInBps) revert ExceedsMaxExitFee();
         tokenToRedemptionInfo[token].exitFeeInBps = _exitFeeInBps;
     }
@@ -246,7 +246,7 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
      * @param _lowWatermarkInBpsOfTvl The low watermark in basis points of the total value of the liquidity pool.
      * @param token The token to set the low watermark for (ETH or stETH).
      */
-    function setLowWatermarkInBpsOfTvl(uint16 _lowWatermarkInBpsOfTvl, address token) external onlyAdmin {
+    function setLowWatermarkInBpsOfTvl(uint16 _lowWatermarkInBpsOfTvl, address token) external onlyOperatingTimelock {
         if (_lowWatermarkInBpsOfTvl > maxLowWatermarkInBpsOfTvl) revert ExceedsMaxLowWatermark();
         tokenToRedemptionInfo[token].lowWatermarkInBpsOfTvl = _lowWatermarkInBpsOfTvl;
     }
@@ -256,7 +256,7 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
      * @param _exitFeeSplitToTreasuryInBps The exit fee split to treasury in basis points.
      * @param token The token to set the exit fee split to treasury for (ETH or stETH).
      */
-    function setExitFeeSplitToTreasuryInBps(uint16 _exitFeeSplitToTreasuryInBps, address token) external onlyAdmin {
+    function setExitFeeSplitToTreasuryInBps(uint16 _exitFeeSplitToTreasuryInBps, address token) external onlyOperatingTimelock {
         if (_exitFeeSplitToTreasuryInBps > maxExitFeeSplitToTreasuryInBps) revert ExceedsMaxExitFeeSplit();
         tokenToRedemptionInfo[token].exitFeeSplitToTreasuryInBps = _exitFeeSplitToTreasuryInBps;
     }

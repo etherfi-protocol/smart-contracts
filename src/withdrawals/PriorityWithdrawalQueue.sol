@@ -371,7 +371,7 @@ contract PriorityWithdrawalQueue is
      * @notice Add a user to the whitelist
      * @param user The address of the user to add to the whitelist
      */
-    function addToWhitelist(address user) external onlyAdmin {
+    function addToWhitelist(address user) external onlyOperatingTimelock {
         if (user == address(0)) revert AddressZero();
         isWhitelisted[user] = true;
         emit WhitelistUpdated(user, true);
@@ -391,7 +391,7 @@ contract PriorityWithdrawalQueue is
      * @param users Array of addresses to update the whitelist for
      * @param statuses Array of boolean values indicating the new whitelist status
      */
-    function batchUpdateWhitelist(address[] calldata users, bool[] calldata statuses) external onlyAdmin {
+    function batchUpdateWhitelist(address[] calldata users, bool[] calldata statuses) external onlyOperatingTimelock {
         if (users.length != statuses.length) revert ArrayLengthMismatch();
         for (uint256 i = 0; i < users.length; ++i) {
             if (users[i] == address(0)) revert AddressZero();

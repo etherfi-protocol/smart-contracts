@@ -36,7 +36,7 @@ abstract contract RolesLibrary {
      * @notice Modifier to check if the caller is the operating timelock
      * @dev reverts with OnlyOperatingTimelock if the caller is not the operating timelock
      */
-    modifier onlyAdmin() {
+    modifier onlyOperatingTimelock() {
         roleRegistry.onlyOperatingTimelock(msg.sender);
         _;
     }

@@ -275,7 +275,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, DeprecatedOZO
      * @notice Validates a withdrawal request
      * @param requestId The ID of the withdrawal request
      */
-    function validateRequest(uint256 requestId) external onlyAdmin {
+    function validateRequest(uint256 requestId) external onlyOperatingTimelock {
         if (!_exists(requestId)) revert RequestNotFound();
         if (_requests[requestId].isValid) revert RequestValid();
         if (requestId <= lastFinalizedRequestId) {
