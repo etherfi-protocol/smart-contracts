@@ -11,7 +11,7 @@ import "@scripts/utils/ValidatorHelpers.sol";
 import "@scripts/utils/SafeTxHashLib.sol";
 import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
 import "@etherfi/staking/interfaces/IEtherFiNode.sol";
-import "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 import "@scripts/operations/consolidations/GnosisConsolidationLib.sol";
 import "@openzeppelin/contracts/governance/TimelockController.sol";
 import "@etherfi/governance/EtherFiTimelock.sol";

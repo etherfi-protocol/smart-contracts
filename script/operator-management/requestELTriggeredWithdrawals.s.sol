@@ -7,7 +7,7 @@ import "forge-std/StdJson.sol";
 
 import {EtherFiNodesManager} from "@etherfi/staking/EtherFiNodesManager.sol";
 import {IEtherFiNode} from "@etherfi/staking/interfaces/IEtherFiNode.sol";
-import "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 import {EtherFiRateLimiter} from "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
 
 import "@scripts/utils/utils.sol";

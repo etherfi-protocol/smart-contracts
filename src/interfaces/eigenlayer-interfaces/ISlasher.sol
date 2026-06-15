@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity >=0.5.0;
 
-import "@etherfi/eigenlayer-interfaces/IStrategyManager.sol";
-import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IStrategyManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
 
 /**
  * @title Interface for the primary 'slashing' contract for EigenLayer.

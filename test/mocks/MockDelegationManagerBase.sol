@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
 
-import "@etherfi/eigenlayer-interfaces/IStrategy.sol";
-import "@etherfi/eigenlayer-interfaces/IPauserRegistry.sol";
-import "@etherfi/eigenlayer-interfaces/ISignatureUtilsMixin.sol";
-import "@etherfi/eigenlayer-libraries/SlashingLib.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IStrategy.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IPauserRegistry.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/ISignatureUtilsMixin.sol";
+import "@eigenlayer-libraries/SlashingLib.sol";
 
 // IDelegationManager but with all functions made virtual
 contract MockDelegationManagerBase is IDelegationManager {

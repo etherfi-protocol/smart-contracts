@@ -9,7 +9,7 @@ import "@etherfi/staking/EtherFiNodesManager.sol";
 import "@etherfi/governance/RoleRegistry.sol";
 import "@etherfi/governance/EtherFiTimelock.sol";
 import "@etherfi/staking/interfaces/IEtherFiNode.sol";
-import "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 
 /**
  * @title Consolidate Validators

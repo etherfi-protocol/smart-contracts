@@ -2,7 +2,7 @@
 pragma solidity ^0.8.27;
 
 import "@tests/mocks/MockDelegationManagerBase.sol";
-import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
 import "@tests/mocks/MockStrategy.sol";
 import "forge-std/console2.sol";
 import "forge-std/Test.sol";

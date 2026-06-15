@@ -4,13 +4,13 @@ pragma solidity ^0.8.13;
 import "@tests/TestSetup.sol";
 import "@etherfi/staking/EtherFiNode.sol";
 import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
-import "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
-import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
-import "@etherfi/eigenlayer-interfaces/IStrategy.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IStrategy.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
-import {BeaconChainProofs} from "@etherfi/eigenlayer-libraries/BeaconChainProofs.sol";
-import {IDelegationManagerTypes} from "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
-import {IEigenPodTypes} from "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
+import {BeaconChainProofs} from "@eigenlayer-libraries/BeaconChainProofs.sol";
+import {IDelegationManagerTypes} from "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
+import {IEigenPodTypes} from "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 import {EigenPodTestHelpers} from "@tests/utils/EigenPodTestHelpers.sol";
 import "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 
@@ -308,15 +308,23 @@ contract EtherFiNodesManagerTest is TestSetup {
         if (!_isEIP4788Available()) {
             vm.skip(true);
         }
+        // startCheckpoint passes revertIfNoBalance=true; on a latest-block fork the
+        // real pod may have no excess native ETH, so seed it to give a checkpointable balance.
+        address pod = managerInstance.getEigenPod(testNode);
+        vm.deal(pod, pod.balance + 100 ether);
         vm.prank(podProver);
         managerInstance.startCheckpoint(testNode);
     }
-    
+
     function test_startCheckpoint_byId() public {
         // Skip if EIP-4788 not available (e.g., Tenderly VNET)
         if (!_isEIP4788Available()) {
             vm.skip(true);
         }
+        // See note in test_startCheckpoint_byAddress: seed the pod with native ETH so
+        // there is a balance to checkpoint (revertIfNoBalance=true).
+        address pod = managerInstance.getEigenPod(testLegacyId);
+        vm.deal(pod, pod.balance + 100 ether);
         vm.prank(podProver);
         managerInstance.startCheckpoint(testLegacyId);
     }

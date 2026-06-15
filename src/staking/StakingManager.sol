@@ -27,29 +27,42 @@ contract StakingManager is
     UUPSUpgradeable,
     RolesLibrary
 {
+    //---------------------------------------------------------------------------
+    //-----------------------------  Storage  -----------------------------------
+    //---------------------------------------------------------------------------
+    LegacyStakingManagerState legacyState; // all legacy state in this contract has been deprecated
+    mapping(address => bool) public deployedEtherFiNodes;
+    mapping(bytes32 => ValidatorCreationStatus) public validatorCreationStatus;
 
+    //---------------------------------------------------------------------------
+    //-----------------------------  IMMUTABLES  ---------------------------------
+    //---------------------------------------------------------------------------
     address public immutable liquidityPool;
-    uint256 public constant INITIAL_DEPOSIT_AMOUNT = 1 ether;
-    uint256 public constant MIN_VALIDATOR_SIZE_WEI = 32 ether;
-    uint256 public constant MAX_VALIDATOR_SIZE_WEI = 2048 ether;
-    uint256 public constant VALIDATOR_PUBKEY_LENGTH = 48;
     IEtherFiNodesManager public immutable etherFiNodesManager;
     IDepositContract public immutable depositContractEth2;
     IAuctionManager public immutable auctionManager;
     UpgradeableBeacon public immutable etherFiNodeBeacon;
 
     //---------------------------------------------------------------------------
-    //-----------------------------  Storage  -----------------------------------
+    //-----------------------------  CONSTANTS  ---------------------------------
     //---------------------------------------------------------------------------
-
-    LegacyStakingManagerState legacyState; // all legacy state in this contract has been deprecated
-    mapping(address => bool) public deployedEtherFiNodes;
-    mapping(bytes32 => ValidatorCreationStatus) public validatorCreationStatus;
+    uint256 public constant INITIAL_DEPOSIT_AMOUNT = 1 ether;
+    uint256 public constant MIN_VALIDATOR_SIZE_WEI = 32 ether;
+    uint256 public constant MAX_VALIDATOR_SIZE_WEI = 2048 ether;
+    uint256 public constant VALIDATOR_PUBKEY_LENGTH = 48;
 
     //-------------------------------------------------------------------------
-    //-----------------------------  Admin  -----------------------------------
+    //-----------------------------  CONSTRUCTOR  ----------------------------
     //-------------------------------------------------------------------------
-
+    /**
+     * @notice Constructor
+     * @param _liquidityPool The address of the liquidity pool
+     * @param _etherFiNodesManager The address of the etherfi nodes manager
+     * @param _ethDepositContract The address of the eth deposit contract
+     * @param _auctionManager The address of the auction manager
+     * @param _etherFiNodeBeacon The address of the etherfi node beacon
+     * @param _roleRegistry The address of the role registry
+     */
     constructor(
         address _liquidityPool,
         address _etherFiNodesManager,
@@ -67,12 +80,15 @@ contract StakingManager is
         _disableInitializers();
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
-
     //---------------------------------------------------------------------------
-    //------------------------- Deposit Flow ------------------------------------
+    //------------------------- OPERATIONAL FUNCTIONS  ----------------------------
     //---------------------------------------------------------------------------
-    
+    /**
+     * @notice Invalidates a registered beacon validator
+     * @param depositData The deposit data of the validator to invalidate
+     * @param bidId The bid id of the validator to invalidate
+     * @param etherFiNode The address of the etherfi node to invalidate the validator for
+     */
     function invalidateRegisteredBeaconValidator(DepositData calldata depositData, uint256 bidId, address etherFiNode) external onlyOracleOperations {
         bytes32 validatorCreationDataHash = keccak256(abi.encode(depositData.publicKey, depositData.signature, depositData.depositDataRoot, depositData.ipfsHashForEncryptedValidatorKey, bidId, etherFiNode));
         if (validatorCreationStatus[validatorCreationDataHash] != ValidatorCreationStatus.REGISTERED) revert InvalidValidatorCreationStatus();
@@ -80,8 +96,31 @@ contract StakingManager is
         emit ValidatorCreationStatusUpdated(depositData, bidId, etherFiNode, validatorCreationDataHash, ValidatorCreationStatus.INVALIDATED);
     }
 
-   /// @notice send 1 eth to deposit contract to create the validator.
-    ///    The rest of the eth will not be sent until the oracle confirms the withdrawal credentials
+    /**
+     * @notice Creates a new proxy instance of the etherFiNode withdrawal safe contract.
+     * @param _createEigenPod Whether to create an associated eigenPod contract.
+     * @return The address of the new etherFiNode
+     */
+    function instantiateEtherFiNode(bool _createEigenPod) external onlyExecutorOperations returns (address) {
+        BeaconProxy proxy = new BeaconProxy(address(etherFiNodeBeacon), "");
+        address node = address(proxy);
+
+        deployedEtherFiNodes[node] = true;
+        emit EtherFiNodeDeployed(node);
+
+        if (_createEigenPod) {
+            etherFiNodesManager.createEigenPod(node);
+        }
+
+        return node;
+    }
+
+    /**
+     * @notice Sends 1 eth to deposit contract to create the validator.
+     * @param depositData The deposit data of the validator to create
+     * @param bidIds The bid ids of the validator to create
+     * @param etherFiNode The address of the etherfi node to create the validator for
+     */
     function createBeaconValidators(DepositData[] calldata depositData, uint256[] calldata bidIds, address etherFiNode) external payable {
         if (msg.sender != liquidityPool) revert InvalidCaller();
         if (depositData.length != bidIds.length) revert InvalidDepositData();
@@ -114,8 +153,12 @@ contract StakingManager is
         }
     }
 
-    /// @notice register the beacon validators data for later confirmation from the oracle before the 1eth deposit
-    /// @dev provided deposit data must be for a 0x02 compounding validator
+    /**
+     * @notice Registers the beacon validators data for later confirmation from the oracle before the 1eth deposit
+     * @param depositData The deposit data of the validator to register
+     * @param bidIds The bid ids of the validator to register
+     * @param etherFiNode The address of the etherfi node to register the validator for
+     */
     function registerBeaconValidators(DepositData[] calldata depositData, uint256[] calldata bidIds, address etherFiNode) external {
         if (msg.sender != liquidityPool) revert InvalidCaller();
         if (depositData.length != bidIds.length) revert InvalidDepositData();
@@ -139,12 +182,16 @@ contract StakingManager is
         }
     }
 
-    /// @notice send remaining eth to activate validators created by "createBeaconValidators"
-    ///    The oracle is expected to have confirmed the withdrawal credentials
-    /// @dev note that since this is considered a "validator top up" by the beacon chain,
-    ///   The signatures are not actually verified by the beacon chain, as key ownership was
-    ///   already proved during the previous deposit. The "deposit data root" i.e. (checksum) however must be valid.
-    ///   The caller can use generateDepositDataRoot() to generate a valid root.
+    /**
+     * @notice Sends remaining eth to activate validators created by "createBeaconValidators"
+     * @param depositData The deposit data of the validator to confirm and fund
+     * @param validatorSizeWei The size of the validator to confirm and fund
+     * @dev The oracle is expected to have confirmed the withdrawal credentials
+     *      note that since this is considered a "validator top up" by the beacon chain,
+     *      the signatures are not actually verified by the beacon chain, as key ownership was
+     *      already proved during the previous deposit. The "deposit data root" i.e. (checksum) however must be valid.
+     *      The caller can use generateDepositDataRoot() to generate a valid root.
+     */
     function confirmAndFundBeaconValidators(DepositData[] calldata depositData, uint256 validatorSizeWei) external payable {
         if (msg.sender != liquidityPool) revert InvalidCaller();
         if (validatorSizeWei < MIN_VALIDATOR_SIZE_WEI || validatorSizeWei > MAX_VALIDATOR_SIZE_WEI) revert InvalidValidatorSize();
@@ -172,61 +219,23 @@ contract StakingManager is
         }
     }
 
-    /// @notice Calculates the pubkey hash of a validator's pubkey as per SSZ spec
-    function calculateValidatorPubkeyHash(bytes memory pubkey) public pure returns (bytes32) {
-        if (pubkey.length != VALIDATOR_PUBKEY_LENGTH) revert InvalidPubKeyLength();
-        return sha256(abi.encodePacked(pubkey, bytes16(0)));
-    }
-
-    /// @notice compute deposit_data_root for the provide deposit data
-    //    The deposit_data_root is essentially a checksum of the provided deposit over the (pubkey, signature, withdrawalCreds, amount)
-    //    and represents the "node" that will be inserted into the beacon deposit merkle tree.
-    //    Note that this is separate from the from the top level beacon deposit_root
-    function generateDepositDataRoot(bytes memory pubkey, bytes memory signature, bytes memory withdrawalCredentials, uint256 amount) public pure returns (bytes32) {
-        return depositDataRootGenerator.generateDepositDataRoot(pubkey, signature, withdrawalCredentials, amount);
-    }
-
     //---------------------------------------------------------------------------
-    //--------------------- EtherFiNode Beacon Proxy ----------------------------
+    //--------------------- ADMIN FUNCTIONS  ------------------------------------
     //---------------------------------------------------------------------------
-
-    /// @notice Upgrades the etherfi node
-    /// @param _newImplementation The new address of the etherfi node
+    /**
+     * @notice Upgrades the etherfi node
+     * @param _newImplementation The new address of the etherfi node
+     */
     function upgradeEtherFiNode(address _newImplementation) external onlyUpgradeTimelock {
         if (_newImplementation == address(0)) revert InvalidUpgrade();
 
         etherFiNodeBeacon.upgradeTo(_newImplementation);
     }
 
-    /// @notice Fetches the address of the beacon contract for future EtherFiNodes (withdrawal safes)
-    function getEtherFiNodeBeacon() external view returns (address) {
-        return address(etherFiNodeBeacon);
-    }
-
-    /// @notice Fetches the address of the implementation contract currently being used by the beacon proxy
-    /// @return the address of the currently used implementation contract
-    function implementation() public view override returns (address) {
-        return etherFiNodeBeacon.implementation();
-    }
-
-    /// @dev create a new proxy instance of the etherFiNode withdrawal safe contract.
-    /// @param _createEigenPod whether or not to create an associated eigenPod contract.
-    function instantiateEtherFiNode(bool _createEigenPod) external onlyExecutorOperations returns (address) {
-        BeaconProxy proxy = new BeaconProxy(address(etherFiNodeBeacon), "");
-        address node = address(proxy);
-
-        deployedEtherFiNodes[node] = true;
-        emit EtherFiNodeDeployed(node);
-
-        if (_createEigenPod) {
-            etherFiNodesManager.createEigenPod(node);
-        }
-
-        return node;
-    }
-
-    /// @dev this method is for backfilling the addresses of etherFiNodes the protocol has previously deployed
-    ///    Once this data has been backfilled we can delete this method
+    /**
+     * @notice Backfills the addresses of etherFiNodes the protocol has previously deployed
+     * @param nodes The addresses of the etherFiNodes to backfill
+     */
     function backfillExistingEtherFiNodes(address[] calldata nodes) external onlyOperatingMultisig {
         for (uint256 i = 0; i < nodes.length; i++) {
             address node = nodes[i];
@@ -235,5 +244,55 @@ contract StakingManager is
             deployedEtherFiNodes[node] = true;
             emit EtherFiNodeDeployed(node);
         }
+    }
+
+    //---------------------------------------------------------------------------
+    //-----------------------------  INTERNAL FUNCTIONS  -------------------------
+    //---------------------------------------------------------------------------
+    /**
+     * @notice Authorizes the upgrade of the implementation contract
+     * @param newImplementation the address of the new implementation contract
+     */
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
+
+    //---------------------------------------------------------------------------
+    //-----------------------------  GETTERS  ------------------------------------
+    //---------------------------------------------------------------------------
+    /**
+     * @notice Fetches the address of the beacon contract for future EtherFiNodes (withdrawal safes)
+     * @return the address of the beacon contract
+     */
+    function getEtherFiNodeBeacon() external view returns (address) {
+        return address(etherFiNodeBeacon);
+    }
+
+    /**
+     * @notice Fetches the address of the implementation contract currently being used by the beacon proxy
+     * @return the address of the currently used implementation contract
+     */
+    function implementation() public view override returns (address) {
+        return etherFiNodeBeacon.implementation();
+    }
+
+    /**
+     * @notice Calculates the pubkey hash of a validator's pubkey as per SSZ spec
+     * @param pubkey The pubkey to calculate the hash of
+     * @return The hash of the pubkey
+     */
+    function calculateValidatorPubkeyHash(bytes memory pubkey) public pure returns (bytes32) {
+        if (pubkey.length != VALIDATOR_PUBKEY_LENGTH) revert InvalidPubKeyLength();
+        return sha256(abi.encodePacked(pubkey, bytes16(0)));
+    }
+
+    /**
+     * @notice compute deposit_data_root for the provide deposit data
+     * @param pubkey The pubkey to generate the deposit data root for
+     * @param signature The signature to generate the deposit data root for
+     * @param withdrawalCredentials The withdrawal credentials to generate the deposit data root for
+     * @param amount The amount to generate the deposit data root for
+     * @return The deposit data root
+     */
+    function generateDepositDataRoot(bytes memory pubkey, bytes memory signature, bytes memory withdrawalCredentials, uint256 amount) public pure returns (bytes32) {
+        return depositDataRootGenerator.generateDepositDataRoot(pubkey, signature, withdrawalCredentials, amount);
     }
 }

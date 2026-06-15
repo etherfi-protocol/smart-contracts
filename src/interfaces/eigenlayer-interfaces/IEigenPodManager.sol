@@ -2,13 +2,13 @@
 pragma solidity >=0.5.0;
 
 import "@openzeppelin/contracts/proxy/beacon/IBeacon.sol";
-import "@etherfi/eigenlayer-interfaces/IETHPOSDeposit.sol";
-import "@etherfi/eigenlayer-interfaces/IStrategyManager.sol";
-import "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
-import "@etherfi/eigenlayer-interfaces/IShareManager.sol";
-import "@etherfi/eigenlayer-interfaces/IPausable.sol";
-import "@etherfi/eigenlayer-interfaces/IStrategy.sol";
-import "@etherfi/eigenlayer-interfaces/ISemVerMixin.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IETHPOSDeposit.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IStrategyManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IShareManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IPausable.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IStrategy.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/ISemVerMixin.sol";
 
 interface IEigenPodManagerErrors {
     /// @dev Thrown when caller is not a EigenPod.

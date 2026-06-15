@@ -7,7 +7,7 @@ import {Initializable} from "@openzeppelin-upgradeable/contracts/proxy/utils/Ini
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {ILayerZeroTellerWithRateLimiting} from "@etherfi/liquid-interfaces/ILayerZeroTellerWithRateLimiting.sol";
+import {ILayerZeroTellerWithRateLimiting} from "@etherfi/interfaces/liquid-interfaces/ILayerZeroTellerWithRateLimiting.sol";
 import {PausableUpgradeable} from "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 
 

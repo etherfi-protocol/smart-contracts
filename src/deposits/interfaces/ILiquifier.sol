@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "@etherfi/eigenlayer-interfaces/IStrategyManager.sol";
-import "@etherfi/eigenlayer-interfaces/IStrategy.sol";
-import "@etherfi/eigenlayer-interfaces/IPauserRegistry.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IStrategyManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IStrategy.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IPauserRegistry.sol";
 import "@etherfi/governance/interfaces/IRoleRegistry.sol";
 
 

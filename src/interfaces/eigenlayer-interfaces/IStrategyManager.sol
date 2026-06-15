@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity >=0.5.0;
 
-import "@etherfi/eigenlayer-interfaces/IStrategy.sol";
-import "@etherfi/eigenlayer-interfaces/IShareManager.sol";
-import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
-import "@etherfi/eigenlayer-interfaces/IEigenPodManager.sol";
-import "@etherfi/eigenlayer-interfaces/ISemVerMixin.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IStrategy.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IShareManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPodManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/ISemVerMixin.sol";
 
 interface IStrategyManagerErrors {
     /// @dev Thrown when total strategies deployed exceeds max.

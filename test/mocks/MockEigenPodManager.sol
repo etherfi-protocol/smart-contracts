@@ -3,7 +3,7 @@ pragma solidity ^0.8.27;
 
 import "@tests/mocks/MockEigenPodManagerBase.sol";
 import "@tests/mocks/MockEigenPod.sol";
-import "@etherfi/eigenlayer-interfaces/IEigenPodManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPodManager.sol";
 import "@tests/mocks/MockStrategy.sol";
 import "forge-std/console2.sol";
 import "forge-std/Test.sol";

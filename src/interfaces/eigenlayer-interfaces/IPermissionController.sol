@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import "@etherfi/eigenlayer-interfaces/ISemVerMixin.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/ISemVerMixin.sol";
 
 interface IPermissionControllerErrors {
     /// @notice Thrown when a non-admin caller attempts to perform an admin-only action.

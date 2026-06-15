@@ -5,8 +5,8 @@ import "@tests/TestSetup.sol";
 import "@etherfi/staking/EtherFiNode.sol";
 import "@openzeppelin/contracts/proxy/beacon/IBeacon.sol";
 import "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
-import "@etherfi/eigenlayer-interfaces/IEigenPodManager.sol";
-import "@etherfi/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPodManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
 import "@tests/mocks/MockDelegationManager.sol";
 import "@tests/mocks/MockEigenPod.sol";
 

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.27;
 
 import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
-import "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 
 /**
  * @title Consolidation Transaction Library

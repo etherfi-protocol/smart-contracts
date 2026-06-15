@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import "@etherfi/eigenlayer-interfaces/IEigenPodManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPodManager.sol";
 import "@tests/mocks/MockShareManagerBase.sol";
 import "@tests/mocks/MockEigenPod.sol";
 import "@tests/mocks/MockPausableBase.sol";

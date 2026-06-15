@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.22;
 
-import {ILayerZeroTellerWithRateLimiting} from "@etherfi/liquid-interfaces/ILayerZeroTellerWithRateLimiting.sol";
+import {ILayerZeroTellerWithRateLimiting} from "@etherfi/interfaces/liquid-interfaces/ILayerZeroTellerWithRateLimiting.sol";
 import {LiquidReferBaseTest} from "@tests/liquid-tests/base/liquidReferBaseTest.t.sol";
 
 contract LiquidReferBtcTest is LiquidReferBaseTest {
