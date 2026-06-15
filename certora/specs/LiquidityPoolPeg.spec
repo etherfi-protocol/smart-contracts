@@ -108,7 +108,10 @@ rule I7_rate_non_decreasing_on_guarded_methods(method f, env e, calldataarg args
         f -> f.selector == sig:withdraw(address,uint256).selector
           || f.selector == sig:burnEEthShares(uint256).selector
           || f.selector == sig:burnEEthSharesForNonETHWithdrawal(uint256,uint256).selector
+          || f.selector == sig:deposit().selector
+          || f.selector == sig:deposit(address).selector
           || f.selector == sig:deposit(address,address).selector
+          || f.selector == sig:depositToRecipient(address,uint256,address).selector
     }
 {
     uint256 P0 = getTotalPooledEther();

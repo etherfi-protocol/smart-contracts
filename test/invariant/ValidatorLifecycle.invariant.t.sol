@@ -36,6 +36,14 @@ contract ValidatorLifecycleInvariantTest is TestSetup {
         setUpTests();
         handler = new ValidatorLifecycleHandler(managerInstance, address(stakingManagerInstance));
         targetContract(address(handler));
+
+        // Restrict fuzzing to the two action functions. Without this, the engine
+        // also targets the handler's view getters (linkedCount, ghostLinkedNode,
+        // the counters), wasting call budget on no-ops.
+        bytes4[] memory sel = new bytes4[](2);
+        sel[0] = handler.doLink.selector;
+        sel[1] = handler.doRelinkAttack.selector;
+        targetSelector(FuzzSelector({addr: address(handler), selectors: sel}));
     }
 
     /// I11: no pubkey-hash link was ever overwritten / repointed after first set.
@@ -54,5 +62,23 @@ contract ValidatorLifecycleInvariantTest is TestSetup {
         handler.link_ok();
         handler.link_already_revert();
         handler.relink_attempt();
+    }
+
+    /// Non-vacuity gate: prove the fuzzer actually drove the I11 lifecycle —
+    /// at least one successful link, at least one rejected re-link (either via
+    /// doLink hitting an already-linked hash or the explicit re-link attack).
+    /// Without this, both invariant_I11_* could pass trivially because no link
+    /// or re-link attempt ever fired.
+    function afterInvariant() public {
+        emit log_named_uint("link_ok            ", handler.link_ok());
+        emit log_named_uint("link_already_revert", handler.link_already_revert());
+        emit log_named_uint("relink_attempt     ", handler.relink_attempt());
+
+        assertGt(handler.link_ok(), 0, "non-vacuity: no pubkey->node link ever succeeded");
+        assertGt(
+            handler.link_already_revert() + handler.relink_attempt(),
+            0,
+            "non-vacuity: no re-link / already-linked path was ever exercised"
+        );
     }
 }

@@ -55,6 +55,12 @@ contract WithdrawalSolvencyHandler is StdUtils {
 
     uint256 public constant N_EOAS = 5;
 
+    // Revert selectors from LiquidityPool, used to classify lock reverts so the
+    // P1 probe can distinguish the liquidity guard (the I3 enforcement) from
+    // the migration guard that precedes it.
+    bytes4 internal constant SEL_INSUFFICIENT_LIQUIDITY = bytes4(keccak256("InsufficientLiquidity()"));
+    bytes4 internal constant SEL_MIGRATION_NOT_COMPLETE = bytes4(keccak256("MigrationNotComplete()"));
+
     LiquidityPool      public immutable lp;
     EETH               public immutable eETH;
     WithdrawRequestNFT public immutable wrn;
@@ -79,6 +85,10 @@ contract WithdrawalSolvencyHandler is StdUtils {
     /// @notice (P1) Set true if a finalize+lock SUCCEEDED while the locked
     ///         amount exceeded `totalValueInLp` at lock time. Must stay false.
     bool public ghost_finalizeExceededLiquidity;
+    /// @notice (P1) Set true if `_lockEth`'s liquidity guard REJECTED a lock
+    ///         whose amount was actually backed (lockAmount <= inLp) — the
+    ///         contract wrongly rejecting a solvent lock. Must stay false.
+    bool public ghost_lockRejectedWhileBacked;
     /// @notice (P3) Set true if a request meeting every claimability
     ///         precondition (finalized, valid, owned, frozen rate in band,
     ///         escrow sufficient) reverted on `claimWithdraw`. Must stay false.
@@ -99,6 +109,10 @@ contract WithdrawalSolvencyHandler is StdUtils {
     ///         positively verified through a successful lock — proves P1 was
     ///         actually exercised, not vacuously true.
     uint256 public ghost_finalizeBoundChecks;
+    /// @notice number of times `_lockEth`'s liquidity guard POSITIVELY rejected
+    ///         a genuinely over-backed lock (lockAmount > inLp) — proves the I3
+    ///         enforcement path is actually driven, not merely regression-guarded.
+    uint256 public ghost_lockBoundEnforced;
 
     // ----- coverage / forensics ------------------------------------------
 
@@ -180,29 +194,53 @@ contract WithdrawalSolvencyHandler is StdUtils {
 
         uint256 inLpBefore = uint256(lp.totalValueInLp());
 
-        // P1 GATE: the protocol enforces lockAmount <= totalValueInLp inside
-        // LP._lockEth. If lockAmount exceeds available in-LP liquidity, the
-        // lock WILL revert — which is precisely the I3 enforcement. We skip
-        // (cannot finalize what we cannot back) rather than asserting a revert,
-        // because that is the contract behaving correctly.
-        if (lockAmount > inLpBefore) { callCounts["finalize_skipped_liquidity"]++; return; }
         if (lockAmount > type(uint128).max) { callCounts["finalize_skipped_overflow"]++; return; }
 
+        // P1 PROBE (mirrors the correct I13 doFinalize pattern): do NOT
+        // pre-filter on liquidity. Attempt the lock UNCONDITIONALLY and let the
+        // contract decide. LiquidityPool._lockEth (LiquidityPool.sol:598)
+        // reverts InsufficientLiquidity when totalValueInLp < _amount — that
+        // revert IS the I3/P1 enforcement, so we must feed it the over-bound
+        // input, not refuse it.
+        //   - SUCCESS  => the contract permitted the lock; P1 demands the bound
+        //                 actually held (lockAmount <= inLpBefore). If a lock
+        //                 ever succeeds with lockAmount > inLpBefore, _lockEth
+        //                 wrongly let an unbacked lock through => trip the ghost.
+        //   - REVERT   => confirm it was the liquidity guard (or the migration
+        //                 guard, which precedes it) and that the bound was in
+        //                 fact violated; record it as a positive enforcement
+        //                 observation. A revert while lockAmount <= inLpBefore
+        //                 would be the contract wrongly rejecting a backed lock.
         if (lockAmount > 0) {
             vm.prank(etherFiAdminAddr);
             try lp.addEthAmountLockedForWithdrawal(uint128(lockAmount)) {
-                // SUCCESS path: P1 must hold. inLpBefore >= lockAmount by the
-                // guard above; if the contract ever let a lock through with
-                // lockAmount > inLpBefore it would be a solvency bug.
+                // SUCCESS path: P1 must hold.
                 if (lockAmount > inLpBefore) {
                     ghost_finalizeExceededLiquidity = true;
                     ghost_failLockAmount = lockAmount;
                     ghost_failInLp = inLpBefore;
                 }
                 ghost_finalizeBoundChecks++;
-            } catch {
-                callCounts["lock_revert"]++;
-                return; // do not finalize a range we couldn't back
+            } catch (bytes memory err) {
+                bytes4 sel = err.length >= 4 ? bytes4(err) : bytes4(0);
+                if (sel == SEL_INSUFFICIENT_LIQUIDITY) {
+                    // Enforcement fired. It MUST have been because the bound was
+                    // genuinely violated; a liquidity revert while the range was
+                    // fully backed would itself be a bug.
+                    if (lockAmount <= inLpBefore) {
+                        ghost_lockRejectedWhileBacked = true;
+                        ghost_failLockAmount = lockAmount;
+                        ghost_failInLp = inLpBefore;
+                    } else {
+                        ghost_lockBoundEnforced++; // positive: guard rejected an unbacked lock
+                    }
+                    callCounts["lock_revert_liquidity"]++;
+                } else if (sel == SEL_MIGRATION_NOT_COMPLETE) {
+                    callCounts["lock_revert_migration"]++;
+                } else {
+                    callCounts["lock_revert_other"]++;
+                }
+                return; // cannot finalize a range whose lock did not land
             }
         }
 
@@ -212,6 +250,45 @@ contract WithdrawalSolvencyHandler is StdUtils {
             callCounts["finalize"]++;
         } catch {
             callCounts["finalize_revert"]++;
+        }
+    }
+
+    /// @notice (P1, adversarial) Deliberately attempt to lock MORE than the LP
+    ///         currently holds in-LP, and assert the contract REJECTS it. This
+    ///         positively drives the I3/P1 enforcement (`_lockEth` reverts when
+    ///         totalValueInLp < _amount) rather than relying on the fuzzer to
+    ///         stumble onto an over-bound range. Self-contained: a single call
+    ///         exercises the guard, so the non-vacuity gate
+    ///         (ghost_lockBoundEnforced > 0) survives Foundry sequence-shrinking.
+    ///
+    ///         If the lock SUCCEEDS despite asking for more than in-LP liquidity,
+    ///         that is the exact solvency violation P1 forbids -> trip the ghost.
+    function probeOverLiquidityLock(uint256 overSeed) external {
+        uint256 inLp = uint256(lp.totalValueInLp());
+        // Ask for strictly more than in-LP liquidity (bounded so the uint128
+        // cast is safe). +1 wei over is enough to violate the guard; add a fuzzed
+        // margin for variety.
+        uint256 over = bound(overSeed, 1, 1_000 ether);
+        uint256 attempt = inLp + over;
+        if (attempt > type(uint128).max) { callCounts["probe_skipped_overflow"]++; return; }
+
+        vm.prank(etherFiAdminAddr);
+        try lp.addEthAmountLockedForWithdrawal(uint128(attempt)) {
+            // Should be impossible: attempt > inLp by construction.
+            ghost_finalizeExceededLiquidity = true;
+            ghost_failLockAmount = attempt;
+            ghost_failInLp = inLp;
+            callCounts["probe_unexpected_ok"]++;
+        } catch (bytes memory err) {
+            bytes4 sel = err.length >= 4 ? bytes4(err) : bytes4(0);
+            if (sel == SEL_INSUFFICIENT_LIQUIDITY) {
+                ghost_lockBoundEnforced++; // positive observation of the guard
+                callCounts["probe_rejected_liquidity"]++;
+            } else if (sel == SEL_MIGRATION_NOT_COMPLETE) {
+                callCounts["probe_rejected_migration"]++;
+            } else {
+                callCounts["probe_rejected_other"]++;
+            }
         }
     }
 

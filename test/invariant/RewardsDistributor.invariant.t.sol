@@ -45,7 +45,7 @@ contract RewardsDistributorInvariantTest is TestSetup {
         // on no-ops so the lifecycle (setPending -> finalize -> claim) is never
         // driven and the run is vacuous (all counters 0). Curate the selectors so
         // every call advances the state machine.
-        bytes4[] memory selectors = new bytes4[](7);
+        bytes4[] memory selectors = new bytes4[](8);
         selectors[0] = handler.doSetPendingRoot.selector;
         selectors[1] = handler.doFinalize.selector;
         selectors[2] = handler.doClaim.selector;
@@ -53,6 +53,7 @@ contract RewardsDistributorInvariantTest is TestSetup {
         selectors[4] = handler.doSetClaimDelay.selector;
         selectors[5] = handler.doWarp.selector;
         selectors[6] = handler.doRoll.selector;
+        selectors[7] = handler.doLowerCumulativeClaim.selector;
         targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
         targetContract(address(handler));
     }
@@ -107,6 +108,10 @@ contract RewardsDistributorInvariantTest is TestSetup {
         assertGt(handler.callCounts("claim_ok"), 0, "non-vacuity: no claim ever succeeded (I12 payout unexercised)");
         // Double-pay defense: at least one replay must have been attempted AND rejected.
         assertGt(handler.callCounts("replay_revert"), 0, "non-vacuity: replay/double-pay path never exercised");
+        // I12 monotonic-decrease guard: at least one strictly-lower-cumulative
+        // claim must have been attempted AND rejected, positively driving the
+        // `preclaimed >= cumulativeAmount` revert path.
+        assertGt(handler.callCounts("lower_rejected"), 0, "non-vacuity: monotonic-decrease guard never exercised");
 
         // And the run must have actually moved ETH: total ghost-paid across all
         // claimants > 0 (independent of the counters above).
@@ -131,6 +136,8 @@ contract RewardsDistributorInvariantTest is TestSetup {
         emit log_named_uint("claim_ok               ", handler.callCounts("claim_ok"));
         emit log_named_uint("claim_revert           ", handler.callCounts("claim_revert"));
         emit log_named_uint("replay_revert          ", handler.callCounts("replay_revert"));
+        emit log_named_uint("lower_rejected         ", handler.callCounts("lower_rejected"));
+        emit log_named_uint("lower_unexpected_ok    ", handler.callCounts("lower_unexpected_ok"));
         emit log_named_uint("replay_unexpected_ok   ", handler.callCounts("replay_unexpected_ok"));
         emit log_named_uint("replay_skipped         ", handler.callCounts("replay_skipped"));
         emit log_named_uint("setClaimDelay          ", handler.callCounts("setClaimDelay"));

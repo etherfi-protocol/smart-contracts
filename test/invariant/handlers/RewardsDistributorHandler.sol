@@ -208,6 +208,55 @@ contract RewardsDistributorHandler is StdUtils {
         }
     }
 
+    /// @notice (I12, monotonic-decrease guard) Attempt to claim a STRICTLY
+    ///         LOWER cumulative than already recorded. The contract rejects this
+    ///         at CumulativeMerkleRewardsDistributor.sol:113
+    ///         (`if (preclaimed >= cumulativeAmount) revert NothingToClaim()`).
+    ///         If such a claim ever SUCCEEDS or moves ETH, the monotonic
+    ///         guarantee is broken -> trip ghost_monotonicViolated. Self-contained
+    ///         (establishes its own root) so it survives sequence-shrinking.
+    function doLowerCumulativeClaim(uint256 acctSeed, uint256 dropSeed) external {
+        address account = _claimant(acctSeed);
+
+        // Self-contained: first ensure this account has a NON-ZERO cumulative by
+        // performing a real claim (establish root -> claim). This makes a SINGLE
+        // doLowerCumulativeClaim call drive the whole guard exercise, so the
+        // non-vacuity gate survives Foundry sequence-shrinking (a shrunk 1-call
+        // replay would otherwise skip on cum==0 and leave lower_rejected at 0).
+        uint256 cum = dist.cumulativeClaimed(token, account);
+        if (cum == 0) {
+            uint256 seed = bound(dropSeed, 1, 50 ether);
+            bytes32 bootLeaf = keccak256(abi.encodePacked(account, seed));
+            _establishRoot(bootLeaf);
+            bytes32[] memory bootProof = new bytes32[](0);
+            try dist.claim(token, account, seed, bootLeaf, bootProof) {
+                ghostPaid[account] += seed;
+                lastSeenCumulative[account] = seed;
+                cum = seed;
+                callCounts["claim_ok"]++;
+            } catch {
+                callCounts["lower_boot_failed"]++;
+                return;
+            }
+        }
+
+        // Strictly-lower target in [0, cum-1].
+        uint256 lower = bound(dropSeed, 0, cum - 1);
+        bytes32 leaf = keccak256(abi.encodePacked(account, lower));
+        _establishRoot(leaf);
+
+        uint256 preBal = account.balance;
+        bytes32[] memory proof = new bytes32[](0);
+        try dist.claim(token, account, lower, leaf, proof) {
+            // MUST be unreachable: preclaimed (cum) >= lower by construction.
+            ghost_monotonicViolated = true;
+            if (account.balance != preBal) ghost_doublePayViolated = true;
+            callCounts["lower_unexpected_ok"]++;
+        } catch {
+            callCounts["lower_rejected"]++;
+        }
+    }
+
     /// @notice Attempt to replay the exact same cumulative amount: must revert
     ///         (NothingToClaim). If it ever succeeds, that is a double-pay.
     function doReplayClaim(uint256 acctSeed) external {
