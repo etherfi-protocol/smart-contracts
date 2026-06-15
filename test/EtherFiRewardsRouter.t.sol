@@ -48,7 +48,7 @@ contract EtherFiRewardsRouterTest is Test {
     function setUp() public {
         // Deploy RoleRegistry
         vm.startPrank(owner);
-        roleRegistryImpl = new RoleRegistry(address(0));
+        roleRegistryImpl = new RoleRegistry(address(0xdead));
         roleRegistryProxy = new UUPSProxy(
             address(roleRegistryImpl),
             abi.encodeWithSelector(RoleRegistry.initialize.selector, owner)

@@ -40,7 +40,7 @@ contract DepositIntegrationTest is TestSetup {
 
         vm.startPrank(alice);
         stEth.approve(address(liquifierInstance), stEthAmount);
-        uint256 mintedShares = liquifierInstance.depositWithERC20(address(stEth), stEthAmount, address(0));
+        uint256 mintedShares = liquifierInstance.depositWithERC20(address(stEth), stEthAmount, 0, address(0));
         vm.stopPrank();
 
         assertGt(mintedShares, 0);
@@ -65,7 +65,7 @@ contract DepositIntegrationTest is TestSetup {
         );
 
         vm.prank(tom);
-        uint256 mintedShares = liquifierInstance.depositWithERC20WithPermit(address(stEth), stEthAmount, address(0), permitInput);
+        uint256 mintedShares = liquifierInstance.depositWithERC20WithPermit(address(stEth), stEthAmount, 0, address(0), permitInput);
 
         assertGt(mintedShares, 0);
         assertEq(eETHInstance.shares(tom), beforeShares + mintedShares);
@@ -138,7 +138,7 @@ contract DepositIntegrationTest is TestSetup {
         ILiquifier.PermitInput memory permitInput = _permitInputForStEth(1202, address(depositAdapterInstance), stEthAmount, stEth.nonces(tom), 2**256 - 1, stEth.DOMAIN_SEPARATOR()); // tom = vm.addr(1202)
 
         vm.prank(tom);
-        uint256 weEthOut = depositAdapterInstance.depositStETHForWeETHWithPermit(stEthAmount, address(0), permitInput);
+        uint256 weEthOut = depositAdapterInstance.depositStETHForWeETHWithPermit(stEthAmount, 0, address(0), permitInput);
 
         assertApproxEqAbs(weEthOut, weETHAmountForEETHAmount, 1e1);
         assertApproxEqAbs(weEthInstance.balanceOf(tom), beforeWeETH + weEthOut, 1e1); // weETH is transferred to the tom
@@ -164,7 +164,7 @@ contract DepositIntegrationTest is TestSetup {
         view
         returns (uint256 expectedWeETHOut, uint256 expectedEETHAmount)
     {
-        uint256 eETHAmountForStEthAmount = liquifierInstance.quoteByDiscountedValue(address(stEth), stEthAmount);
+        uint256 eETHAmountForStEthAmount = liquifierInstance.quoteByDiscountedValue(address(stEth), stEthAmount, 0);
         uint256 eETHSharesForAmount = liquidityPoolInstance.sharesForAmount(eETHAmountForStEthAmount);
         expectedEETHAmount = liquidityPoolInstance.amountForShare(eETHSharesForAmount);
         expectedWeETHOut = liquidityPoolInstance.sharesForAmount(expectedEETHAmount);
@@ -200,7 +200,7 @@ contract DepositIntegrationTest is TestSetup {
         );
 
         vm.prank(tom);
-        uint256 weEthOut = depositAdapterInstance.depositWstETHForWeETHWithPermit(wstEthAmount, address(0), permitInput);
+        uint256 weEthOut = depositAdapterInstance.depositWstETHForWeETHWithPermit(wstEthAmount, 0, address(0), permitInput);
 
         assertApproxEqAbs(weEthOut, weETHAmountForEETHAmount, 1e1);
         assertApproxEqAbs(weEthInstance.balanceOf(tom), beforeWeETH + weEthOut, 1e1); // weETH is transferred to the tom

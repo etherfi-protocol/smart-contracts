@@ -2044,4 +2044,108 @@ contract WithdrawRequestNFTTest is TestSetup {
         withdrawRequestNFTInstance.claimWithdraw(legacyId);
         assertGt(bob.balance, ethBefore, "claim must succeed via live-rate fallback");
     }
+
+    // -----------------------------------------------------------------
+    //  _beforeTokenTransfer blacklist gating
+    //
+    //  The transfer hook now distinguishes valid vs invalid requests:
+    //    - msg.sender (the caller/operator) and `to` are ALWAYS checked.
+    //    - for VALID requests, `from` is also checked (a blacklisted owner
+    //      cannot move their own valid request).
+    //    - for INVALID requests, `from` is intentionally NOT checked: only
+    //      UPGRADE_TIMELOCK may move them (via seizeInvalidRequest), and the
+    //      whole point of a seize is to claw a request away from a blacklisted
+    //      owner — so blocking on `from` would brick the recovery path.
+    // -----------------------------------------------------------------
+
+    function _blacklist(address user) internal {
+        vm.prank(owner); // owner holds the operating-multisig/blacklister role in TestSetup
+        blacklisterInstance.blacklistUser(user);
+    }
+
+    /// @dev Core fix: a seize must succeed even though the request owner (`from`) is
+    ///      blacklisted. Under the old unconditional `nonBlacklisted(from)` check this
+    ///      reverted, making blacklisted requests un-seizable.
+    function test_seizeInvalidRequest_succeedsWhenOwnerBlacklisted() public {
+        uint256 requestId = _requestFor(bob, 1 ether);
+
+        // invalidate (onlyGuardian == admin) then blacklist the owner.
+        vm.prank(admin);
+        withdrawRequestNFTInstance.invalidateRequest(requestId);
+        _blacklist(bob);
+
+        // seize to a clean recipient — caller is upgrade-timelock, `to` is clean,
+        // `from` (bob) is blacklisted but skipped on the invalid path.
+        vm.prank(roleRegistryInstance.owner());
+        withdrawRequestNFTInstance.seizeInvalidRequest(requestId, chad);
+
+        assertEq(withdrawRequestNFTInstance.ownerOf(requestId), chad, "seize must succeed despite blacklisted owner");
+    }
+
+    /// @dev Even on the invalid/seize path, the recipient (`to`) is still checked.
+    function test_seizeInvalidRequest_revertsWhenRecipientBlacklisted() public {
+        uint256 requestId = _requestFor(bob, 1 ether);
+
+        vm.prank(admin);
+        withdrawRequestNFTInstance.invalidateRequest(requestId);
+        _blacklist(chad); // recipient
+
+        vm.prank(roleRegistryInstance.owner());
+        vm.expectRevert(abi.encodeWithSelector(Blacklister.BlacklistedUser.selector, chad));
+        withdrawRequestNFTInstance.seizeInvalidRequest(requestId, chad);
+    }
+
+    /// @dev A valid request whose owner is blacklisted cannot be moved, even by a clean
+    ///      approved operator. Isolates the valid-branch `nonBlacklisted(from)` check
+    ///      (operator is the msg.sender, so the top-level check passes).
+    function test_beforeTokenTransfer_validRequest_revertsWhenOwnerBlacklisted() public {
+        uint256 requestId = _requestFor(bob, 1 ether);
+
+        // bob approves a clean operator (chad), then bob gets blacklisted.
+        vm.prank(bob);
+        withdrawRequestNFTInstance.approve(chad, requestId);
+        _blacklist(bob);
+
+        vm.prank(chad);
+        vm.expectRevert(abi.encodeWithSelector(Blacklister.BlacklistedUser.selector, bob));
+        withdrawRequestNFTInstance.transferFrom(bob, alice, requestId);
+    }
+
+    /// @dev New behaviour: the caller (msg.sender) is now checked, so a blacklisted
+    ///      operator cannot move a clean owner's valid request. (The old hook only
+    ///      checked `from`, so this transfer would have gone through.)
+    function test_beforeTokenTransfer_validRequest_revertsWhenCallerBlacklisted() public {
+        uint256 requestId = _requestFor(bob, 1 ether);
+
+        // bob (clean owner) approves chad, who then gets blacklisted.
+        vm.prank(bob);
+        withdrawRequestNFTInstance.approve(chad, requestId);
+        _blacklist(chad);
+
+        vm.prank(chad);
+        vm.expectRevert(abi.encodeWithSelector(Blacklister.BlacklistedUser.selector, chad));
+        withdrawRequestNFTInstance.transferFrom(bob, alice, requestId);
+    }
+
+    /// @dev The destination (`to`) is always checked on the valid path too.
+    function test_beforeTokenTransfer_validRequest_revertsWhenRecipientBlacklisted() public {
+        uint256 requestId = _requestFor(bob, 1 ether);
+
+        _blacklist(chad); // recipient
+
+        vm.prank(bob);
+        vm.expectRevert(abi.encodeWithSelector(Blacklister.BlacklistedUser.selector, chad));
+        withdrawRequestNFTInstance.transferFrom(bob, chad, requestId);
+    }
+
+    /// @dev Sanity: a clean owner transferring a clean valid request to a clean
+    ///      recipient is unaffected by the new gating.
+    function test_beforeTokenTransfer_validRequest_succeedsWhenAllClean() public {
+        uint256 requestId = _requestFor(bob, 1 ether);
+
+        vm.prank(bob);
+        withdrawRequestNFTInstance.transferFrom(bob, chad, requestId);
+
+        assertEq(withdrawRequestNFTInstance.ownerOf(requestId), chad, "clean valid transfer must succeed");
+    }
 }

@@ -94,12 +94,8 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
     //--------------------------------------------------------------------------------------
     /**
      * @notice Initialize the WeETH contract
-     * @param _liquidityPool The address of the liquidity pool contract
-     * @param _eETH The address of the eETH contract
      */
-    function initialize(address _liquidityPool, address _eETH) external initializer {
-        if (_liquidityPool == address(0) || _eETH == address(0)) revert ZeroAddress();
-
+    function initialize() external initializer {
         __ERC20_init("Wrapped eETH", "weETH");
         __ERC20Permit_init("Wrapped eETH");
         __UUPSUpgradeable_init();
@@ -194,7 +190,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
      * @param amount The amount of ETH to recover
      * @dev Only callable by the admin
      */
-    function recoverETH(address payable to, uint256 amount) external onlyAdmin {
+    function recoverETH(address payable to, uint256 amount) external onlyOperatingTimelock {
         _recoverETH(to, amount);
     }
 
@@ -205,7 +201,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
      * @param amount The amount of tokens to recover
      * @dev Only callable by the admin
      */
-    function recoverERC20(address token, address to, uint256 amount) external onlyAdmin {
+    function recoverERC20(address token, address to, uint256 amount) external onlyOperatingTimelock {
         if (token == address(eETH)) revert CannotRecoverEETH();
         _recoverERC20(token, to, amount);
     }
@@ -217,7 +213,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
      * @param tokenId The ID of the token to recover
      * @dev Only callable by the admin
      */
-    function recoverERC721(address token, address to, uint256 tokenId) external onlyAdmin {
+    function recoverERC721(address token, address to, uint256 tokenId) external onlyOperatingTimelock {
         _recoverERC721(token, to, tokenId);
     }
 

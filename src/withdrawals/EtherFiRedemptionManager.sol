@@ -58,14 +58,18 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
     ILido public immutable lido;
     IPriorityWithdrawalQueue public immutable priorityWithdrawalQueue;
     IBlacklister public immutable blacklister;
+    AggregatorV3Interface public immutable stEthPriceFeed;
 
     uint256 public immutable maxExitFeeSplitToTreasuryInBps;
     uint256 public immutable maxExitFeeInBps;
     uint256 public immutable maxLowWatermarkInBpsOfTvl;
+    uint256 public immutable stalePriceWindow;
+    uint256 public immutable maxPriceThreshold;
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  CONSTANTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
+    uint256 private constant SHARE_UNIT = 1e18;
     uint256 private constant BUCKET_UNIT_SCALE = 1e12;
     uint256 private constant BASIS_POINT_SCALE = 1e4;
 
@@ -73,13 +77,13 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
     //---------------------------------  EVENTS  -------------------------------------------
     //--------------------------------------------------------------------------------------
     event Redeemed(address indexed receiver, uint256 redemptionAmount, uint256 feeAmountToTreasury, uint256 feeAmountToStakers, address token);
+    event DustSwept(address indexed token, address indexed to, uint256 amount);
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  ERRORS  -------------------------------------------
     //--------------------------------------------------------------------------------------
     error InvalidAmount();
     error InvalidOutputToken();
-    error InvalidBps();
     error ExceedsMaxExitFee();
     error ExceedsMaxLowWatermark();
     error ExceedsMaxExitFeeSplit();
@@ -92,6 +96,10 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
     error ExceededRedeemable();
     error RateLimitExceeded();
     error AmountTooLarge();
+    error InvalidRecipient();
+    error InvalidPriceFeed();
+    error StalePriceFeed();
+    error InvalidStEthPrice();
 
     receive() external payable {}
 
@@ -100,36 +108,32 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
     //--------------------------------------------------------------------------------------
     /**
      * @notice Constructor
-     * @param _liquidityPool The address of the liquidity pool
-     * @param _eEth The address of the eETH token
-     * @param _weEth The address of the weETH token
      * @custom:oz-upgrades-unsafe-allow constructor
      */
     constructor(
-        address _liquidityPool, 
-        address _eEth, address _weEth, 
-        address _treasury, 
-        address _roleRegistry, 
-        address _etherFiRestaker, 
-        address _priorityWithdrawalQueue, 
-        address _blacklister, 
+        ConstructorAddresses memory _constructorAddresses,
         uint256 _maxExitFeeSplitToTreasuryInBps, 
         uint256 _maxExitFeeInBps, 
-        uint256 _maxLowWatermarkInBpsOfTvl)
-        RolesLibrary(_roleRegistry)
+        uint256 _maxLowWatermarkInBpsOfTvl,
+        uint256 _stalePriceWindow,
+        uint256 _maxPriceThreshold)
+        RolesLibrary(_constructorAddresses.roleRegistry)
     {
         if (_maxExitFeeSplitToTreasuryInBps > BASIS_POINT_SCALE || _maxExitFeeInBps > BASIS_POINT_SCALE || _maxLowWatermarkInBpsOfTvl > BASIS_POINT_SCALE) revert InvalidAmount();
         maxExitFeeSplitToTreasuryInBps = _maxExitFeeSplitToTreasuryInBps;
         maxExitFeeInBps = _maxExitFeeInBps;
         maxLowWatermarkInBpsOfTvl = _maxLowWatermarkInBpsOfTvl;
-        treasury = _treasury;
-        liquidityPool = ILiquidityPool(payable(_liquidityPool));
-        eEth = IeETH(_eEth);
-        weEth = IWeETH(_weEth); 
-        etherFiRestaker = IEtherFiRestaker(payable(_etherFiRestaker));
+        stalePriceWindow = _stalePriceWindow;
+        maxPriceThreshold = _maxPriceThreshold;
+        treasury = _constructorAddresses.treasury;
+        liquidityPool = ILiquidityPool(payable(_constructorAddresses.liquidityPool));
+        eEth = IeETH(_constructorAddresses.eEth);
+        weEth = IWeETH(_constructorAddresses.weEth); 
+        etherFiRestaker = IEtherFiRestaker(payable(_constructorAddresses.etherFiRestaker));
         lido = etherFiRestaker.lido();
-        priorityWithdrawalQueue = IPriorityWithdrawalQueue(_priorityWithdrawalQueue);
-        blacklister = IBlacklister(_blacklister);
+        priorityWithdrawalQueue = IPriorityWithdrawalQueue(_constructorAddresses.priorityWithdrawalQueue);
+        blacklister = IBlacklister(_constructorAddresses.blacklister);
+        stEthPriceFeed = AggregatorV3Interface(_constructorAddresses.stEthPriceFeed);
 
         _disableInitializers();
     }
@@ -139,17 +143,12 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
     //--------------------------------------------------------------------------------------
     /**
      * @notice Initialize the EtherFiRedemptionManager
-     * @param _exitFeeSplitToTreasuryInBps The exit fee split to treasury in basis points
-     * @param _exitFeeInBps The exit fee in basis points
-     * @param _lowWatermarkInBpsOfTvl The low watermark in basis points of the total value of the liquidity pool
      */
-    function initialize(uint16 _exitFeeSplitToTreasuryInBps, uint16 _exitFeeInBps, uint16 _lowWatermarkInBpsOfTvl, uint256 _bucketCapacity, uint256 _bucketRefillRate) external initializer {
-        if (_exitFeeInBps > BASIS_POINT_SCALE || _exitFeeSplitToTreasuryInBps > BASIS_POINT_SCALE || _lowWatermarkInBpsOfTvl > BASIS_POINT_SCALE) revert InvalidBps();
-
+    function initialize() external initializer {
         __UUPSUpgradeable_init();
     }
 
-    function initializeTokenParameters(address[] memory _tokens, uint16[] memory _exitFeeSplitToTreasuryInBps, uint16[] memory _exitFeeInBps, uint16[] memory _lowWatermarkInBpsOfTvl, uint256[] memory _bucketCapacity, uint256[] memory _bucketRefillRate)  external onlyAdmin {
+    function initializeTokenParameters(address[] memory _tokens, uint16[] memory _exitFeeSplitToTreasuryInBps, uint16[] memory _exitFeeInBps, uint16[] memory _lowWatermarkInBpsOfTvl, uint256[] memory _bucketCapacity, uint256[] memory _bucketRefillRate)  external onlyOperatingTimelock {
         for(uint256 i = 0; i < _exitFeeSplitToTreasuryInBps.length; i++) {
             if (_exitFeeSplitToTreasuryInBps[i] > maxExitFeeSplitToTreasuryInBps) revert ExceedsMaxExitFeeSplit();
             if (_exitFeeInBps[i] > maxExitFeeInBps) revert ExceedsMaxExitFee();
@@ -218,7 +217,7 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
      * @param capacity The capacity of the bucket.
      * @param token The token to set the capacity for
      */
-    function setCapacity(uint256 capacity, address token) external onlyAdmin {
+    function setCapacity(uint256 capacity, address token) external onlyOperatingTimelock {
         // max capacity = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether, which is practically enough
         uint64 bucketUnit = _convertToBucketUnit(capacity, Math.Rounding.Down);
         BucketLimiter.setCapacity(tokenToRedemptionInfo[token].limit, bucketUnit);
@@ -229,7 +228,7 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
      * @param refillRate The rate at which the bucket is refilled per second.
      * @param token The token to set the refill rate for
      */
-    function setRefillRatePerSecond(uint256 refillRate, address token) external onlyAdmin {
+    function setRefillRatePerSecond(uint256 refillRate, address token) external onlyOperatingTimelock {
         // max refillRate = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether per second, which is practically enough
         uint64 bucketUnit = _convertToBucketUnit(refillRate, Math.Rounding.Down);
         BucketLimiter.setRefillRate(tokenToRedemptionInfo[token].limit, bucketUnit);
@@ -240,7 +239,7 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
      * @param _exitFeeInBps The exit fee.
      * @param token The token to set the exit fee for
      */
-    function setExitFeeBasisPoints(uint16 _exitFeeInBps, address token) external onlyAdmin {
+    function setExitFeeBasisPoints(uint16 _exitFeeInBps, address token) external onlyOperatingTimelock {
         if (_exitFeeInBps > maxExitFeeInBps) revert ExceedsMaxExitFee();
         tokenToRedemptionInfo[token].exitFeeInBps = _exitFeeInBps;
     }
@@ -250,7 +249,7 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
      * @param _lowWatermarkInBpsOfTvl The low watermark in basis points of the total value of the liquidity pool.
      * @param token The token to set the low watermark for (ETH or stETH).
      */
-    function setLowWatermarkInBpsOfTvl(uint16 _lowWatermarkInBpsOfTvl, address token) external onlyAdmin {
+    function setLowWatermarkInBpsOfTvl(uint16 _lowWatermarkInBpsOfTvl, address token) external onlyOperatingTimelock {
         if (_lowWatermarkInBpsOfTvl > maxLowWatermarkInBpsOfTvl) revert ExceedsMaxLowWatermark();
         tokenToRedemptionInfo[token].lowWatermarkInBpsOfTvl = _lowWatermarkInBpsOfTvl;
     }
@@ -260,9 +259,25 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
      * @param _exitFeeSplitToTreasuryInBps The exit fee split to treasury in basis points.
      * @param token The token to set the exit fee split to treasury for (ETH or stETH).
      */
-    function setExitFeeSplitToTreasuryInBps(uint16 _exitFeeSplitToTreasuryInBps, address token) external onlyAdmin {
+    function setExitFeeSplitToTreasuryInBps(uint16 _exitFeeSplitToTreasuryInBps, address token) external onlyOperatingTimelock {
         if (_exitFeeSplitToTreasuryInBps > maxExitFeeSplitToTreasuryInBps) revert ExceedsMaxExitFeeSplit();
         tokenToRedemptionInfo[token].exitFeeSplitToTreasuryInBps = _exitFeeSplitToTreasuryInBps;
+    }
+
+    /**
+     * @notice Sweep dust accumulated in the adapter to a recipient.
+     * @param _token Address of the ERC20 to sweep
+     * @param _to Recipient of the swept tokens
+     * @dev Each redemption strands 1-2 wei of eETH due to floor-rounding in both
+     *      amountForShare (shares -> ETH) and wrap (ETH -> shares). This function
+     *      lets operations recover the residual balance of any ERC20 left here.
+     */
+    function sweepDust(address _token, address _to) external onlyOperatingMultisig {
+        if (_to == address(0)) revert InvalidRecipient();
+        uint256 balance = IERC20(_token).balanceOf(address(this));
+        if (balance == 0) revert InsufficientBalance();
+        IERC20(_token).safeTransfer(_to, balance);
+        emit DustSwept(_token, _to, balance);
     }
 
     //--------------------------------------------------------------------------------------
@@ -314,6 +329,10 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
         uint256 sharesToBurn,
         uint256 feeShareToStakers
     ) internal {
+        (, int256 answer, , uint256 updatedAt,) = stEthPriceFeed.latestRoundData();
+        if (answer <= 0) revert InvalidPriceFeed();
+        if (updatedAt + stalePriceWindow < block.timestamp) revert StalePriceFeed();
+        if (SHARE_UNIT + maxPriceThreshold < uint256(answer)) revert InvalidStEthPrice();
         uint256 eEthAmountToReceiver = stEthAmountToReceiver; // 1 stETH = 1 eETH
         if (eEthAmountToReceiver > type(uint128).max || eEthAmountToReceiver == 0 || sharesToBurn == 0) revert InvalidAmount();
         uint256 totalEEthShare = eEth.totalShares();

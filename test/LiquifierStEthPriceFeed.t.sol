@@ -39,13 +39,14 @@ contract LiquifierStEthPriceFeedTest is Test {
     uint256 internal constant MAX_DEVIATION_BPS = 500;
     uint256 internal constant BPS = 10_000;
     uint256 internal constant MIN_DISCOUNT = 100;
+    uint256 internal constant MAX_PRICE_THRESHOLD = 1e16; // 1% depeg band (1e18-scaled)
 
     function setUp() public {
         // Deterministic timestamp far enough in the future that we can subtract
         // arbitrary ages from it without underflow.
         vm.warp(1_700_000_000);
 
-        RoleRegistry rrImpl = new RoleRegistry(address(0));
+        RoleRegistry rrImpl = new RoleRegistry(address(0xdead));
         UUPSProxy rrProxy = new UUPSProxy(
             address(rrImpl),
             abi.encodeWithSelector(RoleRegistry.initialize.selector, owner)
@@ -66,19 +67,11 @@ contract LiquifierStEthPriceFeedTest is Test {
             etherfiRestaker: address(0xA5),
             l1SyncPool: address(0xA6)
         });
-        Liquifier impl = new Liquifier(addrs, MIN_DISCOUNT, STALE_WINDOW, MAX_DEVIATION_BPS);
+        Liquifier impl = new Liquifier(addrs, MIN_DISCOUNT, STALE_WINDOW, MAX_DEVIATION_BPS, MAX_PRICE_THRESHOLD);
         UUPSProxy proxy = new UUPSProxy(address(impl), "");
         liquifier = Liquifier(payable(address(proxy)));
 
-        liquifier.initialize(
-            address(0xCAFE),    // treasury
-            address(0xCAFF),    // liquidityPool
-            address(0xCAFFEE),  // strategyManager
-            address(0xCAFFFE),  // lidoWithdrawalQueue
-            stEth,
-            address(curve),
-            uint32(1 hours)
-        );
+        liquifier.initialize(uint32(1 hours));
 
         // Grant the consolidated admin role before any admin-gated call.
         // updateWhitelistedToken now requires UPGRADE_TIMELOCK_ROLE (onlyUpgradeTimelock);
@@ -180,11 +173,37 @@ contract LiquifierStEthPriceFeedTest is Test {
         liquifier.quoteByMarketValue(stEth, 10_501);
     }
 
-    /// Curve quote above 1:1 stETH→ETH: marketValue capped at amount via _min.
-    /// Chainlink at 1.0 must still pass (chainlinkValue == cap, deviation = 0).
-    function test_curveAboveAmount_marketValueCappedAtAmount() public {
+    /// Curve quote far above 1:1 while Chainlink stays at par: the deviation check
+    /// now runs against the RAW curve quote (the 1:1 cap is applied AFTER the check),
+    /// so a 50% gap between curve (1.5) and chainlink (1.0) trips InvalidStEthPrice.
+    /// Under the old ordering this was masked: the cap pulled marketValue down to
+    /// `amount` first, deviation came out ≈ 0, and the check silently passed.
+    function test_curveFarAboveChainlink_reverts() public {
         feed.set(int256(1 ether), block.timestamp);
-        curve.set(1.5 ether); // > amount → _min returns amount
+        curve.set(1.5 ether); // 50% above chainlink → deviation 5000 bps > 500 cap
+
+        vm.expectRevert(Liquifier.InvalidStEthPrice.selector);
+        liquifier.quoteByMarketValue(stEth, 1 ether);
+    }
+
+    /// Legitimate case the change is built to preserve: stETH momentarily trades a
+    /// hair above par (curve 1.001, chainlink 1.001 — both agree, deviation = 0), so
+    /// the check passes and the value is then conservatively capped to 1:1 (`amount`).
+    function test_curveSlightlyAboveAmount_withinDeviation_capsToOneToOne() public {
+        feed.set(int256(1.001 ether), block.timestamp);
+        curve.set(1.001 ether); // > amount, but agrees with chainlink → passes check
+
+        uint256 q = liquifier.quoteByMarketValue(stEth, 1 ether);
+        assertEq(q, 1 ether, "value capped at amount AFTER passing the deviation check");
+    }
+
+    /// Curve above amount AND within deviation of chainlink, with chainlink itself
+    /// above par: still caps to 1:1. Guards that the post-check `min` is unconditional,
+    /// not gated on chainlink being exactly 1.0. curve=1.004, feed=1.0 → deviation
+    /// 0.004/1.004 ≈ 398 bps < 500 → passes → q = min(1.004, 1) = 1.
+    function test_curveAboveAmount_chainlinkAtPar_withinDeviation_capsToOneToOne() public {
+        feed.set(int256(1 ether), block.timestamp);
+        curve.set(1.004 ether);
 
         uint256 q = liquifier.quoteByMarketValue(stEth, 1 ether);
         assertEq(q, 1 ether);
@@ -228,11 +247,13 @@ contract LiquifierStEthPriceFeedTest is Test {
         feed.set(answer, updatedAt);
         curve.set(curveOut);
 
-        // Mirror the contract:
-        uint256 marketValue = curveOut < amount ? curveOut : amount;
+        // Mirror the contract: the deviation check runs against the RAW curve
+        // quote, and the 1:1 cap (`min(curveOut, amount)`) is applied only AFTER
+        // the check passes.
         uint256 chainlinkValue = (uint256(answer) * amount) / 1e18;
         bool fresh = updatedAt + STALE_WINDOW >= block.timestamp;
-        uint256 deviation = chainlinkValue > marketValue ? chainlinkValue - marketValue : marketValue - chainlinkValue;
+        uint256 deviation = chainlinkValue > curveOut ? chainlinkValue - curveOut : curveOut - chainlinkValue;
+        uint256 cappedValue = curveOut < amount ? curveOut : amount;
 
         if (answer <= 0) {
             vm.expectRevert(Liquifier.InvalidPriceFeed.selector);
@@ -240,12 +261,17 @@ contract LiquifierStEthPriceFeedTest is Test {
         } else if (!fresh) {
             vm.expectRevert(Liquifier.StalePriceFeed.selector);
             liquifier.quoteByMarketValue(stEth, amount);
-        } else if ((deviation * BPS) / marketValue > MAX_DEVIATION_BPS) {
+        } else if (1e18 > uint256(answer) + MAX_PRICE_THRESHOLD) {
+            // Depeg floor: stETH below (1e18 - maxPriceThreshold) is rejected. Runs before
+            // the curve-deviation check, so it takes precedence on a down-depeg.
+            vm.expectRevert(Liquifier.InvalidStEthPrice.selector);
+            liquifier.quoteByMarketValue(stEth, amount);
+        } else if ((deviation * BPS) / curveOut > MAX_DEVIATION_BPS) {
             vm.expectRevert(Liquifier.InvalidStEthPrice.selector);
             liquifier.quoteByMarketValue(stEth, amount);
         } else {
             uint256 q = liquifier.quoteByMarketValue(stEth, amount);
-            assertEq(q, marketValue);
+            assertEq(q, cappedValue);
         }
     }
 }

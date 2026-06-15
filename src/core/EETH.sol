@@ -114,11 +114,8 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
     //--------------------------------------------------------------------------------------
     /**
      * @notice Initialize the EETH contract
-     * @param _liquidityPool The address of the liquidity pool contract
      */
-    function initialize(address _liquidityPool) external initializer {
-        if (_liquidityPool == address(0)) revert AddressZero();
-
+    function initialize() external initializer {
         __UUPSUpgradeable_init();
     }
 
@@ -302,7 +299,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
      * @param amount The amount of ETH to recover
      * @dev Only callable by the admin
      */
-    function recoverETH(address payable to, uint256 amount) external onlyAdmin {
+    function recoverETH(address payable to, uint256 amount) external onlyOperatingTimelock {
         _recoverETH(to, amount);
     }
 
@@ -313,7 +310,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
      * @param amount The amount of tokens to recover
      * @dev Only callable by the admin
      */
-    function recoverERC20(address token, address to, uint256 amount) external onlyAdmin{
+    function recoverERC20(address token, address to, uint256 amount) external onlyOperatingTimelock{
         _recoverERC20(token, to, amount);
     }
 
@@ -324,7 +321,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
      * @param tokenId The ID of the token to recover
      * @dev Only callable by the admin
      */
-    function recoverERC721(address token, address to, uint256 tokenId) external onlyAdmin {
+    function recoverERC721(address token, address to, uint256 tokenId) external onlyOperatingTimelock {
         _recoverERC721(token, to, tokenId);
     }
 

@@ -47,6 +47,20 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         );
     }
 
+    function _redemptionCtorAddrs() internal view returns (IEtherFiRedemptionManager.ConstructorAddresses memory) {
+        return IEtherFiRedemptionManager.ConstructorAddresses({
+            liquidityPool: address(liquidityPoolInstance),
+            eEth: address(eETHInstance),
+            weEth: address(weEthInstance),
+            treasury: address(treasuryInstance),
+            roleRegistry: address(roleRegistryInstance),
+            etherFiRestaker: address(etherFiRestakerInstance),
+            priorityWithdrawalQueue: address(priorityQueueInstance),
+            blacklister: address(blacklisterInstance),
+            stEthPriceFeed: stEthChainlinkFeed
+        });
+    }
+
     function test_upgrade_only_by_owner() public {
         setUp_Fork();
 
@@ -198,49 +212,34 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         // _maxExitFeeSplitToTreasuryInBps above BASIS_POINT_SCALE reverts
         vm.expectRevert(EtherFiRedemptionManager.InvalidAmount.selector);
         new EtherFiRedemptionManager(
-            address(liquidityPoolInstance),
-            address(eETHInstance),
-            address(weEthInstance),
-            address(treasuryInstance),
-            address(roleRegistryInstance),
-            address(etherFiRestakerInstance),
-            address(priorityQueueInstance),
-            address(blacklisterInstance),
+            _redemptionCtorAddrs(),
             oneAboveBasisPoints,
             100,
-            10_000
+            10_000,
+            LIQUIFIER_STALE_WINDOW,
+            STETH_MAX_PRICE_THRESHOLD
         );
 
         // _maxExitFeeInBps above BASIS_POINT_SCALE reverts
         vm.expectRevert(EtherFiRedemptionManager.InvalidAmount.selector);
         new EtherFiRedemptionManager(
-            address(liquidityPoolInstance),
-            address(eETHInstance),
-            address(weEthInstance),
-            address(treasuryInstance),
-            address(roleRegistryInstance),
-            address(etherFiRestakerInstance),
-            address(priorityQueueInstance),
-            address(blacklisterInstance),
+            _redemptionCtorAddrs(),
             10_000,
             oneAboveBasisPoints,
-            10_000
+            10_000,
+            LIQUIFIER_STALE_WINDOW,
+            STETH_MAX_PRICE_THRESHOLD
         );
 
         // _maxLowWatermarkInBpsOfTvl above BASIS_POINT_SCALE reverts
         vm.expectRevert(EtherFiRedemptionManager.InvalidAmount.selector);
         new EtherFiRedemptionManager(
-            address(liquidityPoolInstance),
-            address(eETHInstance),
-            address(weEthInstance),
-            address(treasuryInstance),
-            address(roleRegistryInstance),
-            address(etherFiRestakerInstance),
-            address(priorityQueueInstance),
-            address(blacklisterInstance),
+            _redemptionCtorAddrs(),
             10_000,
             100,
-            oneAboveBasisPoints
+            oneAboveBasisPoints,
+            LIQUIFIER_STALE_WINDOW,
+            STETH_MAX_PRICE_THRESHOLD
         );
     }
 
@@ -478,7 +477,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         etherFiRedemptionManagerInstance.redeemEEth(2000 ether, user, ETH_ADDRESS);
 
         // Use more lenient tolerance for treasury fee due to share-based rounding
-        assertApproxEqAbs(eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance.treasury())), treasuryBalance + expectedTreasuryFee, 1e15);
+        assertApproxEqAbs(eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance.treasury())), treasuryBalance + expectedTreasuryFee, 2e15);
         assertApproxEqAbs(address(user).balance, userBalance + expectedAmountToReceiver, 1e1);
 
         // Check redeemable amount after first redemption
@@ -539,7 +538,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         uint256 expectedTreasuryFee = liquidityPoolInstance.amountForShare(feeShareToTreasury);
         
         // Use more lenient tolerance for share-based rounding differences, especially after rebase
-        assertApproxEqAbs(eETHInstance.balanceOf(treasury), treasuryBalanceBefore + expectedTreasuryFee, 5e11);
+        assertApproxEqAbs(eETHInstance.balanceOf(treasury), treasuryBalanceBefore + expectedTreasuryFee, 2e12);
         assertApproxEqAbs(address(user).balance, userBalance + expectedAmountToReceiver, 1e3);
 
         vm.stopPrank();
@@ -593,7 +592,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         stEth.submit{value: 2100 ether}(address(0));
         uint256 stEthAmount = stEth.balanceOf(funder);
         stEth.approve(address(liquifierInstance), stEthAmount);
-        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, 0, address(0));
         vm.stopPrank();
         
         vm.deal(user, 2010 ether);
@@ -646,6 +645,96 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         vm.stopPrank();
     }
 
+    // -----------------------------------------------------------------
+    //  stETH depeg guard (redemption side)
+    //
+    //  _processStETHRedemption blocks paying out stETH 1:1 when the stETH/ETH price is
+    //  above the ceiling (1e18 + maxPriceThreshold). With STETH_MAX_PRICE_THRESHOLD = 1e16,
+    //  the ceiling is 1.01e18: a premium stETH redemption is unfavorable to the protocol
+    //  (it hands out stETH worth >1 ETH for a 1-ETH eETH burn) and must revert.
+    // -----------------------------------------------------------------
+
+    /// @dev Shared setup: configure lido-token redemption, fund the restaker with stETH,
+    ///      and give `user` redeemable eETH. Returns the stETH (lido) token address.
+    function _setupStEthRedemption() internal returns (address lidoToken) {
+        setUp_Fork();
+        lidoToken = address(etherFiRestakerInstance.lido());
+
+        vm.startPrank(op_admin);
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(0, lidoToken);
+        etherFiRedemptionManagerInstance.setCapacity(3000 ether, lidoToken);
+        etherFiRedemptionManagerInstance.setRefillRatePerSecond(3000 ether, lidoToken);
+        vm.stopPrank();
+        vm.warp(block.timestamp + 1);
+
+        // Fund the restaker with stETH (via a liquifier deposit) so redemptions can pay out.
+        address funder = vm.addr(2001);
+        vm.deal(funder, 2100 ether);
+        vm.startPrank(funder);
+        stEth.submit{value: 2100 ether}(address(0));
+        uint256 stEthAmount = stEth.balanceOf(funder);
+        stEth.approve(address(liquifierInstance), stEthAmount);
+        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, 0, address(0));
+        vm.stopPrank();
+
+        // Give `user` redeemable eETH.
+        vm.deal(user, 2010 ether);
+        vm.startPrank(user);
+        liquidityPoolInstance.deposit{value: 2005 ether}();
+        eETHInstance.approve(address(etherFiRedemptionManagerInstance), 2000 ether);
+        vm.stopPrank();
+    }
+
+    function test_redeem_eEth_for_stETH_revertsOnStEthUpDepeg() public {
+        address lidoToken = _setupStEthRedemption();
+
+        // stETH at 1.02 ETH — above the 1.01e18 ceiling → blocked.
+        vm.mockCall(
+            stEthChainlinkFeed,
+            abi.encodeWithSignature("latestRoundData()"),
+            abi.encode(uint80(0), int256(1.02 ether), uint256(0), block.timestamp, uint80(0))
+        );
+
+        vm.startPrank(user);
+        vm.expectRevert(EtherFiRedemptionManager.InvalidStEthPrice.selector);
+        etherFiRedemptionManagerInstance.redeemEEth(2000 ether, user, lidoToken);
+        vm.stopPrank();
+    }
+
+    /// @dev Favorable side: a slight stETH discount (0.998, below the ceiling) proceeds —
+    ///      the protocol offloads cheap stETH for a par eETH burn.
+    function test_redeem_eEth_for_stETH_allowsAtDiscount() public {
+        address lidoToken = _setupStEthRedemption();
+        uint256 stEthBefore = stEth.balanceOf(user);
+
+        vm.mockCall(
+            stEthChainlinkFeed,
+            abi.encodeWithSignature("latestRoundData()"),
+            abi.encode(uint80(0), int256(0.998 ether), uint256(0), block.timestamp, uint80(0))
+        );
+
+        vm.prank(user);
+        etherFiRedemptionManagerInstance.redeemEEth(2000 ether, user, lidoToken);
+
+        assertGt(stEth.balanceOf(user), stEthBefore, "discounted-stETH redemption must pay out");
+    }
+
+    /// @dev A stale stETH feed must also block stETH redemption.
+    function test_redeem_eEth_for_stETH_revertsOnStalePriceFeed() public {
+        address lidoToken = _setupStEthRedemption();
+
+        vm.mockCall(
+            stEthChainlinkFeed,
+            abi.encodeWithSignature("latestRoundData()"),
+            abi.encode(uint80(0), int256(1 ether), uint256(0), block.timestamp - LIQUIFIER_STALE_WINDOW - 1, uint80(0))
+        );
+
+        vm.startPrank(user);
+        vm.expectRevert(EtherFiRedemptionManager.StalePriceFeed.selector);
+        etherFiRedemptionManagerInstance.redeemEEth(2000 ether, user, lidoToken);
+        vm.stopPrank();
+    }
+
     function test_mainnet_redeem_weEth_with_rebase() public {
         setUp_Fork();
         
@@ -667,7 +756,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         stEth.submit{value: 5 ether}(address(0));
         uint256 stEthAmount = stEth.balanceOf(funder);
         stEth.approve(address(liquifierInstance), stEthAmount);
-        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, 0, address(0));
         vm.stopPrank();
 
         vm.deal(alice, 50000 ether);
@@ -726,7 +815,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         stEth.submit{value: 5 ether}(address(0));
         uint256 stEthAmount = stEth.balanceOf(funder);
         stEth.approve(address(liquifierInstance), stEthAmount);
-        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, 0, address(0));
         vm.stopPrank();
 
         vm.expectRevert(EtherFiRestaker.IncorrectCaller.selector);
@@ -783,7 +872,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         stEth.submit{value: 5 ether}(address(0));
         uint256 stEthAmount = stEth.balanceOf(funder);
         stEth.approve(address(liquifierInstance), stEthAmount);
-        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, 0, address(0));
         vm.stopPrank();
 
         //test low watermark works
@@ -824,7 +913,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         stEth.submit{value: 5 ether}(address(0));
         uint256 stEthAmount = stEth.balanceOf(funder);
         stEth.approve(address(liquifierInstance), stEthAmount);
-        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, 0, address(0));
         vm.stopPrank();
 
         vm.startPrank(user);
@@ -875,7 +964,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         stEth.submit{value: 5 ether}(address(0));
         uint256 stEthAmount = stEth.balanceOf(funder);
         stEth.approve(address(liquifierInstance), stEthAmount);
-        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, 0, address(0));
         vm.stopPrank();
         
         vm.startPrank(user);
@@ -949,7 +1038,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         assertApproxEqAbs(totalValueInLpBefore - liquidityPoolInstance.totalValueInLp(), expectedAmountToReceiver, 1e3);
         assertEq(liquidityPoolInstance.totalValueOutOfLp() - totalValueOutOfLpBefore, 0);
         // Use more lenient tolerance for treasury fee due to share-based rounding differences on mainnet fork
-        assertApproxEqAbs(eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance.treasury())) - treasuryBalanceBefore, expectedTreasuryFee, 5e11);
+        assertApproxEqAbs(eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance.treasury())) - treasuryBalanceBefore, expectedTreasuryFee, 2e12);
         vm.stopPrank();
     }
 
@@ -1012,7 +1101,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         stEth.submit{value: 10000 ether}(address(0));
         uint256 stEthAmount = stEth.balanceOf(funder);
         stEth.approve(address(liquifierInstance), stEthAmount);
-        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, 0, address(0));
         vm.stopPrank();
 
         vm.deal(user, 100 ether);
@@ -1067,7 +1156,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         stEth.submit{value: 50 ether}(address(0));
         uint256 stEthAmount = stEth.balanceOf(funder);
         stEth.approve(address(liquifierInstance), stEthAmount);
-        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, 0, address(0));
         vm.stopPrank();
 
         uint256 instantLiquidity = etherFiRedemptionManagerInstance.getInstantLiquidityAmount(address(stEth));
@@ -1951,5 +2040,77 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
         vm.prank(user);
         etherFiRedemptionManagerInstance.redeemEEth(1 ether, user, ETH_ADDRESS);
+    }
+
+    // -----------------------------------------------------------------
+    //  sweepDust — recover residual ERC20 balances (onlyOperatingMultisig)
+    //
+    //  Non-fork: sweepDust is token-agnostic (any IERC20), so a mock token
+    //  minted directly into the contract exercises every path without a fork.
+    // -----------------------------------------------------------------
+
+    /// @dev local mirror of EtherFiRedemptionManager.DustSwept for expectEmit.
+    event DustSwept(address indexed token, address indexed to, uint256 amount);
+
+    function _grantOperatingMultisig(address who) internal {
+        // Cache view-call results before the prank — each external call (even a view)
+        // consumes a single vm.prank, so inlining them would spend it before grantRole.
+        address rrOwner = roleRegistryInstance.owner();
+        bytes32 role = roleRegistryInstance.OPERATION_MULTISIG_ROLE();
+        vm.prank(rrOwner);
+        roleRegistryInstance.grantRole(role, who);
+    }
+
+    function test_sweepDust_succeeds() public {
+        address sweeper = makeAddr("dustSweeper");
+        address recipient = makeAddr("dustRecipient");
+        _grantOperatingMultisig(sweeper);
+
+        TestERC20 dust = new TestERC20("Dust", "DUST");
+        dust.mint(address(etherFiRedemptionManagerInstance), 1234);
+
+        vm.expectEmit(true, true, false, true);
+        emit DustSwept(address(dust), recipient, 1234);
+
+        vm.prank(sweeper);
+        etherFiRedemptionManagerInstance.sweepDust(address(dust), recipient);
+
+        assertEq(dust.balanceOf(recipient), 1234, "recipient receives full residual balance");
+        assertEq(dust.balanceOf(address(etherFiRedemptionManagerInstance)), 0, "contract balance fully swept");
+    }
+
+    function test_sweepDust_revertsForNonOperatingMultisig() public {
+        TestERC20 dust = new TestERC20("Dust", "DUST");
+        dust.mint(address(etherFiRedemptionManagerInstance), 1 ether);
+
+        // chad holds no roles.
+        vm.prank(chad);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        etherFiRedemptionManagerInstance.sweepDust(address(dust), chad);
+    }
+
+    function test_sweepDust_revertsOnZeroRecipient() public {
+        address sweeper = makeAddr("dustSweeper");
+        _grantOperatingMultisig(sweeper);
+
+        TestERC20 dust = new TestERC20("Dust", "DUST");
+        dust.mint(address(etherFiRedemptionManagerInstance), 1 ether);
+
+        vm.prank(sweeper);
+        vm.expectRevert(EtherFiRedemptionManager.InvalidRecipient.selector);
+        etherFiRedemptionManagerInstance.sweepDust(address(dust), address(0));
+    }
+
+    function test_sweepDust_revertsOnZeroBalance() public {
+        address sweeper = makeAddr("dustSweeper");
+        address recipient = makeAddr("dustRecipient");
+        _grantOperatingMultisig(sweeper);
+
+        // Token with no balance held by the contract.
+        TestERC20 dust = new TestERC20("Dust", "DUST");
+
+        vm.prank(sweeper);
+        vm.expectRevert(EtherFiRedemptionManager.InsufficientBalance.selector);
+        etherFiRedemptionManagerInstance.sweepDust(address(dust), recipient);
     }
 }

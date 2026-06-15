@@ -71,7 +71,7 @@ contract DepositAdapter is UUPSUpgradeable, DeprecatedOZOwnable, RolesLibrary, I
     /**
      * @notice Initialize the contract
      */
-    function initialize() initializer external {
+    function initialize() external initializer {
         __UUPSUpgradeable_init();
     }
 
@@ -113,12 +113,13 @@ contract DepositAdapter is UUPSUpgradeable, DeprecatedOZOwnable, RolesLibrary, I
     /**
      * @notice Deposit stETH to liquifier for weETH
      * @param _amount Amount of stETH to deposit
+     * @param _minOutAmount The minimum out amount
      * @param _referral Address to credit referral
      * @param _permit Permit signature
      * @return weEthAmount weETH received by the depositer
      * @dev Permit must be created to this contract 
      */
-    function depositStETHForWeETHWithPermit(uint256 _amount, address _referral, ILiquifier.PermitInput calldata _permit) external nonBlacklisted returns (uint256) {
+    function depositStETHForWeETHWithPermit(uint256 _amount, uint256 _minOutAmount, address _referral, ILiquifier.PermitInput calldata _permit) external nonBlacklisted returns (uint256) {
         try IERC20PermitUpgradeable(address(stETH)).permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {}
         catch {
             if (_permit.deadline < block.timestamp) revert PermitExpired();
@@ -130,7 +131,7 @@ contract DepositAdapter is UUPSUpgradeable, DeprecatedOZOwnable, RolesLibrary, I
         uint256 actualTransferredAmount = stETH.balanceOf(address(this)) - initialBalance;
 
         IERC20(address(stETH)).safeIncreaseAllowance(address(liquifier), actualTransferredAmount);
-        uint256 eETHShares = liquifier.depositWithERC20(address(stETH), actualTransferredAmount, _referral);
+        uint256 eETHShares = liquifier.depositWithERC20(address(stETH), actualTransferredAmount, _minOutAmount, _referral);
         
         emit AdapterDeposit(msg.sender, actualTransferredAmount, SourceOfFunds.STETH, _referral);
         return _wrapAndReturn(eETHShares);
@@ -139,12 +140,13 @@ contract DepositAdapter is UUPSUpgradeable, DeprecatedOZOwnable, RolesLibrary, I
     /**
      * @notice Deposit wstETH for weETH
      * @param _amount Amount of wstETH to deposit
+     * @param _minOutAmount The minimum out amount
      * @param _referral Address to credit referral
      * @param _permit Permit signature
      * @return weEthAmount weETH received by the depositer
      * @dev Permit for wsETH must be created to this contract. funds are unwrapped to stETH and deposited to liquifier
      */
-    function depositWstETHForWeETHWithPermit(uint256 _amount, address _referral, ILiquifier.PermitInput calldata _permit) external nonBlacklisted returns (uint256) {
+    function depositWstETHForWeETHWithPermit(uint256 _amount, uint256 _minOutAmount, address _referral, ILiquifier.PermitInput calldata _permit) external nonBlacklisted returns (uint256) {
         try wstETH.permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {}
         catch {
             if (_permit.deadline < block.timestamp) revert PermitExpired();
@@ -158,7 +160,7 @@ contract DepositAdapter is UUPSUpgradeable, DeprecatedOZOwnable, RolesLibrary, I
         uint256 actualTransferredAmount = stETH.balanceOf(address(this)) - initialBalance;
 
         IERC20(address(stETH)).safeIncreaseAllowance(address(liquifier), actualTransferredAmount);
-        uint256 eETHShares = liquifier.depositWithERC20(address(stETH), actualTransferredAmount, _referral);
+        uint256 eETHShares = liquifier.depositWithERC20(address(stETH), actualTransferredAmount, _minOutAmount, _referral);
         
         emit AdapterDeposit(msg.sender, actualTransferredAmount, SourceOfFunds.WSTETH, _referral);
         return _wrapAndReturn(eETHShares);

@@ -360,7 +360,7 @@ contract EtherFiNodesManager is
      * @param target call target for forwarded call
      * @param allowed enable or disable the call
      */
-    function updateAllowedForwardedExternalCalls(address user, bytes4 selector, address target, bool allowed) external onlyAdmin {
+    function updateAllowedForwardedExternalCalls(address user, bytes4 selector, address target, bool allowed) external onlyOperatingTimelock {
         allowedForwardedExternalCalls[user][selector][target] = allowed;
         emit UserAllowedForwardedExternalCallsUpdated(user, selector, target, allowed);
     }
@@ -371,7 +371,7 @@ contract EtherFiNodesManager is
      * @param selector method selector
      * @param allowed enable or disable the call
      */
-    function updateAllowedForwardedEigenpodCalls(address user, bytes4 selector, bool allowed) external onlyAdmin {
+    function updateAllowedForwardedEigenpodCalls(address user, bytes4 selector, bool allowed) external onlyOperatingTimelock {
         allowedForwardedEigenpodCalls[user][selector] = allowed;
         emit UserAllowedForwardedEigenpodCallsUpdated(user, selector, allowed);
     }

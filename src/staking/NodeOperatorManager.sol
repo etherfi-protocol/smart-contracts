@@ -46,7 +46,6 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
     //-------------------------------------  ERRORS  ---------------------------------------
     //--------------------------------------------------------------------------------------
     error IncorrectCaller();
-    error InvalidLengths();
     error AlreadyRegistered();
     error InsufficientPublicKeys();
     error InvalidArrayLengths();

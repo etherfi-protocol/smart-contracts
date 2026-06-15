@@ -1427,7 +1427,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         // On the mainnet fork, the live RoleRegistry predates this PR. Upgrade the impl
         // in place so consolidated roles are reachable.
         vm.startPrank(roleRegistryInstance.owner());
-        RoleRegistry newImpl = new RoleRegistry(address(0));
+        RoleRegistry newImpl = new RoleRegistry(address(0xdead));
         roleRegistryInstance.upgradeTo(address(newImpl));
         // pauseContractUntil → GUARDIAN_ROLE; unpause + setPauseUntilDuration → OPERATION_MULTISIG_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), pauseUntilPauser);

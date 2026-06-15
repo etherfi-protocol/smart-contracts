@@ -149,7 +149,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
     ///      `onlyUpgradeTimelock` (e.g. `initializeOnUpgradeV2`) can pass.
     function _upgradeRoleRegistry() internal {
         address roleRegOwner = IOwnableRead(ROLE_REGISTRY).owner();
-        address newRoleRegistryImpl = address(new RoleRegistry(address(0)));
+        address newRoleRegistryImpl = address(new RoleRegistry(address(0xdead)));
         vm.prank(roleRegOwner);
         IUUPSProxy(ROLE_REGISTRY).upgradeTo(newRoleRegistryImpl);
 

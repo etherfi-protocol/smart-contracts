@@ -42,6 +42,7 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
     error OnlyEigenpodOperations();
     error OnlyRevokeAdmin();
     error InvalidRoleToRevoke();
+    error AddressZero();
 
     //--------------------------------------------------------------------------------------
     //-----------------------------------  CONSTRUCTOR  -------------------------------------
@@ -52,6 +53,7 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
      */
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _revokeAdmin) {
+        if (_revokeAdmin == address(0)) revert AddressZero();
         revokeAdmin = _revokeAdmin;
         _disableInitializers();
     }
