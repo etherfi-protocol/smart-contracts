@@ -58,14 +58,18 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
     ILido public immutable lido;
     IPriorityWithdrawalQueue public immutable priorityWithdrawalQueue;
     IBlacklister public immutable blacklister;
+    AggregatorV3Interface public immutable stEthPriceFeed;
 
     uint256 public immutable maxExitFeeSplitToTreasuryInBps;
     uint256 public immutable maxExitFeeInBps;
     uint256 public immutable maxLowWatermarkInBpsOfTvl;
+    uint256 public immutable stalePriceWindow;
+    uint256 public immutable maxPriceThreshold;
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  CONSTANTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
+    uint256 private constant SHARE_UNIT = 1e18;
     uint256 private constant BUCKET_UNIT_SCALE = 1e12;
     uint256 private constant BASIS_POINT_SCALE = 1e4;
 
@@ -93,6 +97,9 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
     error RateLimitExceeded();
     error AmountTooLarge();
     error InvalidRecipient();
+    error InvalidPriceFeed();
+    error StalePriceFeed();
+    error InvalidStEthPrice();
 
     receive() external payable {}
 
@@ -101,36 +108,32 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
     //--------------------------------------------------------------------------------------
     /**
      * @notice Constructor
-     * @param _liquidityPool The address of the liquidity pool
-     * @param _eEth The address of the eETH token
-     * @param _weEth The address of the weETH token
      * @custom:oz-upgrades-unsafe-allow constructor
      */
     constructor(
-        address _liquidityPool, 
-        address _eEth, address _weEth, 
-        address _treasury, 
-        address _roleRegistry, 
-        address _etherFiRestaker, 
-        address _priorityWithdrawalQueue, 
-        address _blacklister, 
+        ConstructorAddresses memory _constructorAddresses,
         uint256 _maxExitFeeSplitToTreasuryInBps, 
         uint256 _maxExitFeeInBps, 
-        uint256 _maxLowWatermarkInBpsOfTvl)
-        RolesLibrary(_roleRegistry)
+        uint256 _maxLowWatermarkInBpsOfTvl,
+        uint256 _stalePriceWindow,
+        uint256 _maxPriceThreshold)
+        RolesLibrary(_constructorAddresses.roleRegistry)
     {
         if (_maxExitFeeSplitToTreasuryInBps > BASIS_POINT_SCALE || _maxExitFeeInBps > BASIS_POINT_SCALE || _maxLowWatermarkInBpsOfTvl > BASIS_POINT_SCALE) revert InvalidAmount();
         maxExitFeeSplitToTreasuryInBps = _maxExitFeeSplitToTreasuryInBps;
         maxExitFeeInBps = _maxExitFeeInBps;
         maxLowWatermarkInBpsOfTvl = _maxLowWatermarkInBpsOfTvl;
-        treasury = _treasury;
-        liquidityPool = ILiquidityPool(payable(_liquidityPool));
-        eEth = IeETH(_eEth);
-        weEth = IWeETH(_weEth); 
-        etherFiRestaker = IEtherFiRestaker(payable(_etherFiRestaker));
+        stalePriceWindow = _stalePriceWindow;
+        maxPriceThreshold = _maxPriceThreshold;
+        treasury = _constructorAddresses.treasury;
+        liquidityPool = ILiquidityPool(payable(_constructorAddresses.liquidityPool));
+        eEth = IeETH(_constructorAddresses.eEth);
+        weEth = IWeETH(_constructorAddresses.weEth); 
+        etherFiRestaker = IEtherFiRestaker(payable(_constructorAddresses.etherFiRestaker));
         lido = etherFiRestaker.lido();
-        priorityWithdrawalQueue = IPriorityWithdrawalQueue(_priorityWithdrawalQueue);
-        blacklister = IBlacklister(_blacklister);
+        priorityWithdrawalQueue = IPriorityWithdrawalQueue(_constructorAddresses.priorityWithdrawalQueue);
+        blacklister = IBlacklister(_constructorAddresses.blacklister);
+        stEthPriceFeed = AggregatorV3Interface(_constructorAddresses.stEthPriceFeed);
 
         _disableInitializers();
     }
@@ -326,6 +329,10 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
         uint256 sharesToBurn,
         uint256 feeShareToStakers
     ) internal {
+        (, int256 answer, , uint256 updatedAt,) = stEthPriceFeed.latestRoundData();
+        if (answer <= 0) revert InvalidPriceFeed();
+        if (updatedAt + stalePriceWindow < block.timestamp) revert StalePriceFeed();
+        if (SHARE_UNIT + maxPriceThreshold < uint256(answer)) revert InvalidStEthPrice();
         uint256 eEthAmountToReceiver = stEthAmountToReceiver; // 1 stETH = 1 eETH
         if (eEthAmountToReceiver > type(uint128).max || eEthAmountToReceiver == 0 || sharesToBurn == 0) revert InvalidAmount();
         uint256 totalEEthShare = eEth.totalShares();

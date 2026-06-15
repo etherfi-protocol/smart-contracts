@@ -63,6 +63,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
     uint256 public immutable minDiscountRateInBps;
     uint256 public immutable stalePriceWindow;
     uint256 public immutable maxPriceDeviationInBps;
+    uint256 public immutable maxPriceThreshold;
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  CONSTANTS  ---------------------------------------
@@ -122,7 +123,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
      * @param _maxPriceDeviationInBps The maximum price deviation in basis points
      * @custom:oz-upgrades-unsafe-allow constructor
      */
-    constructor(ConstructorAddresses memory _constructorAddresses, uint256 _minDiscountInBasisPoints, uint256 _stalePriceWindow, uint256 _maxPriceDeviationInBps) RolesLibrary(_constructorAddresses.roleRegistry) {
+    constructor(ConstructorAddresses memory _constructorAddresses, uint256 _minDiscountInBasisPoints, uint256 _stalePriceWindow, uint256 _maxPriceDeviationInBps, uint256 _maxPriceThreshold) RolesLibrary(_constructorAddresses.roleRegistry) {
         if (_minDiscountInBasisPoints == 0 || _minDiscountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
         if (_stalePriceWindow == 0) revert InvalidPriceWindow();
         if (_maxPriceDeviationInBps == 0 || _maxPriceDeviationInBps > BASIS_POINT_SCALE) revert InvalidMaxPriceDeviationInBps();
@@ -145,6 +146,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
         minDiscountRateInBps = _minDiscountInBasisPoints;
         stalePriceWindow = _stalePriceWindow;
         maxPriceDeviationInBps = _maxPriceDeviationInBps;
+        maxPriceThreshold = _maxPriceThreshold;
         _disableInitializers();
     }
 
@@ -322,7 +324,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
      * @param _quoteStEthWithCurve The boolean value to set the quote stEth with curve
      * @dev Only callable by the admin
      */
-    function updateQuoteStEthWithCurve(bool _quoteStEthWithCurve) external onlyOperatingTimelock {
+    function updateQuoteStEthWithCurve(bool _quoteStEthWithCurve) external onlyOperatingMultisig {
         quoteStEthWithCurve = _quoteStEthWithCurve;
     }
 
@@ -383,17 +385,17 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
         if (!isTokenWhitelisted(_token)) revert NotSupportedToken();
 
         if (_token == address(lido)) {
+            // We also validate against chainlink price feed to ensure there's no significant price deviation
+            // If price feed is stale, we BLOCK the stETH deposit (revert StalePriceFeed)
+            // If price feed is negative or deviation is too high, we do not allow the stETH deposit at all, something is wrong with the markets and deposit
+            // via stETH will be blocked until it stablises (either because of underlying lido solvency/liquidity issue or oracle manipulation)
+            (, int256 answer, , uint256 updatedAt,) = stEthPriceFeed.latestRoundData();
+            if (answer <= 0) revert InvalidPriceFeed();
+            if (updatedAt + stalePriceWindow < block.timestamp) revert StalePriceFeed();
+            if (SHARE_UNIT > uint256(answer) + maxPriceThreshold) revert InvalidStEthPrice();
             if (quoteStEthWithCurve) {
                 // check market value from curve pool, stETH price is on avrage always lower than ETH (this is essentially the capital efficiency of the protocol)
                 _marketValue = ICurvePoolQuoter1(address(stEth_Eth_Pool)).get_dy(1, 0, _amount);
-
-                // We also validate against chainlink price feed to ensure there's no significant price deviation
-                // If price feed is stale, we BLOCK the stETH deposit (revert StalePriceFeed) — we do NOT skip the check
-                // If price feed is negative or deviation is too high, we do not allow the stETH deposit at all, something is wrong with the markets and deposit
-                // via stETH will be blocked until it stablises (either because of underlying lido solvency/liquidity issue or oracle manipulation)
-                (, int256 answer, , uint256 updatedAt,) = stEthPriceFeed.latestRoundData();
-                if (answer <= 0) revert InvalidPriceFeed();
-                if (updatedAt + stalePriceWindow < block.timestamp) revert StalePriceFeed();
                 uint256 pricefeedValue = uint256(answer).mulDiv(_amount, SHARE_UNIT);
                 uint256 deviation = pricefeedValue > _marketValue ? pricefeedValue - _marketValue : _marketValue - pricefeedValue;
                 if (deviation.mulDiv(BASIS_POINT_SCALE, _marketValue) > maxPriceDeviationInBps) revert InvalidStEthPrice();

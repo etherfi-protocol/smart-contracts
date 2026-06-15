@@ -47,6 +47,20 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         );
     }
 
+    function _redemptionCtorAddrs() internal view returns (IEtherFiRedemptionManager.ConstructorAddresses memory) {
+        return IEtherFiRedemptionManager.ConstructorAddresses({
+            liquidityPool: address(liquidityPoolInstance),
+            eEth: address(eETHInstance),
+            weEth: address(weEthInstance),
+            treasury: address(treasuryInstance),
+            roleRegistry: address(roleRegistryInstance),
+            etherFiRestaker: address(etherFiRestakerInstance),
+            priorityWithdrawalQueue: address(priorityQueueInstance),
+            blacklister: address(blacklisterInstance),
+            stEthPriceFeed: stEthChainlinkFeed
+        });
+    }
+
     function test_upgrade_only_by_owner() public {
         setUp_Fork();
 
@@ -198,49 +212,34 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         // _maxExitFeeSplitToTreasuryInBps above BASIS_POINT_SCALE reverts
         vm.expectRevert(EtherFiRedemptionManager.InvalidAmount.selector);
         new EtherFiRedemptionManager(
-            address(liquidityPoolInstance),
-            address(eETHInstance),
-            address(weEthInstance),
-            address(treasuryInstance),
-            address(roleRegistryInstance),
-            address(etherFiRestakerInstance),
-            address(priorityQueueInstance),
-            address(blacklisterInstance),
+            _redemptionCtorAddrs(),
             oneAboveBasisPoints,
             100,
-            10_000
+            10_000,
+            LIQUIFIER_STALE_WINDOW,
+            STETH_MAX_PRICE_THRESHOLD
         );
 
         // _maxExitFeeInBps above BASIS_POINT_SCALE reverts
         vm.expectRevert(EtherFiRedemptionManager.InvalidAmount.selector);
         new EtherFiRedemptionManager(
-            address(liquidityPoolInstance),
-            address(eETHInstance),
-            address(weEthInstance),
-            address(treasuryInstance),
-            address(roleRegistryInstance),
-            address(etherFiRestakerInstance),
-            address(priorityQueueInstance),
-            address(blacklisterInstance),
+            _redemptionCtorAddrs(),
             10_000,
             oneAboveBasisPoints,
-            10_000
+            10_000,
+            LIQUIFIER_STALE_WINDOW,
+            STETH_MAX_PRICE_THRESHOLD
         );
 
         // _maxLowWatermarkInBpsOfTvl above BASIS_POINT_SCALE reverts
         vm.expectRevert(EtherFiRedemptionManager.InvalidAmount.selector);
         new EtherFiRedemptionManager(
-            address(liquidityPoolInstance),
-            address(eETHInstance),
-            address(weEthInstance),
-            address(treasuryInstance),
-            address(roleRegistryInstance),
-            address(etherFiRestakerInstance),
-            address(priorityQueueInstance),
-            address(blacklisterInstance),
+            _redemptionCtorAddrs(),
             10_000,
             100,
-            oneAboveBasisPoints
+            oneAboveBasisPoints,
+            LIQUIFIER_STALE_WINDOW,
+            STETH_MAX_PRICE_THRESHOLD
         );
     }
 
@@ -643,6 +642,96 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         }
         // If user doesn't have enough balance, that's fine - the redemption already verified the core functionality
 
+        vm.stopPrank();
+    }
+
+    // -----------------------------------------------------------------
+    //  stETH depeg guard (redemption side)
+    //
+    //  _processStETHRedemption blocks paying out stETH 1:1 when the stETH/ETH price is
+    //  above the ceiling (1e18 + maxPriceThreshold). With STETH_MAX_PRICE_THRESHOLD = 1e16,
+    //  the ceiling is 1.01e18: a premium stETH redemption is unfavorable to the protocol
+    //  (it hands out stETH worth >1 ETH for a 1-ETH eETH burn) and must revert.
+    // -----------------------------------------------------------------
+
+    /// @dev Shared setup: configure lido-token redemption, fund the restaker with stETH,
+    ///      and give `user` redeemable eETH. Returns the stETH (lido) token address.
+    function _setupStEthRedemption() internal returns (address lidoToken) {
+        setUp_Fork();
+        lidoToken = address(etherFiRestakerInstance.lido());
+
+        vm.startPrank(op_admin);
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(0, lidoToken);
+        etherFiRedemptionManagerInstance.setCapacity(3000 ether, lidoToken);
+        etherFiRedemptionManagerInstance.setRefillRatePerSecond(3000 ether, lidoToken);
+        vm.stopPrank();
+        vm.warp(block.timestamp + 1);
+
+        // Fund the restaker with stETH (via a liquifier deposit) so redemptions can pay out.
+        address funder = vm.addr(2001);
+        vm.deal(funder, 2100 ether);
+        vm.startPrank(funder);
+        stEth.submit{value: 2100 ether}(address(0));
+        uint256 stEthAmount = stEth.balanceOf(funder);
+        stEth.approve(address(liquifierInstance), stEthAmount);
+        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, 0, address(0));
+        vm.stopPrank();
+
+        // Give `user` redeemable eETH.
+        vm.deal(user, 2010 ether);
+        vm.startPrank(user);
+        liquidityPoolInstance.deposit{value: 2005 ether}();
+        eETHInstance.approve(address(etherFiRedemptionManagerInstance), 2000 ether);
+        vm.stopPrank();
+    }
+
+    function test_redeem_eEth_for_stETH_revertsOnStEthUpDepeg() public {
+        address lidoToken = _setupStEthRedemption();
+
+        // stETH at 1.02 ETH — above the 1.01e18 ceiling → blocked.
+        vm.mockCall(
+            stEthChainlinkFeed,
+            abi.encodeWithSignature("latestRoundData()"),
+            abi.encode(uint80(0), int256(1.02 ether), uint256(0), block.timestamp, uint80(0))
+        );
+
+        vm.startPrank(user);
+        vm.expectRevert(EtherFiRedemptionManager.InvalidStEthPrice.selector);
+        etherFiRedemptionManagerInstance.redeemEEth(2000 ether, user, lidoToken);
+        vm.stopPrank();
+    }
+
+    /// @dev Favorable side: a slight stETH discount (0.998, below the ceiling) proceeds —
+    ///      the protocol offloads cheap stETH for a par eETH burn.
+    function test_redeem_eEth_for_stETH_allowsAtDiscount() public {
+        address lidoToken = _setupStEthRedemption();
+        uint256 stEthBefore = stEth.balanceOf(user);
+
+        vm.mockCall(
+            stEthChainlinkFeed,
+            abi.encodeWithSignature("latestRoundData()"),
+            abi.encode(uint80(0), int256(0.998 ether), uint256(0), block.timestamp, uint80(0))
+        );
+
+        vm.prank(user);
+        etherFiRedemptionManagerInstance.redeemEEth(2000 ether, user, lidoToken);
+
+        assertGt(stEth.balanceOf(user), stEthBefore, "discounted-stETH redemption must pay out");
+    }
+
+    /// @dev A stale stETH feed must also block stETH redemption.
+    function test_redeem_eEth_for_stETH_revertsOnStalePriceFeed() public {
+        address lidoToken = _setupStEthRedemption();
+
+        vm.mockCall(
+            stEthChainlinkFeed,
+            abi.encodeWithSignature("latestRoundData()"),
+            abi.encode(uint80(0), int256(1 ether), uint256(0), block.timestamp - LIQUIFIER_STALE_WINDOW - 1, uint80(0))
+        );
+
+        vm.startPrank(user);
+        vm.expectRevert(EtherFiRedemptionManager.StalePriceFeed.selector);
+        etherFiRedemptionManagerInstance.redeemEEth(2000 ether, user, lidoToken);
         vm.stopPrank();
     }
 

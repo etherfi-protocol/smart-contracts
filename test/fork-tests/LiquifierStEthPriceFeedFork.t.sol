@@ -158,6 +158,11 @@ contract LiquifierStEthPriceFeedForkTest is TestSetup {
         if (!fresh) {
             vm.expectRevert(Liquifier.StalePriceFeed.selector);
             liquifierInstance.quoteByMarketValue(address(stEth), amount);
+        } else if (1e18 > uint256(answer) + liquifierInstance.maxPriceThreshold()) {
+            // Depeg floor: stETH below (1e18 - maxPriceThreshold) is rejected. Runs before
+            // the curve-deviation check, so it takes precedence on a down-depeg.
+            vm.expectRevert(Liquifier.InvalidStEthPrice.selector);
+            liquifierInstance.quoteByMarketValue(address(stEth), amount);
         } else if ((deviation * bps) / curveOut > liquifierInstance.maxPriceDeviationInBps()) {
             vm.expectRevert(Liquifier.InvalidStEthPrice.selector);
             liquifierInstance.quoteByMarketValue(address(stEth), amount);

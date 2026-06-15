@@ -360,7 +360,11 @@ contract WithdrawEscrowE2ETest is TestSetup {
             "step4: NFT raw ETH after claim");
         assertApproxEqAbs(address(liquidityPoolInstance).balance, preLp.rawEth, 5,
             "step4: LP raw ETH unchanged at claim");
-        assertEq(liquidityPoolInstance.totalValueInLp(), preLp.inLp,
+        // "Unchanged" up to a wei: the claim sweeps any stranded ETH (balance above the
+        // amount still locked) back to LP via LP.receive(), which can nudge totalValueInLp
+        // by 1 wei of share-rate rounding dust at the live mainnet rate. Mirrors the 5-wei
+        // tolerance used by the sibling balance/share assertions above.
+        assertApproxEqAbs(liquidityPoolInstance.totalValueInLp(), preLp.inLp, 5,
             "step4: totalValueInLp unchanged at claim");
         // totalValueOutOfLp decrements by request.amountOfEEth (the value credited at
         // fulfill), not by the ETH actually paid. Here that credit == withdrawAmt

@@ -62,6 +62,9 @@ contract LiquifierTest is TestSetup {
     function test_deposit_above_cap() public {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
+        // Price validation now runs on every stETH deposit; pin a fresh ~1:1 feed so the
+        // deposit reaches the cap check rather than reverting StalePriceFeed first.
+        _mockFreshStEthFeed();
 
         vm.deal(alice, 1000000000 ether);
 
@@ -166,6 +169,58 @@ contract LiquifierTest is TestSetup {
         vm.stopPrank();
 
         assertApproxEqAbs(eETHInstance.balanceOf(alice), quoted, 0.01 ether);
+    }
+
+    /// @dev Depeg guard (deposit side): a stETH down-depeg below the price floor
+    ///      (1e18 - maxPriceThreshold) must block stETH deposits — the protocol must not
+    ///      accept cheap stETH at ~par. At peg the deposit proceeds (covered by
+    ///      test_deposit_stEth). maxPriceThreshold is STETH_MAX_PRICE_THRESHOLD = 1e16 (1%),
+    ///      so the floor sits at 0.99e18.
+    function test_deposit_revertsOnStEthDownDepeg() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+
+        vm.deal(alice, 100 ether);
+        vm.startPrank(alice);
+        stEth.submit{value: 10 ether}(address(0));
+        stEth.approve(address(liquifierInstance), 10 ether);
+
+        // stETH at 0.98 ETH — below the 0.99e18 floor → blocked.
+        vm.mockCall(
+            stEthChainlinkFeed,
+            abi.encodeWithSignature("latestRoundData()"),
+            abi.encode(uint80(0), int256(0.98 ether), uint256(0), block.timestamp, uint80(0))
+        );
+
+        vm.expectRevert(Liquifier.InvalidStEthPrice.selector);
+        liquifierInstance.depositWithERC20(address(stEth), 10 ether, 0, address(0));
+        vm.stopPrank();
+    }
+
+    /// @dev A stETH price just inside the floor (0.995 ≥ 0.99) is still accepted — the guard
+    ///      only trips on a genuine depeg beyond the band, not on the normal ~0.1-0.2% discount.
+    function test_deposit_allowsStEthWithinBand() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+
+        vm.startPrank(roleRegistryInstance.owner());
+        liquifierInstance.updateQuoteStEthWithCurve(false); // isolate the floor from curve-deviation
+        vm.stopPrank();
+
+        vm.deal(alice, 100 ether);
+        vm.startPrank(alice);
+        stEth.submit{value: 10 ether}(address(0));
+        stEth.approve(address(liquifierInstance), 10 ether);
+
+        vm.mockCall(
+            stEthChainlinkFeed,
+            abi.encodeWithSignature("latestRoundData()"),
+            abi.encode(uint80(0), int256(0.995 ether), uint256(0), block.timestamp, uint80(0))
+        );
+
+        liquifierInstance.depositWithERC20(address(stEth), 10 ether, 0, address(0));
+        vm.stopPrank();
+        assertGt(eETHInstance.balanceOf(alice), 0, "deposit within band must mint eETH");
     }
 
     function test_deopsit_stEth_and_swap() internal {
@@ -748,45 +803,46 @@ contract LiquifierTest is TestSetup {
 
     function test_constructor_revertsOnZeroMinDiscount() public {
         vm.expectRevert(Liquifier.InvalidDiscountRate.selector);
-        new Liquifier(_ctorAddrs(address(1), address(2), address(3)), 0, 1 days, 500);
+        new Liquifier(_ctorAddrs(address(1), address(2), address(3)), 0, 1 days, 500, 1e16);
     }
 
     function test_constructor_revertsOnMinDiscountAboveScale() public {
         vm.expectRevert(Liquifier.InvalidDiscountRate.selector);
-        new Liquifier(_ctorAddrs(address(1), address(2), address(3)), 10_001, 1 days, 500);
+        new Liquifier(_ctorAddrs(address(1), address(2), address(3)), 10_001, 1 days, 500, 1e16);
     }
 
     function test_constructor_acceptsMinDiscountAtScale() public {
-        Liquifier impl = new Liquifier(_ctorAddrs(address(1), address(2), address(3)), 10_000, 1 days, 500);
+        Liquifier impl = new Liquifier(_ctorAddrs(address(1), address(2), address(3)), 10_000, 1 days, 500, 1e16);
         assertEq(impl.minDiscountRateInBps(), 10_000);
     }
 
     function test_constructor_storesMinDiscount() public {
-        Liquifier impl = new Liquifier(_ctorAddrs(address(1), address(2), address(3)), 250, 1 days, 500);
+        Liquifier impl = new Liquifier(_ctorAddrs(address(1), address(2), address(3)), 250, 1 days, 500, 1e16);
         assertEq(impl.minDiscountRateInBps(), 250);
         assertEq(impl.BASIS_POINT_SCALE(), 10_000);
     }
 
     function test_constructor_revertsOnZeroStaleWindow() public {
         vm.expectRevert(Liquifier.InvalidPriceWindow.selector);
-        new Liquifier(_ctorAddrs(address(1), address(2), address(3)), 100, 0, 500);
+        new Liquifier(_ctorAddrs(address(1), address(2), address(3)), 100, 0, 500, 1e16);
     }
 
     function test_constructor_revertsOnZeroMaxPriceDeviation() public {
         vm.expectRevert(Liquifier.InvalidMaxPriceDeviationInBps.selector);
-        new Liquifier(_ctorAddrs(address(1), address(2), address(3)), 100, 1 days, 0);
+        new Liquifier(_ctorAddrs(address(1), address(2), address(3)), 100, 1 days, 0, 1e16);
     }
 
     function test_constructor_revertsOnMaxPriceDeviationAboveScale() public {
         vm.expectRevert(Liquifier.InvalidMaxPriceDeviationInBps.selector);
-        new Liquifier(_ctorAddrs(address(1), address(2), address(3)), 100, 1 days, 10_001);
+        new Liquifier(_ctorAddrs(address(1), address(2), address(3)), 100, 1 days, 10_001, 1e16);
     }
 
     function test_constructor_storesPriceFeedImmutables() public {
-        Liquifier impl = new Liquifier(_ctorAddrs(address(1), address(2), address(3)), 250, 1 days, 500);
+        Liquifier impl = new Liquifier(_ctorAddrs(address(1), address(2), address(3)), 250, 1 days, 500, 1e16);
         assertEq(address(impl.stEthPriceFeed()), address(2));
         assertEq(impl.stalePriceWindow(), 1 days);
         assertEq(impl.maxPriceDeviationInBps(), 500);
+        assertEq(impl.maxPriceThreshold(), 1e16);
     }
 
     function test_registerToken_revertsOnZeroDiscountRate() public {
@@ -875,6 +931,8 @@ contract LiquifierTest is TestSetup {
 
     function test_quoteByDiscountedValue_appliesNewDiscount() public {
         _setUp(MAINNET_FORK);
+        // Price validation now runs on every stETH quote; pin a fresh ~1:1 feed.
+        _mockFreshStEthFeed();
 
         vm.prank(admin);
         liquifierInstance.updateDiscountInBasisPoints(address(stEth), 500); // 5%

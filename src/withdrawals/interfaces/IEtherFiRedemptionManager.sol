@@ -11,6 +11,18 @@ interface IEtherFiRedemptionManager {
         uint16 lowWatermarkInBpsOfTvl;
     }
 
+    struct ConstructorAddresses {
+        address liquidityPool;
+        address eEth;
+        address weEth;
+        address treasury;
+        address roleRegistry;
+        address etherFiRestaker;
+        address priorityWithdrawalQueue;
+        address blacklister;
+        address stEthPriceFeed;
+    }
+
     function redeemEEth(uint256 eEthAmount, address receiver, address outputToken) external;
     function redeemWeEth(uint256 weEthAmount, address receiver, address outputToken) external;
 }

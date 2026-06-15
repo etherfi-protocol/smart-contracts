@@ -39,6 +39,7 @@ contract LiquifierStEthPriceFeedTest is Test {
     uint256 internal constant MAX_DEVIATION_BPS = 500;
     uint256 internal constant BPS = 10_000;
     uint256 internal constant MIN_DISCOUNT = 100;
+    uint256 internal constant MAX_PRICE_THRESHOLD = 1e16; // 1% depeg band (1e18-scaled)
 
     function setUp() public {
         // Deterministic timestamp far enough in the future that we can subtract
@@ -66,7 +67,7 @@ contract LiquifierStEthPriceFeedTest is Test {
             etherfiRestaker: address(0xA5),
             l1SyncPool: address(0xA6)
         });
-        Liquifier impl = new Liquifier(addrs, MIN_DISCOUNT, STALE_WINDOW, MAX_DEVIATION_BPS);
+        Liquifier impl = new Liquifier(addrs, MIN_DISCOUNT, STALE_WINDOW, MAX_DEVIATION_BPS, MAX_PRICE_THRESHOLD);
         UUPSProxy proxy = new UUPSProxy(address(impl), "");
         liquifier = Liquifier(payable(address(proxy)));
 
@@ -259,6 +260,11 @@ contract LiquifierStEthPriceFeedTest is Test {
             liquifier.quoteByMarketValue(stEth, amount);
         } else if (!fresh) {
             vm.expectRevert(Liquifier.StalePriceFeed.selector);
+            liquifier.quoteByMarketValue(stEth, amount);
+        } else if (1e18 > uint256(answer) + MAX_PRICE_THRESHOLD) {
+            // Depeg floor: stETH below (1e18 - maxPriceThreshold) is rejected. Runs before
+            // the curve-deviation check, so it takes precedence on a down-depeg.
+            vm.expectRevert(Liquifier.InvalidStEthPrice.selector);
             liquifier.quoteByMarketValue(stEth, amount);
         } else if ((deviation * BPS) / curveOut > MAX_DEVIATION_BPS) {
             vm.expectRevert(Liquifier.InvalidStEthPrice.selector);
