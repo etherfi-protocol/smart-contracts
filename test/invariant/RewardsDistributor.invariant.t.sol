@@ -56,6 +56,25 @@ contract RewardsDistributorInvariantTest is TestSetup {
         selectors[7] = handler.doLowerCumulativeClaim.selector;
         targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
         targetContract(address(handler));
+
+        // Deterministically drive ONE full lifecycle here so the afterInvariant
+        // non-vacuity floor is guaranteed regardless of the fuzzed sequence.
+        // Foundry snapshots state after setUp and reverts to it before every run,
+        // so these counter increments persist as a baseline on EVERY run. Without
+        // this, an unlucky seed dominated by the no-op-ish selectors
+        // (doWarp/doRoll/doSetClaimDelay) leaves finalize_ok/claim_ok/lower_rejected
+        // at 0 at evaluation time and the gate flakes red (latent in #470; the 8th
+        // selector merely perturbed the distribution enough to surface it).
+        //
+        // doClaim is self-contained (establish root -> finalize -> claim -> inline
+        // replay-rejected), so this one call seeds finalize_ok, claim_ok AND
+        // replay_revert. doLowerCumulativeClaim seeds lower_rejected (it bootstraps
+        // its own cumulative, then drives the monotonic-decrease guard). These run
+        // through the handler's REAL ops (admin-pranked), identical to fuzzed calls,
+        // so the fuzzer still independently exercises every path at runtime — this
+        // only establishes the floor.
+        handler.doClaim(0, 1 ether);
+        handler.doLowerCumulativeClaim(1, 0);
     }
 
     // =====================================================================

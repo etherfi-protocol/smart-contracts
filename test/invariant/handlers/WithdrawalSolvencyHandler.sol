@@ -88,6 +88,13 @@ contract WithdrawalSolvencyHandler is StdUtils {
     /// @notice (P1) Set true if `_lockEth`'s liquidity guard REJECTED a lock
     ///         whose amount was actually backed (lockAmount <= inLp) — the
     ///         contract wrongly rejecting a solvent lock. Must stay false.
+    ///         NOTE: `_lockEth` can emit InsufficientLiquidity from TWO sites —
+    ///         the entry guard (totalValueInLp < _amount) and the post-send
+    ///         `_checkTotalValueInLp`. This ghost conservatively flags EITHER
+    ///         when the range was backed; the post-send variant only fires if
+    ///         the LP is genuinely under-collateralized, which is itself a real
+    ///         solvency violation, so catching it here is correct (the name is
+    ///         narrower than the full set of conditions it guards).
     bool public ghost_lockRejectedWhileBacked;
     /// @notice (P3) Set true if a request meeting every claimability
     ///         precondition (finalized, valid, owned, frozen rate in band,
