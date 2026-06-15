@@ -4,7 +4,7 @@ pragma solidity ^0.8.27;
 import "forge-std/StdJson.sol";
 import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
 import "@etherfi/staking/interfaces/IEtherFiNode.sol";
-import "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 
 /**
  * @title Validator Helpers Library

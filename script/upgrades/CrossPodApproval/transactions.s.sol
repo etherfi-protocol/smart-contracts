@@ -13,7 +13,7 @@ import {IEtherFiNodesManager} from "@etherfi/staking/interfaces/IEtherFiNodesMan
 import {ContractCodeChecker} from "@scripts/ContractCodeChecker.sol";
 import {Deployed} from "@scripts/deploys/Deployed.s.sol";
 import {Utils} from "@scripts/utils/utils.sol";
-import {IEigenPodTypes} from "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
+import {IEigenPodTypes} from "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 
 // forge script script/upgrades/CrossPodApproval/transactions.s.sol:CrossPodApprovalScript --fork-url $MAINNET_RPC_URL -vvvv
 contract CrossPodApprovalScript is Script, Deployed, Utils {

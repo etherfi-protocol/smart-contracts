@@ -6,7 +6,7 @@ import "forge-std/console2.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Deployed} from "@scripts/deploys/Deployed.s.sol";
 import {EtherFiRestaker} from "@etherfi/restaking/EtherFiRestaker.sol";
-import {IDelegationManager} from "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
+import {IDelegationManager} from "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
 
 // Complete all pending EigenLayer stETH withdrawal queues on the restaker:
 //   forge script script/operations/steth-management/CompleteQueuedWithdrawalsStETH.s.sol --fork-url $MAINNET_RPC_URL -vvvv

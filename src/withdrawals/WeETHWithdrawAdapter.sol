@@ -3,7 +3,6 @@ pragma solidity ^0.8.13;
 
 import {Initializable} from "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import {OwnableUpgradeable} from "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -15,6 +14,7 @@ import {IWithdrawRequestNFT} from "@etherfi/withdrawals/interfaces/IWithdrawRequ
 import {IBlacklister} from "@etherfi/governance/interfaces/IBlacklister.sol";
 import {PausableUntil} from "@etherfi/governance/utils/PausableUntil.sol";
 import {RolesLibrary} from "@etherfi/governance/utils/RolesLibrary.sol";
+import {DeprecatedOZOwnable} from "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
 
 /**
  * @title WeETHWithdrawAdapter
@@ -24,46 +24,47 @@ import {RolesLibrary} from "@etherfi/governance/utils/RolesLibrary.sol";
 contract WeETHWithdrawAdapter is 
     Initializable, 
     UUPSUpgradeable, 
-    OwnableUpgradeable, 
+    DeprecatedOZOwnable, 
     PausableUntil,
-    RolesLibrary,
-    IWeETHWithdrawAdapter 
+    IWeETHWithdrawAdapter
 {
     using SafeERC20 for IERC20;
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
+    // deprecated storage slot
+    uint8 private __gap_0;
 
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  IMMUTABLES  ---------------------------------------
+    //--------------------------------------------------------------------------------------
     IWeETH public immutable weETH;
     IeETH public immutable eETH;
     ILiquidityPool public immutable liquidityPool;
     IWithdrawRequestNFT public immutable withdrawRequestNFT;
     IBlacklister public immutable blacklister;
 
-    bool public paused;
-
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ERRORS  --------------------------------------
     //--------------------------------------------------------------------------------------
-
     error ZeroAmount();
     error ZeroAddress();
-    error ContractPaused();
     error InvalidAmount();
 
     //--------------------------------------------------------------------------------------
-    //-------------------------------------  EVENTS  --------------------------------------
+    //---------------------------------  CONSTRUCTOR  ---------------------------------------
     //--------------------------------------------------------------------------------------
-
-    event Paused(address account);
-    event Unpaused(address account);
-
-    //--------------------------------------------------------------------------------------
-    //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
-    //--------------------------------------------------------------------------------------
-
-    /// @custom:oz-upgrades-unsafe-allow constructor
+    /**
+     * @notice Constructor
+     * @param _weETH The address of the weETH token.
+     * @param _eETH The address of the eETH token.
+     * @param _liquidityPool The address of the liquidity pool.
+     * @param _withdrawRequestNFT The address of the withdraw request NFT.
+     * @param _roleRegistry The address of the role registry.
+     * @param _blacklister The address of the blacklister.
+     * @custom:oz-upgrades-unsafe-allow constructor
+     */
     constructor(
         address _weETH,
         address _eETH,
@@ -89,18 +90,21 @@ contract WeETHWithdrawAdapter is
         _disableInitializers();
     }
 
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  INITIALIZERS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
     /**
      * @notice Initialize the adapter contract with initial owner
      * @param _initialOwner Address that will be set as the contract owner
      */
     function initialize(address _initialOwner) external initializer {
         if (_initialOwner == address(0)) revert ZeroAddress();
-        __Ownable_init();
         __UUPSUpgradeable_init();
-        _transferOwnership(_initialOwner);
-        paused = false;
     }
 
+    //--------------------------------------------------------------------------------------
+    //-----------------------------  WITHDRAW FUNCTIONS  -----------------------------------
+    //--------------------------------------------------------------------------------------
     /**
      * @notice Request withdrawal using weETH tokens
      * @param weETHAmount Amount of weETH to withdraw
@@ -158,58 +162,17 @@ contract WeETHWithdrawAdapter is
         return requestWithdraw(weETHAmount, recipient);
     }
 
-
-
     //--------------------------------------------------------------------------------------
-    //----------------------------------  ADMIN FUNCTIONS  --------------------------------
+    //------------------------------  INTERNAL FUNCTIONS  ----------------------------------
     //--------------------------------------------------------------------------------------
-
     /**
-     * @notice Pause the contract
+     * @notice Authorize contract upgrades
      */
-    function pauseContract() external onlyOperatingMultisig {
-        if (paused) revert("Pausable: already paused");
-
-        paused = true;
-        emit Paused(msg.sender);
-    }
-
-    /**
-     * @notice Unpause the contract
-     */
-    function unPauseContract() external onlyOperatingMultisig {
-        if (!paused) revert("Pausable: not paused");
-
-        paused = false;
-        emit Unpaused(msg.sender);
-    }
-
-    /**
-     * @notice Pause the contract until MAX_PAUSE_DURATION
-     */
-    function pauseContractUntil() external onlyGuardian {
-        _pauseUntil();
-    }
-
-    /**
-     * @notice Unpause the contract from pauseUntil
-     */
-    function unpauseContractUntil() external onlyOperatingMultisig {
-        _unpauseUntil();
-    }
-
-    /**
-     * @notice Sets the pause duration for the contract
-     * @param _pauseUntilDuration The new pause duration
-     */
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
-        _setPauseUntilDuration(_pauseUntilDuration);
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     //--------------------------------------------------------------------------------------
     //------------------------------------  GETTERS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-
     /**
      * @notice Get the current implementation address
      * @return The implementation contract address
@@ -228,31 +191,11 @@ contract WeETHWithdrawAdapter is
     }
 
     //--------------------------------------------------------------------------------------
-    //------------------------------  INTERNAL FUNCTIONS  ----------------------------------
-    //--------------------------------------------------------------------------------------
-
-    /**
-     * @notice Authorize contract upgrades
-     */
-    function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
-
-    /**
-     * @notice Check if contract is not paused
-     */
-    function _requireNotPaused() internal view {
-        if (paused) revert ContractPaused();
-    }
-
-    //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
     //--------------------------------------------------------------------------------------
-
-    modifier whenNotPaused() {
-        _requireNotPaused();
-        _requireNotPausedUntil();
-        _;
-    }
-
+    /**
+     * @notice Modifier to check if the caller is not blacklisted
+     */
     modifier nonBlacklisted() {
         blacklister.nonBlacklisted(msg.sender);
         _;

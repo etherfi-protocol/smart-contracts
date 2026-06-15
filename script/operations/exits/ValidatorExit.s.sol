@@ -3,7 +3,7 @@ pragma solidity ^0.8.27;
 
 import "@etherfi/staking/interfaces/IEtherFiNode.sol";
 import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
-import {IEigenPod, IEigenPodTypes} from "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
+import {IEigenPod, IEigenPodTypes} from "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 

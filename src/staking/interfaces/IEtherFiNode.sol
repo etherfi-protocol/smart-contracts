@@ -3,8 +3,8 @@ pragma solidity ^0.8.13;
 
 import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
 
-import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
-import "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 
 interface IEtherFiNode {
 

@@ -4,7 +4,7 @@ pragma solidity ^0.8.22;
 import {Test} from "forge-std/Test.sol";
 import {LiquidRefer} from "@etherfi/deposits/LiquidRefer.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {ILayerZeroTellerWithRateLimiting} from "@etherfi/liquid-interfaces/ILayerZeroTellerWithRateLimiting.sol";
+import {ILayerZeroTellerWithRateLimiting} from "@etherfi/interfaces/liquid-interfaces/ILayerZeroTellerWithRateLimiting.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";

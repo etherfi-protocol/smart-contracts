@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
+import {ReentrancyGuardTransient} from "solady/utils/ReentrancyGuardTransient.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 import "@etherfi/staking/interfaces/IAuctionManager.sol";
@@ -11,15 +9,18 @@ import "@etherfi/staking/interfaces/INodeOperatorManager.sol";
 import "@etherfi/governance/interfaces/IBlacklister.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
+import "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
+import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
+import "@etherfi/governance/utils/DeprecatedOZReentrancyGuard.sol";
 
 contract AuctionManager is
     Initializable,
     IAuctionManager,
-    PausableUpgradeable,
-    OwnableUpgradeable,
+    DeprecatedOZPausable,
+    DeprecatedOZOwnable,
     PausableUntil,
-    RolesLibrary,
-    ReentrancyGuardUpgradeable,
+    DeprecatedOZReentrancyGuard,
+    ReentrancyGuardTransient,
     UUPSUpgradeable
 {
     //--------------------------------------------------------------------------------------
@@ -53,7 +54,6 @@ contract AuctionManager is
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-
     event BidCreated(address indexed bidder, uint256 amountPerBid, uint256[] bidIdArray, uint64[] ipfsIndexArray);
     event BidCancelled(uint256 indexed bidId);
     event BidReEnteredAuction(uint256 indexed bidId);
@@ -64,7 +64,6 @@ contract AuctionManager is
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ERRORS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-
     error AddressZero();
     error InvalidBidSize();
     error NotWhitelisted();
@@ -83,8 +82,14 @@ contract AuctionManager is
     //--------------------------------------------------------------------------------------
     //-------------------------------------  CONSTRUCTOR  ----------------------------------
     //--------------------------------------------------------------------------------------
-
-    /// @custom:oz-upgrades-unsafe-allow constructor
+    /**
+     * @notice Constructor
+     * @param _roleRegistry The address of the role registry
+     * @param _blacklister The address of the blacklister
+     * @param _nodeOperatorManagerContract The address of the node operator manager contract
+     * @param _stakingManagerContractAddress The address of the staking manager contract
+     * @param _treasury The address of the treasury
+     */
     constructor(address _roleRegistry, address _blacklister, address _nodeOperatorManagerContract, address _stakingManagerContractAddress, address _treasury) RolesLibrary(_roleRegistry) {
         blacklister = IBlacklister(_blacklister);
         nodeOperatorManager = INodeOperatorManager(_nodeOperatorManagerContract);
@@ -94,10 +99,12 @@ contract AuctionManager is
     }
 
     //--------------------------------------------------------------------------------------
-    //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
+    //---------------------------------  INITIALIZERS  -------------------------------------
     //--------------------------------------------------------------------------------------
-
-    /// @notice Initialize to set variables on deployment
+    /**
+     * @notice Initialize to set variables on deployment
+     * @param _nodeOperatorManagerContract The address of the node operator manager contract
+     */
     function initialize(
         address _nodeOperatorManagerContract
     ) external initializer {
@@ -109,16 +116,18 @@ contract AuctionManager is
         numberOfBids = 1;
         whitelistEnabled = true;
 
-        __Pausable_init();
-        __Ownable_init();
         __UUPSUpgradeable_init();
-        __ReentrancyGuard_init();
     }
 
-    /// @notice Creates bid(s) for the right to run a validator node when ETH is deposited
-    /// @param _bidSize the number of bids that the node operator would like to create
-    /// @param _bidAmountPerBid the ether value of each bid that is created
-    /// @return bidIdArray array of the bidIDs that were created
+    //--------------------------------------------------------------------------------------
+    //------------------------------- AUCTION FUNCTIONS  -----------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Creates bid(s) for the right to run a validator node when ETH is deposited
+     * @param _bidSize the number of bids that the node operator would like to create
+     * @param _bidAmountPerBid the ether value of each bid that is created
+     * @return bidIdArray array of the bidIDs that were created
+     */
     function createBid(
         uint256 _bidSize,
         uint256 _bidAmountPerBid
@@ -175,27 +184,36 @@ contract AuctionManager is
         return bidIdArray;
     }
 
-    /// @notice Cancels bids in a batch by calling the 'cancelBid' function multiple times
-    /// @dev Calls an internal function to perform the cancel
-    /// @param _bidIds the ID's of the bids to cancel
+    /**
+     * @notice Cancels bids in a batch by calling the 'cancelBid' function multiple times
+     * @param _bidIds the ID's of the bids to cancel
+     * @dev Calls an internal function to perform the cancel
+     */
     function cancelBidBatch(uint256[] calldata _bidIds) external whenNotPaused nonBlacklisted {
         for (uint256 i = 0; i < _bidIds.length; i++) {
             _cancelBid(_bidIds[i]);
         }
     }
 
-    /// @notice Cancels a specified bid by de-activating it
-    /// @dev Calls an internal function to perform the cancel
-    /// @param _bidId the ID of the bid to cancel
+    /**
+     * @notice Cancels a specified bid by de-activating it
+     * @param _bidId the ID of the bid to cancel
+     * @dev Calls an internal function to perform the cancel
+     */
     function cancelBid(uint256 _bidId) public whenNotPaused nonBlacklisted {
         _cancelBid(_bidId);
     }
 
-    /// @notice Updates the details of the bid which has been used in a stake match
-    /// @dev Called by batchDepositWithBidIds() in StakingManager.sol. Forwards the
-    ///      consumed bid's ETH to `treasury` so protocol-side bid revenue is not
-    ///      stranded in this contract.
-    /// @param _bidId the ID of the bid being removed from the auction (since it has been selected)
+    //--------------------------------------------------------------------------------------
+    //------------------------------- STAKING FUNCTIONS  -----------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Updates the details of the bid which has been used in a stake match
+     * @param _bidId the ID of the bid being removed from the auction (since it has been selected)
+     * @dev Called by batchDepositWithBidIds() in StakingManager.sol. Forwards the
+     *      consumed bid's ETH to `treasury` so protocol-side bid revenue is not
+     *      stranded in this contract.
+     */
     function updateSelectedBidInformation(
         uint256 _bidId
     ) external onlyStakingManagerContract {
@@ -213,8 +231,10 @@ contract AuctionManager is
         }
     }
 
-    /// @notice Lets a bid that was matched to a cancelled stake re-enter the auction
-    /// @param _bidId the ID of the bid which was matched to the cancelled stake.
+    /**
+     * @notice Lets a bid that was matched to a cancelled stake re-enter the auction
+     * @param _bidId the ID of the bid which was matched to the cancelled stake.
+     */
     function reEnterAuction(
         uint256 _bidId
     ) external onlyStakingManagerContract {
@@ -226,49 +246,69 @@ contract AuctionManager is
         emit BidReEnteredAuction(_bidId);
     }
 
-    /// @notice Disables the whitelisting phase of the bidding
-    /// @dev Allows both regular users and whitelisted users to bid
+    //--------------------------------------------------------------------------------------
+    //------------------------------- ADMIN FUNCTIONS  -------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    /**
+     * @notice Updates the minimum bid price for a non-whitelisted bidder
+     * @param _newMinBidAmount the new amount to set the minimum bid price as
+     * @dev Only the operating multisig can update the minimum bid price
+     */
+    function setMinBidPrice(uint64 _newMinBidAmount) external onlyOperatingMultisig {
+        if (_newMinBidAmount >= maxBidAmount) revert InvalidMinBid();
+        if (_newMinBidAmount < whitelistBidAmount) revert InvalidMinBid();
+        minBidAmount = _newMinBidAmount;
+    }
+
+    /**
+     * @notice Updates the maximum bid price for both whitelisted and non-whitelisted bidders
+     * @param _newMaxBidAmount the new amount to set the maximum bid price as
+     * @dev Only the operating multisig can update the maximum bid price
+     */
+    function setMaxBidPrice(uint64 _newMaxBidAmount) external onlyOperatingMultisig {
+        if (_newMaxBidAmount <= minBidAmount) revert InvalidMaxBid();
+        maxBidAmount = _newMaxBidAmount;
+    }
+
+    /**
+     * @notice Disables the whitelisting phase of the bidding
+     * @dev Allows both regular users and whitelisted users to bid
+     */
     function disableWhitelist() public onlyOperatingMultisig {
         whitelistEnabled = false;
         emit WhitelistDisabled(whitelistEnabled);
     }
 
-    /// @notice Enables the whitelisting phase of the bidding
-    /// @dev Only users who are on a whitelist can bid
+    /**
+     * @notice Enables the whitelisting phase of the bidding
+     * @dev Only users who are on a whitelist can bid
+     */
     function enableWhitelist() public onlyOperatingMultisig {
         whitelistEnabled = true;
         emit WhitelistEnabled(whitelistEnabled);
     }
 
-    //Pauses the contract
-    function pauseContract() external onlyOperatingMultisig {
-        _pause();
-    }
-
-    //Unpauses the contract
-    function unPauseContract() external onlyOperatingMultisig {
-        _unpause();
-    }
-
-    // Pauses contract until MAX_PAUSE_DURATION
-    function pauseContractUntil() external onlyGuardian {
-        _pauseUntil();
-    }
-
-    // Unpauses contract from pauseUntil
-    function unpauseContractUntil() external onlyOperatingMultisig {
-        _unpauseUntil();
-    }
-
-    /// @notice Sets the pause duration for the contract
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
-        _setPauseUntilDuration(_pauseUntilDuration);
+    /**
+     * @notice Updates the minimum bid price for a whitelisted address
+     * @param _newAmount the new amount to set the minimum bid price as
+     * @dev Only the operating multisig can update the minimum bid price for a whitelisted address
+     */
+    function updateWhitelistMinBidAmount(
+        uint128 _newAmount
+    ) external onlyOperatingMultisig {
+        if (_newAmount >= minBidAmount || _newAmount == 0) revert InvalidWhitelistAmount();
+        whitelistBidAmount = _newAmount;
     }
 
     //--------------------------------------------------------------------------------------
     //-------------------------------  INTERNAL FUNCTIONS   --------------------------------
     //--------------------------------------------------------------------------------------
-
+    /**
+     * @notice Cancels a bid by de-activating it and refunding the user with their bid amount
+     * @param _bidId the ID of the bid to cancel
+     * @dev Called by cancelBid() and cancelBidBatch()
+     */
     function _cancelBid(uint256 _bidId) internal {
         Bid storage bid = bids[_bidId];
         if (bid.bidderAddress != msg.sender) revert InvalidBid();
@@ -285,74 +325,62 @@ contract AuctionManager is
         emit BidCancelled(_bidId);
     }
 
-    function _requireNotPaused() internal override view {
-        _requireNotPausedUntil();
-        super._requireNotPaused();
-    }
-
+    /**
+     * @notice Authorizes the upgrade of the implementation contract
+     * @param newImplementation the address of the new implementation contract
+     * @dev Only the upgrade timelock can authorize the upgrade
+     */
     function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
     //--------------------------------------------------------------------------------------
     //--------------------------------------  GETTER  --------------------------------------
     //--------------------------------------------------------------------------------------
 
-    /// @notice Fetches the address of the user who placed a bid for a specific bid ID
-    /// @dev Needed for registerValidator() function in Staking Contract as well as function in the EtherFiNodeManager.sol
-    /// @return the address of the user who placed (owns) the bid
+    /**
+     * @notice Fetches the address of the user who placed a bid for a specific bid ID
+     * @param _bidId the ID of the bid to fetch the owner of
+     * @dev Needed for registerValidator() function in Staking Contract as well as function in the EtherFiNodeManager.sol
+     * @return the address of the user who placed (owns) the bid
+     */
     function getBidOwner(uint256 _bidId) external view returns (address) {
         return bids[_bidId].bidderAddress;
     }
 
-    /// @notice Fetches if a selected bid is currently active
-    /// @dev Needed for batchDepositWithBidIds() function in Staking Contract
-    /// @return the boolean value of the active flag in bids
+    /**
+     * @notice Fetches if a selected bid is currently active
+     * @param _bidId the ID of the bid to fetch the active status of
+     * @dev Needed for batchDepositWithBidIds() function in Staking Contract
+     * @return the boolean value of the active flag in bids
+     */
     function isBidActive(uint256 _bidId) external view returns (bool) {
         return bids[_bidId].isActive;
     }
 
-    /// @notice Fetches the address of the implementation contract currently being used by the proxy
-    /// @return the address of the currently used implementation contract
+    /**
+     * @notice Fetches the address of the implementation contract currently being used by the proxy
+     * @dev Needed for the getImplementation() function in the UUPSUpgradeable contract
+     * @return the address of the currently used implementation contract
+     */
     function getImplementation() external view returns (address) {
         return _getImplementation();
     }
 
     //--------------------------------------------------------------------------------------
-    //--------------------------------------  SETTER  --------------------------------------
-    //--------------------------------------------------------------------------------------
-
-    /// @notice Updates the minimum bid price for a non-whitelisted bidder
-    /// @param _newMinBidAmount the new amount to set the minimum bid price as
-    function setMinBidPrice(uint64 _newMinBidAmount) external onlyOperatingMultisig {
-        if (_newMinBidAmount >= maxBidAmount) revert InvalidMinBid();
-        if (_newMinBidAmount < whitelistBidAmount) revert InvalidMinBid();
-        minBidAmount = _newMinBidAmount;
-    }
-
-    /// @notice Updates the maximum bid price for both whitelisted and non-whitelisted bidders
-    /// @param _newMaxBidAmount the new amount to set the maximum bid price as
-    function setMaxBidPrice(uint64 _newMaxBidAmount) external onlyOperatingMultisig {
-        if (_newMaxBidAmount <= minBidAmount) revert InvalidMaxBid();
-        maxBidAmount = _newMaxBidAmount;
-    }
-
-    /// @notice Updates the minimum bid price for a whitelisted address
-    /// @param _newAmount the new amount to set the minimum bid price as
-    function updateWhitelistMinBidAmount(
-        uint128 _newAmount
-    ) external onlyOperatingMultisig {
-        if (_newAmount >= minBidAmount || _newAmount == 0) revert InvalidWhitelistAmount();
-        whitelistBidAmount = _newAmount;
-    }
-
-    //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
     //--------------------------------------------------------------------------------------
-
+    /**
+     * @notice Modifier to only allow the staking manager contract to call a function
+     * @dev Only the staking manager contract can call this function
+     */
     modifier onlyStakingManagerContract() {
         if (msg.sender != stakingManagerContractAddress) revert IncorrectCaller();
         _;
     }
 
+    /**
+     * @notice Modifier to only allow non-blacklisted addresses to call a function
+     * @dev Only non-blacklisted addresses can call this function
+     */
     modifier nonBlacklisted() {
         blacklister.nonBlacklisted(msg.sender);
         _;

@@ -8,7 +8,7 @@ import "@scripts/utils/GnosisTxGeneratorLib.sol";
 import "@scripts/utils/StringHelpers.sol";
 import "@scripts/utils/ValidatorHelpers.sol";
 import "@etherfi/staking/EtherFiNodesManager.sol";
-import "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 import "@scripts/operations/consolidations/GnosisConsolidationLib.sol";
 
 /**

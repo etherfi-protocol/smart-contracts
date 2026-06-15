@@ -2,9 +2,7 @@
 pragma solidity ^0.8.23;
 
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
+import {ReentrancyGuardTransient} from "solady/utils/ReentrancyGuardTransient.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
@@ -14,12 +12,15 @@ import "@etherfi/core/interfaces/ILiquidityPool.sol";
 import "@etherfi/governance/interfaces/IBlacklister.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
+import "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
+import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
+import "@etherfi/governance/utils/DeprecatedOZReentrancyGuard.sol";
 
-import "@etherfi/eigenlayer-interfaces/IStrategyManager.sol";
-import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IStrategyManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
 
 /// Go wild, spread eETH/weETH to the world
-contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable, PausableUntil, ReentrancyGuardUpgradeable, ILiquifier, RolesLibrary {
+contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, DeprecatedOZPausable, PausableUntil, DeprecatedOZReentrancyGuard, ReentrancyGuardTransient, ILiquifier {
     using SafeERC20 for IERC20;
     using Math for uint256;
 
@@ -49,7 +50,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     //--------------------------------------------------------------------------------------
     //---------------------------------  IMMUTABLES  --------------------------------------
     //--------------------------------------------------------------------------------------
-
     ILiquidityPool public immutable liquidityPool;
     ILidoWithdrawalQueue public immutable lidoWithdrawalQueue;
     ILido public immutable lido;
@@ -67,7 +67,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     //--------------------------------------------------------------------------------------
     //---------------------------------  CONSTANTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-
     uint256 public constant BASIS_POINT_SCALE = 10_000;
     uint256 public constant SHARE_UNIT = 1e18;
     uint32 public constant MAX_TIME_BOUND_CAP_IN_ETHER = 500_000_000;
@@ -80,7 +79,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-
     event Liquified(address _user, uint256 _toEEthAmount, address _fromToken, bool _isRestaked);
     // This event is deprecated. will be removed in the next release.
     // event RegisteredQueuedWithdrawal(bytes32 _withdrawalRoot, IStrategyManager.DeprecatedStruct_QueuedWithdrawal _queuedWithdrawal);
@@ -92,7 +90,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ERRORS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-
     error NotSupportedToken();
     error EthTransferFailed();
     error AlreadyRegistered();
@@ -116,23 +113,17 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     error AddressZero();
     error InvalidTotalSupply();
 
-    struct ConstructorAddresses {
-        address liquidityPool;
-        address lidoWithdrawalQueue;
-        address lido;
-        address stEth_Eth_Pool;
-        address roleRegistry;
-        address stEthPriceFeed;
-        address blacklister;
-        address etherfiRestaker;
-        address l1SyncPool;
-    }
-
     //--------------------------------------------------------------------------------------
     //-------------------------------------  CONSTRUCTOR  ----------------------------------
     //--------------------------------------------------------------------------------------
-
-    /// @custom:oz-upgrades-unsafe-allow constructor
+    /**
+     * @notice Constructor
+     * @param _constructorAddresses The addresses of the constructor addresses
+     * @param _minDiscountInBasisPoints The minimum discount rate in basis points
+     * @param _stalePriceWindow The stale price window
+     * @param _maxPriceDeviationInBps The maximum price deviation in basis points
+     * @custom:oz-upgrades-unsafe-allow constructor
+     */
     constructor(ConstructorAddresses memory _constructorAddresses, uint256 _minDiscountInBasisPoints, uint256 _stalePriceWindow, uint256 _maxPriceDeviationInBps) RolesLibrary(_constructorAddresses.roleRegistry) {
         if (_minDiscountInBasisPoints == 0 || _minDiscountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
         if (_stalePriceWindow == 0) revert InvalidPriceWindow();
@@ -160,29 +151,45 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     //--------------------------------------------------------------------------------------
-    //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
+    //----------------------------  INITIALIZERS  ------------------------------------------
     //--------------------------------------------------------------------------------------
-
-    /// @notice initialize to set variables on deployment
+    /**
+     * @notice Initialize the Liquifier
+     * @param _treasury The address of the treasury
+     * @param _liquidityPool The address of the liquidity pool
+     * @param _eigenLayerStrategyManager The address of the eigen layer strategy manager
+     * @param _lidoWithdrawalQueue The address of the lido withdrawal queue
+     * @param _stEth The address of the stEth
+     * @param _stEth_Eth_Pool The address of the stEth_Eth_Pool
+     * @param _timeBoundCapRefreshInterval The time bounded cap refresh interval
+    */
     function initialize(address _treasury, address _liquidityPool, address _eigenLayerStrategyManager, address _lidoWithdrawalQueue, 
                         address _stEth, address _stEth_Eth_Pool,
                         uint32 _timeBoundCapRefreshInterval) initializer external {
-        __Pausable_init();
-        __Ownable_init();
         __UUPSUpgradeable_init();
-        __ReentrancyGuard_init();
 
         timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
     }
 
+    //--------------------------------------------------------------------------------------
+    //--------------------------------  RECEIVE FUNCTION  ----------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Receive ETH
+     */
     receive() external payable {}
 
-    /// Deposit Liquid Staking Token such as stETH and Mint eETH
-    /// @param _token The address of the token to deposit
-    /// @param _amount The amount of the token to deposit
-    /// @param _referral The referral address
-    /// @return mintedAmount the amount of eETH minted to the caller (= msg.sender)
-    /// If the token is l2Eth, only the l2SyncPool can call this function
+    //--------------------------------------------------------------------------------------
+    //----------------------------  DEPOSIT FUNCTIONS  -------------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Deposit Liquid Staking Token such as stETH and Mint eETH
+     * @param _token The address of the token to deposit
+     * @param _amount The amount of the token to deposit
+     * @param _referral The referral address
+     * @return mintedAmount the amount of eETH minted to the caller (= msg.sender)
+     * @dev If the token is l2Eth, only the l1SyncPool can call this function
+     */
     function depositWithERC20(address _token, uint256 _amount, address _referral) public nonReentrant whenNotPaused nonBlacklisted returns (uint256) {        
         if (!isTokenWhitelisted(_token) || (tokenInfos[_token].isL2Eth && msg.sender != l1SyncPool)) revert NotAllowed();
 
@@ -212,32 +219,78 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         return eEthShare;
     }
 
+    /**
+     * @notice Deposit Liquid Staking Token such as stETH and Mint eETH with Permit
+     * @param _token The address of the token to deposit
+     * @param _amount The amount of the token to deposit
+     * @param _referral The referral address
+     * @param _permit The permit input
+     * @return mintedAmount the amount of eETH minted to the caller (= msg.sender)
+     * @dev Only callable when contract is not paused
+     * @dev Only callable when sender is not blacklisted
+     */
     function depositWithERC20WithPermit(address _token, uint256 _amount, address _referral, PermitInput calldata _permit) external whenNotPaused nonBlacklisted returns (uint256) {
         try IERC20Permit(_token).permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} catch {}
         return depositWithERC20(_token, _amount, _referral);
     }
 
-    // Send the redeemed ETH back to the liquidity pool & Send the fee to Treasury
+    //--------------------------------------------------------------------------------------
+    //----------------------------  OPERATINAL FUNCTIONS  ----------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Send the redeemed ETH back to the liquidity pool & Send the fee to Treasury
+     * @dev Only callable by the housekeeping operations
+     */
     function withdrawEther() external onlyHousekeepingOperations {
-        uint256 amountToLiquidityPool = _min(address(this).balance, liquidityPool.totalValueOutOfLp());
+        uint256 amountToLiquidityPool = Math.min(address(this).balance, liquidityPool.totalValueOutOfLp());
         (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: GAS_STIPEND_NO_GRIEF}("");
         if (!sent) revert EthTransferFailed();
     }
 
+    /**
+     * @notice Send the token to the etherfi restaker
+     * @param _token The address of the token to send
+     * @param _amount The amount of the token to send
+     * @dev Only callable by the housekeeping operations
+     */
     function sendToEtherFiRestaker(address _token, uint256 _amount) external onlyHousekeepingOperations {
         IERC20(_token).safeTransfer(etherfiRestaker, _amount);
     }
 
+    /**
+     * @notice Update the whitelisted token
+     * @param _token The address of the token to update
+     * @param _isWhitelisted The boolean value to set the token as whitelisted
+     * @dev Only callable by the upgrade timelock
+     */
     function updateWhitelistedToken(address _token, bool _isWhitelisted) external onlyUpgradeTimelock {
         tokenInfos[_token].isWhitelisted = _isWhitelisted;
     }
 
+    /**
+     * @notice Update the deposit cap
+     * @param _token The address of the token to update
+     * @param _timeBoundCapInEther The time bound cap in ether
+     * @param _totalCapInEther The total cap in ether
+     * @dev Only callable by the admin
+     */
     function updateDepositCap(address _token, uint32 _timeBoundCapInEther, uint32 _totalCapInEther) public onlyAdmin {
         if (_timeBoundCapInEther > MAX_TIME_BOUND_CAP_IN_ETHER || _totalCapInEther > MAX_TOTAL_CAP_IN_ETHER) revert InvalidDepositCap();
         tokenInfos[_token].timeBoundCapInEther = _timeBoundCapInEther;
         tokenInfos[_token].totalCapInEther = _totalCapInEther;
     }
 
+    /**
+     * @notice Register a new token
+     * @param _token The address of the token to register
+     * @param _target The address of the target
+     * @param _isWhitelisted The boolean value to set the token as whitelisted
+     * @param _discountInBasisPoints The discount in basis points
+     * @param _timeBoundCapInEther The time bound cap in ether
+     * @param _totalCapInEther The total cap in ether
+     * @param _isL2Eth The boolean value to set the token as l2Eth
+     * @dev Only callable by the upgrade timelock
+     */
     function registerToken(address _token, address _target, bool _isWhitelisted, uint16 _discountInBasisPoints, uint32 _timeBoundCapInEther, uint32 _totalCapInEther, bool _isL2Eth) external onlyUpgradeTimelock {
         if (_discountInBasisPoints < minDiscountRateInBps || _discountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
         if (_timeBoundCapInEther > MAX_TIME_BOUND_CAP_IN_ETHER || _totalCapInEther > MAX_TOTAL_CAP_IN_ETHER) revert InvalidDepositCap();
@@ -252,45 +305,42 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         tokenInfos[_token] = TokenInfo(0, 0, IStrategy(_target), _isWhitelisted, _discountInBasisPoints, uint32(block.timestamp), _timeBoundCapInEther, _totalCapInEther, 0, 0, _isL2Eth);
     }
 
+    /**
+     * @notice Update the time bound cap refresh interval
+     * @param _timeBoundCapRefreshInterval The time bound cap refresh interval
+     * @dev Only callable by the admin
+     */
     function updateTimeBoundCapRefreshInterval(uint32 _timeBoundCapRefreshInterval) external onlyAdmin {
         timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
     }
 
+    /**
+     * @notice Update the discount in basis points
+     * @param _token The address of the token to update
+     * @param _discountInBasisPoints The discount in basis points
+     * @dev Only callable by the admin
+     */
     function updateDiscountInBasisPoints(address _token, uint16 _discountInBasisPoints) external onlyAdmin {
         if (_discountInBasisPoints < minDiscountRateInBps || _discountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
         tokenInfos[_token].discountInBasisPoints = _discountInBasisPoints;
     }
 
+    /**
+     * @notice Update the quote stEth with curve
+     * @param _quoteStEthWithCurve The boolean value to set the quote stEth with curve
+     * @dev Only callable by the admin
+     */
     function updateQuoteStEthWithCurve(bool _quoteStEthWithCurve) external onlyAdmin {
         quoteStEthWithCurve = _quoteStEthWithCurve;
     }
 
-    //Pauses the contract
-    function pauseContract() external onlyOperatingMultisig {
-        _pause();
-    }
-
-    //Unpauses the contract
-    function unPauseContract() external onlyOperatingMultisig {
-        _unpause();
-    }
-
-    /// @notice Pauses the contract until MAX_PAUSE_DURATION
-    function pauseContractUntil() external onlyGuardian {
-        _pauseUntil();
-    }
-
-    /// @notice Unpauses the contract from pauseUntil
-    function unpauseContractUntil() external onlyOperatingMultisig {
-        _unpauseUntil();
-    }
-
-    /// @notice Sets the pause duration for the contract
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
-        _setPauseUntilDuration(_pauseUntilDuration);
-    }
-
-    // ETH comes in, L2ETH is burnt
+    /**
+     * @notice Unwrap the L2ETH
+     * @param _l2Eth The address of the L2ETH to unwrap
+     * @return The amount of ETH unwrapped
+     * @dev Only callable by the l1SyncPool
+     * @dev Only callable when the token is whitelisted and isL2Eth
+     */
     function unwrapL2Eth(address _l2Eth) external payable nonReentrant returns (uint256) {
         if (msg.sender != l1SyncPool) revert IncorrectCaller();
         if (!isTokenWhitelisted(_l2Eth) || !tokenInfos[_l2Eth].isL2Eth) revert NotSupportedToken();
@@ -300,9 +350,16 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         return msg.value;
     }
 
-    /* VIEW FUNCTIONS */
+    //--------------------------------------------------------------------------------------
+    //----------------------------  VIEW FUNCTIONS  ----------------------------------------
+    //--------------------------------------------------------------------------------------
 
-    // Given the `_amount` of `_token` token, returns the equivalent amount of ETH 
+    /**
+     * @notice Quote the fair value of the token
+     * @param _token The address of the token to quote
+     * @param _amount The amount of the token to quote
+     * @return The fair value of the token
+     */
     function quoteByFairValue(address _token, uint256 _amount) public view returns (uint256) {
         if (!isTokenWhitelisted(_token)) revert NotSupportedToken();
 
@@ -312,11 +369,24 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         revert NotSupportedToken();
     }
 
+    /**
+     * @notice Quote the strategy share for deposit
+     * @param _token The address of the token to quote
+     * @param _strategy The address of the strategy
+     * @param _share The share of the strategy
+     * @return The strategy share for deposit
+     */
     function quoteStrategyShareForDeposit(address _token, IStrategy _strategy, uint256 _share) public view returns (uint256) {
         uint256 tokenAmount = _strategy.sharesToUnderlyingView(_share);
         return quoteByMarketValue(_token, tokenAmount);
     }
 
+    /**
+     * @notice Quote the market value of the token
+     * @param _token The address of the token to quote
+     * @param _amount The amount of the token to quote
+     * @return _marketValue The market value of the token
+     */
     function quoteByMarketValue(address _token, uint256 _amount) public view returns (uint256 _marketValue) {
         if (!isTokenWhitelisted(_token)) revert NotSupportedToken();
 
@@ -324,7 +394,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
             if (quoteStEthWithCurve) {
                 // check market value from curve pool, stETH price is on avrage always lower than ETH (this is essentially the capital efficiency of the protocol)
                 // if stETH price is temporarily larger than underlying ETH value, we set market value as 1:1 
-                _marketValue = _min(_amount, ICurvePoolQuoter1(address(stEth_Eth_Pool)).get_dy(1, 0, _amount));
+                _marketValue = Math.min(_amount, ICurvePoolQuoter1(address(stEth_Eth_Pool)).get_dy(1, 0, _amount));
 
                 // We also validate against chainlink price feed to ensure there's no significant price deviation
                 // If price feed is stale, we BLOCK the stETH deposit (revert StalePriceFeed) — we do NOT skip the check
@@ -347,21 +417,40 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         }
     }
 
-    // Calculates the amount of eETH that will be minted for a given token considering the discount rate
+    /**
+     * @notice Quote the discounted value of the token
+     * @param _token The address of the token to quote
+     * @param _amount The amount of the token to quote
+     * @return The discounted value of the token
+     */
     function quoteByDiscountedValue(address _token, uint256 _amount) public view returns (uint256) {
         uint256 marketValue = quoteByMarketValue(_token, _amount);
 
         return (BASIS_POINT_SCALE - tokenInfos[_token].discountInBasisPoints).mulDiv(marketValue, BASIS_POINT_SCALE);
     }
 
+    /**
+     * @notice Check if the token is whitelisted
+     * @param _token The address of the token to check
+     * @return True if the token is whitelisted, false otherwise
+     */
     function isTokenWhitelisted(address _token) public view returns (bool) {
         return tokenInfos[_token].isWhitelisted;
     }
 
+    /**
+     * @notice Check if the token is L2ETH
+     * @param _token The address of the token to check
+     * @return True if the token is L2ETH, false otherwise
+     */
     function isL2Eth(address _token) public view returns (bool) {
         return tokenInfos[_token].isL2Eth;
     }
 
+    /**
+     * @notice Get the total pooled ether
+     * @return total The total pooled ether
+     */
     function getTotalPooledEther() public view returns (uint256 total) {
         total = address(this).balance;
         for (uint256 i = 0; i < dummies.length; i++) {
@@ -369,10 +458,17 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         }
     }
 
-    /// deposited (restaked) ETH can have 3 states:
-    /// - restaked in EigenLayer & pending for withdrawals
-    /// - non-restaked & held by this contract
-    /// - non-restaked & not held by this contract & pending for withdrawals
+    /**
+     * @notice Get the total pooled ether splits
+     * @param _token The address of the token to get the total pooled ether splits
+     * @return restaked The amount of ether restaked
+     * @return holding The amount of ether holding
+     * @return pendingForWithdrawals The amount of ether pending for withdrawals
+     * @dev Deposited (restaked) ETH can have 3 states:
+     * - restaked in EigenLayer & pending for withdrawals
+     * - non-restaked & held by this contract
+     * - non-restaked & not held by this contract & pending for withdrawals
+     */
     function getTotalPooledEtherSplits(address _token) public view returns (uint256 restaked, uint256 holding, uint256 pendingForWithdrawals) {
         TokenInfo memory info = tokenInfos[_token];
         if (!isTokenWhitelisted(_token)) return (0, 0, 0);
@@ -380,27 +476,57 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         holding = quoteByFairValue(_token, IERC20(_token).balanceOf(address(this))); /// eth value for erc20 holdings
     }
 
+    /**
+     * @notice Get the total pooled ether
+     * @param _token The address of the token to get the total pooled ether
+     * @return The total pooled ether
+     */
     function getTotalPooledEther(address _token) public view returns (uint256) {
         (uint256 restaked, uint256 holding, uint256 pendingForWithdrawals) = getTotalPooledEtherSplits(_token);
         return restaked + holding + pendingForWithdrawals;
     }
 
+    /**
+     * @notice Get the implementation
+     * @return The implementation
+     */
     function getImplementation() external view returns (address) {
         return _getImplementation();
     }
 
+    /**
+     * @notice Get the time bound cap
+     * @param _token The address of the token to get the time bound cap
+     * @return The time bound cap
+     */
     function timeBoundCap(address _token) public view returns (uint256) {
         return uint256(1 ether) * tokenInfos[_token].timeBoundCapInEther;
     }
 
+    /**
+     * @notice Get the total cap
+     * @param _token The address of the token to get the total cap
+     * @return The total cap
+     */
     function totalCap(address _token) public view returns (uint256) {
         return uint256(1 ether) * tokenInfos[_token].totalCapInEther;
     }
 
+    /**
+     * @notice Get the total deposited
+     * @param _token The address of the token to get the total deposited
+     * @return The total deposited
+     */
     function totalDeposited(address _token) public view returns (uint256) {
         return tokenInfos[_token].totalDeposited;
     }
 
+    /**
+     * @notice Check if the deposit cap is reached
+     * @param _token The address of the token to check
+     * @param _amount The amount of the token to check
+     * @return True if the deposit cap is reached, false otherwise
+     */
     function isDepositCapReached(address _token, uint256 _amount) public view returns (bool) {
         TokenInfo memory info = tokenInfos[_token];
         uint96 totalDepositedThisPeriod_ = info.totalDepositedThisPeriod;
@@ -411,7 +537,14 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         return (totalDepositedThisPeriod_ + _amount > timeBoundCap(_token) || info.totalDeposited + _amount > totalCap(_token));
     }
 
-    /* INTERNAL FUNCTIONS */
+    //--------------------------------------------------------------------------------------
+    //----------------------------  INTERNAL FUNCTIONS  -------------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice After deposit
+     * @param _token The address of the token to after deposit
+     * @param _amount The amount of the token to after deposit
+     */
     function _afterDeposit(address _token, uint256 _amount) internal {
         TokenInfo storage info = tokenInfos[_token];
         if (block.timestamp >= info.timeBoundCapClockStartTime + timeBoundCapRefreshInterval) {
@@ -422,21 +555,29 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         info.totalDeposited += uint96(_amount);
     }
 
+    /**
+     * @notice L2 sanity checks
+     * @param _token The address of the token to check
+     * @dev Only callable by the internal function
+     */
     function _L2SanityChecks(address _token) internal view {
         if (IERC20(_token).totalSupply() != IERC20(_token).balanceOf(address(this))) revert InvalidTotalSupply();
     }
 
-    function _min(uint256 _a, uint256 _b) internal pure returns (uint256) {
-        return (_a > _b) ? _b : _a;
-    }
-
+    /**
+     * @notice Authorize upgrade
+     * @param newImplementation The address of the new implementation
+     * @dev Only callable by the upgrade timelock
+     */
     function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
 
-    function _requireNotPaused() internal override view {
-        _requireNotPausedUntil();
-        super._requireNotPaused();
-    }
-
+    //--------------------------------------------------------------------------------------
+    //----------------------------------  MODIFIERS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
+    /**
+     * @notice Non blacklisted modifier
+     * @dev Only callable by the internal function
+     */
     modifier nonBlacklisted() {
         blacklister.nonBlacklisted(msg.sender);
         _;

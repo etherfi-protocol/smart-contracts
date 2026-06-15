@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import "@etherfi/membership/interfaces/IMembershipNFT.sol";
+import "@etherfi/archive/membership/interfaces/IMembershipNFT.sol";
 import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
 import "@etherfi/staking/interfaces/IEtherFiNode.sol";
 

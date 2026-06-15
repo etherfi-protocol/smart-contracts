@@ -3,9 +3,9 @@ pragma solidity ^0.8.13;
 
 import "@etherfi/staking/interfaces/IEtherFiNode.sol";
 import "@etherfi/staking/interfaces/IStakingManager.sol";
-import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
-import "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
-import {BeaconChainProofs} from "@etherfi/eigenlayer-libraries/BeaconChainProofs.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
+import {BeaconChainProofs} from "@eigenlayer-libraries/BeaconChainProofs.sol";
 
 interface IEtherFiNodesManager {
 
@@ -55,12 +55,6 @@ interface IEtherFiNodesManager {
     function allowedForwardedEigenpodCalls(address user, bytes4 selector) external view returns (bool);
     function allowedForwardedExternalCalls(address user, bytes4 selector, address to) external view returns (bool);
 
-    // protocol
-    function pauseContract() external;
-    function unPauseContract() external;
-    function pauseContractUntil() external;
-    function unpauseContractUntil() external;
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external;
 
     struct LegacyNodesManagerState {
         uint256[4] legacyPadding1;

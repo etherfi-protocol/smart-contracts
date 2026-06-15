@@ -10,6 +10,7 @@ import {EtherFiRedemptionManager} from "@etherfi/withdrawals/EtherFiRedemptionMa
 import {EtherFiRestaker} from "@etherfi/restaking/EtherFiRestaker.sol";
 import {EtherFiRewardsRouter} from "@etherfi/rewards/EtherFiRewardsRouter.sol";
 import {Liquifier} from "@etherfi/deposits/Liquifier.sol";
+import {ILiquifier} from "@etherfi/deposits/interfaces/ILiquifier.sol";
 import {WithdrawRequestNFT} from "@etherfi/withdrawals/WithdrawRequestNFT.sol";
 import {EtherFiViewer} from "@etherfi/helpers/EtherFiViewer.sol";
 import {StakingManager} from "@etherfi/staking/StakingManager.sol";
@@ -206,7 +207,7 @@ contract ReauditFixesTransactions is Utils {
         EtherFiRedemptionManager newEtherFiRedemptionManagerImplementation = new EtherFiRedemptionManager(address(LIQUIDITY_POOL), address(EETH), address(WEETH), address(TREASURY), address(ROLE_REGISTRY), address(ETHERFI_RESTAKER), address(0x0), address(0x0), 10_000, 100, 10_000);
         EtherFiRestaker newEtherFiRestakerImplementation = new EtherFiRestaker(address(LIQUIDITY_POOL), address(LIQUIFIER), address(EIGENLAYER_REWARDS_COORDINATOR), address(ETHERFI_REDEMPTION_MANAGER), address(ROLE_REGISTRY), address(ETHERFI_RATE_LIMITER), address(EIGENLAYER_STRATEGY_MANAGER), address(EIGENLAYER_DELEGATION_MANAGER));
         EtherFiRewardsRouter newEtherFiRewardsRouterImplementation = new EtherFiRewardsRouter(address(LIQUIDITY_POOL), address(TREASURY), address(ROLE_REGISTRY));
-        Liquifier newLiquifierImplementation = new Liquifier(Liquifier.ConstructorAddresses({
+        Liquifier newLiquifierImplementation = new Liquifier(ILiquifier.ConstructorAddresses({
             liquidityPool: address(LIQUIDITY_POOL),
             lidoWithdrawalQueue: address(LIDO_WITHDRAWAL_QUEUE),
             lido: 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84,
@@ -217,7 +218,7 @@ contract ReauditFixesTransactions is Utils {
             etherfiRestaker: address(ETHERFI_RESTAKER),
             l1SyncPool: address(ETHERFI_L1_SYNC_POOL_ETH)
         }), 100, 24 hours, 500);
-        WithdrawRequestNFT newWithdrawRequestNFTImplementation = new WithdrawRequestNFT(address(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE), address(EETH), address(LIQUIDITY_POOL), address(MEMBERSHIP_MANAGER), address(ROLE_REGISTRY), address(0x0), address(ETHERFI_ADMIN), 1, 4e18);
+        WithdrawRequestNFT newWithdrawRequestNFTImplementation = new WithdrawRequestNFT(address(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE), address(EETH), address(LIQUIDITY_POOL), address(ROLE_REGISTRY), address(0x0), address(ETHERFI_ADMIN));
         EtherFiViewer newEtherFiViewerImplementation = new EtherFiViewer(address(EIGENLAYER_POD_MANAGER), address(EIGENLAYER_DELEGATION_MANAGER));
 
         contractCodeChecker.verifyContractByteCodeMatch(etherFiNodeImpl, address(newEtherFiNodeImplementation));

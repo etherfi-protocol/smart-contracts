@@ -29,7 +29,4 @@ interface IAuctionManager {
     function reEnterAuction(uint256 _bidId) external;
 
     function updateSelectedBidInformation(uint256 _bidId) external;
-
-    function pauseContract() external;
-    function unPauseContract() external;
 }

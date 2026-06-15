@@ -9,7 +9,7 @@ interface IEtherFiOracle {
         uint32 refBlockFrom;
         uint32 refBlockTo;
         int128 accruedRewards;
-        int128 protocolFees;
+        uint128 protocolFees;
         uint256[] validatorsToApprove;
         uint32 lastFinalizedWithdrawalRequestId;
         uint128 finalizedWithdrawalAmount;
@@ -51,7 +51,4 @@ interface IEtherFiOracle {
     function setQuorumSize(uint32 _quorumSize) external;
     function setOracleReportPeriod(uint32 _reportPeriodSlot) external;
     function setConsensusVersion(uint32 _consensusVersion) external;
-
-    function pauseContract() external;
-    function unPauseContract() external;
 }

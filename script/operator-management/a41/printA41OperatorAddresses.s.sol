@@ -5,7 +5,7 @@ import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 import "forge-std/StdJson.sol";
 
-import {IDelegationManager} from "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
+import {IDelegationManager} from "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
 
 import "@scripts/utils/utils.sol";
 

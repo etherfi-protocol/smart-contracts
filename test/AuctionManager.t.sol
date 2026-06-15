@@ -517,17 +517,17 @@ contract AuctionManagerTest is TestSetup {
 
         assertFalse(auctionInstance.paused());
         vm.prank(alice);
-        auctionInstance.pauseContract();
+        auctionInstance.pause();
         assertTrue(auctionInstance.paused());
 
-        vm.expectRevert("Pausable: paused");
+        vm.expectRevert(Pausable.ContractPaused.selector);
         hoax(alice);
         auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
 
         assertEq(auctionInstance.numberOfActiveBids(), 0);
 
         vm.prank(alice);
-        auctionInstance.unPauseContract();
+        auctionInstance.unpause();
 
         hoax(alice);
         auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
@@ -667,14 +667,14 @@ contract AuctionManagerTest is TestSetup {
         assertEq(auctionInstance.numberOfActiveBids(), 2);
 
         vm.prank(alice);
-        auctionInstance.pauseContract();
+        auctionInstance.pause();
 
-        vm.expectRevert("Pausable: paused");
+        vm.expectRevert(Pausable.ContractPaused.selector);
         hoax(0x9154a74AAfF2F586FB0a884AeAb7A64521c64bCf);
         auctionInstance.cancelBid(bid2Id[0]);
 
         vm.prank(alice);
-        auctionInstance.unPauseContract();
+        auctionInstance.unpause();
 
         assertEq(auctionInstance.numberOfActiveBids(), 2);
 

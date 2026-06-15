@@ -322,7 +322,7 @@ contract RedemptionManagerHandler is StdUtils {
     /// @notice Pause/unpause exercises the whenNotPaused gate.
     function admin_pause_and_attempt_redeem(uint256 actorSeed) external {
         vm.prank(adminSigner);
-        try erm.pauseContract() {
+        try erm.pause() {
             callCounts["pause"]++;
         } catch (bytes memory err) {
             _recordRevert("pause", err);
@@ -339,7 +339,7 @@ contract RedemptionManagerHandler is StdUtils {
             }
         }
         vm.prank(adminSigner);
-        try erm.unPauseContract() {
+        try erm.unpause() {
             callCounts["unpause"]++;
         } catch {}
     }
@@ -372,8 +372,8 @@ contract RedemptionManagerHandler is StdUtils {
         if (cap > uint256(uint128(type(int128).max))) cap = uint256(uint128(type(int128).max));
         int128 delta = int128(int256(bound(uint256(deltaSeed), 0, cap)));
 
-        vm.prank(membershipManager);
-        try lp.rebase(delta) {
+        vm.prank(lp.etherFiAdminContract());
+        try lp.rebase(delta, 0) {
             callCounts["rebase"]++;
         } catch (bytes memory err) {
             _recordRevert("rebase", err);

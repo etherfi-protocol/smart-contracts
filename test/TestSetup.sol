@@ -3,12 +3,12 @@ pragma solidity ^0.8.13;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 import "@scripts/deploys/Deployed.s.sol";
-import "@etherfi/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
-import "@etherfi/eigenlayer-interfaces/IEigenPodManager.sol";
-import "@etherfi/eigenlayer-interfaces/IBeaconChainOracle.sol";
-import "@etherfi/eigenlayer-interfaces/IDelegationManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPodManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IBeaconChainOracle.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
 import "@tests/eigenlayer-mocks/BeaconChainOracleMock.sol";
-import "@etherfi/eigenlayer-interfaces/ITimelock.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/ITimelock.sol";
 import "@tests/mocks/MockEigenPodManager.sol";
 import "@tests/mocks/MockDelegationManager.sol";
 import "@tests/mocks/MockChainlinkPriceFeed.sol";
@@ -17,6 +17,7 @@ import "@tests/common/ArrayTestHelper.sol";
 import "@etherfi/staking/interfaces/IStakingManager.sol";
 import "@etherfi/staking/interfaces/IEtherFiNode.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/deposits/interfaces/IDepositAdapter.sol";
 import "@etherfi/deposits/interfaces/ILiquifier.sol";
 import "@etherfi/staking/EtherFiNodesManager.sol";
 import "@etherfi/staking/StakingManager.sol";
@@ -33,8 +34,8 @@ import "@etherfi/deposits/Liquifier.sol";
 import "@etherfi/restaking/EtherFiRestaker.sol";
 import "@etherfi/core/EETH.sol";
 import "@etherfi/core/WeETH.sol";
-import "@etherfi/membership/MembershipManager.sol";
-import "@etherfi/membership/MembershipNFT.sol";
+import "@etherfi/archive/membership/MembershipManager.sol";
+import "@etherfi/archive/membership/MembershipNFT.sol";
 import "@etherfi/archive/EarlyAdopterPool.sol";
 import "@etherfi/archive/TVLOracle.sol";
 import "@etherfi/utils/UUPSProxy.sol";
@@ -44,9 +45,10 @@ import "@tests/common/DepositDataGeneration.sol";
 import "@tests/common/DepositContract.sol";
 import "@tests/TestERC20.sol";
 
-import "@etherfi/archive/MembershipManagerV0.sol";
+import "@etherfi/archive/membership/MembershipManagerV0.sol";
 import "@etherfi/oracle/EtherFiOracle.sol";
 import "@etherfi/oracle/EtherFiAdmin.sol";
+import "@etherfi/oracle/interfaces/IEtherFiAdmin.sol";
 import "@etherfi/governance/EtherFiTimelock.sol";
 
 import "@etherfi/archive/BucketRateLimiter.sol";
@@ -533,7 +535,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             existingBeacon,
             address(roleRegistryInstance)
         ));
-        vm.prank(stakingManagerInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         stakingManagerInstance.upgradeTo(newSmImpl);
 
         // Upgrade EtherFiRedemptionManager on the fork for the same reason — the
@@ -565,18 +567,23 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         // Upgrade DepositAdapter on the fork so tests exercise the post-refactor
         // custom-error reverts instead of the still-deployed string-revert impl.
+        // Preserve the live token immutables (wETH/stETH/wstETH) by reading them
+        // off the deployed proxy — these are needed by the deposit paths, and the
+        // values differ per fork (mainnet vs testnet).
         address newDepositAdapterImpl = address(new DepositAdapter(
-            address(liquidityPoolInstance),
-            address(liquifierInstance),
-            address(weEthInstance),
-            address(eETHInstance),
-            0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2,
-            address(stEth),
-            0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0,
-            address(roleRegistryInstance),
-            address(blacklisterInstance)
+            IDepositAdapter.ConstructorAddresses({
+                liquidityPool: address(liquidityPoolInstance),
+                liquifier: address(liquifierInstance),
+                weETH: address(weEthInstance),
+                eETH: address(eETHInstance),
+                wETH: address(depositAdapterInstance.wETH()),
+                stETH: address(depositAdapterInstance.stETH()),
+                wstETH: address(depositAdapterInstance.wstETH()),
+                blacklister: address(blacklisterInstance),
+                roleRegistry: address(roleRegistryInstance)
+            })
         ));
-        vm.prank(depositAdapterInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         depositAdapterInstance.upgradeTo(newDepositAdapterImpl);
 
         // Upgrade LiquidityPool — deployed impl uses `onlyProtocolUpgrader`,
@@ -585,7 +592,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // afterwards the new impl's `onlyUpgradeTimelock` takes over (and we
         // grant the role to relevant addresses below).
         address newLpImpl = address(new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: address(stakingManagerInstance),
                 nodesManager: address(managerInstance),
                 eETH: address(eETHInstance),
@@ -597,10 +604,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: address(etherFiAdminInstance),
                 membershipManager: address(membershipManagerV1Instance)
-            }),
-            0
+            })
         ));
-        vm.prank(liquidityPoolInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         liquidityPoolInstance.upgradeTo(newLpImpl);
 
         // Upgrade WithdrawRequestNFT — legacy `_authorizeUpgrade` is `onlyOwner`,
@@ -610,14 +616,11 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             deployed.WITHDRAW_REQUEST_NFT_BUYBACK_SAFE(),
             address(eETHInstance),
             address(liquidityPoolInstance),
-            address(membershipManagerV1Instance),
             address(roleRegistryInstance),
             address(blacklisterInstance),
-            address(etherFiAdminInstance),
-            1,
-            4e18
+            address(etherFiAdminInstance)
         ));
-        vm.prank(withdrawRequestNFTInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         withdrawRequestNFTInstance.upgradeTo(newWrnImpl);
 
         // Upgrade EtherFiNodesManager — deployed impl uses `onlyProtocolUpgrader`.
@@ -626,7 +629,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(roleRegistryInstance),
             address(rateLimiterInstance)
         ));
-        vm.prank(managerInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         managerInstance.upgradeTo(newManagerImpl);
 
         // Upgrade EtherFiAdmin — deployed impl uses `onlyProtocolUpgrader`. Tests
@@ -634,13 +637,12 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // route through the new impl's `onlyUpgradeTimelock`, which we grant
         // below.
         address newAdminImpl = address(new EtherFiAdmin(
-            EtherFiAdmin.ConstructorAddresses({
+            IEtherFiAdmin.ConstructorAddresses({
                 etherFiOracle: address(etherFiOracleInstance),
                 stakingManager: address(stakingManagerInstance),
                 auctionManager: address(auctionInstance),
                 etherFiNodesManager: address(managerInstance),
                 liquidityPool: address(liquidityPoolInstance),
-                membershipManager: address(membershipManagerV1Instance),
                 withdrawRequestNft: address(withdrawRequestNFTInstance),
                 roleRegistry: address(roleRegistryInstance),
                 priorityWithdrawalQueue: address(priorityQueueInstance)
@@ -662,7 +664,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(blacklisterInstance),
             address(rateLimiterInstance)
         ));
-        vm.prank(weEthInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         weEthInstance.upgradeTo(newWeETHImpl);
 
         // Upgrade Liquifier — legacy `_authorizeUpgrade` is `onlyOwner`, but we
@@ -673,7 +675,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             stEthChainlinkFeed = address(new MockChainlinkPriceFeed(int256(1 ether), 0));
         }
         address newLiquifierImpl = address(new Liquifier(
-            Liquifier.ConstructorAddresses({
+            ILiquifier.ConstructorAddresses({
                 liquidityPool: address(liquidityPoolInstance),
                 lidoWithdrawalQueue: address(lidoWithdrawalQueue),
                 lido: address(stEth),
@@ -688,7 +690,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             LIQUIFIER_STALE_WINDOW,
             LIQUIFIER_MAX_PRICE_DEVIATION_BPS
         ));
-        vm.prank(liquifierInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         liquifierInstance.upgradeTo(newLiquifierImpl);
 
         // Now that every live proxy that authorizes upgrades through the legacy
@@ -716,16 +718,16 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // UPGRADE_TIMELOCK_ROLE. Grant it to every proxy owner address that
         // realistic-fork tests prank as for an upgradeTo call.
         roleRegistryInstance.grantRole(_upgradeTimelockRole, _roleRegOwner);
-        roleRegistryInstance.grantRole(_upgradeTimelockRole, stakingManagerInstance.owner());
-        roleRegistryInstance.grantRole(_upgradeTimelockRole, depositAdapterInstance.owner());
-        roleRegistryInstance.grantRole(_upgradeTimelockRole, liquidityPoolInstance.owner());
-        roleRegistryInstance.grantRole(_upgradeTimelockRole, withdrawRequestNFTInstance.owner());
-        roleRegistryInstance.grantRole(_upgradeTimelockRole, managerInstance.owner());
-        roleRegistryInstance.grantRole(_upgradeTimelockRole, etherFiAdminInstance.owner());
-        roleRegistryInstance.grantRole(_upgradeTimelockRole, etherFiOracleInstance.owner());
-        roleRegistryInstance.grantRole(_upgradeTimelockRole, liquifierInstance.owner());
-        roleRegistryInstance.grantRole(_upgradeTimelockRole, nodeOperatorManagerInstance.owner());
-        roleRegistryInstance.grantRole(_upgradeTimelockRole, etherFiRestakerInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(_upgradeTimelockRole, roleRegistryInstance.owner());
         roleRegistryInstance.grantRole(_upgradeTimelockRole, owner);
 
         // Operational roles for test setUps. Pre-consolidation, these
@@ -753,6 +755,12 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.startPrank(_roleRegOwner);
         liquidityPoolInstance.setMaxWithdrawAmount(1000 ether);
         liquidityPoolInstance.setMinWithdrawAmount(0.001 ether);
+        vm.stopPrank();
+
+        // PR #385: disable the new per-rebase caps for generic fork tests (some rebase a
+        // few % of TVL, above the 25bps default). Dedicated tests set explicit values.
+        vm.startPrank(admin);
+        etherFiAdminInstance.setMaxNegativeRebaseBps(10_000);
         vm.stopPrank();
 
         // Run the one-shot escrow migration so `requestWithdraw` / `withdraw`
@@ -792,12 +800,12 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         // Upgrade Liquifier BEFORE swapping RoleRegistry: the live Liquifier impl
         // still authorizes upgrades through `onlyProtocolUpgrader`, which the new
-        // RoleRegistry impl no longer exposes. `liquifierInstance.owner()` matches
+        // RoleRegistry impl no longer exposes. `roleRegistryInstance.owner()` matches
         // RoleRegistry.owner() on mainnet, so the OLD impl's owner check passes.
         if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
             // Deploy the new impl BEFORE pranking — see note above; the inlined
             // `new` would otherwise consume the single-shot vm.prank.
-            address newLiquifierImpl = address(new Liquifier(Liquifier.ConstructorAddresses({
+            address newLiquifierImpl = address(new Liquifier(ILiquifier.ConstructorAddresses({
                 liquidityPool: address(liquidityPoolInstance),
                 lidoWithdrawalQueue: address(lidoWithdrawalQueue),
                 lido: address(stEth),
@@ -808,7 +816,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 etherfiRestaker: address(etherFiRestakerInstance),
                 l1SyncPool: address(0xA6)
             }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS));
-            vm.prank(liquifierInstance.owner());
+            vm.prank(roleRegistryInstance.owner());
             liquifierInstance.upgradeTo(newLiquifierImpl);
         }
 
@@ -997,7 +1005,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // =====================================================================
 
         // Liquifier first — EtherFiRestaker's constructor reads from it.
-        liquifierImplementation = new Liquifier(Liquifier.ConstructorAddresses({
+        liquifierImplementation = new Liquifier(ILiquifier.ConstructorAddresses({
             liquidityPool: address(liquidityPoolProxy),
             lidoWithdrawalQueue: address(lidoWithdrawalQueue),
             lido: address(stEth),
@@ -1107,7 +1115,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         addressProviderInstance = new AddressProvider(address(owner));
 
         liquidityPoolImplementation = new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: address(0x0),
                 nodesManager: address(0x0),
                 eETH: address(0x0),
@@ -1119,8 +1127,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 blacklister: address(0x0),
                 etherFiAdminContract: address(0x0),
                 membershipManager: address(0x0)
-            }),
-            0
+            })
         );
 
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), admin);
@@ -1143,7 +1150,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // Re-deploy the impl now that etherFiRestakerProxy is known and upgrade the
         // already-initialized proxy in place. Creating a fresh proxy here would drop
         // the initialized owner set in Phase 3 and break later upgradeTo calls.
-        liquifierImplementation = new Liquifier(Liquifier.ConstructorAddresses({
+        liquifierImplementation = new Liquifier(ILiquifier.ConstructorAddresses({
             liquidityPool: address(liquidityPoolProxy),
             lidoWithdrawalQueue: address(lidoWithdrawalQueue),
             lido: address(stEth),
@@ -1170,9 +1177,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.expectRevert("Initializable: contract is already initialized");
         weEthImplementation.initialize(payable(address(liquidityPoolProxy)), address(eETHProxy));
         weEthInstance.upgradeTo(address(weEthImplementation));
-        vm.expectRevert(WeETH.AddressZero.selector);
+        vm.expectRevert(WeETH.ZeroAddress.selector);
         weEthInstance.initialize(address(0), address(eETHProxy));
-        vm.expectRevert(WeETH.AddressZero.selector);
+        vm.expectRevert(WeETH.ZeroAddress.selector);
         weEthInstance.initialize(payable(address(liquidityPoolProxy)), address(0));
         weEthInstance.initialize(payable(address(liquidityPoolProxy)), address(eETHProxy));
 
@@ -1205,11 +1212,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(treasuryInstance),
             address(eETHProxy),
             address(liquidityPoolProxy),
-            address(membershipManagerProxy),
             address(roleRegistryInstance),
             address(blacklisterInstance),
-            address(etherFiAdminProxy),
-            1, 4e18
+            address(etherFiAdminProxy)
         );
         withdrawRequestNFTInstance.upgradeTo(address(withdrawRequestNFTImplementation));
 
@@ -1234,13 +1239,12 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         // EtherFiAdmin
         etherFiAdminImplementation = new EtherFiAdmin(
-            EtherFiAdmin.ConstructorAddresses({
+            IEtherFiAdmin.ConstructorAddresses({
                 etherFiOracle: address(etherFiOracleProxy),
                 stakingManager: address(stakingManagerProxy),
                 auctionManager: address(auctionManagerProxy),
                 etherFiNodesManager: address(etherFiNodeManagerProxy),
                 liquidityPool: address(liquidityPoolProxy),
-                membershipManager: address(membershipManagerProxy),
                 withdrawRequestNft: address(withdrawRequestNFTProxy),
                 roleRegistry: address(roleRegistryInstance),
                 priorityWithdrawalQueue: address(priorityQueueProxy)
@@ -1292,7 +1296,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         // LiquidityPool — every dep is now a known proxy address
         liquidityPoolImplementation = new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: address(stakingManagerProxy),
                 nodesManager: address(etherFiNodeManagerProxy),
                 eETH: address(eETHProxy),
@@ -1304,8 +1308,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: address(etherFiAdminProxy),
                 membershipManager: address(membershipManagerProxy)
-            }),
-            0
+            })
         );
         liquidityPoolInstance.upgradeTo(address(liquidityPoolImplementation));
 
@@ -1339,18 +1342,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // guard requires. We're inside an active `vm.startPrank(owner)` block here and
         // `owner` was granted UPGRADE_TIMELOCK_ROLE in Phase 1, so no extra prank needed.
         withdrawRequestNFTInstance.initializeShareRateFreezeUpgrade();
-        // initializeOnUpgrade now reverts (checks immutable roleRegistry == 0). Set the
-        // share-remainder split + paused state it used to bootstrap directly.
-        withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(1000);
-        {
-            // Slot 306 packs (nextRequestId, lastFinalizedRequestId, shareRemainderSplit,
-            // _unused_gap, currentRequestIdToScanFromForShareRemainder, lastRequestIdToScanUntilForShareRemainder).
-            // currentRequestIdToScanFromForShareRemainder sits at bytes 12-15 (bits 96-127).
-            bytes32 slot306 = vm.load(address(withdrawRequestNFTInstance), bytes32(uint256(306)));
-            uint256 mask = ~(uint256(0xffffffff) << 96);
-            bytes32 updated = bytes32((uint256(slot306) & mask) | (uint256(1) << 96));
-            vm.store(address(withdrawRequestNFTInstance), bytes32(uint256(306)), updated);
-        }
 
         membershipManagerInstance.initialize(
             address(eETHInstance),
@@ -1439,9 +1430,14 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         liquidityPoolInstance.setValidatorSizeWei(32 ether);
         liquidityPoolInstance.setMaxWithdrawAmount(1000 ether);
         liquidityPoolInstance.setMinWithdrawAmount(0.001 ether);
+        // PR #385: the new per-rebase caps (positive in LP, negative in EtherFiAdmin)
+        // would reject the large artificial rebases many generic tests perform on a small
+        // fresh-deploy TVL. Disable them here (100% = effectively no bound); dedicated
+        // tests set explicit values to exercise enforcement.
+        etherFiAdminInstance.setMaxNegativeRebaseBps(10_000);
         // Pause WithdrawRequestNFT so existing tests that unPauseContract in their
         // own setUp continue to find it paused (initializeOnUpgrade used to set this).
-        withdrawRequestNFTInstance.pauseContract();
+        withdrawRequestNFTInstance.pause();
         vm.stopPrank();
 
         vm.startPrank(owner);
@@ -1467,9 +1463,13 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), alice);
         vm.stopPrank();
 
-        vm.startPrank(alice);
-        liquidityPoolInstance.unPauseContract();
-        vm.stopPrank();
+        // LiquidityPool no longer starts paused at deploy (pause state moved to the namespaced
+        // Pausable storage), so only unpause if it is actually paused.
+        if (liquidityPoolInstance.paused()) {
+            vm.startPrank(alice);
+            liquidityPoolInstance.unpause();
+            vm.stopPrank();
+        }
 
         vm.startPrank(owner);
         _approveNodeOperators();
@@ -1534,36 +1534,34 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
     function _upgrade_etherfiAdmin() internal {
         address newAdminImpl = address(new EtherFiAdmin(
-            EtherFiAdmin.ConstructorAddresses({
+            IEtherFiAdmin.ConstructorAddresses({
                 etherFiOracle: address(etherFiOracleInstance),
                 stakingManager: address(stakingManagerInstance),
                 auctionManager: address(auctionInstance),
                 etherFiNodesManager: address(managerInstance),
                 liquidityPool: address(liquidityPoolInstance),
-                membershipManager: address(membershipManagerInstance),
                 withdrawRequestNft: address(withdrawRequestNFTInstance),
                 roleRegistry: address(roleRegistryInstance),
                 priorityWithdrawalQueue: address(priorityQueueInstance)
             }),
             10_000, 1_000, 7200
         , 100_000 ether, 500, 1000));
-        vm.prank(etherFiAdminInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         etherFiAdminInstance.upgradeTo(newAdminImpl);
     }
 
     function _upgradeOracleAndAdminForFork() internal {
         address newOracleImpl = address(new EtherFiOracle(1, address(etherFiAdminInstance), address(roleRegistryInstance)));
-        vm.prank(etherFiOracleInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         etherFiOracleInstance.upgradeTo(newOracleImpl);
 
         address newAdminImpl = address(new EtherFiAdmin(
-            EtherFiAdmin.ConstructorAddresses({
+            IEtherFiAdmin.ConstructorAddresses({
                 etherFiOracle: address(etherFiOracleInstance),
                 stakingManager: address(stakingManagerInstance),
                 auctionManager: address(auctionInstance),
                 etherFiNodesManager: address(managerInstance),
                 liquidityPool: address(liquidityPoolInstance),
-                membershipManager: address(membershipManagerInstance),
                 withdrawRequestNft: address(withdrawRequestNFTInstance),
                 roleRegistry: address(roleRegistryInstance),
                 priorityWithdrawalQueue: address(priorityQueueInstance)
@@ -1739,7 +1737,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(eETHInstance),
             address(liquidityPoolInstance),
             address(membershipNftInstance),
-            address(etherFiAdminInstance),
             address(roleRegistryInstance),
             address(blacklisterInstance)
         );
@@ -1867,6 +1864,33 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         vm.prank(alice);
         etherFiAdminInstance.executeTasks(_report);
+    }
+
+    /// @notice Applies a rebase that may exceed the per-report 25 bps positive cap
+    ///         (LiquidityPool.MAX_POSITIVE_REBASE_BPS) by splitting a positive rebase
+    ///         into sub-cap chunks. `rebase` is purely additive (totalValueOutOfLp += amount),
+    ///         so applying the chunks back-to-back leaves the final TVL and share rate
+    ///         identical to a single rebase of `_amount` — every post-rebase assertion holds.
+    ///         Negative/zero rebases are applied in a single call (no positive cap applies).
+    /// @dev Pranks the LP's registered etherFiAdmin contract, so it works in both the unit
+    ///      setup and mainnet-fork setups regardless of which instance is wired in.
+    function _rebaseUncapped(int128 _amount) internal {
+        address admin = liquidityPoolInstance.etherFiAdminContract();
+        if (_amount <= 0) {
+            vm.prank(admin);
+            liquidityPoolInstance.rebase(_amount, 0);
+            return;
+        }
+        uint256 remaining = uint256(uint128(_amount));
+        while (remaining > 0) {
+            uint256 maxIncrease = (liquidityPoolInstance.getTotalPooledEther()
+                * liquidityPoolInstance.MAX_POSITIVE_REBASE_BPS()) / 10_000;
+            require(maxIncrease > 0, "_rebaseUncapped: TVL too small for a positive rebase");
+            uint256 chunk = remaining < maxIncrease ? remaining : maxIncrease;
+            vm.prank(admin);
+            liquidityPoolInstance.rebase(int128(uint128(chunk)), 0);
+            remaining -= chunk;
+        }
     }
 
     function _emptyOracleReport() internal view returns (IEtherFiOracle.OracleReport memory report) {
@@ -2234,13 +2258,13 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         EtherFiNode etherFiNode = new EtherFiNode(liquidityPool, etherFiNodesManager, eigenPodManager, delegationManager);
         address newImpl = address(etherFiNode);
-        vm.prank(stakingManagerInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         stakingManagerInstance.upgradeEtherFiNode(newImpl);
     }
 
     function _upgrade_etherfi_nodes_manager_contract() internal {
         address newImpl = address(new EtherFiNodesManager(address(stakingManagerInstance), address(roleRegistryInstance), address(rateLimiterInstance)));
-        vm.prank(managerInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         managerInstance.upgradeTo(newImpl);
     }
 
@@ -2248,13 +2272,13 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // TODO(dave): fix
         //address newImpl = address(new StakingManager());
         address newImpl = address(0x0);
-        vm.prank(stakingManagerInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         stakingManagerInstance.upgradeTo(newImpl);
     }
 
     function _upgrade_liquidity_pool_contract() internal {
         address newImpl = address(new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: address(stakingManagerInstance),
                 nodesManager: address(managerInstance),
                 eETH: address(eETHInstance),
@@ -2266,16 +2290,15 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: address(etherFiAdminInstance),
                 membershipManager: address(membershipManagerInstance)
-            }),
-            0
+            })
         ));
-        vm.startPrank(liquidityPoolInstance.owner());
+        vm.startPrank(roleRegistryInstance.owner());
         liquidityPoolInstance.upgradeTo(newImpl);
         vm.stopPrank();
     }
 
     function _upgrade_liquifier() internal {
-        address newImpl = address(new Liquifier(Liquifier.ConstructorAddresses({
+        address newImpl = address(new Liquifier(ILiquifier.ConstructorAddresses({
             liquidityPool: address(liquidityPoolInstance),
             lidoWithdrawalQueue: address(lidoWithdrawalQueue),
             lido: address(stEth),
@@ -2286,7 +2309,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             etherfiRestaker: address(0xA5),
             l1SyncPool: address(0xA6)
         }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS));
-        vm.prank(liquifierInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         liquifierInstance.upgradeTo(newImpl);
     }
 

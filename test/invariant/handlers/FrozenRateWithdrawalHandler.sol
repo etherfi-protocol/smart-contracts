@@ -47,11 +47,6 @@ import "@etherfi/withdrawals/interfaces/IPriorityWithdrawalQueue.sol";
 ///         `amountForShare(shares) + TOLERANCE >= amountWithFee` check is
 ///         exercised at the edge.
 ///
-///         (F-023) Housekeeping-side `wrn_handleRemainder` + `pq_handleRemainder`
-///         ops. Without these, stranded eETH only accumulates and the
-///         lock-covers-unclaimed invariant has slack the production system
-///         doesn't.
-///
 ///         (F-026) `pq_invalidate` (oracle ops) + `wrn_invalidate` (guardian)
 ///         + `wrn_validate` (admin) ops. State-machine bookkeeping for
 ///         invalidated-but-finalized requests is now exercised.
@@ -105,9 +100,6 @@ contract FrozenRateWithdrawalHandler is StdUtils {
     ///         the bounds check above is meaningful even when the rate is at
     ///         the edge.
     mapping(uint256 => bool) public ghost_wrnFrozenRateAtFinalizeRecorded;
-
-    /// @notice Set if any finalize-snapshotted rate fell outside [min, max].
-    bool public ghost_frozenRateOutOfBounds;
 
     /// @notice Set on any observed claim where `burnedShares > shareOfEEth`.
     bool public ghost_wrnBurnExceededShares;
@@ -217,14 +209,10 @@ contract FrozenRateWithdrawalHandler is StdUtils {
 
         vm.prank(etherFiAdminContract);
         try wrn.finalizeRequests(uint256(target)) {
-            // (F-003) Write-once snapshot of the frozen rate per id.
-            uint256 lo = wrn.minAcceptableShareRate();
-            uint256 hi = wrn.maxAcceptableShareRate();
             for (uint32 id = last + 1; id <= target; id++) {
                 uint256 t = uint256(id);
                 if (!ghost_wrnFrozenRateAtFinalizeRecorded[t]) {
                     uint256 frozen = uint256(wrn.frozenRateFor(t));
-                    if (frozen < lo || frozen > hi) ghost_frozenRateOutOfBounds = true;
                     ghost_wrnFrozenRateAtFinalize[t] = frozen;
                     ghost_wrnFrozenRateAtFinalizeRecorded[t] = true;
                 }
@@ -324,21 +312,6 @@ contract FrozenRateWithdrawalHandler is StdUtils {
             callCounts["wrn_validate"]++;
         } catch {
             callCounts["wrn_validate_revert"]++;
-        }
-    }
-
-    /// (F-023) WRN handleRemainder. Sweeps stranded eETH to treasury +
-    /// burns the remainder. Pranked as housekeeping role.
-    function wrn_handleRemainder() external {
-        uint256 remainderShares = wrn.totalRemainderEEthShares();
-        if (remainderShares == 0) { callCounts["wrn_remainder_skipped"]++; return; }
-        uint256 remainderAmount = wrn.getEEthRemainderAmount();
-        if (remainderAmount == 0) { callCounts["wrn_remainder_skipped"]++; return; }
-        vm.prank(housekeepingActor);
-        try wrn.handleRemainder(remainderAmount) {
-            callCounts["wrn_remainder"]++;
-        } catch {
-            callCounts["wrn_remainder_revert"]++;
         }
     }
 
@@ -546,17 +519,6 @@ contract FrozenRateWithdrawalHandler is StdUtils {
         }
     }
 
-    /// (F-023) PQ handleRemainder.
-    function pq_handleRemainder() external {
-        uint96 rs = pq.totalRemainderShares();
-        if (rs == 0) { callCounts["pq_remainder_skipped"]++; return; }
-        uint256 amt = pq.getRemainderAmount();
-        if (amt == 0) { callCounts["pq_remainder_skipped"]++; return; }
-        vm.prank(housekeepingActor);
-        try pq.handleRemainder(amt) { callCounts["pq_remainder"]++; }
-        catch { callCounts["pq_remainder_revert"]++; }
-    }
-
     // =====================================================================
     // Shared
     // =====================================================================
@@ -577,8 +539,8 @@ contract FrozenRateWithdrawalHandler is StdUtils {
             maxD = int256(cap);
         }
         delta = int128(bound(int256(delta), minD, maxD));
-        vm.prank(membershipManager);
-        try lp.rebase(delta) {
+        vm.prank(etherFiAdminContract);
+        try lp.rebase(delta, 0) {
             callCounts[delta < 0 ? bytes32("rebase_negative") : bytes32("rebase_positive")]++;
         } catch { callCounts["rebase_revert"]++; }
     }
@@ -595,8 +557,8 @@ contract FrozenRateWithdrawalHandler is StdUtils {
             maxD = int256(cap);
         }
         delta = int128(bound(int256(delta), minD, maxD));
-        vm.prank(membershipManager);
-        try lp.rebase(delta) { callCounts["rebaseExtreme"]++; }
+        vm.prank(etherFiAdminContract);
+        try lp.rebase(delta, 0) { callCounts["rebaseExtreme"]++; }
         catch { callCounts["rebaseExtreme_revert"]++; }
     }
 
@@ -620,34 +582,6 @@ contract FrozenRateWithdrawalHandler is StdUtils {
                 return;
             }
         }
-    }
-
-    /// (F-005) Walk every checkpoint in WRN's finalization trace and
-    /// verify each rate is in bounds. The constructor's bounds check at
-    /// finalize is necessary but covers only the read-after-success; a
-    /// finalize that pushed an OOB value AND reverted would not surface
-    /// via the per-call read.
-    /// `Checkpoints.Trace224` exposes no direct iterator over the (key,
-    /// value) pairs, so we sample the trace via `lowerLookup(tokenId)`
-    /// for every tokenId the handler has tracked. Each tracked tokenId
-    /// belongs to exactly one finalize batch and every finalize batch
-    /// covers at least one tracked tokenId, so the per-tokenId loop is
-    /// equivalent to walking the trace.
-    function verifyAllFinalizationCheckpointsInBounds() external view returns (bool ok, uint256 firstOOB) {
-        uint256 lo = wrn.minAcceptableShareRate();
-        uint256 hi = wrn.maxAcceptableShareRate();
-        for (uint256 i = 0; i < wrnTokenIds.length; i++) {
-            uint256 t = wrnTokenIds[i];
-            if (!ghost_wrnFrozenRateAtFinalizeRecorded[t]) continue;
-            uint256 r = uint256(wrn.frozenRateFor(t));
-            // Legacy sentinel (= 0) is allowed for pre-upgrade IDs; we
-            // never push the sentinel in test setUp, so any 0 here is a
-            // real OOB.
-            if (r == 0 || r < lo || r > hi) {
-                return (false, t);
-            }
-        }
-        return (true, 0);
     }
 
     function pqSumFinalizedAmount() external view returns (uint256 acc) {

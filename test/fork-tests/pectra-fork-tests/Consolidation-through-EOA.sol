@@ -11,7 +11,7 @@ import "@etherfi/governance/RoleRegistry.sol";
 import "@etherfi/governance/interfaces/IRoleRegistry.sol";
 import "@etherfi/staking/interfaces/IStakingManager.sol";
 import "@etherfi/governance/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
-import {IEigenPod, IEigenPodTypes } from "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
+import {IEigenPod, IEigenPodTypes } from "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 import {EigenPodTestHelpers} from "@tests/utils/EigenPodTestHelpers.sol";
 
 /**

@@ -10,7 +10,7 @@ import "@scripts/utils/StringHelpers.sol";
 import "@scripts/utils/ValidatorHelpers.sol";
 import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
 import "@etherfi/staking/interfaces/IEtherFiNode.sol";
-import "@etherfi/eigenlayer-interfaces/IEigenPod.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 import "@scripts/operations/consolidations/GnosisConsolidationLib.sol";
 
 /**
