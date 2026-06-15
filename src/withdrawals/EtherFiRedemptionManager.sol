@@ -73,6 +73,7 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
     //---------------------------------  EVENTS  -------------------------------------------
     //--------------------------------------------------------------------------------------
     event Redeemed(address indexed receiver, uint256 redemptionAmount, uint256 feeAmountToTreasury, uint256 feeAmountToStakers, address token);
+    event DustSwept(address indexed token, address indexed to, uint256 amount);
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  ERRORS  -------------------------------------------
@@ -91,6 +92,7 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
     error ExceededRedeemable();
     error RateLimitExceeded();
     error AmountTooLarge();
+    error InvalidRecipient();
 
     receive() external payable {}
 
@@ -257,6 +259,22 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
     function setExitFeeSplitToTreasuryInBps(uint16 _exitFeeSplitToTreasuryInBps, address token) external onlyAdmin {
         if (_exitFeeSplitToTreasuryInBps > maxExitFeeSplitToTreasuryInBps) revert ExceedsMaxExitFeeSplit();
         tokenToRedemptionInfo[token].exitFeeSplitToTreasuryInBps = _exitFeeSplitToTreasuryInBps;
+    }
+
+    /**
+     * @notice Sweep dust accumulated in the adapter to a recipient.
+     * @param _token Address of the ERC20 to sweep
+     * @param _to Recipient of the swept tokens
+     * @dev Each redemption strands 1-2 wei of eETH due to floor-rounding in both
+     *      amountForShare (shares -> ETH) and wrap (ETH -> shares). This function
+     *      lets operations recover the residual balance of any ERC20 left here.
+     */
+    function sweepDust(address _token, address _to) external onlyOperatingMultisig {
+        if (_to == address(0)) revert InvalidRecipient();
+        uint256 balance = IERC20(_token).balanceOf(address(this));
+        if (balance == 0) revert InsufficientBalance();
+        IERC20(_token).safeTransfer(_to, balance);
+        emit DustSwept(_token, _to, balance);
     }
 
     //--------------------------------------------------------------------------------------

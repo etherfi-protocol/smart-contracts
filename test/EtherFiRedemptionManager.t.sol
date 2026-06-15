@@ -1952,4 +1952,76 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         vm.prank(user);
         etherFiRedemptionManagerInstance.redeemEEth(1 ether, user, ETH_ADDRESS);
     }
+
+    // -----------------------------------------------------------------
+    //  sweepDust — recover residual ERC20 balances (onlyOperatingMultisig)
+    //
+    //  Non-fork: sweepDust is token-agnostic (any IERC20), so a mock token
+    //  minted directly into the contract exercises every path without a fork.
+    // -----------------------------------------------------------------
+
+    /// @dev local mirror of EtherFiRedemptionManager.DustSwept for expectEmit.
+    event DustSwept(address indexed token, address indexed to, uint256 amount);
+
+    function _grantOperatingMultisig(address who) internal {
+        // Cache view-call results before the prank — each external call (even a view)
+        // consumes a single vm.prank, so inlining them would spend it before grantRole.
+        address rrOwner = roleRegistryInstance.owner();
+        bytes32 role = roleRegistryInstance.OPERATION_MULTISIG_ROLE();
+        vm.prank(rrOwner);
+        roleRegistryInstance.grantRole(role, who);
+    }
+
+    function test_sweepDust_succeeds() public {
+        address sweeper = makeAddr("dustSweeper");
+        address recipient = makeAddr("dustRecipient");
+        _grantOperatingMultisig(sweeper);
+
+        TestERC20 dust = new TestERC20("Dust", "DUST");
+        dust.mint(address(etherFiRedemptionManagerInstance), 1234);
+
+        vm.expectEmit(true, true, false, true);
+        emit DustSwept(address(dust), recipient, 1234);
+
+        vm.prank(sweeper);
+        etherFiRedemptionManagerInstance.sweepDust(address(dust), recipient);
+
+        assertEq(dust.balanceOf(recipient), 1234, "recipient receives full residual balance");
+        assertEq(dust.balanceOf(address(etherFiRedemptionManagerInstance)), 0, "contract balance fully swept");
+    }
+
+    function test_sweepDust_revertsForNonOperatingMultisig() public {
+        TestERC20 dust = new TestERC20("Dust", "DUST");
+        dust.mint(address(etherFiRedemptionManagerInstance), 1 ether);
+
+        // chad holds no roles.
+        vm.prank(chad);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        etherFiRedemptionManagerInstance.sweepDust(address(dust), chad);
+    }
+
+    function test_sweepDust_revertsOnZeroRecipient() public {
+        address sweeper = makeAddr("dustSweeper");
+        _grantOperatingMultisig(sweeper);
+
+        TestERC20 dust = new TestERC20("Dust", "DUST");
+        dust.mint(address(etherFiRedemptionManagerInstance), 1 ether);
+
+        vm.prank(sweeper);
+        vm.expectRevert(EtherFiRedemptionManager.InvalidRecipient.selector);
+        etherFiRedemptionManagerInstance.sweepDust(address(dust), address(0));
+    }
+
+    function test_sweepDust_revertsOnZeroBalance() public {
+        address sweeper = makeAddr("dustSweeper");
+        address recipient = makeAddr("dustRecipient");
+        _grantOperatingMultisig(sweeper);
+
+        // Token with no balance held by the contract.
+        TestERC20 dust = new TestERC20("Dust", "DUST");
+
+        vm.prank(sweeper);
+        vm.expectRevert(EtherFiRedemptionManager.InsufficientBalance.selector);
+        etherFiRedemptionManagerInstance.sweepDust(address(dust), recipient);
+    }
 }
