@@ -131,8 +131,10 @@ abstract contract SecurityUpgradesConstants is Deployed {
     address internal constant HOLDER_OPERATION_TIMELOCK_ROLE = 0xcD425f44758a08BaAB3C4908f3e3dE5776e45d7a; // OPERATING_TIMELOCK
     address internal constant HOLDER_OPERATION_MULTISIG_ROLE = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC; // ETHERFI_OPERATING_ADMIN
 
-    address internal constant HOLDER_SUPER_GUARDIAN_ROLE          = address(0);
-    address internal constant HOLDER_GUARDIAN_ROLE                = address(0);
+    address internal constant HOLDER_EXEC_GUARDIAN_SAFE           = 0x427989Bb12f4A390D11e7647d467DeA02b9d2eE3; // EXEC_1_OF_N-GUARDIAN_SAFE
+    address internal constant HOLDER_SUPER_GUARDIAN_ROLE          = 0x9E26e096C1643ba9133e5562B4E1897031Ad3F66; // SUPER_GUARDIAN_HYPERNATIVE_KEY
+    address internal constant HOLDER_GUARDIAN_ROLE                = 0x9AF1298993DC1f397973C62A5D47a284CF76844D; // GUARDIAN_HYPERNATIVE_KEY
+
     address internal constant HOLDER_ORACLE_OPERATIONS_ROLE       = address(0);
     address internal constant HOLDER_HOUSEKEEPING_OPERATIONS_ROLE = address(0);
     address internal constant HOLDER_EXECUTOR_OPERATIONS_ROLE     = address(0);

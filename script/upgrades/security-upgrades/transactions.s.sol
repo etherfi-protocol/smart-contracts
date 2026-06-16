@@ -998,7 +998,9 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
     // STEP 3: executeUpgrade — the single UPGRADE_TIMELOCK batch (10d)
     //
     // ONE atomic batch, executed by the UPGRADE_TIMELOCK, in this exact order:
-    //   1. grant the 9 RolesLibrary roles      (grantRole is owner-gated; owner == UPGRADE_TIMELOCK)
+    //   1. grant the 9 RolesLibrary roles + 6 extra (operating multisig gets all RevokeAdmin
+    //      roles) + 2 (exec guardian safe gets GUARDIAN + SUPER_GUARDIAN) = 17 grants
+    //      (grantRole is owner-gated; owner == UPGRADE_TIMELOCK)
     //   2. upgrade every proxy + the EtherFiNode beacon (gated by OLD RR.onlyProtocolUpgrader = owner check)
     //   3. swap RoleRegistry impl                       (gated by OLD RR._authorizeUpgrade = onlyOwner)
     //   4. run the two onlyUpgradeTimelock one-shot initializers (gated by NEW RR.onlyUpgradeTimelock)
@@ -1016,8 +1018,9 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
 
         uint256 revokeCount = _countLegacyRoleHolders();
 
-        // 9 grants + (21 proxy upgrades + 1 beacon + 1 RR swap + 2 initializers + 2 Liquifier
-        // token unwhitelists, <=50 headroom) + N legacy revokes.
+        // 17 grants (9 HOLDER_* + 6 operating-multisig RevokeAdmin roles + 2 exec guardian safe)
+        // + (21 proxy upgrades + 1 beacon + 1 RR swap + 2 initializers + 2 Liquifier token
+        // unwhitelists) = 44, <=50 headroom + N legacy revokes.
         address[] memory targets = new address[](50 + revokeCount);
         bytes[]   memory data    = new bytes[](50 + revokeCount);
         uint256[] memory values  = new uint256[](50 + revokeCount);
@@ -1511,7 +1514,10 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
     //--------------------------------------------------------------------------------------
     // _appendGrantCalls — part 1 of the upgrade-timelock batch (see executeUpgrade)
     //
-    // Appends the 9 RolesLibrary role grants. grantRole is owner-gated (Solady
+    // Appends the 9 RolesLibrary role grants (one HOLDER_* each), PLUS 6 extra grants that
+    // give the operating multisig every RevokeAdmin-governed role, PLUS 2 that give the
+    // executor guardian safe both guardian-tier roles — 17 grantRole calls total.
+    // grantRole is owner-gated (Solady
     // setRole -> contract owner) and the RoleRegistry owner IS the UPGRADE_TIMELOCK
     // executing this batch, so it can grant. These run before the proxy upgrades, so
     // the calldata hits the pre-upgrade registry impl — fine, it shares Solady's role
@@ -1564,6 +1570,40 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
             data[i]    = abi.encodeWithSelector(RoleRegistry.grantRole.selector, roles[k], holders[k]);
             i++;
         }
+
+        // Additionally grant the operating multisig (OPERATION_MULTISIG holder, 0x2aCA…) every
+        // role that RevokeAdmin governs — the 6 guardian/operations roles its revoke* helpers
+        // can strip (revokeSuperGuardianRole / revokeGuardianRole / revokeOracleOperationsRole /
+        // revokeHousekeepingOperationsRole / revokeExecutorOperationsRole /
+        // revokeEigenpodOperationsRole). This gives the operating multisig direct authority over
+        // every guardian/operations action, alongside its existing revoke power. These are
+        // ADDITIONAL holders on top of the dedicated HOLDER_* grants above; Solady `_setRole`
+        // no-ops when the account already holds the role, so this is safe even if a HOLDER_*
+        // is itself the operating multisig.
+        bytes32[6] memory revokeAdminRoles = [
+            SUPER_GUARDIAN_ROLE,
+            GUARDIAN_ROLE,
+            ORACLE_OPERATIONS_ROLE,
+            HOUSEKEEPING_OPERATIONS_ROLE,
+            EXECUTOR_OPERATIONS_ROLE,
+            EIGENPOD_OPERATIONS_ROLE
+        ];
+        for (uint256 k = 0; k < 6; k++) {
+            targets[i] = ROLE_REGISTRY;
+            data[i]    = abi.encodeWithSelector(RoleRegistry.grantRole.selector, revokeAdminRoles[k], HOLDER_OPERATION_MULTISIG_ROLE);
+            i++;
+        }
+
+        // Also grant the executor guardian safe (HOLDER_EXEC_GUARDIAN_SAFE) both guardian-tier
+        // roles, so it can pauseContractUntil across the protocol (GUARDIAN) and pause the
+        // EETH/WeETH tokens (SUPER_GUARDIAN). Additional holder; Solady `_setRole` no-ops on overlap.
+        targets[i] = ROLE_REGISTRY;
+        data[i]    = abi.encodeWithSelector(RoleRegistry.grantRole.selector, SUPER_GUARDIAN_ROLE, HOLDER_EXEC_GUARDIAN_SAFE);
+        i++;
+        targets[i] = ROLE_REGISTRY;
+        data[i]    = abi.encodeWithSelector(RoleRegistry.grantRole.selector, GUARDIAN_ROLE, HOLDER_EXEC_GUARDIAN_SAFE);
+        i++;
+
         return i;
     }
 
@@ -1828,6 +1868,18 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(roleRegistry.hasRole(HOUSEKEEPING_OPERATIONS_ROLE, HOLDER_HOUSEKEEPING_OPERATIONS_ROLE), "HOUSEKEEPING_OPERATIONS_ROLE not granted");
         require(roleRegistry.hasRole(EXECUTOR_OPERATIONS_ROLE,     HOLDER_EXECUTOR_OPERATIONS_ROLE),     "EXECUTOR_OPERATIONS_ROLE not granted");
         require(roleRegistry.hasRole(EIGENPOD_OPERATIONS_ROLE,     HOLDER_EIGENPOD_OPERATIONS_ROLE),     "EIGENPOD_OPERATIONS_ROLE not granted");
+
+        // The operating multisig must additionally hold every RevokeAdmin-governed role.
+        require(roleRegistry.hasRole(SUPER_GUARDIAN_ROLE,          HOLDER_OPERATION_MULTISIG_ROLE), "SUPER_GUARDIAN_ROLE not granted to operating multisig");
+        require(roleRegistry.hasRole(GUARDIAN_ROLE,                HOLDER_OPERATION_MULTISIG_ROLE), "GUARDIAN_ROLE not granted to operating multisig");
+        require(roleRegistry.hasRole(ORACLE_OPERATIONS_ROLE,       HOLDER_OPERATION_MULTISIG_ROLE), "ORACLE_OPERATIONS_ROLE not granted to operating multisig");
+        require(roleRegistry.hasRole(HOUSEKEEPING_OPERATIONS_ROLE, HOLDER_OPERATION_MULTISIG_ROLE), "HOUSEKEEPING_OPERATIONS_ROLE not granted to operating multisig");
+        require(roleRegistry.hasRole(EXECUTOR_OPERATIONS_ROLE,     HOLDER_OPERATION_MULTISIG_ROLE), "EXECUTOR_OPERATIONS_ROLE not granted to operating multisig");
+        require(roleRegistry.hasRole(EIGENPOD_OPERATIONS_ROLE,     HOLDER_OPERATION_MULTISIG_ROLE), "EIGENPOD_OPERATIONS_ROLE not granted to operating multisig");
+
+        // The executor guardian safe must hold both guardian-tier roles.
+        require(roleRegistry.hasRole(SUPER_GUARDIAN_ROLE, HOLDER_EXEC_GUARDIAN_SAFE), "SUPER_GUARDIAN_ROLE not granted to exec guardian safe");
+        require(roleRegistry.hasRole(GUARDIAN_ROLE,       HOLDER_EXEC_GUARDIAN_SAFE), "GUARDIAN_ROLE not granted to exec guardian safe");
 
         require(LiquidityPool(payable(LIQUIDITY_POOL)).maxWithdrawAmount() == LP_MAX_WITHDRAW_AMOUNT, "LP.maxWithdrawAmount mismatch");
         require(LiquidityPool(payable(LIQUIDITY_POOL)).minWithdrawAmount() == LP_MIN_WITHDRAW_AMOUNT, "LP.minWithdrawAmount mismatch");

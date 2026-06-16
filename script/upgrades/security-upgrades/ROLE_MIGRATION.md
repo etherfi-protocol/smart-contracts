@@ -86,7 +86,7 @@ upgraded by PR #385, with the exact function name and the role that gates it.
 | DepositAdapter | `sweepDust` |
 | WeETHWithdrawAdapter | `pauseContract`, `unPauseContract`, `unpauseContractUntil` |
 | Blacklister | `blacklistUser`, `unblacklistUser`, `setBlacklistUntil` |
-| RevokeAdmin | `revokeGuardianRole`, `revokeOracleOperationsRole`, `revokeHousekeepingOperationsRole`, `revokeExecutorOperationsRole`, `revokeEigenpodOperationsRole` |
+| RevokeAdmin | `revokeSuperGuardianRole`, `revokeGuardianRole`, `revokeOracleOperationsRole`, `revokeHousekeepingOperationsRole`, `revokeExecutorOperationsRole`, `revokeEigenpodOperationsRole` |
 
 ### `GUARDIAN_ROLE` (`onlyGuardian`)
 
@@ -225,9 +225,19 @@ cast call $ROLE_REGISTRY "roleHolders(bytes32)(address[])" $(cast keccak GUARDIA
 
 ## 2. Role holder worksheet
 
-Each of the 9 RolesLibrary roles gets exactly one grant in this script. 3 are
-prefilled with the protocol-fixed addresses; **fill in the other 6** (the
+Each of the 9 RolesLibrary roles gets one dedicated `HOLDER_*` grant in this script.
+3 are prefilled with the protocol-fixed addresses; **fill in the other 6** (the
 `HOLDER_*` constants in `transactions.s.sol`).
+
+> **The operating multisig also gets every RevokeAdmin-governed role.** In addition
+> to the per-role `HOLDER_*` grants, `_appendGrantCalls` grants the
+> `OPERATION_MULTISIG` holder (`0x2aCA…`) all 6 roles that `RevokeAdmin` can revoke —
+> `SUPER_GUARDIAN`, `GUARDIAN`, `ORACLE_OPERATIONS`, `HOUSEKEEPING_OPERATIONS`,
+> `EXECUTOR_OPERATIONS`, `EIGENPOD_OPERATIONS` — so the multisig has direct authority
+> over every guardian/operations action alongside its revoke power. That's 15 grant
+> calls total (9 + 6). These roles therefore end up with 2 holders each (the dedicated
+> `HOLDER_*` and the operating multisig); Solady `_setRole` no-ops on overlap, so it's
+> safe even if a `HOLDER_*` is itself the operating multisig.
 
 > **All 9 grants ride the single UPGRADE_TIMELOCK batch (Batch 1, 10d).**
 > `RoleRegistry.grantRole` is owner-gated (Solady `setRole` → contract owner),
