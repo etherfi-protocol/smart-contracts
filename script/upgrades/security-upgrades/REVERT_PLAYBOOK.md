@@ -104,49 +104,40 @@ The upgrade batch **revoked 31 legacy granular roles** and moved gating to the 9
 
 ---
 
-## 6.5 Escrow value reconciliation — LP ↔ WRN / PWQ (the hard part)
-
-**This is the part a code-only revert gets wrong, and it moves real ETH.**
+## 6.5 Escrow value reconciliation — LP ↔ WRN / PWQ
 
 ### What the upgrade does (forward)
-`LiquidityPool.initializeOnUpgradeV2()` performs a one-time **escrow migration**:
-- reads `nftLocked` = legacy `ethAmountLockedForWithdrawal` (WRN-bound escrow held *in* the LP) and `queueLocked` = `PWQ.ethAmountLockedForPriorityWithdrawal()`;
-- `totalValueInLp -= (nftLocked+queueLocked)`, `totalValueOutOfLp += (nftLocked+queueLocked)`;
-- **physically `_sendFund`s** `nftLocked` ETH → WithdrawRequestNFT and `queueLocked` ETH → PriorityWithdrawalQueue;
-- zeroes the legacy `ethAmountLockedForWithdrawal` slot; sets `escrowMigrationCompleted = true`.
+`LiquidityPool.initializeOnUpgradeV2()` performs a one-time **escrow migration**: it physically `_sendFund`s `nftLocked` ETH → WRN and `queueLocked` ETH → PWQ, moves the accounting (`totalValueInLp -=`, `totalValueOutOfLp +=`), zeroes the legacy `ethAmountLockedForWithdrawal` slot, and sets `escrowMigrationCompleted = true`. Post-upgrade, withdrawal escrow lives as **segregated ETH in WRN/PWQ** (their own `ethAmountLockedForWithdrawal` counters), not in the LP's legacy slot. **Magnitude today:** `nftLocked ≈ 20,356 ETH`, `queueLocked = 0` (read live at upgrade time).
 
-Post-upgrade the new model keeps withdrawal escrow as **segregated ETH balances in WRN/PWQ** (+ `totalValueOutOfLp`), not in the LP's legacy slot.
+### Chosen approach: DRAIN, then revert (no reverse-migration code needed)
+Escrow only ever enters WRN/PWQ **at finalize time** (`EtherFiAdmin` → `LP.addEthAmountLockedForWithdrawal` for WRN; `PWQ` → `LP.transferLockedEthForPriority`). Request creation moves no ETH. So **the segregated escrow == exactly the finalized-but-unclaimed requests.** Claims are permissionless. Therefore:
 
-**Magnitude today (pre-upgrade mainnet):** `nftLocked ≈ 20,356 ETH`, `queueLocked = 0` (PWQ has no pending priority withdrawals yet). So the live migration moves **~20,356 ETH LP→WRN, 0→PWQ** — though both values will differ at the real upgrade and must be read live.
+> **Before executing the revert, claim every finalized request.** That drains WRN (and PWQ) escrow to **0** through the front door. Then the revert needs to move **nothing**: the legacy LP slot is already `0` (migration zeroed it), WRN/PWQ balances are `0`, and there are no pending finalized withdrawals for the old impls to service.
 
-### Why a code-only revert is wrong
-Reverting impls does **not** move the ETH back or restore the legacy slot. After an impl-only revert:
-- ~20,356 ETH sits in WRN; the legacy `ethAmountLockedForWithdrawal` reads **0**; `totalValueInLp` is still reduced.
-- The old LP would treat the escrowed ETH as **freely available** (locked-amount = 0) → over-withdrawal / under-collateralised pending withdrawals. **Funds-integrity bug.**
+**Why the accounting reconciles (verified against master vs branch):**
+- New-model claim: `WRN.ethAmountLockedForWithdrawal -= amountOfEEth`; `LP.withdraw(amount, share)` does `totalValueOutOfLp -= amount` + burns the share; WRN pays the owner from its own balance; **any leftover ETH is swept back to LP** (`_claimWithdraw`, so dust/negative-rebase remainder never strands in WRN).
+- Draining all finalized requests therefore returns `totalValueOutOfLp` to its pre-migration level and leaves `totalValueInLp == LP.balance`, `WRN.balance == 0`, legacy `ethAmountLockedForWithdrawal == 0`.
+- Post-revert the old LP reads `ethAmountLockedForWithdrawal = 0` with no pending finalized withdrawals → fully consistent; it re-accumulates the legacy slot normally as new requests finalize.
 
-### The reverse operation (what must happen)
-1. Return the escrowed ETH from WRN (and PWQ) to the LP via a plain transfer — **`LP.receive()` auto-rebalances** `totalValueOutOfLp -= / totalValueInLp +=`, exactly inverting the migration's accounting. ✅ no extra accounting code needed.
-2. **Restore the legacy `ethAmountLockedForWithdrawal` slot** to the WRN-bound amount (the old LP reads it). ← needs a storage write.
-3. Set `escrowMigrationCompleted = false` (so a later re-upgrade can re-migrate).
+**Pause-compatibility (verified):** the whole claim path is pause-exempt — `WRN.claimWithdraw`, `LP.withdraw(amount,share)`, `eETH.burnShares`'s `rateLimiter.consumeToken` (the token path is **not** `whenNotPaused`, unlike `consume`), and `LP.receive()` are all callable while the protocol is paused. So "pause everything except EETH/WeETH, then drain via claims, then revert" works. (`eETH.burnShares` is `whenNotPaused` on EETH itself — which is why EETH/WeETH stay unpaused.)
 
-### The blocker: no existing function does steps 1–3
-- WRN/PWQ only *sweep dust* back to LP inside claim/cancel/fulfill flows — there is **no external "return full escrow to LP"** function.
-- The new LP has **no reverse of `initializeOnUpgradeV2`**, and **no setter** for the legacy slot. The old LP has no admin setter either.
-- Storage can't be poked on mainnet; it needs a contract function on a **live** impl.
+### Edges that MUST be handled before relying on this
+1. **Blacklisted finalized holders.** `_claimWithdraw` calls `blacklister.nonBlacklisted(ownerOf(tokenId))`, and a blacklisted owner also can't transfer the NFT away. A valid finalized request owned by a blacklisted address **cannot be claimed** → its escrow stays in WRN → balance ≠ 0. **Mitigation:** enumerate finalized-unclaimed requests, check owners against the blacklist; temporarily un-blacklist to drain (then re-blacklist), or explicitly send-back just that residual.
+2. **EETH_BURN rate-limit capacity.** Each claim burns eETH → `consumeToken(EETH_BURN_LIMIT_ID, amount)`. A paused rate limiter is fine (token path isn't `whenNotPaused`), but the **bucket capacity/refill** can throttle a ~20k-ETH mass-drain (`LimitExceeded`). Ensure `EETH_BURN` capacity ≥ total finalized-unclaimed escrow, or raise it before draining (or drain across refill windows).
+3. **Freeze finalization first.** New finalized requests keep appearing while the oracle runs. Pause `EtherFiAdmin`/oracle (part of the full pause) so the finalized set is frozen, then drain it to completion.
+4. **PWQ symmetry + maturity.** `queueLocked = 0` today, but if PWQ has finalized-unclaimed requests at revert time, drain them too. PWQ `claimWithdraw` is permissionless but enforces `creationTime + minDelay` (1h) maturity — very-recently-finalized requests can't be claimed until matured.
+5. **Re-upgrade (recovery loop):** `escrowMigrationCompleted` stays `true` after a revert; the old impl re-accumulates the legacy `ethAmountLockedForWithdrawal` slot. A later re-upgrade's `initializeOnUpgradeV2` would revert `AlreadyMigrated` and **skip** migrating that re-accumulated escrow. The re-attempt must reset `escrowMigrationCompleted` (or the re-upgrade impl must handle a non-zero legacy slot with the flag already set). See §9.
+6. **Storage-layout** of WRN's new `ethAmountLockedForWithdrawal` slot under the old impl — low risk (it's `0` after the drain), but confirm via `UpgradeStorageIntegrity.t.sol`.
 
-### Options (analysis)
-- **Option A — build a reverse-migration into the audited contracts (recommended).**
-  Add `LiquidityPool.reverseEscrowMigrationV2()` (onlyUpgradeTimelock) that pulls escrow back from WRN+PWQ (via new `returnEscrowToLiquidityPool()` guarded functions on WRN/PWQ), restores the legacy slot, and clears `escrowMigrationCompleted`. Sequence it **first** in the revert batch, *before* the impl flips, while the new impls + RoleRegistry gate are still live. Atomic, exact, auditable.
-  *Cost:* new code in LP + WRN + PWQ → **must be in the audit scope of this upgrade.** This is the main decision.
-- **Option B — scope the revert to exclude LP / WRN / PWQ.**
-  Keep the value-bearing trio on the new (working) impls; revert only the rest. Avoids the reconciliation entirely. *Cost:* doesn't help if the bug is in LP/WRN/PWQ; mixed old/new impls risk cross-ABI/role drift.
-- **Option C — bespoke per-incident reconciliation Safe batch.** Hand-built recovery if A wasn't shipped. *Cost:* highest risk, under incident pressure — avoid as the primary plan.
+### Net result
+With the drain-first sequence, **no reverse-migration contract code is required** — the prior Option A (new `reverseEscrowMigrationV2` + `returnEscrowToLiquidityPool`) is **not needed**, keeping the audit scope unchanged. The revert script stays impl-revert + legacy-role-restore; the escrow is handled operationally by draining before execution.
 
-### Critical timing constraint (independent of option)
-The two escrow models track pending withdrawals differently, and the revert rides a **10-day timelock**. If withdrawals keep processing on the new system during that window, WRN/PWQ escrow **diverges** from the migrated amounts and the reverse stops being a clean inverse.
-**→ On any incident that may lead to a revert, immediately PAUSE the withdrawal paths (LP / WithdrawRequestNFT / PriorityWithdrawalQueue).** A revert is only clean while the segregated escrow still equals what the migration moved. Reverting *early* (escrow unchanged) is exact; reverting *late* needs Option C.
-
-**[CONFIRM] — primary decision for this ticket:** ship **Option A** (reverse-migration in the audited contracts) now, so a clean revert is possible? If not, the revert must be Option B (partial) or accept Option C (bespoke, risky).
+### Execution-day escrow sequence (slots into §5)
+1. Pause everything except EETH/WeETH (incl. EtherFiAdmin/oracle so finalization stops).
+2. Enumerate finalized-unclaimed WRN (+ PWQ matured) requests; resolve any blacklisted owners (edge 1); confirm EETH_BURN capacity (edge 2).
+3. `batchClaimWithdraw` until `WRN.balance == 0 && WRN.ethAmountLockedForWithdrawal == 0` (and PWQ likewise).
+4. Execute the revert batch (impl revert + legacy-role re-grants).
+5. Unpause; verify normal flow.
 
 ---
 
@@ -189,13 +180,17 @@ Steps: confirm-on-new-impl → snapshot → schedule+warp(10d)+execute → asser
 4. **Re-test:** full Layer-1 (pristine fork) + Layer-2 (Safe-replay on a fresh Tenderly VNet) green, including the fixed path. Mind the **sticky state** from §1 — re-upgrading onto a once-upgraded-then-reverted system means init flags are already set and buckets/grants persist; the re-upgrade batch must tolerate that (idempotent grants, skip already-initialized, etc.).
 5. **Re-ship:** new 3CP, fresh timelock cycle, same execution-day discipline.
 
+> ⚠️ **MUST-CARRY note for the next upgrade version built after a revert — escrow-migration flag.**
+> A revert does NOT reset `LiquidityPool.escrowMigrationCompleted` (it stays `true`), and after the revert the *old* impl re-accumulates the legacy `ethAmountLockedForWithdrawal` slot as new requests finalize. So the **new upgrade version** you ship next must NOT rely on the existing one-shot `initializeOnUpgradeV2` (it would `revert AlreadyMigrated` and silently skip the escrow migration, stranding the re-accumulated legacy escrow). The next version must explicitly handle this — e.g. a fresh migration entrypoint that ignores/resets `escrowMigrationCompleted` and re-reads the legacy slot, or a deliberate flag reset in that upgrade's batch. This is not a problem for the *current* version (the drain-then-revert leaves the slot at 0); it is a design requirement for whatever upgrade follows a revert. **Bake this into the next version's migration design and its review checklist.**
+
 ---
 
 ## 10. Open items before sign-off
 - [x] `PRE_*` impl addresses populated in `revert.s.sol` (read from live mainnet ERC1967 slots — knowable today, pre-upgrade). Refresh if any proxy impl changes before the upgrade.
 - [x] Revert script fork-verified for the impl rollback (§8).
 - [x] **§6 legacy-role restoration** — re-grant block built into the revert batch (39-pair snapshot) + Step-5 verification; fork-verified green.
-- [ ] **§6.5 escrow reconciliation** — **primary decision:** ship Option A (reverse-migration in the audited contracts)? Requires new code in LP + WRN + PWQ → audit scope. Then extend the fork verification to assert ETH + legacy slot restored.
+- [x] **§6.5 escrow reconciliation** — resolved via **drain-then-revert** (claim all finalized requests to empty WRN/PWQ before reverting). Verified against master vs branch; **no new contract code / no audit-scope change**. Remaining: operationalize the drain (handle blacklisted holders, EETH_BURN capacity, PWQ maturity) and add the §6.5 execution-day sequence to the runbook.
+- [ ] **Re-upgrade `escrowMigrationCompleted` reset** (§6.5 edge 5 / §9) — decide how the re-attempt re-enables the escrow migration.
 - [ ] **§7 oracle node rollback** procedure documented by node owner.
 - [ ] **§2 trigger conditions** ratified.
 - [ ] Playbook reviewed + signed off + linked on EARN-1481.
