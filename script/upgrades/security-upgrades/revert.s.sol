@@ -100,6 +100,22 @@ contract SecurityUpgradesRevertScript is Script, SecurityUpgradesConstants, Util
     address constant PRE_WEETH_WITHDRAW_ADAPTER              = 0x3f313F0A856aE12b0A16178e29B6Ada84c256952;
     address constant PRE_WITHDRAW_REQUEST_NFT                = 0x2f4A5921FcAB46F1F3154e8b42Fc189e08fae3Ed;
 
+    // ─────────────────────────────────────────────────────────────────────
+    // LEGACY-ROLE RE-GRANTS — restore the roles the upgrade revoked, to their
+    // pre-upgrade holders, in the same revert batch (see §6 of REVERT_PLAYBOOK.md).
+    // Snapshot of current mainnet holders captured BEFORE the upgrade revokes them
+    // (they can't be read back afterwards). 28 of 31 legacy roles are held → 39
+    // (role, holder) grants; the 3 empty legacy roles (WEETH_OPERATING_ADMIN_ROLE,
+    // CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_CLAIM_DELAY_SETTER_ROLE,
+    // WEETH_WITHDRAW_ADAPTER_ADMIN_ROLE) had no holders, so nothing to restore.
+    // Refresh this snapshot if any legacy-role holder changes before the upgrade.
+    // ─────────────────────────────────────────────────────────────────────
+    uint256 constant LEGACY_REGRANT_COUNT = 39;
+    // Holders not already named in Deployed.s.sol / Constants.s.sol:
+    address constant HOLDER_HYPERNATIVE_PAUSER = 0x9AF1298993DC1f397973C62A5D47a284CF76844D; // PROTOCOL_PAUSER (Hypernative)
+    address constant HOLDER_POD_PROVER         = 0x7835fB36A8143a014A2c381363cD1A4DeE586d2A; // EtherFiNodesManager pod prover / call forwarder
+    address constant HOLDER_CMRD_ADMIN         = 0x8D5AAc5d3d5cda4c404fA7ee31B0822B648Bb150; // CumulativeMerkleRewardsDistributor admin
+
     // upgradeTimelock, UPGRADE_TIMELOCK_DELAY, OUT_DIR, GIT_COMMIT_SHA and
     // commitHashSalt all come from Constants.s.sol (SecurityUpgradesConstants).
 
@@ -116,6 +132,7 @@ contract SecurityUpgradesRevertScript is Script, SecurityUpgradesConstants, Util
         executeRevert();
         verifyReverted();
         verifyAccessControlPreservation();
+        verifyLegacyRolesRestored();
     }
 
     /// @dev Fail loudly the moment a required PRE_* constant is unset.
@@ -220,9 +237,10 @@ contract SecurityUpgradesRevertScript is Script, SecurityUpgradesConstants, Util
     function executeRevert() public {
         console2.log("=== Step 2: Executing revert (UPGRADE_TIMELOCK, 10d) ===");
 
-        address[] memory targets = new address[](24);
-        bytes[]   memory data    = new bytes[](24);
-        uint256[] memory values  = new uint256[](24);
+        // 24 impl reverts (22 proxies + RoleRegistry + beacon) + legacy-role re-grants.
+        address[] memory targets = new address[](24 + LEGACY_REGRANT_COUNT);
+        bytes[]   memory data    = new bytes[](24 + LEGACY_REGRANT_COUNT);
+        uint256[] memory values  = new uint256[](24 + LEGACY_REGRANT_COUNT);
         uint256 i;
 
         // core
@@ -272,6 +290,18 @@ contract SecurityUpgradesRevertScript is Script, SecurityUpgradesConstants, Util
         // revert). Reverting it first would strip that gate and the remaining reverts
         // would lose their authorizer.
         (targets[i], data[i]) = (ROLE_REGISTRY,              _upgradeTo(PRE_ROLE_REGISTRY));                 i++;
+
+        // Re-grant the legacy roles the upgrade revoked, to their pre-upgrade holders, so the
+        // reverted old impls can authorize their gated flows again (oracle push, finalization,
+        // pausing, …). grantRole is owner-gated (RoleRegistry owner == UPGRADE_TIMELOCK executing
+        // this batch) and Solady EnumerableRoles storage is shared across the impl swap, so these
+        // grants work whether they land before or after the RoleRegistry revert above. See §6 of
+        // REVERT_PLAYBOOK.md. The (role, holder) snapshot is hardcoded in _legacyRegrants().
+        (bytes32[] memory lroles, address[] memory lholders) = _legacyRegrants();
+        for (uint256 k = 0; k < lroles.length; k++) {
+            (targets[i], data[i]) = (ROLE_REGISTRY, abi.encodeWithSignature("grantRole(bytes32,address)", lroles[k], lholders[k]));
+            i++;
+        }
 
         bytes32 salt = keccak256(abi.encode("batch-revert", commitHashSalt));
 
@@ -421,5 +451,66 @@ contract SecurityUpgradesRevertScript is Script, SecurityUpgradesConstants, Util
 
     function _upgradeTo(address impl) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, impl);
+    }
+
+    /// @notice Step 5: assert every legacy-role re-grant landed (the reverted old impls
+    ///         depend on these to authorize their gated flows).
+    function verifyLegacyRolesRestored() public view {
+        console2.log("=== Step 5: Verifying legacy roles re-granted ===");
+        (bytes32[] memory roles, address[] memory holders) = _legacyRegrants();
+        for (uint256 k = 0; k < roles.length; k++) {
+            require(roleRegistry.hasRole(roles[k], holders[k]), string.concat("legacy role not restored: idx ", vm.toString(k)));
+        }
+        console2.log("[OK] all", roles.length, "legacy (role,holder) grants restored");
+        console2.log("");
+    }
+
+    /// @dev Pre-upgrade legacy-role holder snapshot (mainnet), restored on revert. Used by both
+    ///      executeRevert (to append grantRole calls) and verifyLegacyRolesRestored (to assert).
+    ///      Single source of truth so the two can never drift. 39 (role, holder) pairs.
+    function _legacyRegrants() internal pure returns (bytes32[] memory roles, address[] memory holders) {
+        roles   = new bytes32[](LEGACY_REGRANT_COUNT);
+        holders = new address[](LEGACY_REGRANT_COUNT);
+        uint256 k;
+        (roles[k], holders[k++]) = (L_PROTOCOL_PAUSER,                                    ETHERFI_ADMIN);
+        (roles[k], holders[k++]) = (L_PROTOCOL_PAUSER,                                    HOLDER_HYPERNATIVE_PAUSER);
+        (roles[k], holders[k++]) = (L_PROTOCOL_PAUSER,                                    ETHERFI_OPERATING_ADMIN);
+        (roles[k], holders[k++]) = (L_PROTOCOL_UNPAUSER,                                  ETHERFI_OPERATING_ADMIN);
+        (roles[k], holders[k++]) = (L_PROTOCOL_UNPAUSER,                                  ETHERFI_ADMIN);
+        (roles[k], holders[k++]) = (L_EETH_OPERATING_ADMIN_ROLE,                          ETHERFI_OPERATING_ADMIN);
+        (roles[k], holders[k++]) = (L_LIQUIDITY_POOL_ADMIN_ROLE,                          ETHERFI_ADMIN);
+        (roles[k], holders[k++]) = (L_LIQUIDITY_POOL_ADMIN_ROLE,                          OPERATING_TIMELOCK);
+        (roles[k], holders[k++]) = (L_LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE,             ETHERFI_ADMIN);
+        (roles[k], holders[k++]) = (L_LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE,              ETHERFI_OPERATING_ADMIN);
+        (roles[k], holders[k++]) = (L_LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE,              ADMIN_EOA);
+        (roles[k], holders[k++]) = (L_STAKING_MANAGER_ADMIN_ROLE,                         ETHERFI_OPERATING_ADMIN);
+        (roles[k], holders[k++]) = (L_STAKING_MANAGER_NODE_CREATOR_ROLE,                  OPERATING_TIMELOCK);
+        (roles[k], holders[k++]) = (L_STAKING_MANAGER_NODE_CREATOR_ROLE,                  ADMIN_EOA);
+        (roles[k], holders[k++]) = (L_STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE,         ADMIN_EOA);
+        (roles[k], holders[k++]) = (L_ETHERFI_NODES_MANAGER_ADMIN_ROLE,                   OPERATING_TIMELOCK);
+        (roles[k], holders[k++]) = (L_ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE,        OPERATING_TIMELOCK);
+        (roles[k], holders[k++]) = (L_ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE,        ADMIN_EOA);
+        (roles[k], holders[k++]) = (L_ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE,        STAKING_MANAGER);
+        (roles[k], holders[k++]) = (L_ETHERFI_NODES_MANAGER_POD_PROVER_ROLE,             HOLDER_POD_PROVER);
+        (roles[k], holders[k++]) = (L_ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE,          OPERATING_TIMELOCK);
+        (roles[k], holders[k++]) = (L_ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE,          HOLDER_POD_PROVER);
+        (roles[k], holders[k++]) = (L_ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE,         ADMIN_EOA);
+        (roles[k], holders[k++]) = (L_ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE,        ETHERFI_OPERATING_ADMIN);
+        (roles[k], holders[k++]) = (L_ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE,        ADMIN_EOA);
+        (roles[k], holders[k++]) = (L_ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE,           ADMIN_EOA);
+        (roles[k], holders[k++]) = (L_ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE,                 OPERATING_TIMELOCK);
+        (roles[k], holders[k++]) = (L_ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE,          ADMIN_EOA);
+        (roles[k], holders[k++]) = (L_ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE,              OPERATING_TIMELOCK);
+        (roles[k], holders[k++]) = (L_ETHERFI_RATE_LIMITER_ADMIN_ROLE,                    ETHERFI_OPERATING_ADMIN);
+        (roles[k], holders[k++]) = (L_WITHDRAW_REQUEST_NFT_ADMIN_ROLE,                    ETHERFI_ADMIN);
+        (roles[k], holders[k++]) = (L_WITHDRAW_REQUEST_NFT_ADMIN_ROLE,                    OPERATING_TIMELOCK);
+        (roles[k], holders[k++]) = (L_IMPLICIT_FEE_CLAIMER_ROLE,                          ADMIN_EOA);
+        (roles[k], holders[k++]) = (L_PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE,               ETHERFI_OPERATING_ADMIN);
+        (roles[k], holders[k++]) = (L_PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE,   ETHERFI_OPERATING_ADMIN);
+        (roles[k], holders[k++]) = (L_PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE,     ADMIN_EOA);
+        (roles[k], holders[k++]) = (L_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE,   HOLDER_CMRD_ADMIN);
+        (roles[k], holders[k++]) = (L_ETHERFI_REWARDS_ROUTER_ADMIN_ROLE,                  ETHERFI_OPERATING_ADMIN);
+        (roles[k], holders[k++]) = (L_ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE,         ADMIN_EOA);
+        require(k == LEGACY_REGRANT_COUNT, "legacy regrant count mismatch");
     }
 }

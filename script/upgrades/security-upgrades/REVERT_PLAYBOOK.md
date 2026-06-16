@@ -94,7 +94,7 @@ The revert is deliberately **minimal-blast-radius**: it only swaps implementatio
 
 The upgrade batch **revoked 31 legacy granular roles** and moved gating to the 9 RolesLibrary roles. The old (pre-upgrade) impls gate on those **legacy** roles (verified: master `EtherFiAdmin` uses `roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE / PROTOCOL_PAUSER / PROTOCOL_UNPAUSER, …)`). A code-only revert leaves the old contracts gating on **empty** roles → oracle pushes, validator approvals, withdrawal finalization, and pausing all brick.
 
-**Decision (per EARN-1481): the revert batch re-grants every removed legacy role to its pre-upgrade holder**, in the same UPGRADE_TIMELOCK block, so impl-revert + role-restore land atomically.
+**Decision (per EARN-1481): the revert batch re-grants every removed legacy role to its pre-upgrade holder**, in the same UPGRADE_TIMELOCK block, so impl-revert + role-restore land atomically. **✅ Implemented + fork-verified** — `revert.s.sol` now appends 39 `grantRole` calls (the `_legacyRegrants()` snapshot) after the impl reverts, and `verifyLegacyRolesRestored()` (Step 5) asserts all 39 landed.
 
 - The holder set must be **snapshotted pre-upgrade** (the upgrade revokes them, so they can't be read back post-upgrade) and hardcoded into `revert.s.sol`, exactly like `PRE_*`.
 - On-chain snapshot taken (current mainnet): **28 of the 31** legacy roles have holders (3 are already empty). ~40 `grantRole(role, holder)` calls total. Snapshot lives in the revert script as a `(role, holder)[]` table; `RoleRegistry.grantRole` is owner-gated and the owner is the UPGRADE_TIMELOCK executing the batch.
@@ -194,7 +194,7 @@ Steps: confirm-on-new-impl → snapshot → schedule+warp(10d)+execute → asser
 ## 10. Open items before sign-off
 - [x] `PRE_*` impl addresses populated in `revert.s.sol` (read from live mainnet ERC1967 slots — knowable today, pre-upgrade). Refresh if any proxy impl changes before the upgrade.
 - [x] Revert script fork-verified for the impl rollback (§8).
-- [ ] **§6 legacy-role restoration** — build the 28-pair re-grant block into the revert batch (snapshot hardcoded). Decision made; implementation pending.
+- [x] **§6 legacy-role restoration** — re-grant block built into the revert batch (39-pair snapshot) + Step-5 verification; fork-verified green.
 - [ ] **§6.5 escrow reconciliation** — **primary decision:** ship Option A (reverse-migration in the audited contracts)? Requires new code in LP + WRN + PWQ → audit scope. Then extend the fork verification to assert ETH + legacy slot restored.
 - [ ] **§7 oracle node rollback** procedure documented by node owner.
 - [ ] **§2 trigger conditions** ratified.
