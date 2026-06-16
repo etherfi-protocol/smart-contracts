@@ -212,6 +212,16 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         executeLpWithdrawBounds();
 
         verifyOperatingConfig();
+
+        // ── Day-10 combined Safe B multiSend (steps 3 + 4) ─────────────────────────
+        // Emits execday_ops_and_bounds.json: a single multiSend from ETHERFI_OPERATING_ADMIN
+        // that runs the operating-timelock executeBatch THEN the LP bounds in one tx, in
+        // order. Reuses the exact same executeBatch calldata + salt as ops_schedule.json so
+        // the scheduled op matches. The standalone JSONs above remain valid; this is the
+        // ordered/atomic packaging for execution day. (Sweep + nested upgrade are added once
+        // the single-tx gas budget is confirmed.) Emit AFTER the dry-runs so we don't
+        // re-schedule the same timelock op on the fork.
+        emitExecutionDayOpsAndBounds();
     }
 
     /// @dev Fail loudly the moment a required constant is unset.
@@ -1599,9 +1609,43 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
     //--------------------------------------------------------------------------------------
     // STEP 8: executeOperatingConfig — Batch 2, the OPERATING_TIMELOCK batch (2d)
     //--------------------------------------------------------------------------------------
+    /// @dev Salt for the operating-timelock (Batch 2) operation. Shared between the
+    ///      schedule/execute JSONs (executeOperatingConfig) and the day-10 combined
+    ///      multiSend (emitExecutionDayOpsAndBounds), so both reference the SAME timelock
+    ///      operation id — the day-10 executeBatch must match what was scheduled at day 0.
+    function _opsBatchSalt() internal view returns (bytes32) {
+        return keccak256(abi.encode("batch-2", commitHashSalt));
+    }
+
     function executeOperatingConfig() public {
         console2.log("=== Step 8: Executing Operating Config (Batch 2, OPERATING_TIMELOCK, 2d) ===");
 
+        (address[] memory tt, uint256[] memory vv, bytes[] memory dd) = _buildOperatingConfigBatch();
+
+        _shrinkAndEmit(
+            BatchEmit({
+                label: "Operating Timelock Batch",
+                timelock: operatingTimelock,
+                timelockAddr: OPERATING_TIMELOCK,
+                adminSafe: ETHERFI_OPERATING_ADMIN,
+                minDelay: OPERATING_TIMELOCK_DELAY,
+                salt: _opsBatchSalt(),
+                scheduleFile: "ops_schedule.json",
+                executeFile: "ops_execute.json"
+            }),
+            tt, vv, dd, tt.length
+        );
+    }
+
+    /// @dev Builds the operating-timelock (Batch 2) call set: rate-limiter buckets +
+    ///      consumers, pause durations, and the EtherFiAdmin daily finalized-withdrawal cap.
+    ///      Extracted so both the schedule/execute JSON path and the day-10 combined
+    ///      multiSend can encode the identical (targets, values, datas) tuple.
+    function _buildOperatingConfigBatch()
+        internal
+        view
+        returns (address[] memory, uint256[] memory, bytes[] memory)
+    {
         address[] memory targets = new address[](60);
         bytes[]   memory data    = new bytes[](60);
         uint256[] memory values  = new uint256[](60);
@@ -1670,19 +1714,55 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         (targets[i], data[i]) = (WEETH_WITHDRAW_ADAPTER,                _pauseDur(PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER));                i++;
         (targets[i], data[i]) = (WITHDRAW_REQUEST_NFT,       _pauseDur(PAUSE_UNTIL_WITHDRAW_REQUEST_NFT));   i++;
 
-        _shrinkAndEmit(
-            BatchEmit({
-                label: "Operating Timelock Batch",
-                timelock: operatingTimelock,
-                timelockAddr: OPERATING_TIMELOCK,
-                adminSafe: ETHERFI_OPERATING_ADMIN,
-                minDelay: OPERATING_TIMELOCK_DELAY,
-                salt: keccak256(abi.encode("batch-2", commitHashSalt)),
-                scheduleFile: "ops_schedule.json",
-                executeFile: "ops_execute.json"
-            }),
-            targets, values, data, i
-        );
+        return _shrink(targets, values, data, i);
+    }
+
+    //--------------------------------------------------------------------------------------
+    // STEP 9b: emitExecutionDayOpsAndBounds — day-10 combined Safe B multiSend (steps 3 + 4)
+    //
+    // Both steps are signed/executed by the SAME Safe (ETHERFI_OPERATING_ADMIN, 0x2aCA…):
+    //   3. OPERATING_TIMELOCK.executeBatch(...)  (Safe B is the timelock's executor)
+    //   4. LiquidityPool.setMaxWithdrawAmount / setMinWithdrawAmount (Safe B holds OPERATION_MULTISIG_ROLE)
+    // so they fold into ONE Safe Transaction-Builder batch → the Safe UI runs it as a single
+    // `multiSend`, guaranteeing order (execute-batch THEN bounds) with no tx in between.
+    //
+    // This is the same-Safe portion of the day-10 atomic sequence. The full sequence also
+    // prepends the AuctionManager sweep (step 1, Safe B) and the nested UPGRADE_TIMELOCK
+    // execute (step 2, wrapped as SafeA.execTransaction with pre-approved hashes) — those are
+    // added once the gas budget for a single combined tx is confirmed on a fork.
+    //
+    // The executeBatch calldata MUST match what `ops_schedule.json` scheduled at day 0:
+    // identical (targets, values, datas, predecessor=0, salt). We reuse _buildOperatingConfigBatch
+    // + _opsBatchSalt so they can never drift. setMaxWithdrawAmount comes before
+    // setMinWithdrawAmount (the min check requires _min <= maxWithdrawAmount).
+    //--------------------------------------------------------------------------------------
+    function emitExecutionDayOpsAndBounds() public {
+        console2.log("=== Step 9b: Emitting day-10 combined Safe B multiSend (ops execute + LP bounds) ===");
+
+        (address[] memory tt, uint256[] memory vv, bytes[] memory dd) = _buildOperatingConfigBatch();
+
+        SafeTx[] memory batch = new SafeTx[](3);
+        // 3. execute the (already-scheduled) operating-timelock batch
+        batch[0] = SafeTx({
+            to: OPERATING_TIMELOCK,
+            value: 0,
+            data: abi.encodeWithSelector(operatingTimelock.executeBatch.selector, tt, vv, dd, bytes32(0), _opsBatchSalt())
+        });
+        // 4. LP withdraw bounds — max first, then min
+        batch[1] = SafeTx({
+            to: LIQUIDITY_POOL,
+            value: 0,
+            data: abi.encodeWithSelector(LiquidityPool.setMaxWithdrawAmount.selector, LP_MAX_WITHDRAW_AMOUNT)
+        });
+        batch[2] = SafeTx({
+            to: LIQUIDITY_POOL,
+            value: 0,
+            data: abi.encodeWithSelector(LiquidityPool.setMinWithdrawAmount.selector, LP_MIN_WITHDRAW_AMOUNT)
+        });
+
+        writeSafeJson(OUT_DIR, "execday_ops_and_bounds.json", ETHERFI_OPERATING_ADMIN, batch, 1);
+        console2.log("[OK] wrote execday_ops_and_bounds.json (3 sub-calls, one multiSend from ETHERFI_OPERATING_ADMIN)");
+        console2.log("");
     }
 
     //--------------------------------------------------------------------------------------
