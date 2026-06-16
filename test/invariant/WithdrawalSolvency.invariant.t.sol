@@ -139,6 +139,17 @@ contract WithdrawalSolvencyInvariantTest is TestSetup {
 
         targetContract(address(handler));
 
+        // Restrict fuzzing to the action functions. Without this, the engine
+        // also targets the handler's public getters/counters, burning call
+        // budget on no-ops. probeOverLiquidityLock is included so the I3/P1
+        // liquidity guard is positively driven on every run.
+        bytes4[] memory sel = new bytes4[](4);
+        sel[0] = handler.requestWithdraw.selector;
+        sel[1] = handler.finalizeRequests.selector;
+        sel[2] = handler.claimWithdraw.selector;
+        sel[3] = handler.probeOverLiquidityLock.selector;
+        targetSelector(FuzzSelector({addr: address(handler), selectors: sel}));
+
         // Pre-seed a batch of OUR OWN requests and finalize them, so every fuzz
         // run starts with claimable inventory the `claimWithdraw` op can hit.
         // Foundry resets handler/contract state to this post-setUp snapshot
@@ -196,6 +207,15 @@ contract WithdrawalSolvencyInvariantTest is TestSetup {
             handler.ghost_finalizeExceededLiquidity(),
             string.concat(
                 "I3/P1: a finalize+lock SUCCEEDED with lockAmount > totalValueInLp - lock=",
+                vm.toString(handler.ghost_failLockAmount()),
+                " inLp=", vm.toString(handler.ghost_failInLp())
+            )
+        );
+        // Dual direction: the guard must not reject a lock that WAS backed.
+        assertFalse(
+            handler.ghost_lockRejectedWhileBacked(),
+            string.concat(
+                "I3/P1: _lockEth rejected a backed lock (lockAmount <= totalValueInLp) - lock=",
                 vm.toString(handler.ghost_failLockAmount()),
                 " inLp=", vm.toString(handler.ghost_failInLp())
             )
@@ -276,11 +296,16 @@ contract WithdrawalSolvencyInvariantTest is TestSetup {
         emit log_named_uint("requestsFinalized   ", handler.ghost_requestsFinalized());
         emit log_named_uint("requestsClaimed     ", handler.ghost_requestsClaimed());
         emit log_named_uint("finalizeBoundChecks ", handler.ghost_finalizeBoundChecks());
+        emit log_named_uint("lockBoundEnforced   ", handler.ghost_lockBoundEnforced());
 
         assertGt(handler.ghost_requestsCreated(), 0, "non-vacuity: no withdraw request was ever created");
         assertGt(handler.ghost_requestsFinalized(), 0, "non-vacuity: no request was ever finalized");
         assertGt(handler.ghost_requestsClaimed(), 0, "non-vacuity: no finalized request was ever claimed");
         assertGt(handler.ghost_finalizeBoundChecks(), 0, "non-vacuity: P1 liquidity bound never exercised");
+        // P1 enforcement must be POSITIVELY driven: the liquidity guard rejected
+        // at least one genuinely over-backed lock. This is what makes I3/P1 a
+        // live assertion rather than dead code.
+        assertGt(handler.ghost_lockBoundEnforced(), 0, "non-vacuity: P1 liquidity guard never rejected an over-bound lock");
     }
 
     // =====================================================================
@@ -295,7 +320,11 @@ contract WithdrawalSolvencyInvariantTest is TestSetup {
         emit log_named_uint("finalize_skipped_none      ", handler.callCounts("finalize_skipped_none"));
         emit log_named_uint("finalize_skipped_liquidity ", handler.callCounts("finalize_skipped_liquidity"));
         emit log_named_uint("finalize_revert            ", handler.callCounts("finalize_revert"));
-        emit log_named_uint("lock_revert                ", handler.callCounts("lock_revert"));
+        emit log_named_uint("lock_revert_liquidity      ", handler.callCounts("lock_revert_liquidity"));
+        emit log_named_uint("lock_revert_migration      ", handler.callCounts("lock_revert_migration"));
+        emit log_named_uint("lock_revert_other          ", handler.callCounts("lock_revert_other"));
+        emit log_named_uint("probe_rejected_liquidity   ", handler.callCounts("probe_rejected_liquidity"));
+        emit log_named_uint("probe_unexpected_ok        ", handler.callCounts("probe_unexpected_ok"));
         emit log_named_uint("claim                      ", handler.callCounts("claim"));
         emit log_named_uint("claim_skipped_empty        ", handler.callCounts("claim_skipped_empty"));
         emit log_named_uint("claim_skipped_unfinalized  ", handler.callCounts("claim_skipped_unfinalized"));
