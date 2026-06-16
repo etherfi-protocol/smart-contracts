@@ -4,8 +4,6 @@ pragma solidity ^0.8.24;
 import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {ReentrancyGuardTransient} from "solady/utils/ReentrancyGuardTransient.sol";
-import "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
-import "@etherfi/staking/interfaces/IAuctionManager.sol";
 import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 import "@etherfi/staking/interfaces/IEtherFiNode.sol";
 import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
