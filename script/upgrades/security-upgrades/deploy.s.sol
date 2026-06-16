@@ -37,6 +37,7 @@ import {NodeOperatorManager} from "@etherfi/staking/NodeOperatorManager.sol";
 import {StakingManager} from "@etherfi/staking/StakingManager.sol";
 // withdrawals
 import {EtherFiRedemptionManager} from "@etherfi/withdrawals/EtherFiRedemptionManager.sol";
+import {IEtherFiRedemptionManager} from "@etherfi/withdrawals/interfaces/IEtherFiRedemptionManager.sol";
 import {PriorityWithdrawalQueue} from "@etherfi/withdrawals/PriorityWithdrawalQueue.sol";
 import {WeETHWithdrawAdapter} from "@etherfi/withdrawals/WeETHWithdrawAdapter.sol";
 import {WithdrawRequestNFT} from "@etherfi/withdrawals/WithdrawRequestNFT.sol";
@@ -247,7 +248,8 @@ contract DeploySecurityUpgrades is Script, SecurityUpgradesConstants, Utils {
                 lqAddrs,
                 LIQUIFIER_MIN_DISCOUNT_BPS,
                 LIQUIFIER_STALE_PRICE_WINDOW,
-                LIQUIFIER_MAX_PRICE_DEVIATION_BPS
+                LIQUIFIER_MAX_PRICE_DEVIATION_BPS,
+                LIQUIFIER_MAX_PRICE_THRESHOLD
             );
             bytes memory bc = abi.encodePacked(type(Liquifier).creationCode, args);
             liquifierImpl = deploy(name, args, bc, commitHashSalt, false, factory); // logging=false: struct arg
@@ -404,17 +406,22 @@ contract DeploySecurityUpgrades is Script, SecurityUpgradesConstants, Utils {
         {
             string memory name = "EtherFiRedemptionManager";
             bytes memory args = abi.encode(
-                LIQUIDITY_POOL,
-                EETH,
-                WEETH,
-                WITHDRAW_REQUEST_NFT_BUYBACK_SAFE,
-                ROLE_REGISTRY,
-                ETHERFI_RESTAKER,
-                PRIORITY_WITHDRAWAL_QUEUE,
-                blacklisterProxy,
+                IEtherFiRedemptionManager.ConstructorAddresses({
+                    liquidityPool: LIQUIDITY_POOL,
+                    eEth: EETH,
+                    weEth: WEETH,
+                    treasury: WITHDRAW_REQUEST_NFT_BUYBACK_SAFE,
+                    roleRegistry: ROLE_REGISTRY,
+                    etherFiRestaker: ETHERFI_RESTAKER,
+                    priorityWithdrawalQueue: PRIORITY_WITHDRAWAL_QUEUE,
+                    blacklister: blacklisterProxy,
+                    stEthPriceFeed: STETH_PRICE_FEED
+                }),
                 RM_MAX_EXIT_FEE_SPLIT_TO_TREASURY_BPS,
                 RM_MAX_EXIT_FEE_BPS,
-                RM_MAX_LOW_WATERMARK_BPS_OF_TVL
+                RM_MAX_LOW_WATERMARK_BPS_OF_TVL,
+                RM_STALE_PRICE_WINDOW,
+                RM_MAX_PRICE_THRESHOLD
             );
             bytes memory bc = abi.encodePacked(type(EtherFiRedemptionManager).creationCode, args);
             etherFiRedemptionManagerImpl = deploy(name, args, bc, commitHashSalt, true, factory);

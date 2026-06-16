@@ -57,6 +57,9 @@ abstract contract SecurityUpgradesConstants is Deployed {
     uint256 internal constant LIQUIFIER_MIN_DISCOUNT_BPS = 0;
     uint256 internal constant LIQUIFIER_STALE_PRICE_WINDOW = 2 days; // 2 days (heartbeat to updated stETH price feed is 1 days)
     uint256 internal constant LIQUIFIER_MAX_PRICE_DEVIATION_BPS = 200;   // 2%
+    // price floor: reverts if stETH/ETH feed answer + threshold < SHARE_UNIT (1e18), i.e. stETH may
+    // price at most 1% below the 1.0 peg.
+    uint256 internal constant LIQUIFIER_MAX_PRICE_THRESHOLD = 1e16;      // 1% below 1e18 peg
 
     // oracle — EtherFiAdmin immutable params
     int256  internal constant ADMIN_MAX_REBASE_APR_BPS = 1_000;           // 10% absolute ceiling
@@ -90,6 +93,11 @@ abstract contract SecurityUpgradesConstants is Deployed {
     uint256 internal constant RM_MAX_EXIT_FEE_SPLIT_TO_TREASURY_BPS = 10_000;
     uint256 internal constant RM_MAX_EXIT_FEE_BPS = 500;                  // 5% hardcoded ceiling
     uint256 internal constant RM_MAX_LOW_WATERMARK_BPS_OF_TVL = 500;    // 5% hardcoded ceiling
+    // stETH/ETH price-feed guards: reads the same STETH_PRICE_FEED as Liquifier (1-day heartbeat),
+    // so the stale window matches LIQUIFIER_STALE_PRICE_WINDOW (2 days). maxPriceThreshold caps the
+    // feed answer at SHARE_UNIT (1e18) + threshold, i.e. stETH may price at most 1% above the 1.0 peg.
+    uint256 internal constant RM_STALE_PRICE_WINDOW = 2 days;
+    uint256 internal constant RM_MAX_PRICE_THRESHOLD = 1e16;            // 1% above 1e18 peg
 
     // withdrawals — PriorityWithdrawalQueue — must match the constructor arg used at proxy genesis;
     // the proxy's existing impl was deployed with 1 hour, so the new impl must too.

@@ -37,6 +37,7 @@ import {NodeOperatorManager} from "@etherfi/staking/NodeOperatorManager.sol";
 import {StakingManager} from "@etherfi/staking/StakingManager.sol";
 // withdrawals
 import {EtherFiRedemptionManager} from "@etherfi/withdrawals/EtherFiRedemptionManager.sol";
+import {IEtherFiRedemptionManager} from "@etherfi/withdrawals/interfaces/IEtherFiRedemptionManager.sol";
 import {PriorityWithdrawalQueue} from "@etherfi/withdrawals/PriorityWithdrawalQueue.sol";
 import {WeETHWithdrawAdapter} from "@etherfi/withdrawals/WeETHWithdrawAdapter.sol";
 import {WithdrawRequestNFT} from "@etherfi/withdrawals/WithdrawRequestNFT.sol";
@@ -462,7 +463,8 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
                 etherfiRestaker: ETHERFI_RESTAKER,
                 l1SyncPool: ETHERFI_L1_SYNC_POOL_ETH
             }),
-            LIQUIFIER_MIN_DISCOUNT_BPS, LIQUIFIER_STALE_PRICE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS
+            LIQUIFIER_MIN_DISCOUNT_BPS, LIQUIFIER_STALE_PRICE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS,
+            LIQUIFIER_MAX_PRICE_THRESHOLD
         );
         codeChecker.verifyContractByteCodeMatch(liquifierImpl, address(fresh2));
     }
@@ -557,9 +559,19 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
 
     function _verifyWithdrawalsBytecode() internal {
         EtherFiRedemptionManager fresh = new EtherFiRedemptionManager(
-            LIQUIDITY_POOL, EETH, WEETH, WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, ROLE_REGISTRY, ETHERFI_RESTAKER,
-            PRIORITY_WITHDRAWAL_QUEUE, blacklisterProxy,
-            RM_MAX_EXIT_FEE_SPLIT_TO_TREASURY_BPS, RM_MAX_EXIT_FEE_BPS, RM_MAX_LOW_WATERMARK_BPS_OF_TVL
+            IEtherFiRedemptionManager.ConstructorAddresses({
+                liquidityPool: LIQUIDITY_POOL,
+                eEth: EETH,
+                weEth: WEETH,
+                treasury: WITHDRAW_REQUEST_NFT_BUYBACK_SAFE,
+                roleRegistry: ROLE_REGISTRY,
+                etherFiRestaker: ETHERFI_RESTAKER,
+                priorityWithdrawalQueue: PRIORITY_WITHDRAWAL_QUEUE,
+                blacklister: blacklisterProxy,
+                stEthPriceFeed: STETH_PRICE_FEED
+            }),
+            RM_MAX_EXIT_FEE_SPLIT_TO_TREASURY_BPS, RM_MAX_EXIT_FEE_BPS, RM_MAX_LOW_WATERMARK_BPS_OF_TVL,
+            RM_STALE_PRICE_WINDOW, RM_MAX_PRICE_THRESHOLD
         );
         codeChecker.verifyContractByteCodeMatch(etherFiRedemptionManagerImpl, address(fresh));
 
