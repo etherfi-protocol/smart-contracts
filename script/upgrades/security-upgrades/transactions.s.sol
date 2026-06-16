@@ -314,6 +314,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(HOLDER_HOUSEKEEPING_OPERATIONS_ROLE != address(0), "preflight: HOLDER_HOUSEKEEPING_OPERATIONS_ROLE unset");
         require(HOLDER_EXECUTOR_OPERATIONS_ROLE     != address(0), "preflight: HOLDER_EXECUTOR_OPERATIONS_ROLE unset");
         require(HOLDER_EIGENPOD_OPERATIONS_ROLE     != address(0), "preflight: HOLDER_EIGENPOD_OPERATIONS_ROLE unset");
+        require(HOLDER_CANCELLER_GUARDIAN           != address(0), "preflight: HOLDER_CANCELLER_GUARDIAN unset");
     }
 
     /// @dev Cross-check every hardcoded keccak256 role-ID string against a freshly-built
@@ -1018,9 +1019,9 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
 
         uint256 revokeCount = _countLegacyRoleHolders();
 
-        // 17 grants (9 HOLDER_* + 6 operating-multisig RevokeAdmin roles + 2 exec guardian safe)
-        // + (21 proxy upgrades + 1 beacon + 1 RR swap + 2 initializers + 2 Liquifier token
-        // unwhitelists) = 44, <=50 headroom + N legacy revokes.
+        // 18 grants (9 HOLDER_* + 6 operating-multisig RevokeAdmin roles + 2 exec guardian safe
+        // + 1 UPGRADE_TIMELOCK CANCELLER_ROLE) + (21 proxy upgrades + 1 beacon + 1 RR swap +
+        // 2 initializers + 2 Liquifier token unwhitelists) = 45, <=50 headroom + N legacy revokes.
         address[] memory targets = new address[](50 + revokeCount);
         bytes[]   memory data    = new bytes[](50 + revokeCount);
         uint256[] memory values  = new uint256[](50 + revokeCount);
@@ -1546,10 +1547,14 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
     //
     // Appends the 9 RolesLibrary role grants (one HOLDER_* each), PLUS 6 extra grants that
     // give the operating multisig every RevokeAdmin-governed role, PLUS 2 that give the
-    // executor guardian safe both guardian-tier roles — 17 grantRole calls total.
-    // grantRole is owner-gated (Solady
+    // executor guardian safe both guardian-tier roles, PLUS 1 that grants
+    // HOLDER_CANCELLER_GUARDIAN the TimelockController CANCELLER_ROLE on the UPGRADE_TIMELOCK
+    // itself — 18 grantRole calls total.
+    // The first 17 grantRole calls are owner-gated (Solady
     // setRole -> contract owner) and the RoleRegistry owner IS the UPGRADE_TIMELOCK
-    // executing this batch, so it can grant. These run before the proxy upgrades, so
+    // executing this batch, so it can grant. The 18th targets the UPGRADE_TIMELOCK, which is
+    // its own OZ AccessControl admin, so the same executing timelock can self-grant.
+    // These run before the proxy upgrades, so
     // the calldata hits the pre-upgrade registry impl — fine, it shares Solady's role
     // storage, and the grants are visible to the new impl after the swap. They MUST
     // precede the onlyUpgradeTimelock initializers in _appendUpgradeCalls, which need
@@ -1632,6 +1637,14 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         i++;
         targets[i] = ROLE_REGISTRY;
         data[i]    = abi.encodeWithSelector(RoleRegistry.grantRole.selector, GUARDIAN_ROLE, HOLDER_EXEC_GUARDIAN_SAFE);
+        i++;
+
+        // Grant the guardian Safe CANCELLER_ROLE on the UPGRADE_TIMELOCK so it can cancel a
+        // scheduled-but-pending op during the 10-day delay. Target is the timelock itself
+        // (NOT the RoleRegistry): TimelockController is its own AccessControl admin, and the
+        // UPGRADE_TIMELOCK is the account executing this batch, so it can self-grant.
+        targets[i] = UPGRADE_TIMELOCK;
+        data[i]    = abi.encodeWithSelector(upgradeTimelock.grantRole.selector, TIMELOCK_CANCELLER_ROLE, HOLDER_CANCELLER_GUARDIAN);
         i++;
 
         return i;
@@ -1784,6 +1797,14 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         (targets[i], data[i]) = (WEETH_WITHDRAW_ADAPTER,                _pauseDur(PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER));                i++;
         (targets[i], data[i]) = (WITHDRAW_REQUEST_NFT,       _pauseDur(PAUSE_UNTIL_WITHDRAW_REQUEST_NFT));   i++;
 
+        // governance — grant the guardian Safe CANCELLER_ROLE on the OPERATING_TIMELOCK so it
+        // can cancel a scheduled-but-pending op during the 2-day delay. Target is the timelock
+        // itself: TimelockController is its own AccessControl admin and the OPERATING_TIMELOCK
+        // is the account executing this batch, so it self-grants. This rides the operating
+        // batch (not the upgrade batch) because only the OPERATING_TIMELOCK can grant its own role.
+        (targets[i], data[i]) = (OPERATING_TIMELOCK,
+            abi.encodeWithSelector(operatingTimelock.grantRole.selector, TIMELOCK_CANCELLER_ROLE, HOLDER_CANCELLER_GUARDIAN)); i++;
+
         return _shrink(targets, values, data, i);
     }
 
@@ -1910,6 +1931,12 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         // The executor guardian safe must hold both guardian-tier roles.
         require(roleRegistry.hasRole(SUPER_GUARDIAN_ROLE, HOLDER_EXEC_GUARDIAN_SAFE), "SUPER_GUARDIAN_ROLE not granted to exec guardian safe");
         require(roleRegistry.hasRole(GUARDIAN_ROLE,       HOLDER_EXEC_GUARDIAN_SAFE), "GUARDIAN_ROLE not granted to exec guardian safe");
+
+        // The guardian Safe must hold CANCELLER_ROLE on BOTH timelocks. Both batches have been
+        // dry-run on the fork by the time this verifier runs (executeUpgrade then
+        // executeOperatingConfig in run()), so the grants are live on the forked timelocks.
+        require(upgradeTimelock.hasRole(TIMELOCK_CANCELLER_ROLE,   HOLDER_CANCELLER_GUARDIAN), "CANCELLER_ROLE not granted on upgrade timelock");
+        require(operatingTimelock.hasRole(TIMELOCK_CANCELLER_ROLE, HOLDER_CANCELLER_GUARDIAN), "CANCELLER_ROLE not granted on operating timelock");
 
         require(LiquidityPool(payable(LIQUIDITY_POOL)).maxWithdrawAmount() == LP_MAX_WITHDRAW_AMOUNT, "LP.maxWithdrawAmount mismatch");
         require(LiquidityPool(payable(LIQUIDITY_POOL)).minWithdrawAmount() == LP_MIN_WITHDRAW_AMOUNT, "LP.minWithdrawAmount mismatch");
