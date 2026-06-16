@@ -59,16 +59,21 @@ import {SecurityUpgradesConstants} from "./Constants.s.sol";
  * Every constant left at address(0) / 0 must be filled in before broadcast;
  * `_preflight()` reverts otherwise.
  *
- * Everything is packed into exactly THREE batches → FIVE Safe JSON files:
+ * Everything is packed into FOUR batches → SIX Safe JSON files:
+ *   • Batch 0 — OPERATION_MULTISIG (now): auction_sweep.json   (PRE-UPGRADE; must execute first)
  *   • Batch 1 — UPGRADE_TIMELOCK (10d):   upgrade_schedule.json + upgrade_execute.json
  *   • Batch 2 — OPERATING_TIMELOCK (2d):  ops_schedule.json + ops_execute.json
  *   • Batch 3 — OPERATION_MULTISIG (now): lp_withdraw_bounds.json
+ * Execute Batch 0 first (flushes AuctionManager revenue while the old impl still can).
  * Both timelock batches are SCHEDULED together; after the 10-day delay, execute
  * Batch 1, then Batch 2, then the instant Batch 3.
  *
  * `run()` builds + dry-runs them in execution order:
  *   1. verifyDeployedBytecode      — fresh deploys match the recorded impls
  *   2. takePreUpgradeSnapshots     — owners + paused, per upgraded proxy
+ *   2.5 executeAuctionSweep        — Batch 0 (OPERATION_MULTISIG, instant, PRE-UPGRADE):
+ *                                    flush AuctionManager.accumulatedRevenue to MembershipManager
+ *                                    before the impl swap deletes that slot + its transfer fn.
  *   3. executeUpgrade              — Batch 1 (UPGRADE_TIMELOCK, 10d). ONE batch, in order:
  *                                    (a) grant the 9 RolesLibrary roles (owner-gated; owner == UPGRADE_TIMELOCK),
  *                                    (b) upgrade RoleRegistry + every proxy + the EtherFiNode beacon,
@@ -175,6 +180,13 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
 
         verifyDeployedBytecode();
         takePreUpgradeSnapshots();
+
+        // ── Batch 0: the pre-upgrade AuctionManager sweep (instant) ────────────────
+        // Flush the OLD AuctionManager's pending accumulatedRevenue to the MembershipManager
+        // BEFORE the impl swap deletes that storage slot + its transfer function. Signed by
+        // ETHERFI_OPERATING_ADMIN (an `admins[]` entry on the old impl). Must execute before
+        // Batch 1 executes.
+        executeAuctionSweep();
 
         // ── Batch 1: the UPGRADE_TIMELOCK batch (10d) ──────────────────────────────
         // One schedule + one execute JSON. Internally ordered: role grants ->
@@ -919,6 +931,57 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         list[19] = PRIORITY_WITHDRAWAL_QUEUE;
         list[20] = WEETH_WITHDRAW_ADAPTER;
         list[21] = WITHDRAW_REQUEST_NFT;
+    }
+
+    //--------------------------------------------------------------------------------------
+    // STEP 2.5: executeAuctionSweep — Batch 0, the OPERATION_MULTISIG pre-upgrade sweep (instant)
+    //
+    // MUST run BEFORE the upgrade batch executes. The currently-deployed AuctionManager
+    // accrues consumed-bid fees in the `accumulatedRevenue` storage slot and only flushes
+    // them to the MembershipManager once they cross `accumulatedRevenueThreshold`
+    // (`transferAccumulatedRevenue()`). The NEW AuctionManager impl deletes that slot (now a
+    // deprecated `__gap`) and forwards each bid's revenue directly to `treasury` — it has no
+    // `transferAccumulatedRevenue` and no path to move the residual. Any un-flushed
+    // `accumulatedRevenue` ETH would therefore be stranded in the proxy balance post-upgrade.
+    // So we flush it first, on the OLD impl, while the function still exists.
+    //
+    // `transferAccumulatedRevenue()` is `onlyAdmin` on the OLD impl, where `onlyAdmin` checks
+    // the legacy `admins[msg.sender]` mapping (NOT a RoleRegistry role). On mainnet
+    // ETHERFI_OPERATING_ADMIN (0x2aCA…) has `admins[..] == true`, so this single tx is
+    // broadcast directly from that Safe (no timelock). One JSON, executed first of all.
+    //
+    // The call is built via abi.encodeWithSignature because the NEW AuctionManager type
+    // (imported here) no longer declares transferAccumulatedRevenue().
+    //--------------------------------------------------------------------------------------
+    function executeAuctionSweep() public {
+        console2.log("=== Step 2.5: Executing AuctionManager Sweep (Batch 0, OPERATION_MULTISIG, instant, PRE-UPGRADE) ===");
+
+        bytes memory sweepData = abi.encodeWithSignature("transferAccumulatedRevenue()");
+
+        writeSafeJson(OUT_DIR, "auction_sweep.json", ETHERFI_OPERATING_ADMIN, AUCTION_MANAGER, 0, sweepData, 1);
+
+        console2.log("=== Dry-running AuctionManager sweep on fork (OLD impl, pre-upgrade) ===");
+        uint256 pendingBefore = _auctionAccumulatedRevenue();
+        uint256 mmBalBefore   = MEMBERSHIP_MANAGER.balance;
+        console2.log("accumulatedRevenue (wei) to flush:   ", pendingBefore);
+
+        vm.prank(ETHERFI_OPERATING_ADMIN);
+        (bool ok, ) = AUCTION_MANAGER.call(sweepData);
+        require(ok, "auction sweep: transferAccumulatedRevenue reverted");
+
+        require(_auctionAccumulatedRevenue() == 0, "auction sweep: accumulatedRevenue not zeroed");
+        require(MEMBERSHIP_MANAGER.balance == mmBalBefore + pendingBefore, "auction sweep: MembershipManager did not receive flushed revenue");
+
+        console2.log("[OK] AuctionManager accumulatedRevenue flushed to MembershipManager");
+        console2.log("");
+    }
+
+    /// @dev Read the OLD AuctionManager's `accumulatedRevenue` via low-level staticcall, since
+    ///      the NEW AuctionManager type imported by this script no longer declares it.
+    function _auctionAccumulatedRevenue() internal view returns (uint256) {
+        (bool ok, bytes memory ret) = AUCTION_MANAGER.staticcall(abi.encodeWithSignature("accumulatedRevenue()"));
+        require(ok && ret.length >= 32, "auction sweep: accumulatedRevenue() read failed");
+        return abi.decode(ret, (uint256));
     }
 
     //--------------------------------------------------------------------------------------

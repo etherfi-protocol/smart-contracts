@@ -148,8 +148,15 @@ functions run inside the upgrade-timelock batch (Batch 1, see `transactions.s.so
 | Liquifier | `withdrawEther`, `sendToEtherFiRestaker` |
 | WithdrawRequestNFT | `handleRemainder` |
 | PriorityWithdrawalQueue | `handleRemainder` |
-| AuctionManager | `transferAccumulatedRevenue` |
 | RestakingRewardsRouter | `recoverERC20` |
+
+> **AuctionManager no longer has `transferAccumulatedRevenue`.** The old impl
+> accrued consumed-bid fees and flushed them to the MembershipManager on a
+> threshold; the new impl forwards each consumed bid's revenue directly to
+> `treasury` inside `updateSelectedBidInformation` (the `onlyStakingManagerContract`
+> bid hook), so there is no housekeeping revenue function to gate. Any residual
+> pre-upgrade `accumulatedRevenue` is flushed by the pre-upgrade Batch 0 sweep
+> (`auction_sweep.json`) — see `transactions.s.sol::executeAuctionSweep`.
 
 ### `EXECUTOR_OPERATIONS_ROLE` (`onlyExecutorOperations`)
 
@@ -410,18 +417,21 @@ the upgrade timelock can't satisfy `onlyAdmin`).
        --fork-url $MAINNET_RPC_URL -vvvv
    ```
 6. Hand the emitted Safe JSONs to the corresponding signer. The script emits
-   exactly **5 files across 3 batches**:
+   exactly **6 files across 4 batches**:
 
    | # | File(s) | Batch | Signer | Contents |
    |---|---|---|---|---|
+   | 0 | `auction_sweep.json` | OPERATION_MULTISIG (instant) | `ETHERFI_OPERATING_ADMIN` | flush AuctionManager.accumulatedRevenue → MembershipManager (PRE-UPGRADE) |
    | 1 | `upgrade_schedule.json` / `upgrade_execute.json` | UPGRADE_TIMELOCK (10d) | `ETHERFI_UPGRADE_ADMIN` | grants → proxy/beacon upgrades → onlyUpgradeTimelock initializers → legacy role revocations |
    | 2 | `ops_schedule.json` / `ops_execute.json` | OPERATING_TIMELOCK (2d) | `ETHERFI_OPERATING_ADMIN` | rate-limiter buckets, pause durations, EtherFiAdmin daily finalized-withdrawal cap |
    | 3 | `lp_withdraw_bounds.json` | OPERATION_MULTISIG (instant) | `ETHERFI_OPERATING_ADMIN` | LP min/max withdraw bounds |
 
-   **Execution sequence:** schedule both timelock batches up front (Batch 1 and
-   Batch 2 at the same time); after the 10-day delay, execute `upgrade_execute.json`,
-   then `ops_execute.json`, then the instant `lp_withdraw_bounds.json`. Batch 3 needs
-   the LP upgrade live + `OPERATION_MULTISIG_ROLE`, both delivered by Batch 1.
+   **Execution sequence:** execute the instant `auction_sweep.json` FIRST (it must land
+   before the upgrade deletes the old AuctionManager's `transferAccumulatedRevenue`).
+   Then schedule both timelock batches up front (Batch 1 and Batch 2 at the same time);
+   after the 10-day delay, execute `upgrade_execute.json`, then `ops_execute.json`, then
+   the instant `lp_withdraw_bounds.json`. Batch 3 needs the LP upgrade live +
+   `OPERATION_MULTISIG_ROLE`, both delivered by Batch 1.
 
 ---
 
@@ -498,7 +508,7 @@ function initializeTokenParameters(
 Call once with `_tokens = [EETH, WEETH]` and matching per-token parameter
 arrays. The ceilings baked into the EFRM impl bound each parameter (see
 `deploy.s.sol` immutables: `RM_MAX_EXIT_FEE_SPLIT_TO_TREASURY_BPS = 10_000`,
-`RM_MAX_EXIT_FEE_BPS = 500`, `RM_MAX_LOW_WATERMARK_BPS_OF_TVL = 2_000`).
+`RM_MAX_EXIT_FEE_BPS = 500`, `RM_MAX_LOW_WATERMARK_BPS_OF_TVL = 500`).
 
 ### 6.2 Per-address eETH/weETH rate-limit pre-seeding (H7 from review)
 
