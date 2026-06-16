@@ -85,8 +85,8 @@ The revert is deliberately **minimal-blast-radius**: it only swaps implementatio
 2. **Dry-run on a fork** (§8) — confirms proxies are currently on new impls and revert returns them to `PRE_*`.
 3. **Emit the JSONs:** `revert_schedule.json` + `revert_execute.json` (both target `UPGRADE_TIMELOCK`, signed by `ETHERFI_UPGRADE_ADMIN`).
 4. **Schedule** `revert_schedule.json` → wait **10 days** → **execute** `revert_execute.json`.
-5. **Pair with the legacy-role re-grant** (§6) — ideally in the *same* batch so the system is functional the moment the revert lands.
-6. Keep affected contracts **paused** through the 10-day window unless the pause itself is the problem.
+5. The revert batch **already includes the legacy-role re-grant** (§6, built into `revert.s.sol` + fork-verified) so the system is functional the moment the revert lands — no separate role batch needed.
+6. Keep affected contracts **paused** (and the oracle node paused, §7) through the 10-day window unless the pause itself is the problem. Run the escrow drain (§6.5) before executing.
 
 ---
 
@@ -133,11 +133,12 @@ Escrow only ever enters WRN/PWQ **at finalize time** (`EtherFiAdmin` → `LP.add
 With the drain-first sequence, **no reverse-migration contract code is required** — the prior Option A (new `reverseEscrowMigrationV2` + `returnEscrowToLiquidityPool`) is **not needed**, keeping the audit scope unchanged. The revert script stays impl-revert + legacy-role-restore; the escrow is handled operationally by draining before execution.
 
 ### Execution-day escrow sequence (slots into §5)
-1. Pause everything except EETH/WeETH (incl. EtherFiAdmin/oracle so finalization stops).
+1. **Pause the oracle node** (stop report submission) and pause every contract except EETH/WeETH (incl. EtherFiAdmin so finalization stops). See §7.
 2. Enumerate finalized-unclaimed WRN (+ PWQ matured) requests; resolve any blacklisted owners (edge 1); confirm EETH_BURN capacity (edge 2).
 3. `batchClaimWithdraw` until `WRN.balance == 0 && WRN.ethAmountLockedForWithdrawal == 0` (and PWQ likewise).
 4. Execute the revert batch (impl revert + legacy-role re-grants).
-5. Unpause; verify normal flow.
+5. **Revert the oracle node to the pre-upgrade version** (§7), confirm its account holds the re-granted legacy role, then unpause the node.
+6. Unpause contracts; verify normal flow (incl. a successful oracle report).
 
 ---
 
@@ -146,9 +147,13 @@ With the drain-first sequence, **no reverse-migration contract code is required*
 The oracle node was updated for the new contracts (EARN-1212 et al.): the **10-field `OracleReport`** ABI and the new role model. A contract revert has direct node implications:
 
 - After an impl revert, `EtherFiOracle` / `EtherFiAdmin` are back on **pre-upgrade ABIs and role expectations**. The updated node would submit **new-format reports the old contracts reject** (ABI mismatch), and would call paths gated by **new/legacy roles** that no longer line up.
-- **Action: roll the oracle node back to the pre-upgrade release in lockstep with the contract revert.** Contracts and node must match versions; a half-revert (old contracts + new node, or vice-versa) stalls oracle reporting.
-- Because reverting also strips legacy role holders (§6), the node's reporting account must be **re-granted its legacy role** before reports succeed.
-- During the 10-day timelock window the contracts are still on the *new* impls, so the *new* node keeps working — **do not roll the node back until just before executing the revert.** Sequence: execute revert → roll node back → confirm a report lands.
+
+**Required oracle actions, in order:**
+1. **Pause the oracle node** (stop it submitting reports / running the publish loop) as part of the incident pause, BEFORE the revert executes. A running new-version node pushing 10-field reports at old contracts would only produce failed/garbage txns. Pausing it also freezes withdrawal finalization, which is what keeps the escrow-drain set stable (§6.5).
+2. **Revert the oracle node to the pre-upgrade version** (the release that matches the pre-upgrade contract ABIs/roles), in lockstep with the contract revert. Contracts and node must be on the same version; a half-revert (old contracts + new node, or vice-versa) stalls oracle reporting.
+3. Because reverting also strips legacy role holders (§6), the node's reporting account must have its **legacy role re-granted** (handled by the revert batch's role-restore, §6) before reports succeed.
+
+**Timing:** keep the node **paused** through the 10-day timelock window — during that window the contracts are still on the *new* impls, so do NOT roll the node back to the old version until just before the revert executes (else the old node hits the new contracts). Sequence: pause node (at incident) → execute revert → swap node to pre-upgrade version + confirm its account holds the legacy role → unpause node → confirm a report lands.
 
 **[CONFIRM]** Node owner to document the exact node rollback procedure (release tag, deploy steps, who runs it) and the report-success check.
 
@@ -168,7 +173,7 @@ Steps: confirm-on-new-impl → snapshot → schedule+warp(10d)+execute → asser
 
 > Verified on a Tenderly VNet that had this upgrade applied via the real Safe→timelock replay (Layer-2). On a pristine (un-upgraded) fork the script aborts at Step 0 by design — there is nothing to revert.
 
-**Note:** this verifies the **impl rollback** only. Once §6 (legacy-role restore) is built, extend the verification to assert the legacy roles are re-granted and a representative oracle/withdrawal flow works on the reverted system.
+**Also verified:** the revert script's Step 5 asserts all 39 legacy `(role, holder)` re-grants landed (§6), and `test/fork-tests/RevertEscrowDrain.t.sol` (4 tests, mainnet fork) proves the escrow drain — each claim decrements WRN escrow by `amountOfEEth`, holds the `balance == escrow` invariant, sweeps leftover to LP, and reconciles LP accounting; claims work while paused; a blacklisted holder blocks the drain (§6.5 edge 1).
 
 ---
 
@@ -185,12 +190,17 @@ Steps: confirm-on-new-impl → snapshot → schedule+warp(10d)+execute → asser
 
 ---
 
-## 10. Open items before sign-off
-- [x] `PRE_*` impl addresses populated in `revert.s.sol` (read from live mainnet ERC1967 slots — knowable today, pre-upgrade). Refresh if any proxy impl changes before the upgrade.
-- [x] Revert script fork-verified for the impl rollback (§8).
-- [x] **§6 legacy-role restoration** — re-grant block built into the revert batch (39-pair snapshot) + Step-5 verification; fork-verified green.
-- [x] **§6.5 escrow reconciliation** — resolved via **drain-then-revert** (claim all finalized requests to empty WRN/PWQ before reverting). Verified against master vs branch; **no new contract code / no audit-scope change**. Remaining: operationalize the drain (handle blacklisted holders, EETH_BURN capacity, PWQ maturity) and add the §6.5 execution-day sequence to the runbook.
-- [ ] **Re-upgrade `escrowMigrationCompleted` reset** (§6.5 edge 5 / §9) — decide how the re-attempt re-enables the escrow migration.
-- [ ] **§7 oracle node rollback** procedure documented by node owner.
-- [ ] **§2 trigger conditions** ratified.
-- [ ] Playbook reviewed + signed off + linked on EARN-1481.
+## 10. EARN-1481 "Done when" status
+- [x] **Revert script verified on a fork** (impl pointers + critical state intact) — §8; `revert.s.sol` fork-verified (impl rollback + 39 legacy re-grants) + `RevertEscrowDrain.t.sol` (4 tests) for the escrow drain.
+- [x] **Trigger conditions documented** — §2 (when to revert; when explicitly NOT to). *Needs owner ratification (below).*
+- [x] **Step-by-step revert process documented** — §3 (authority/signers/delays) + §5 (ordering vs upgrade batch).
+- [x] **Oracle handling documented** — §7 (pause node → revert node to pre-upgrade version → re-grant legacy role → unpause; ABI/role compatibility). *Node owner to fill exact rollback runbook (below).*
+- [x] **Recovery loop documented** — §9 (triage → fix → re-attempt), incl. the re-upgrade escrow-flag must-carry note.
+- [ ] **Playbook reviewed / signed off & linked on the ticket** — playbook linked on EARN-1481; sign-off pending (human).
+
+### Remaining human / ops items (do not block the documentation; tracked here)
+- [ ] **§2 trigger conditions** ratified by Stake + security.
+- [ ] **§7 oracle-node rollback runbook** filled in by the node owner (release tag, deploy steps, report-success check).
+- [ ] **Drain operationalized** (§6.5): pre-check blacklisted finalized holders, confirm EETH_BURN capacity covers the drain, account for PWQ maturity.
+- [ ] **Next-version note** (§9): the upgrade version shipped *after* a revert must handle `escrowMigrationCompleted` (not a current-version blocker).
+- [ ] Final review + sign-off.
