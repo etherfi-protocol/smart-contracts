@@ -64,41 +64,41 @@ contract SecurityUpgradesRevertScript is Script, SecurityUpgradesConstants, Util
     // restaking, rewards, staking, withdrawals.
     // ─────────────────────────────────────────────────────────────────────
     // core
-    address constant PRE_EETH                                = address(0);
-    address constant PRE_LIQUIDITY_POOL                      = address(0);
-    address constant PRE_WEETH                               = address(0);
+    address constant PRE_EETH                                = 0xCB3D917A965A70214f430a135154Cd5ADdA2ad84;
+    address constant PRE_LIQUIDITY_POOL                      = 0x83bc649fCdb2c8DA146b2154a559ddEDf937eF12;
+    address constant PRE_WEETH                               = 0x2d10683E941275D502173053927AD6066e6aFd6B;
     // deposits
-    address constant PRE_DEPOSIT_ADAPTER                     = address(0);
-    address constant PRE_LIQUIFIER                           = address(0);
+    address constant PRE_DEPOSIT_ADAPTER                     = 0xE87797A1aFb329216811dfA22C87380128CA17d8;
+    address constant PRE_LIQUIFIER                           = 0x0E7489D32D34CCdC12d7092067bf53Aa38bf2BF6;
     // governance
-    address constant PRE_ROLE_REGISTRY                       = address(0);
-    address constant PRE_ETHERFI_RATE_LIMITER                = address(0);
+    address constant PRE_ROLE_REGISTRY                       = 0x3A75019F8b09c278D152279d446c97d009E064f3;
+    address constant PRE_ETHERFI_RATE_LIMITER                = 0x1dd43C32f03f8A74b8160926D559d34358880A89;
     // membership
-    address constant PRE_MEMBERSHIP_MANAGER                  = address(0);
-    address constant PRE_MEMBERSHIP_NFT                      = address(0);
+    address constant PRE_MEMBERSHIP_MANAGER                  = 0x047A7749AD683C2Fd8A27C7904Ca8dD128F15889;
+    address constant PRE_MEMBERSHIP_NFT                      = 0x290d981b41B713437265Cd7846806D7500307106;
     // oracle
-    address constant PRE_ETHERFI_ADMIN                       = address(0);
-    address constant PRE_ETHERFI_ORACLE                      = address(0);
+    address constant PRE_ETHERFI_ADMIN                       = 0xd50f28485A75A1FdE432BA7d012d0E2543D2f20d;
+    address constant PRE_ETHERFI_ORACLE                      = 0x5eefE6f65a280A6f1Eb1FdFf36Ab9e2af6f38462;
     // restaking
-    address constant PRE_ETHERFI_RESTAKER                    = address(0);
-    address constant PRE_RESTAKING_REWARDS_ROUTER            = address(0);
+    address constant PRE_ETHERFI_RESTAKER                    = 0x9D795b303B9dA3488FD3A4ca4702c872576BD0c6;
+    address constant PRE_RESTAKING_REWARDS_ROUTER            = 0xcB6e9a5943946307815eaDF3BEDC49fE30290CA8;
     // rewards
-    address constant PRE_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR = address(0);
-    address constant PRE_ETHERFI_REWARDS_ROUTER              = address(0);
+    address constant PRE_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR = 0xD3F3480511FB25a3D86568B6e1eFBa09d0aDEebF;
+    address constant PRE_ETHERFI_REWARDS_ROUTER              = 0x408de8D339F40086c5643EE4778E0F872aB5E423;
     // staking
-    address constant PRE_AUCTION_MANAGER                     = address(0);
+    address constant PRE_AUCTION_MANAGER                     = 0x68FE80C6e97E0c8613e2FED344358c6635ba5366;
     // EtherFiNode is a beacon proxy: its pre-upgrade impl is NOT in any ERC1967
     // slot. Read it from the beacon via StakingManager.implementation():
     //   cast call <STAKING_MANAGER> "implementation()(address)" --rpc-url $MAINNET_RPC_URL
-    address constant PRE_ETHERFI_NODE_IMPL                   = address(0);
-    address constant PRE_ETHERFI_NODES_MANAGER               = address(0);
-    address constant PRE_NODE_OPERATOR_MANAGER               = address(0);
-    address constant PRE_STAKING_MANAGER                     = address(0);
+    address constant PRE_ETHERFI_NODE_IMPL                   = 0xA91F8a52F0C1b4D3fDC256fC5bEBCA4D627da392;
+    address constant PRE_ETHERFI_NODES_MANAGER               = 0x789CbBe0739F1458905C9Ca6d6e74f7997622A9B;
+    address constant PRE_NODE_OPERATOR_MANAGER               = 0xfcC674Fc9A0602692D2a91905E7e978aE6EE2cAF;
+    address constant PRE_STAKING_MANAGER                     = 0xd3985048Bf1Cb613F5E199713a86B2aD3954F82A;
     // withdrawals
-    address constant PRE_ETHERFI_REDEMPTION_MANAGER          = address(0);
-    address constant PRE_PRIORITY_WITHDRAWAL_QUEUE           = address(0);
-    address constant PRE_WEETH_WITHDRAW_ADAPTER              = address(0);
-    address constant PRE_WITHDRAW_REQUEST_NFT                = address(0);
+    address constant PRE_ETHERFI_REDEMPTION_MANAGER          = 0x6BD191582F40012b2f2cdf66bD3D32bDe41191F7;
+    address constant PRE_PRIORITY_WITHDRAWAL_QUEUE           = 0x554B2a0c78840bBD4fDB24e198cdD93f99E29456;
+    address constant PRE_WEETH_WITHDRAW_ADAPTER              = 0x3f313F0A856aE12b0A16178e29B6Ada84c256952;
+    address constant PRE_WITHDRAW_REQUEST_NFT                = 0x2f4A5921FcAB46F1F3154e8b42Fc189e08fae3Ed;
 
     // upgradeTimelock, UPGRADE_TIMELOCK_DELAY, OUT_DIR, GIT_COMMIT_SHA and
     // commitHashSalt all come from Constants.s.sol (SecurityUpgradesConstants).
@@ -345,15 +345,43 @@ contract SecurityUpgradesRevertScript is Script, SecurityUpgradesConstants, Util
     }
 
     function verifyAccessControlPreservation() public view {
-        console2.log("=== Step 4: Verifying owner + paused unchanged ===");
+        console2.log("=== Step 4: Verifying owner + paused across revert ===");
         address[23] memory p = _proxies();
         for (uint256 i = 0; i < p.length; i++) {
             Snap memory pre = preRevertSnap[p[i]];
-            require(_getOwner(p[i])  == pre.owner,  string.concat("owner changed across revert: ", vm.toString(p[i])));
+            if (_ownerDeprecated(p[i])) {
+                // These 16 contracts migrated OFF OZ Ownable in the upgrade (DeprecatedOZOwnable
+                // shim, no owner() getter), so the pre-revert snapshot captured owner()==address(0).
+                // The revert restores the OLD impl, which HAS owner() again — so post-revert owner()
+                // must be RESTORED to a non-zero value (the original pre-upgrade owner). Asserting
+                // == pre.owner (address(0)) would be wrong; assert the getter is live again instead.
+                require(_getOwner(p[i]) != address(0), string.concat("owner not restored by revert: ", vm.toString(p[i])));
+            } else {
+                // MembershipManager/MembershipNFT keep OZ Ownable; RateLimiter/RestakingRewardsRouter/
+                // EtherFiRedemptionManager/PriorityWithdrawalQueue never exposed owner(). owner() is
+                // identical on the new and old impls, so it must be unchanged across the revert.
+                require(_getOwner(p[i]) == pre.owner, string.concat("owner changed across revert: ", vm.toString(p[i])));
+            }
             require(_getPaused(p[i]) == pre.paused, string.concat("paused changed across revert: ", vm.toString(p[i])));
         }
-        console2.log("[OK] owner + paused unchanged on all 23 proxies");
+        console2.log("[OK] owner restored/unchanged + paused unchanged on all 23 proxies");
         console2.log("");
+    }
+
+    /// @dev The 16 proxies whose upgrade impl inherits DeprecatedOZOwnable (owner() removed).
+    ///      Mirrors the same helper in transactions.s.sol. On a revert these get owner()
+    ///      restored (old impl has the getter); the other 7 entries in _proxies() keep their
+    ///      owner() identical (Membership* keep OZ Ownable; the rest never had owner()).
+    function _ownerDeprecated(address p) internal pure returns (bool) {
+        return
+            p == EETH || p == WEETH || p == LIQUIDITY_POOL ||
+            p == DEPOSIT_ADAPTER || p == LIQUIFIER ||
+            p == ETHERFI_ADMIN || p == ETHERFI_ORACLE ||
+            p == ETHERFI_RESTAKER ||
+            p == CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR || p == ETHERFI_REWARDS_ROUTER ||
+            p == AUCTION_MANAGER || p == ETHERFI_NODES_MANAGER ||
+            p == NODE_OPERATOR_MANAGER || p == STAKING_MANAGER ||
+            p == WEETH_WITHDRAW_ADAPTER || p == WITHDRAW_REQUEST_NFT;
     }
 
     function _proxies() internal pure returns (address[23] memory list) {
