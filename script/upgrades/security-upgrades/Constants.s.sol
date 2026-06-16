@@ -54,7 +54,7 @@ abstract contract SecurityUpgradesConstants is Deployed {
     // for each in the upgrade batch so new deposits revert.
     address internal constant CBETH = 0xBe9895146f7AF43049ca1c1AE358B0541Ea49704; // Coinbase cbETH
     address internal constant WBETH = 0xa2E3356610840701BDf5611a53974510Ae27E2e1; // Binance wBETH (bETH)
-    uint256 internal constant LIQUIFIER_MIN_DISCOUNT_BPS = 0;
+    uint256 internal constant LIQUIFIER_MIN_DISCOUNT_BPS = 1;
     uint256 internal constant LIQUIFIER_STALE_PRICE_WINDOW = 2 days; // 2 days (heartbeat to updated stETH price feed is 1 days)
     uint256 internal constant LIQUIFIER_MAX_PRICE_DEVIATION_BPS = 200;   // 2%
     // price floor: reverts if stETH/ETH feed answer + threshold < SHARE_UNIT (1e18), i.e. stETH may

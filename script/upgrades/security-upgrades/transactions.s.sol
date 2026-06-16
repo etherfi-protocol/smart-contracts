@@ -1466,13 +1466,43 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
     //--------------------------------------------------------------------------------------
     // STEP 6: verifyAccessControlPreservation
     //--------------------------------------------------------------------------------------
+    /// @dev True for the 16 upgraded proxies whose new impl inherits DeprecatedOZOwnable and
+    ///      therefore drops the owner() getter (OZ Ownable -> RoleRegistry migration). The other
+    ///      6 in _upgradedProxies() either keep OZ Ownable (MembershipManager/MembershipNFT) or
+    ///      never had owner() (RateLimiter / RestakingRewardsRouter / EtherFiRedemptionManager /
+    ///      PriorityWithdrawalQueue), so their owner() is expected unchanged.
+    function _ownerDeprecated(address p) internal pure returns (bool) {
+        return
+            p == EETH || p == WEETH || p == LIQUIDITY_POOL ||
+            p == DEPOSIT_ADAPTER || p == LIQUIFIER ||
+            p == ETHERFI_ADMIN || p == ETHERFI_ORACLE ||
+            p == ETHERFI_RESTAKER ||
+            p == CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR || p == ETHERFI_REWARDS_ROUTER ||
+            p == AUCTION_MANAGER || p == ETHERFI_NODES_MANAGER ||
+            p == NODE_OPERATOR_MANAGER || p == STAKING_MANAGER ||
+            p == WEETH_WITHDRAW_ADAPTER || p == WITHDRAW_REQUEST_NFT;
+    }
+
     function verifyAccessControlPreservation() public view {
         console2.log("=== Step 6: Verifying Access Control Preservation ===");
         address[22] memory proxies = _upgradedProxies();
         for (uint256 k = 0; k < proxies.length; k++) {
             address p = proxies[k];
             Snap memory pre = preSnap[p];
-            require(_getOwner(p)  == pre.owner,  string.concat("owner changed: ", vm.toString(p)));
+            if (_ownerDeprecated(p)) {
+                // This upgrade migrates the contract off OpenZeppelin Ownable to the RoleRegistry
+                // model: the new impl inherits DeprecatedOZOwnable (a storage-only shim with NO
+                // owner() getter), so owner() is intentionally removed. Assert it is now gone
+                // (staticcall reverts -> _getOwner returns address(0)) rather than requiring it
+                // equal the pre-upgrade owner. Upgrade authority is preserved via _authorizeUpgrade's
+                // onlyUpgradeTimelock + the role grants (verified in verifyOperatingConfig).
+                require(_getOwner(p) == address(0), string.concat("owner not deprecated: ", vm.toString(p)));
+            } else {
+                // Contracts that retain (or never had) owner(): MembershipManager / MembershipNFT
+                // keep OZ Ownable; RateLimiter / RestakingRewardsRouter / EtherFiRedemptionManager /
+                // PriorityWithdrawalQueue never exposed owner(). Either way owner() must be unchanged.
+                require(_getOwner(p) == pre.owner, string.concat("owner changed: ", vm.toString(p)));
+            }
             require(_getPaused(p) == pre.paused, string.concat("paused changed: ", vm.toString(p)));
         }
         // Initialization state - upgraded proxies must remain non-reinitializable.

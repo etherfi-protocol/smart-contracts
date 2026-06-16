@@ -424,7 +424,7 @@ contract DeploySecurityUpgrades is Script, SecurityUpgradesConstants, Utils {
                 RM_MAX_PRICE_THRESHOLD
             );
             bytes memory bc = abi.encodePacked(type(EtherFiRedemptionManager).creationCode, args);
-            etherFiRedemptionManagerImpl = deploy(name, args, bc, commitHashSalt, true, factory);
+            etherFiRedemptionManagerImpl = deploy(name, args, bc, commitHashSalt, false, factory); // logging=false: struct arg
         }
         {
             string memory name = "PriorityWithdrawalQueue";
