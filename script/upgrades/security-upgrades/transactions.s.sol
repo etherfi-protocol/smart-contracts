@@ -1741,25 +1741,6 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(QUEUE_WITHDRAWALS_LIMIT_ID,        ETHERFI_RESTAKER)); i++;
         (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(DEPOSIT_INTO_STRATEGY_LIMIT_ID,    ETHERFI_RESTAKER)); i++;
 
-        // ───────── staking — EtherFiNodesManager buckets (consume) ─────────
-        // NOTE: UNRESTAKING / EXIT_REQUEST / CONSOLIDATION_REQUEST buckets already exist
-        // on mainnet from a prior deployment (limitExists() == true). createNewLimiter
-        // would revert with LimitAlreadyExists(). Use setCapacity + setRefillRatePerSecond
-        // for these 3; the consumer wiring is also already in place so no updateConsumer
-        // call is needed.
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER,
-            abi.encodeWithSelector(EtherFiRateLimiter.setCapacity.selector, UNRESTAKING_LIMIT_ID, UNRESTAKING_CAPACITY));           i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER,
-            abi.encodeWithSelector(EtherFiRateLimiter.setRefillRate.selector, UNRESTAKING_LIMIT_ID, UNRESTAKING_REFILL_RATE));      i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER,
-            abi.encodeWithSelector(EtherFiRateLimiter.setCapacity.selector, EXIT_REQUEST_LIMIT_ID, EXIT_REQUEST_CAPACITY));         i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER,
-            abi.encodeWithSelector(EtherFiRateLimiter.setRefillRate.selector, EXIT_REQUEST_LIMIT_ID, EXIT_REQUEST_REFILL_RATE));    i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER,
-            abi.encodeWithSelector(EtherFiRateLimiter.setCapacity.selector, CONSOLIDATION_REQUEST_LIMIT_ID, CONSOLIDATION_REQUEST_CAPACITY));   i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER,
-            abi.encodeWithSelector(EtherFiRateLimiter.setRefillRate.selector, CONSOLIDATION_REQUEST_LIMIT_ID, CONSOLIDATION_REQUEST_REFILL_RATE)); i++;
-
         // ───────── oracle — EtherFiAdmin daily finalized-withdrawal cap (onlyAdmin) ─────────
         // Seeds maxFinalizedWithdrawalAmountPerDay (defaults to 0, which rejects all
         // finalized withdrawals). onlyAdmin = OPERATION_TIMELOCK_ROLE, so it belongs in
@@ -1848,9 +1829,6 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(rl.limitExists(STETH_REQUEST_WITHDRAWAL_LIMIT_ID), "STETH_REQUEST_WITHDRAWAL bucket missing");
         require(rl.limitExists(QUEUE_WITHDRAWALS_LIMIT_ID),        "QUEUE_WITHDRAWALS bucket missing");
         require(rl.limitExists(DEPOSIT_INTO_STRATEGY_LIMIT_ID),    "DEPOSIT_INTO_STRATEGY bucket missing");
-        require(rl.limitExists(UNRESTAKING_LIMIT_ID),              "UNRESTAKING bucket missing");
-        require(rl.limitExists(EXIT_REQUEST_LIMIT_ID),             "EXIT_REQUEST bucket missing");
-        require(rl.limitExists(CONSOLIDATION_REQUEST_LIMIT_ID),    "CONSOLIDATION_REQUEST bucket missing");
 
         require(rl.isConsumerAllowed(EETH_MINT_LIMIT_ID,                EETH),                  "EETH consumer (mint) not allowed");
         require(rl.isConsumerAllowed(EETH_BURN_LIMIT_ID,                EETH),                  "EETH consumer (burn) not allowed");
@@ -1859,9 +1837,6 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(rl.isConsumerAllowed(STETH_REQUEST_WITHDRAWAL_LIMIT_ID, ETHERFI_RESTAKER),      "EFRestaker consumer (stEth) not allowed");
         require(rl.isConsumerAllowed(QUEUE_WITHDRAWALS_LIMIT_ID,        ETHERFI_RESTAKER),      "EFRestaker consumer (queue) not allowed");
         require(rl.isConsumerAllowed(DEPOSIT_INTO_STRATEGY_LIMIT_ID,    ETHERFI_RESTAKER),      "EFRestaker consumer (deposit) not allowed");
-        require(rl.isConsumerAllowed(UNRESTAKING_LIMIT_ID,              ETHERFI_NODES_MANAGER), "EFNodesMgr consumer (unrestaking) not allowed");
-        require(rl.isConsumerAllowed(EXIT_REQUEST_LIMIT_ID,             ETHERFI_NODES_MANAGER), "EFNodesMgr consumer (exit) not allowed");
-        require(rl.isConsumerAllowed(CONSOLIDATION_REQUEST_LIMIT_ID,    ETHERFI_NODES_MANAGER), "EFNodesMgr consumer (consolidation) not allowed");
 
         require(EETHToken(EETH).pauseUntilDuration()                                  == PAUSE_UNTIL_EETH,                  "EETH pause duration mismatch");
         require(LiquidityPool(payable(LIQUIDITY_POOL)).pauseUntilDuration()           == PAUSE_UNTIL_LIQUIDITY_POOL,        "LP pause duration mismatch");

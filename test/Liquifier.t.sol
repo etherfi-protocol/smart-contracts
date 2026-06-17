@@ -801,11 +801,6 @@ contract LiquifierTest is TestSetup {
         });
     }
 
-    function test_constructor_revertsOnZeroMinDiscount() public {
-        vm.expectRevert(Liquifier.InvalidDiscountRate.selector);
-        new Liquifier(_ctorAddrs(address(1), address(2), address(3)), 0, 1 days, 500, 1e16);
-    }
-
     function test_constructor_revertsOnMinDiscountAboveScale() public {
         vm.expectRevert(Liquifier.InvalidDiscountRate.selector);
         new Liquifier(_ctorAddrs(address(1), address(2), address(3)), 10_001, 1 days, 500, 1e16);

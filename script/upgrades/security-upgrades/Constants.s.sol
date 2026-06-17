@@ -54,7 +54,7 @@ abstract contract SecurityUpgradesConstants is Deployed {
     // for each in the upgrade batch so new deposits revert.
     address internal constant CBETH = 0xBe9895146f7AF43049ca1c1AE358B0541Ea49704; // Coinbase cbETH
     address internal constant WBETH = 0xa2E3356610840701BDf5611a53974510Ae27E2e1; // Binance wBETH (bETH)
-    uint256 internal constant LIQUIFIER_MIN_DISCOUNT_BPS = 1;
+    uint256 internal constant LIQUIFIER_MIN_DISCOUNT_BPS = 0;
     uint256 internal constant LIQUIFIER_STALE_PRICE_WINDOW = 2 days; // 2 days (heartbeat to updated stETH price feed is 1 days)
     uint256 internal constant LIQUIFIER_MAX_PRICE_DEVIATION_BPS = 200;   // 2%
     // price floor: reverts if stETH/ETH feed answer + threshold < SHARE_UNIT (1e18), i.e. stETH may
@@ -65,7 +65,7 @@ abstract contract SecurityUpgradesConstants is Deployed {
     int256  internal constant ADMIN_MAX_REBASE_APR_BPS = 1_000;           // 10% absolute ceiling
     uint256 internal constant ADMIN_MAX_VALIDATOR_TASK_BATCH_SIZE = 100; // 50 Currently
     uint256 internal constant ADMIN_STALE_ORACLE_REPORT_BLOCK_WINDOW = 7200 * 14; // ~14 days @ 12s blocks
-    uint256 internal constant ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY = 100_000 ether;
+    uint256 internal constant ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY = 150_000 ether;
     uint256 internal constant ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY = 100;
     // rationale: 5000 requests x 2000 sload cost ~ 10M gas which we consider is max acceptable limit for grefining, 
     // anyone making that many requests will be flagged for grefining and their requests can be invalidated
@@ -122,7 +122,7 @@ abstract contract SecurityUpgradesConstants is Deployed {
     // _validateReport reject EVERY finalized withdrawal, so it must be seeded.
     // Must satisfy 0 < value <= ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY
     // (the immutable acceptable ceiling baked into the EtherFiAdmin impl).
-    uint256 internal constant ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT = 20_000 ether;
+    uint256 internal constant ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT = 80_000 ether;
 
     // ─────────────────────────────────────────────────────────────────────
     // ROLE HOLDERS - 3 fixed + 6 user-set.
@@ -267,11 +267,6 @@ abstract contract SecurityUpgradesConstants is Deployed {
     bytes32 internal constant STETH_REQUEST_WITHDRAWAL_LIMIT_ID = keccak256("STETH_REQUEST_WITHDRAWAL_LIMIT_ID");
     bytes32 internal constant QUEUE_WITHDRAWALS_LIMIT_ID        = keccak256("QUEUE_WITHDRAWALS_LIMIT_ID");
     bytes32 internal constant DEPOSIT_INTO_STRATEGY_LIMIT_ID    = keccak256("DEPOSIT_INTO_STRATEGY_LIMIT_ID");
-
-    // staking
-    bytes32 internal constant UNRESTAKING_LIMIT_ID              = keccak256("UNRESTAKING_LIMIT_ID");
-    bytes32 internal constant EXIT_REQUEST_LIMIT_ID             = keccak256("EXIT_REQUEST_LIMIT_ID");
-    bytes32 internal constant CONSOLIDATION_REQUEST_LIMIT_ID    = keccak256("CONSOLIDATION_REQUEST_LIMIT_ID");
 
     // ─────────────────────────────────────────────────────────────────────
     // TIMELOCKS / REGISTRY HANDLES + DELAYS + OUTPUT DIR.

@@ -124,7 +124,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
      * @custom:oz-upgrades-unsafe-allow constructor
      */
     constructor(ConstructorAddresses memory _constructorAddresses, uint256 _minDiscountInBasisPoints, uint256 _stalePriceWindow, uint256 _maxPriceDeviationInBps, uint256 _maxPriceThreshold) RolesLibrary(_constructorAddresses.roleRegistry) {
-        if (_minDiscountInBasisPoints == 0 || _minDiscountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
+        if (_minDiscountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
         if (_stalePriceWindow == 0) revert InvalidPriceWindow();
         if (_maxPriceDeviationInBps == 0 || _maxPriceDeviationInBps > BASIS_POINT_SCALE) revert InvalidMaxPriceDeviationInBps();
         if (_constructorAddresses.liquidityPool == address(0)) revert InvalidLiquidityPool();
