@@ -125,7 +125,7 @@ abstract contract SecurityUpgradesConstants is Deployed {
     uint256 internal constant ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT = 80_000 ether;
 
     // ─────────────────────────────────────────────────────────────────────
-    // ROLE HOLDERS - 3 fixed + 6 user-set.
+    // ROLE HOLDERS - 3 fixed + 7 user-set.
     // ─────────────────────────────────────────────────────────────────────
     address internal constant HOLDER_UPGRADE_TIMELOCK_ROLE   = 0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761; // UPGRADE_TIMELOCK
     address internal constant HOLDER_OPERATION_TIMELOCK_ROLE = 0xcD425f44758a08BaAB3C4908f3e3dE5776e45d7a; // OPERATING_TIMELOCK
@@ -139,6 +139,11 @@ abstract contract SecurityUpgradesConstants is Deployed {
     address internal constant HOLDER_HOUSEKEEPING_OPERATIONS_ROLE = address(0);
     address internal constant HOLDER_EXECUTOR_OPERATIONS_ROLE     = address(0);
     address internal constant HOLDER_EIGENPOD_OPERATIONS_ROLE     = address(0);
+
+    // Guardian Safe granted TimelockController CANCELLER_ROLE on BOTH timelocks, so it can
+    // veto a scheduled-but-not-yet-executed op during its delay window. Set to the chosen
+    // guardian Safe before broadcast; _preflight reverts while it is address(0).
+    address internal constant HOLDER_CANCELLER_GUARDIAN           = address(0);
 
     // ─────────────────────────────────────────────────────────────────────
     // ROLE IDs — hardcoded keccak256 of the role name. Mirror the constants in
@@ -274,6 +279,11 @@ abstract contract SecurityUpgradesConstants is Deployed {
     EtherFiTimelock internal constant upgradeTimelock   = EtherFiTimelock(payable(UPGRADE_TIMELOCK));
     EtherFiTimelock internal constant operatingTimelock = EtherFiTimelock(payable(OPERATING_TIMELOCK));
     RoleRegistry    internal constant roleRegistry      = RoleRegistry(ROLE_REGISTRY);
+
+    // OZ TimelockController CANCELLER_ROLE — held on each EtherFiTimelock, NOT the RoleRegistry.
+    // Mirrors TimelockController.CANCELLER_ROLE = keccak256("CANCELLER_ROLE"). The timelock is
+    // its own role admin, so a grant must ride inside that timelock's own scheduled batch.
+    bytes32 internal constant TIMELOCK_CANCELLER_ROLE = keccak256("CANCELLER_ROLE"); // 0xfd643c72710c63c0180259aba6b2d05451e3591a24e58b62239378085726f783
 
     uint256 internal constant UPGRADE_TIMELOCK_DELAY   = 10 days;
     uint256 internal constant OPERATING_TIMELOCK_DELAY = 2 days;
