@@ -16,8 +16,6 @@ import "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
 import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
 import "@etherfi/governance/utils/DeprecatedOZReentrancyGuard.sol";
 
-import "@etherfi/interfaces/eigenlayer-interfaces/IStrategyManager.sol";
-import "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
 
 /// Go wild, spread eETH/weETH to the world
 contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, DeprecatedOZPausable, PausableUntil, DeprecatedOZReentrancyGuard, ReentrancyGuardTransient, ILiquifier {
@@ -81,9 +79,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
     event Liquified(address _user, uint256 _toEEthAmount, address _fromToken, bool _isRestaked);
-    event CompletedQueuedWithdrawal(bytes32 _withdrawalRoot);
-    event QueuedStEthWithdrawals(uint256[] _reqIds);
-    event CompletedStEthQueuedWithdrawals(uint256[] _reqIds);
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ERRORS  ---------------------------------------

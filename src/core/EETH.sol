@@ -3,7 +3,6 @@ pragma solidity ^0.8.13;
 
 import "@openzeppelin-upgradeable/contracts/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/utils/cryptography/EIP712Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/utils/CountersUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/draft-IERC20PermitUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/utils/cryptography/ECDSAUpgradeable.sol";

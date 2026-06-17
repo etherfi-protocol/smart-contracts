@@ -501,7 +501,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         blacklisterInstance = Blacklister(address(new UUPSProxy(address(blacklisterImplementation), abi.encodeWithSelector(Blacklister.initialize.selector))));
 
         // Deploy PriorityWithdrawalQueue for fork testing (mainnet LP has immutable address(0) for this)
-        PriorityWithdrawalQueue priorityQueueImplementation = new PriorityWithdrawalQueue(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(blacklisterInstance), address(roleRegistryInstance), address(treasuryInstance), 1 hours);
+        PriorityWithdrawalQueue priorityQueueImplementation = new PriorityWithdrawalQueue(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(blacklisterInstance), address(roleRegistryInstance), 1 hours);
         UUPSProxy priorityQueueProxy = new UUPSProxy(
             address(priorityQueueImplementation),
             abi.encodeWithSelector(PriorityWithdrawalQueue.initialize.selector)
@@ -620,8 +620,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // so the call path is independent of RoleRegistry, but we still need the
         // new impl in place for the consolidated role checks elsewhere.
         address newWrnImpl = address(new WithdrawRequestNFT(
-            deployed.WITHDRAW_REQUEST_NFT_BUYBACK_SAFE(),
-            address(eETHInstance),
             address(liquidityPoolInstance),
             address(roleRegistryInstance),
             address(blacklisterInstance),
@@ -1203,8 +1201,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         // WithdrawRequestNFT
         withdrawRequestNFTImplementation = new WithdrawRequestNFT(
-            address(treasuryInstance),
-            address(eETHProxy),
             address(liquidityPoolProxy),
             address(roleRegistryInstance),
             address(blacklisterInstance),
@@ -1223,7 +1219,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(weETHProxy),
             address(blacklisterInstance),
             address(roleRegistryInstance),
-            address(treasuryInstance),
             1 hours
         );
         priorityQueueInstance.upgradeToAndCall(
@@ -1574,7 +1569,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             // upgrade our existing contracts to utilize `roleRegistry`
             vm.stopPrank();
             vm.startPrank(owner);
-            PriorityWithdrawalQueue priorityQueueImplementation = new PriorityWithdrawalQueue(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(blacklisterInstance), address(roleRegistryInstance), address(treasuryInstance), 1 hours);
+            PriorityWithdrawalQueue priorityQueueImplementation = new PriorityWithdrawalQueue(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(blacklisterInstance), address(roleRegistryInstance), 1 hours);
             UUPSProxy priorityQueueProxy = new UUPSProxy(
                 address(priorityQueueImplementation),
                 abi.encodeWithSelector(PriorityWithdrawalQueue.initialize.selector)

@@ -17,10 +17,6 @@ import "@etherfi/withdrawals/interfaces/IPriorityWithdrawalQueue.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
 import "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
 
-interface IEtherFiPausable {
-    function paused() external view returns (bool);
-}
-
 contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, RolesLibrary, IEtherFiAdmin {
     using Math for uint256;
 

@@ -273,7 +273,7 @@ contract PriorityQueueTransactions is Script, Utils {
         // pattern used elsewhere in this script — the operator must substitute the
         // deployed Blacklister address before running the bytecode-match verification.
         PriorityWithdrawalQueue newPWQImpl = new PriorityWithdrawalQueue(
-            LIQUIDITY_POOL, EETH, WEETH, address(0), ROLE_REGISTRY, WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, PWQ_minDelay
+            LIQUIDITY_POOL, EETH, WEETH, address(0), ROLE_REGISTRY, PWQ_minDelay
         );
         EtherFiRedemptionManager newRedemptionManagerImpl = new EtherFiRedemptionManager(
             IEtherFiRedemptionManager.ConstructorAddresses({
@@ -317,12 +317,11 @@ contract PriorityQueueTransactions is Script, Utils {
     }
 
     function getPWQImmutableSelectors() internal pure returns (bytes4[] memory selectors) {
-        selectors = new bytes4[](5);
+        selectors = new bytes4[](4);
         selectors[0] = bytes4(keccak256("liquidityPool()"));
         selectors[1] = bytes4(keccak256("eETH()"));
         selectors[2] = bytes4(keccak256("roleRegistry()"));
-        selectors[3] = bytes4(keccak256("treasury()"));
-        selectors[4] = bytes4(keccak256("minDelay()"));
+        selectors[3] = bytes4(keccak256("minDelay()"));
     }
 
     //--------------------------------------------------------------------------------------

@@ -102,7 +102,6 @@ contract DeployWeETHWithdrawAdapter is Script {
                 weETHAddress,
                 eETHAddress,
                 liquidityPoolAddress,
-                withdrawRequestNFTAddress,
                 roleRegistryAddress
             );
             bytes memory bytecode = abi.encodePacked(
@@ -122,7 +121,6 @@ contract DeployWeETHWithdrawAdapter is Script {
                 weETHAddress,
                 eETHAddress,
                 liquidityPoolAddress,
-                withdrawRequestNFTAddress,
                 roleRegistryAddress
             );
             bytes memory implBytecode = abi.encodePacked(
@@ -178,7 +176,6 @@ contract DeployWeETHWithdrawAdapter is Script {
             weETHAddress,
             eETHAddress,
             liquidityPoolAddress,
-            withdrawRequestNFTAddress,
             roleRegistryAddress
         );
         bytes memory implBytecode = abi.encodePacked(
@@ -281,9 +278,6 @@ contract DeployWeETHWithdrawAdapter is Script {
         
         require(address(adapter.liquidityPool()) == liquidityPoolAddress, "LiquidityPool address mismatch");
         console.log("[PASS] LiquidityPool address verified");
-        
-        require(address(adapter.withdrawRequestNFT()) == withdrawRequestNFTAddress, "WithdrawRequestNFT address mismatch");
-        console.log("[PASS] WithdrawRequestNFT address verified");
         
         require(address(adapter.roleRegistry()) == roleRegistryAddress, "RoleRegistry address mismatch");
         console.log("[PASS] RoleRegistry address verified");
