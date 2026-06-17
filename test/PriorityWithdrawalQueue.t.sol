@@ -18,7 +18,6 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     address public requestManager;
     address public vipUser;
     address public regularUser;
-    address public treasury;
 
     bytes32 public constant PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE = keccak256("PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE");
     bytes32 public constant PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE = keccak256("PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE");
@@ -33,7 +32,6 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         requestManager = makeAddr("requestManager");
         vipUser = makeAddr("vipUser");
         regularUser = makeAddr("regularUser");
-        treasury = makeAddr("treasury");
 
         // Deploy PriorityWithdrawalQueue with constructor args
         vm.startPrank(owner);
@@ -43,7 +41,6 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             address(weEthInstance),
             address(blacklisterInstance),
             address(roleRegistryInstance),
-            treasury,
             1 hours
         );
         UUPSProxy proxy = new UUPSProxy(
@@ -79,8 +76,6 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         vm.startPrank(wrnOwner);
         WithdrawRequestNFT newWrnImpl =
             new WithdrawRequestNFT(
-                0x2f5301a3D59388c509C65f8698f521377D41Fd0F,
-                address(eETHInstance),
                 address(liquidityPoolInstance),
                 address(roleRegistryInstance),
                 address(blacklisterInstance),
@@ -234,7 +229,6 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         assertEq(address(priorityQueue.eETH()), address(eETHInstance));
         assertEq(address(priorityQueue.weETH()), address(weEthInstance));
         assertEq(address(priorityQueue.roleRegistry()), address(roleRegistryInstance));
-        assertEq(priorityQueue.treasury(), treasury);
 
         // Verify initial state
         assertEq(priorityQueue.nonce(), 1);

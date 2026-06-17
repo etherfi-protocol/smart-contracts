@@ -4,7 +4,6 @@ pragma solidity ^0.8.13;
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 import "@etherfi/staking/interfaces/INodeOperatorManager.sol";
-import "@etherfi/staking/interfaces/IAuctionManager.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
 import "@etherfi/governance/utils/Pausable.sol";

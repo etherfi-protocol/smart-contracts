@@ -3,7 +3,6 @@ pragma solidity ^0.8.13;
 import "@openzeppelin-upgradeable/contracts/token/ERC721/ERC721Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
-import "@etherfi/core/interfaces/IeETH.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
 import "@etherfi/withdrawals/interfaces/IWithdrawRequestNFT.sol";
 import "@etherfi/governance/interfaces/IBlacklister.sol";
@@ -73,10 +72,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, DeprecatedOZO
     //---------------------------------  IMMUTABLES  --------------------------------------
     //--------------------------------------------------------------------------------------
     ILiquidityPool public immutable liquidityPool;
-    IeETH public immutable eETH;
     IBlacklister public immutable blacklister;
-    // this treasury address is set to ethfi buyback wallet address
-    address public immutable treasury;
     address public immutable etherFiAdmin;
 
     //--------------------------------------------------------------------------------------
@@ -116,17 +112,13 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, DeprecatedOZO
     //--------------------------------------------------------------------------------------
     /**
      * @notice Constructor
-     * @param _treasury The address of the treasury.
-     * @param _eETH The address of the eETH token.
      * @param _liquidityPool The address of the liquidity pool.
      * @param _roleRegistry The address of the role registry.
      * @param _blacklister The address of the blacklister.
      * @param _etherFiAdmin The address of the etherFi admin.
      * @custom:oz-upgrades-unsafe-allow constructor
      */
-    constructor(address _treasury, address _eETH, address _liquidityPool, address _roleRegistry, address _blacklister,  address _etherFiAdmin) RolesLibrary(_roleRegistry) {
-        treasury = _treasury;
-        eETH = IeETH(_eETH);
+    constructor(address _liquidityPool, address _roleRegistry, address _blacklister,  address _etherFiAdmin) RolesLibrary(_roleRegistry) {
         liquidityPool = ILiquidityPool(_liquidityPool);
         blacklister = IBlacklister(_blacklister);
         etherFiAdmin = _etherFiAdmin;

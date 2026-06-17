@@ -84,7 +84,6 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
     event UpdatedFeeRecipient(address newFeeRecipient);
     event ValidatorSpawnerRegistered(address user);
     event ValidatorSpawnerUnregistered(address user);
-    event ValidatorRegistered(uint256 indexed validatorId, bytes signature, bytes pubKey, bytes32 depositRoot);
     event Rebase(uint256 totalEthLocked, uint256 totalEEthShares);
     event ProtocolFeePaid(uint128 protocolFees);
     event MinWithdrawAmountSet(uint256 minWithdrawAmount);

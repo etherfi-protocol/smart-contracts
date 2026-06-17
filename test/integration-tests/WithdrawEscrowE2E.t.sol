@@ -105,7 +105,6 @@ contract WithdrawEscrowE2ETest is TestSetup {
             address(weEthInstance),
             address(blacklisterInstance),
             address(roleRegistryInstance),
-            treasuryInstance,
             1 hours
         );
         UUPSProxy proxy = new UUPSProxy(
@@ -136,8 +135,6 @@ contract WithdrawEscrowE2ETest is TestSetup {
         // Deploy the impl BEFORE pranking — the inlined `new` is a CREATE that
         // would otherwise consume the single-shot vm.prank (OnlyUpgradeTimelock).
         address newWrnImpl = address(new WithdrawRequestNFT(
-            0x2f5301a3D59388c509C65f8698f521377D41Fd0F,
-            address(eETHInstance),
             address(liquidityPoolInstance),
             address(roleRegistryInstance),
             address(blacklisterInstance)

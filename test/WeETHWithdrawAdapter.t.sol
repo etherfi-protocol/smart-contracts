@@ -27,7 +27,6 @@ contract WeETHWithdrawAdapterTest is TestSetup {
             address(weEthInstance),
             address(eETHInstance),
             address(liquidityPoolInstance),
-            address(withdrawRequestNFTInstance),
             address(roleRegistryInstance),
             address(blacklisterInstance)
         );
@@ -311,7 +310,6 @@ contract WeETHWithdrawAdapterTest is TestSetup {
             address(weEthInstance),
             address(eETHInstance),
             address(liquidityPoolInstance),
-            address(withdrawRequestNFTInstance),
             address(roleRegistryInstance),
             address(0)
         );

@@ -58,7 +58,4 @@ interface IPriorityWithdrawalQueue {
     function removeFromWhitelist(address user) external;
     function batchUpdateWhitelist(address[] calldata users, bool[] calldata statuses) external;
     function invalidateRequests(WithdrawRequest[] calldata requests) external returns(bytes32[] memory);
-
-    // Immutables
-    function treasury() external view returns (address);
 }
