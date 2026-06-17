@@ -44,7 +44,7 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         address wrnOwner = roleRegistryInstance.owner();
         // Deploy the impl BEFORE pranking — the inlined `new` is a CREATE that
         // would otherwise consume the single-shot vm.prank (OnlyUpgradeTimelock).
-        address newWrnImpl = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(eETHInstance), address(liquidityPoolInstance), address(roleRegistryInstance), address(blacklisterInstance), address(etherFiAdminInstance)));
+        address newWrnImpl = address(new WithdrawRequestNFT(address(liquidityPoolInstance), address(roleRegistryInstance), address(blacklisterInstance), address(etherFiAdminInstance)));
         vm.prank(wrnOwner);
         withdrawRequestNFTInstance.upgradeTo(newWrnImpl);
 
@@ -53,7 +53,7 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         // into the queue and would revert with SendFail. Upgrade the queue first.
         address newPQ = address(new PriorityWithdrawalQueue(
             address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance),
-            address(blacklisterInstance), address(roleRegistryInstance), treasuryInstance, 1 hours
+            address(blacklisterInstance), address(roleRegistryInstance), 1 hours
         ));
         vm.prank(UPGRADE_TIMELOCK);
         PriorityWithdrawalQueue(payable(PRIORITY_WITHDRAWAL_QUEUE)).upgradeTo(newPQ);

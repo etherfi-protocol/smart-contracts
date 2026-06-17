@@ -56,7 +56,6 @@ contract PriorityWithdrawalQueue is
     IeETH public immutable eETH;
     IWeETH public immutable weETH;
     IBlacklister public immutable blacklister;
-    address public immutable treasury;
     uint32 public immutable minDelay;
 
     //--------------------------------------------------------------------------------------
@@ -116,12 +115,11 @@ contract PriorityWithdrawalQueue is
      * @param _weETH The address of the weETH token.
      * @param _blacklister The address of the blacklister.
      * @param _roleRegistry The address of the role registry.
-     * @param _treasury The address of the treasury.
      * @param _minDelay The minimum delay for a withdrawal request.
      * @custom:oz-upgrades-unsafe-allow constructor
      */
-    constructor(address _liquidityPool, address _eETH, address _weETH, address _blacklister, address _roleRegistry, address _treasury, uint32 _minDelay) RolesLibrary(_roleRegistry) {
-        if (_liquidityPool == address(0) || _eETH == address(0) || _weETH == address(0) || _blacklister == address(0) || _treasury == address(0)) {
+    constructor(address _liquidityPool, address _eETH, address _weETH, address _blacklister, address _roleRegistry, uint32 _minDelay) RolesLibrary(_roleRegistry) {
+        if (_liquidityPool == address(0) || _eETH == address(0) || _weETH == address(0) || _blacklister == address(0)) {
             revert AddressZero();
         }
 
@@ -129,7 +127,6 @@ contract PriorityWithdrawalQueue is
         eETH = IeETH(_eETH);
         weETH = IWeETH(_weETH);
         blacklister = IBlacklister(_blacklister);
-        treasury = _treasury;
         minDelay = _minDelay;
 
         _disableInitializers();
