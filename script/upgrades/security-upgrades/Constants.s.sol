@@ -54,7 +54,7 @@ abstract contract SecurityUpgradesConstants is Deployed {
     // for each in the upgrade batch so new deposits revert.
     address internal constant CBETH = 0xBe9895146f7AF43049ca1c1AE358B0541Ea49704; // Coinbase cbETH
     address internal constant WBETH = 0xa2E3356610840701BDf5611a53974510Ae27E2e1; // Binance wBETH (bETH)
-    uint256 internal constant LIQUIFIER_MIN_DISCOUNT_BPS = 0;
+    uint256 internal constant LIQUIFIER_MIN_DISCOUNT_BPS = 0; // we want the baility to have 0 discount rate on l2 dummy tokens
     uint256 internal constant LIQUIFIER_STALE_PRICE_WINDOW = 2 days; // 2 days (heartbeat to updated stETH price feed is 1 days)
     uint256 internal constant LIQUIFIER_MAX_PRICE_DEVIATION_BPS = 200;   // 2%
     // price floor: reverts if stETH/ETH feed answer + threshold < SHARE_UNIT (1e18), i.e. stETH may
@@ -65,7 +65,7 @@ abstract contract SecurityUpgradesConstants is Deployed {
     int256  internal constant ADMIN_MAX_REBASE_APR_BPS = 1_000;           // 10% absolute ceiling
     uint256 internal constant ADMIN_MAX_VALIDATOR_TASK_BATCH_SIZE = 100; // 50 Currently
     uint256 internal constant ADMIN_STALE_ORACLE_REPORT_BLOCK_WINDOW = 7200 * 14; // ~14 days @ 12s blocks
-    uint256 internal constant ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY = 150_000 ether;
+    uint256 internal constant ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY = 150_000 ether; // greater than the highest single day finalization we have seen of 130k ETH
     uint256 internal constant ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY = 100;
     // rationale: 5000 requests x 2000 sload cost ~ 10M gas which we consider is max acceptable limit for grefining, 
     // anyone making that many requests will be flagged for grefining and their requests can be invalidated
@@ -208,34 +208,22 @@ abstract contract SecurityUpgradesConstants is Deployed {
     // ─────────────────────────────────────────────────────────────────────
     // core — Token-side global buckets (consumeToken on eETH/weETH paths).
     // Transfer is now per-address (consumeForAddressIfConfigured); no global TRANSFER bucket.
-    uint64 internal constant EETH_MINT_CAPACITY    = 0;
-    uint64 internal constant EETH_MINT_REFILL_RATE = 0;
-    uint64 internal constant EETH_BURN_CAPACITY    = 0;
-    uint64 internal constant EETH_BURN_REFILL_RATE = 0;
+    uint64 internal constant EETH_MINT_CAPACITY    = 30000000000000;
+    uint64 internal constant EETH_MINT_REFILL_RATE = 2083333333;
+    uint64 internal constant EETH_BURN_CAPACITY    = 25000000000000;
+    uint64 internal constant EETH_BURN_REFILL_RATE = 1736111111;
     uint64 internal constant WEETH_MINT_CAPACITY   = 0;
     uint64 internal constant WEETH_MINT_REFILL_RATE = 0;
     uint64 internal constant WEETH_BURN_CAPACITY   = 0;
     uint64 internal constant WEETH_BURN_REFILL_RATE = 0;
 
     // restaking — EtherFiRestaker buckets (consume).
-    uint64 internal constant STETH_REQUEST_WITHDRAWAL_CAPACITY    = 0;
-    uint64 internal constant STETH_REQUEST_WITHDRAWAL_REFILL_RATE = 0;
+    uint64 internal constant STETH_REQUEST_WITHDRAWAL_CAPACITY    = 50000000000000;
+    uint64 internal constant STETH_REQUEST_WITHDRAWAL_REFILL_RATE = 3472222222;
     uint64 internal constant QUEUE_WITHDRAWALS_CAPACITY           = 0;
     uint64 internal constant QUEUE_WITHDRAWALS_REFILL_RATE        = 0;
     uint64 internal constant DEPOSIT_INTO_STRATEGY_CAPACITY       = 0;
     uint64 internal constant DEPOSIT_INTO_STRATEGY_REFILL_RATE    = 0;
-
-    // staking — EtherFiNodesManager buckets (consume).
-    // NOTE: UNRESTAKING / EXIT_REQUEST / CONSOLIDATION_REQUEST buckets already exist on
-    // mainnet from a prior deployment (limitExists() == true). Batch 2 calls
-    // setCapacity + setRefillRate for these 3 rather than createNewLimiter; the 7 token
-    // and restaker buckets are still newly-created. See F2 in PR #420 review.
-    uint64 internal constant UNRESTAKING_CAPACITY            = 0;
-    uint64 internal constant UNRESTAKING_REFILL_RATE         = 0;
-    uint64 internal constant EXIT_REQUEST_CAPACITY           = 0;
-    uint64 internal constant EXIT_REQUEST_REFILL_RATE        = 0;
-    uint64 internal constant CONSOLIDATION_REQUEST_CAPACITY  = 0;
-    uint64 internal constant CONSOLIDATION_REQUEST_REFILL_RATE = 0;
 
     // ─────────────────────────────────────────────────────────────────────
     // PausableUntil durations (sec; TBD). Gated to contracts that mix in
