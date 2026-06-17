@@ -599,18 +599,17 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         codeChecker.verifyContractByteCodeMatch(etherFiRedemptionManagerImpl, address(fresh));
 
         PriorityWithdrawalQueue fresh2 = new PriorityWithdrawalQueue(
-            LIQUIDITY_POOL, EETH, WEETH, blacklisterProxy, ROLE_REGISTRY, WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, PWQ_MIN_DELAY
+            LIQUIDITY_POOL, EETH, WEETH, blacklisterProxy, ROLE_REGISTRY, PWQ_MIN_DELAY
         );
         codeChecker.verifyContractByteCodeMatch(priorityWithdrawalQueueImpl, address(fresh2));
 
         WeETHWithdrawAdapter fresh3 = new WeETHWithdrawAdapter(
-            WEETH, EETH, LIQUIDITY_POOL, WITHDRAW_REQUEST_NFT, ROLE_REGISTRY, blacklisterProxy
+            WEETH, EETH, LIQUIDITY_POOL, ROLE_REGISTRY, blacklisterProxy
         );
         codeChecker.verifyContractByteCodeMatch(weETHWithdrawAdapterImpl, address(fresh3));
 
         WithdrawRequestNFT fresh4 = new WithdrawRequestNFT(
-            WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, EETH, LIQUIDITY_POOL,
-            ROLE_REGISTRY, blacklisterProxy, ETHERFI_ADMIN
+            LIQUIDITY_POOL, ROLE_REGISTRY, blacklisterProxy, ETHERFI_ADMIN
         );
         codeChecker.verifyContractByteCodeMatch(withdrawRequestNFTImpl, address(fresh4));
     }
@@ -1442,7 +1441,6 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(address(pwq.liquidityPool()) == LIQUIDITY_POOL,                  "PWQ.liquidityPool");
         require(address(pwq.eETH())          == EETH,                            "PWQ.eETH");
         require(address(pwq.weETH())         == WEETH,                           "PWQ.weETH");
-        require(pwq.treasury()    == WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, "PWQ.treasury");
         require(pwq.minDelay()               == PWQ_MIN_DELAY,                   "PWQ.minDelay");
         require(address(pwq.roleRegistry())  == ROLE_REGISTRY,                   "PWQ.roleRegistry");
         require(address(pwq.blacklister())   == blacklisterProxy,                "PWQ.blacklister");
@@ -1451,14 +1449,11 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(address(wwa.weETH())              == WEETH,                "WeETHWA.weETH");
         require(address(wwa.eETH())               == EETH,                 "WeETHWA.eETH");
         require(address(wwa.liquidityPool())      == LIQUIDITY_POOL,       "WeETHWA.liquidityPool");
-        require(address(wwa.withdrawRequestNFT()) == WITHDRAW_REQUEST_NFT, "WeETHWA.withdrawRequestNFT");
         require(address(wwa.blacklister())        == blacklisterProxy,     "WeETHWA.blacklister");
         require(address(wwa.roleRegistry())       == ROLE_REGISTRY,        "WeETHWA.roleRegistry");
 
         WithdrawRequestNFT n = WithdrawRequestNFT(payable(WITHDRAW_REQUEST_NFT));
-        require(n.treasury()       == WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, "NFT.treasury");
         require(address(n.liquidityPool())    == LIQUIDITY_POOL,           "NFT.liquidityPool");
-        require(address(n.eETH())             == EETH,                     "NFT.eETH");
         require(address(n.roleRegistry())     == ROLE_REGISTRY,            "NFT.roleRegistry");
         require(address(n.blacklister())      == blacklisterProxy,         "NFT.blacklister");
         require(n.etherFiAdmin()              == ETHERFI_ADMIN,            "NFT.etherFiAdmin");

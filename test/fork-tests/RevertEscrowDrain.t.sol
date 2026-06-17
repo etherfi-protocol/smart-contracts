@@ -62,8 +62,8 @@ contract RevertEscrowDrainTest is Test, Deployed {
                 membershipManager: MEMBERSHIP_MANAGER
             })
         ));
-        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, EETH, LIQUIDITY_POOL, ROLE_REGISTRY, address(blacklister), ETHERFI_ADMIN));
-        address newPQ = address(new PriorityWithdrawalQueue(LIQUIDITY_POOL, EETH, WEETH, address(blacklister), ROLE_REGISTRY, TREASURY, 1 hours));
+        address newWRN = address(new WithdrawRequestNFT(LIQUIDITY_POOL, ROLE_REGISTRY, address(blacklister), ETHERFI_ADMIN));
+        address newPQ = address(new PriorityWithdrawalQueue(LIQUIDITY_POOL, EETH, WEETH, address(blacklister), ROLE_REGISTRY, 1 hours));
 
         address roleRegOwner = IOwnableRead(ROLE_REGISTRY).owner();
         address wrnOwner = IOwnableRead(WITHDRAW_REQUEST_NFT).owner();
