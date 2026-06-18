@@ -410,7 +410,7 @@ contract DeploySecurityUpgrades is Script, SecurityUpgradesConstants, Utils {
                     liquidityPool: LIQUIDITY_POOL,
                     eEth: EETH,
                     weEth: WEETH,
-                    treasury: WITHDRAW_REQUEST_NFT_BUYBACK_SAFE,
+                    treasury: TREASURY,
                     roleRegistry: ROLE_REGISTRY,
                     etherFiRestaker: ETHERFI_RESTAKER,
                     priorityWithdrawalQueue: PRIORITY_WITHDRAWAL_QUEUE,
@@ -434,7 +434,6 @@ contract DeploySecurityUpgrades is Script, SecurityUpgradesConstants, Utils {
                 WEETH,
                 blacklisterProxy,
                 ROLE_REGISTRY,
-                WITHDRAW_REQUEST_NFT_BUYBACK_SAFE,
                 PWQ_MIN_DELAY
             );
             bytes memory bc = abi.encodePacked(type(PriorityWithdrawalQueue).creationCode, args);
@@ -446,7 +445,6 @@ contract DeploySecurityUpgrades is Script, SecurityUpgradesConstants, Utils {
                 WEETH,
                 EETH,
                 LIQUIDITY_POOL,
-                WITHDRAW_REQUEST_NFT,
                 ROLE_REGISTRY,
                 blacklisterProxy
             );
@@ -456,8 +454,6 @@ contract DeploySecurityUpgrades is Script, SecurityUpgradesConstants, Utils {
         {
             string memory name = "WithdrawRequestNFT";
             bytes memory args = abi.encode(
-                WITHDRAW_REQUEST_NFT_BUYBACK_SAFE,
-                EETH,
                 LIQUIDITY_POOL,
                 ROLE_REGISTRY,
                 blacklisterProxy,
