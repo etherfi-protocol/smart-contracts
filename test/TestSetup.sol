@@ -117,6 +117,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     address public stEthChainlinkFeed;
     uint256 public constant LIQUIFIER_STALE_WINDOW = 24 hours;
     uint256 public constant LIQUIFIER_MAX_PRICE_DEVIATION_BPS = 500;
+    // Allowed stETH/ETH depeg band (1e18-scaled) for the deposit floor / redemption ceiling guards: 1% = 1e16.
+    uint256 public constant STETH_MAX_PRICE_THRESHOLD = 1e16;
 
     IcbETH public cbEth;
     IwBETH public wbEth;
@@ -499,7 +501,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         blacklisterInstance = Blacklister(address(new UUPSProxy(address(blacklisterImplementation), abi.encodeWithSelector(Blacklister.initialize.selector))));
 
         // Deploy PriorityWithdrawalQueue for fork testing (mainnet LP has immutable address(0) for this)
-        PriorityWithdrawalQueue priorityQueueImplementation = new PriorityWithdrawalQueue(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(blacklisterInstance), address(roleRegistryInstance), address(treasuryInstance), 1 hours);
+        PriorityWithdrawalQueue priorityQueueImplementation = new PriorityWithdrawalQueue(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(blacklisterInstance), address(roleRegistryInstance), 1 hours);
         UUPSProxy priorityQueueProxy = new UUPSProxy(
             address(priorityQueueImplementation),
             abi.encodeWithSelector(PriorityWithdrawalQueue.initialize.selector)
@@ -543,17 +545,22 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // longer exposes (e.g. PROTOCOL_PAUSER). Match the on-chain max-cap
         // immutables (10_000 across the board) so fork tests keep working.
         address newRedemptionImpl = address(new EtherFiRedemptionManager(
-            address(liquidityPoolInstance),
-            address(eETHInstance),
-            address(weEthInstance),
-            treasuryInstance,
-            address(roleRegistryInstance),
-            address(etherFiRestakerInstance),
-            address(priorityQueueInstance),
-            address(blacklisterInstance),
+            IEtherFiRedemptionManager.ConstructorAddresses({
+                liquidityPool: address(liquidityPoolInstance),
+                eEth: address(eETHInstance),
+                weEth: address(weEthInstance),
+                treasury: address(treasuryInstance),
+                roleRegistry: address(roleRegistryInstance),
+                etherFiRestaker: address(etherFiRestakerInstance),
+                priorityWithdrawalQueue: address(priorityQueueInstance),
+                blacklister: address(blacklisterInstance),
+                stEthPriceFeed: stEthChainlinkFeed
+            }),
             10_000,
             10_000,
-            10_000
+            10_000,
+            LIQUIFIER_STALE_WINDOW,
+            STETH_MAX_PRICE_THRESHOLD
         ));
         vm.prank(roleRegistryInstance.owner());
         etherFiRedemptionManagerInstance.upgradeTo(newRedemptionImpl);
@@ -613,8 +620,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // so the call path is independent of RoleRegistry, but we still need the
         // new impl in place for the consolidated role checks elsewhere.
         address newWrnImpl = address(new WithdrawRequestNFT(
-            deployed.WITHDRAW_REQUEST_NFT_BUYBACK_SAFE(),
-            address(eETHInstance),
             address(liquidityPoolInstance),
             address(roleRegistryInstance),
             address(blacklisterInstance),
@@ -688,7 +693,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             }),
             100,
             LIQUIFIER_STALE_WINDOW,
-            LIQUIFIER_MAX_PRICE_DEVIATION_BPS
+            LIQUIFIER_MAX_PRICE_DEVIATION_BPS,
+            STETH_MAX_PRICE_THRESHOLD
         ));
         vm.prank(roleRegistryInstance.owner());
         liquifierInstance.upgradeTo(newLiquifierImpl);
@@ -701,7 +707,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // Deploy the new impl BEFORE pranking: a `new` inside the upgradeTo
         // argument is a CREATE that would consume the single-shot vm.prank,
         // leaving upgradeTo to run as the test contract (Ownable revert).
-        address newRoleRegistryImpl = address(new RoleRegistry(address(0)));
+        address newRoleRegistryImpl = address(new RoleRegistry(address(0xdead)));
         vm.prank(roleRegistryInstance.owner());
         roleRegistryInstance.upgradeTo(newRoleRegistryImpl);
 
@@ -815,7 +821,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 blacklister: address(blacklisterInstance),
                 etherfiRestaker: address(etherFiRestakerInstance),
                 l1SyncPool: address(0xA6)
-            }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS));
+            }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS, STETH_MAX_PRICE_THRESHOLD));
             vm.prank(roleRegistryInstance.owner());
             liquifierInstance.upgradeTo(newLiquifierImpl);
         }
@@ -823,7 +829,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // Now swap RoleRegistry and grant roles used by tests.
         vm.startPrank(roleRegistryInstance.owner());
         if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
-            roleRegistryInstance.upgradeTo(address(new RoleRegistry(address(0))));
+            roleRegistryInstance.upgradeTo(address(new RoleRegistry(address(0xdead))));
         }
         roleRegistryInstance.grantRole(roleRegistryInstance.UPGRADE_TIMELOCK_ROLE(), owner);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), owner);
@@ -900,7 +906,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // Phase 1: deploy infrastructure with no circular deps
         // =====================================================================
 
-        roleRegistryImplementation = new RoleRegistry(address(0));
+        roleRegistryImplementation = new RoleRegistry(address(0xdead));
         roleRegistryProxy = new UUPSProxy(address(roleRegistryImplementation), abi.encodeWithSelector(RoleRegistry.initialize.selector, owner));
         roleRegistryInstance = RoleRegistry(address(roleRegistryProxy));
 
@@ -1015,17 +1021,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             blacklister: address(blacklisterInstance),
             etherfiRestaker: address(0xA5),
             l1SyncPool: address(0xA6)
-        }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS);
+        }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS, STETH_MAX_PRICE_THRESHOLD);
         liquifierInstance.upgradeTo(address(liquifierImplementation));
-        liquifierInstance.initialize(
-            address(treasuryInstance),
-            address(liquidityPoolProxy),
-            address(eigenLayerStrategyManager),
-            address(lidoWithdrawalQueue),
-            address(stEth),
-            address(stEth_Eth_Pool),
-            3600
-        );
+        liquifierInstance.initialize(3600);
 
         // EtherFiNode (non-proxy beacon impl used by StakingManager)
         node = new EtherFiNode(
@@ -1049,7 +1047,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(treasuryInstance)
         );
         auctionInstance.upgradeTo(address(auctionImplementation));
-        auctionInstance.initialize(address(nodeOperatorManagerInstance));
+        auctionInstance.initialize();
 
         // StakingManager
         stakingManagerImplementation = new StakingManager(
@@ -1160,28 +1158,22 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             blacklister: address(blacklisterInstance),
             etherfiRestaker: address(etherFiRestakerProxy),
             l1SyncPool: address(0xA6)
-        }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS);
+        }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS, STETH_MAX_PRICE_THRESHOLD);
         liquifierInstance.upgradeTo(address(liquifierImplementation));
 
         // TODO - not sure what `name` and `versiona` are for
         eETHImplementation = new EETH(address(liquidityPoolProxy), address(roleRegistryInstance), address(blacklisterInstance), address(rateLimiterInstance));
         vm.expectRevert("Initializable: contract is already initialized");
-        eETHImplementation.initialize(payable(address(liquidityPoolProxy)));
+        eETHImplementation.initialize();
         eETHInstance.upgradeTo(address(eETHImplementation));
-        vm.expectRevert(EETH.AddressZero.selector);
-        eETHInstance.initialize(payable(address(0)));
-        eETHInstance.initialize(payable(address(liquidityPoolProxy)));
+        eETHInstance.initialize();
 
         // WeETH
         weEthImplementation = new WeETH(address(eETHProxy), address(liquidityPoolProxy), address(roleRegistryInstance), address(blacklisterInstance), address(rateLimiterInstance));
         vm.expectRevert("Initializable: contract is already initialized");
-        weEthImplementation.initialize(payable(address(liquidityPoolProxy)), address(eETHProxy));
+        weEthImplementation.initialize();
         weEthInstance.upgradeTo(address(weEthImplementation));
-        vm.expectRevert(WeETH.ZeroAddress.selector);
-        weEthInstance.initialize(address(0), address(eETHProxy));
-        vm.expectRevert(WeETH.ZeroAddress.selector);
-        weEthInstance.initialize(payable(address(liquidityPoolProxy)), address(0));
-        weEthInstance.initialize(payable(address(liquidityPoolProxy)), address(eETHProxy));
+        weEthInstance.initialize();
 
         // EETH/WEETH operating admin consolidated into OPERATION_MULTISIG_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), admin);
@@ -1209,8 +1201,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         // WithdrawRequestNFT
         withdrawRequestNFTImplementation = new WithdrawRequestNFT(
-            address(treasuryInstance),
-            address(eETHProxy),
             address(liquidityPoolProxy),
             address(roleRegistryInstance),
             address(blacklisterInstance),
@@ -1229,7 +1219,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(weETHProxy),
             address(blacklisterInstance),
             address(roleRegistryInstance),
-            address(treasuryInstance),
             1 hours
         );
         priorityQueueInstance.upgradeToAndCall(
@@ -1281,15 +1270,20 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         // EtherFiRedemptionManager
         EtherFiRedemptionManager etherFiRedemptionManagerImpl = new EtherFiRedemptionManager(
-            address(liquidityPoolProxy),
-            address(eETHProxy),
-            address(weETHProxy),
-            address(treasuryInstance),
-            address(roleRegistryInstance),
-            address(etherFiRestakerProxy),
-            address(priorityQueueProxy),
-            address(blacklisterInstance),
-            10_000, 100, 10_000
+            IEtherFiRedemptionManager.ConstructorAddresses({
+                liquidityPool: address(liquidityPoolProxy),
+                eEth: address(eETHProxy),
+                weEth: address(weETHProxy),
+                treasury: address(treasuryInstance),
+                roleRegistry: address(roleRegistryInstance),
+                etherFiRestaker: address(etherFiRestakerProxy),
+                priorityWithdrawalQueue: address(priorityQueueProxy),
+                blacklister: address(blacklisterInstance),
+                stEthPriceFeed: stEthChainlinkFeed
+            }),
+            10_000, 100, 10_000,
+            LIQUIFIER_STALE_WINDOW,
+            STETH_MAX_PRICE_THRESHOLD
         );
         etherFiRedemptionManagerInstance.upgradeTo(address(etherFiRedemptionManagerImpl));
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), owner);
@@ -1323,21 +1317,13 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         //   - NodeOperatorManager.setAuctionContractAddress (removed)
         //   - AuctionManager.setStakingManagerContractAddress (removed)
         // =====================================================================
-        liquidityPoolInstance.initialize(
-            address(eETHProxy),
-            address(stakingManagerProxy),
-            address(etherFiNodeManagerProxy),
-            address(membershipManagerProxy),
-            address(TNFTInstance),
-            address(etherFiAdminProxy),
-            address(withdrawRequestNFTProxy)
-        );
+        liquidityPoolInstance.initialize();
         // Bootstrap escrow migration flag (no `must be zero` check on immutables).
         liquidityPoolInstance.initializeOnUpgradeV2();
 
         membershipNftInstance.initialize("https://etherfi-cdn/{id}.json", address(membershipManagerInstance));
 
-        withdrawRequestNFTInstance.initialize(payable(address(liquidityPoolProxy)), payable(address(eETHProxy)), payable(address(membershipManagerProxy)));
+        withdrawRequestNFTInstance.initialize();
         // Push the share-rate-freeze sentinel checkpoint that the new finalizeRequests
         // guard requires. We're inside an active `vm.startPrank(owner)` block here and
         // `owner` was granted UPGRADE_TIMELOCK_ROLE in Phase 1, so no extra prank needed.
@@ -1387,13 +1373,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         tvlOracle = new TVLOracle(alice);
 
         etherFiAdminInstance.initialize(
-            address(etherFiOracleProxy),
-            address(stakingManagerProxy),
-            address(auctionManagerProxy),
-            address(etherFiNodeManagerProxy),
-            address(liquidityPoolProxy),
-            address(membershipManagerProxy),
-            address(withdrawRequestNFTProxy),
             10000,
             0
         );
@@ -1581,7 +1560,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         if (address(liquidityPoolInstance.roleRegistry()) == address(0x0)) {
             // deploy new versions of role registry
-            roleRegistryImplementation = new RoleRegistry(address(0));
+            roleRegistryImplementation = new RoleRegistry(address(0xdead));
             bytes memory initializerData =  abi.encodeWithSelector(RoleRegistry.initialize.selector, admin);
             roleRegistryInstance = RoleRegistry(address(new UUPSProxy(address(roleRegistryImplementation), initializerData)));
             superAdmin = admin;
@@ -1590,16 +1569,31 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             // upgrade our existing contracts to utilize `roleRegistry`
             vm.stopPrank();
             vm.startPrank(owner);
-            PriorityWithdrawalQueue priorityQueueImplementation = new PriorityWithdrawalQueue(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(blacklisterInstance), address(roleRegistryInstance), address(treasuryInstance), 1 hours);
+            PriorityWithdrawalQueue priorityQueueImplementation = new PriorityWithdrawalQueue(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(blacklisterInstance), address(roleRegistryInstance), 1 hours);
             UUPSProxy priorityQueueProxy = new UUPSProxy(
                 address(priorityQueueImplementation),
                 abi.encodeWithSelector(PriorityWithdrawalQueue.initialize.selector)
             );
             priorityQueueInstance = PriorityWithdrawalQueue(payable(address(priorityQueueProxy)));
-            EtherFiRedemptionManager etherFiRedemptionManagerImplementation = new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance), address(etherFiRestakerInstance), address(priorityQueueInstance), address(blacklisterInstance), 10_000, 100, 10_000);
+            EtherFiRedemptionManager etherFiRedemptionManagerImplementation = new EtherFiRedemptionManager(
+                IEtherFiRedemptionManager.ConstructorAddresses({
+                    liquidityPool: address(liquidityPoolInstance),
+                    eEth: address(eETHInstance),
+                    weEth: address(weEthInstance),
+                    treasury: address(treasuryInstance),
+                    roleRegistry: address(roleRegistryInstance),
+                    etherFiRestaker: address(etherFiRestakerInstance),
+                    priorityWithdrawalQueue: address(priorityQueueInstance),
+                    blacklister: address(blacklisterInstance),
+                    stEthPriceFeed: stEthChainlinkFeed
+                }),
+                10_000, 100, 10_000,
+                LIQUIFIER_STALE_WINDOW,
+                STETH_MAX_PRICE_THRESHOLD
+            );
             etherFiRedemptionManagerProxy = new UUPSProxy(address(etherFiRedemptionManagerImplementation), "");
             etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
-            etherFiRedemptionManagerInstance.initialize(10_00, 1_00, 1_00, 5 ether, 0.001 ether); // 10% fee split to treasury, 1% exit fee, 1% low watermark  
+            etherFiRedemptionManagerInstance.initialize();
         }
 
         vm.startPrank(admin);
@@ -2308,7 +2302,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             blacklister: address(blacklisterInstance),
             etherfiRestaker: address(0xA5),
             l1SyncPool: address(0xA6)
-        }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS));
+        }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS, STETH_MAX_PRICE_THRESHOLD));
         vm.prank(roleRegistryInstance.owner());
         liquifierInstance.upgradeTo(newImpl);
     }

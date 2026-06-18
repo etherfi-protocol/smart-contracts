@@ -273,10 +273,20 @@ contract PriorityQueueTransactions is Script, Utils {
         // pattern used elsewhere in this script — the operator must substitute the
         // deployed Blacklister address before running the bytecode-match verification.
         PriorityWithdrawalQueue newPWQImpl = new PriorityWithdrawalQueue(
-            LIQUIDITY_POOL, EETH, WEETH, address(0), ROLE_REGISTRY, WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, PWQ_minDelay
+            LIQUIDITY_POOL, EETH, WEETH, address(0), ROLE_REGISTRY, PWQ_minDelay
         );
         EtherFiRedemptionManager newRedemptionManagerImpl = new EtherFiRedemptionManager(
-            LIQUIDITY_POOL, EETH, WEETH, WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, ROLE_REGISTRY, ETHERFI_RESTAKER, priorityWithdrawalQueueProxy, address(0), 10_000, 100, 10_000
+            IEtherFiRedemptionManager.ConstructorAddresses({
+                liquidityPool: LIQUIDITY_POOL,
+                eEth: EETH,
+                weEth: WEETH,
+                treasury: WITHDRAW_REQUEST_NFT_BUYBACK_SAFE,
+                roleRegistry: ROLE_REGISTRY,
+                etherFiRestaker: ETHERFI_RESTAKER,
+                priorityWithdrawalQueue: priorityWithdrawalQueueProxy,
+                blacklister: address(0),
+                stEthPriceFeed: 0x86392dC19c0b719886221c78AB11eb8Cf5c52812
+            }), 10_000, 100, 10_000, 24 hours, 1e16
         );
 
         contractCodeChecker.verifyContractByteCodeMatch(liquidityPoolImpl, address(newLiquidityPoolImpl));
@@ -307,12 +317,11 @@ contract PriorityQueueTransactions is Script, Utils {
     }
 
     function getPWQImmutableSelectors() internal pure returns (bytes4[] memory selectors) {
-        selectors = new bytes4[](5);
+        selectors = new bytes4[](4);
         selectors[0] = bytes4(keccak256("liquidityPool()"));
         selectors[1] = bytes4(keccak256("eETH()"));
         selectors[2] = bytes4(keccak256("roleRegistry()"));
-        selectors[3] = bytes4(keccak256("treasury()"));
-        selectors[4] = bytes4(keccak256("minDelay()"));
+        selectors[3] = bytes4(keccak256("minDelay()"));
     }
 
     //--------------------------------------------------------------------------------------

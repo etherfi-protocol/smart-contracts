@@ -10,7 +10,6 @@ import {IWeETHWithdrawAdapter} from "@etherfi/withdrawals/interfaces/IWeETHWithd
 import {IWeETH} from "@etherfi/core/interfaces/IWeETH.sol";
 import {IeETH} from "@etherfi/core/interfaces/IeETH.sol";
 import {ILiquidityPool} from "@etherfi/core/interfaces/ILiquidityPool.sol";
-import {IWithdrawRequestNFT} from "@etherfi/withdrawals/interfaces/IWithdrawRequestNFT.sol";
 import {IBlacklister} from "@etherfi/governance/interfaces/IBlacklister.sol";
 import {PausableUntil} from "@etherfi/governance/utils/PausableUntil.sol";
 import {RolesLibrary} from "@etherfi/governance/utils/RolesLibrary.sol";
@@ -42,7 +41,6 @@ contract WeETHWithdrawAdapter is
     IWeETH public immutable weETH;
     IeETH public immutable eETH;
     ILiquidityPool public immutable liquidityPool;
-    IWithdrawRequestNFT public immutable withdrawRequestNFT;
     IBlacklister public immutable blacklister;
 
     //--------------------------------------------------------------------------------------
@@ -50,7 +48,6 @@ contract WeETHWithdrawAdapter is
     //--------------------------------------------------------------------------------------
     error ZeroAmount();
     error ZeroAddress();
-    error InvalidAmount();
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  CONSTRUCTOR  ---------------------------------------
@@ -60,7 +57,6 @@ contract WeETHWithdrawAdapter is
      * @param _weETH The address of the weETH token.
      * @param _eETH The address of the eETH token.
      * @param _liquidityPool The address of the liquidity pool.
-     * @param _withdrawRequestNFT The address of the withdraw request NFT.
      * @param _roleRegistry The address of the role registry.
      * @param _blacklister The address of the blacklister.
      * @custom:oz-upgrades-unsafe-allow constructor
@@ -69,14 +65,12 @@ contract WeETHWithdrawAdapter is
         address _weETH,
         address _eETH,
         address _liquidityPool,
-        address _withdrawRequestNFT,
         address _roleRegistry,
         address _blacklister
     ) RolesLibrary(_roleRegistry) {
         if (_weETH == address(0) ||
             _eETH == address(0) ||
             _liquidityPool == address(0) ||
-            _withdrawRequestNFT == address(0) ||
             _blacklister == address(0)) {
             revert ZeroAddress();
         }
@@ -84,7 +78,6 @@ contract WeETHWithdrawAdapter is
         weETH = IWeETH(_weETH);
         eETH = IeETH(_eETH);
         liquidityPool = ILiquidityPool(_liquidityPool);
-        withdrawRequestNFT = IWithdrawRequestNFT(_withdrawRequestNFT);
         blacklister = IBlacklister(_blacklister);
 
         _disableInitializers();
@@ -94,11 +87,9 @@ contract WeETHWithdrawAdapter is
     //---------------------------------  INITIALIZERS  ---------------------------------------
     //--------------------------------------------------------------------------------------
     /**
-     * @notice Initialize the adapter contract with initial owner
-     * @param _initialOwner Address that will be set as the contract owner
+     * @notice Initialize the adapter contract
      */
-    function initialize(address _initialOwner) external initializer {
-        if (_initialOwner == address(0)) revert ZeroAddress();
+    function initialize() external initializer {
         __UUPSUpgradeable_init();
     }
 

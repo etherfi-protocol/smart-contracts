@@ -68,7 +68,7 @@ contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistribut
      * @notice Set the claim delay
      * @param _claimDelay The claim delay
      */
-    function setClaimDelay(uint256 _claimDelay) external onlyAdmin {
+    function setClaimDelay(uint256 _claimDelay) external onlyOperatingTimelock {
         claimDelay = _claimDelay;
         emit ClaimDelayUpdated(claimDelay);
     }
@@ -78,7 +78,7 @@ contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistribut
      * @param user The address of the recipient
      * @param isWhitelisted The boolean value indicating if the recipient is whitelisted
      */
-    function updateWhitelistedRecipient(address user, bool isWhitelisted) external onlyAdmin {
+    function updateWhitelistedRecipient(address user, bool isWhitelisted) external onlyOperatingTimelock {
         whitelistedRecipient[user] = isWhitelisted;
         emit RecipientStatusUpdated(user, isWhitelisted);
     }
@@ -169,7 +169,7 @@ contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistribut
      * @param to The address to recover the ETH to
      * @param amount The amount of ETH to recover
      */
-    function recoverETH(address payable to, uint256 amount) external onlyAdmin {
+    function recoverETH(address payable to, uint256 amount) external onlyOperatingTimelock {
         _recoverETH(to, amount);
     }
 
@@ -179,7 +179,7 @@ contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistribut
      * @param to The address to recover the tokens to
      * @param amount The amount of tokens to recover
      */
-    function recoverERC20(address token, address to, uint256 amount) external onlyAdmin {
+    function recoverERC20(address token, address to, uint256 amount) external onlyOperatingTimelock {
         _recoverERC20(token, to, amount);
     }
 

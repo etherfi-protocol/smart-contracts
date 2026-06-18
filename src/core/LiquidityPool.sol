@@ -81,19 +81,11 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
     event Deposit(address indexed sender, uint256 amount, SourceOfFunds source, address referral);
     event Withdraw(address indexed sender, address recipient, uint256 amount, SourceOfFunds source);
     event EEthSharesBurnedForNonETHWithdrawal(uint256 amountSharesToBurn, uint256 withdrawalValueInETH);
-    event UpdatedWhitelist(address userAddress, bool value);
-    event UpdatedTreasury(address newTreasury); 
     event UpdatedFeeRecipient(address newFeeRecipient);
-    event BnftHolderDeregistered(address user, uint256 index);
-    event BnftHolderRegistered(address user, uint256 index);
     event ValidatorSpawnerRegistered(address user);
     event ValidatorSpawnerUnregistered(address user);
-    event ValidatorRegistered(uint256 indexed validatorId, bytes signature, bytes pubKey, bytes32 depositRoot);
-    event ValidatorApproved(uint256 indexed validatorId);
-    event ValidatorRegistrationCanceled(uint256 indexed validatorId);
     event Rebase(uint256 totalEthLocked, uint256 totalEEthShares);
     event ProtocolFeePaid(uint128 protocolFees);
-    event WhitelistStatusUpdated(bool value);
     event MinWithdrawAmountSet(uint256 minWithdrawAmount);
     event MaxWithdrawAmountSet(uint256 maxWithdrawAmount);
 
@@ -104,11 +96,9 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
     error InvalidAmount();
     error InvalidWithdrawalAmount();
     error InvalidShareAmount();
-    error DataNotSet();
     error InsufficientLiquidity();
     error SendFail();
     error InvalidValidatorSize();
-    error InvalidRate();
     error RebaseExceedsPositiveCap();
     error AlreadyMigrated();
     error MigrationNotComplete();
@@ -143,17 +133,8 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
     //--------------------------------------------------------------------------------------
     /**
      * @notice Initialize the Liquidity Pool
-     * @param _eEthAddress The address of the eETH contract
-     * @param _stakingManagerAddress The address of the staking manager contract
-     * @param _nodesManagerAddress The address of the nodes manager contract
-     * @param _membershipManagerAddress The address of the membership manager contract
-     * @param _tNftAddress The address of the tNFT contract
-     * @param _etherFiAdminContract The address of the etherFi admin contract
-     * @param _withdrawRequestNFT The address of the withdraw request NFT contract
      */
-    function initialize(address _eEthAddress, address _stakingManagerAddress, address _nodesManagerAddress, address _membershipManagerAddress, address _tNftAddress, address _etherFiAdminContract, address _withdrawRequestNFT) external initializer {
-        if (_eEthAddress == address(0) || _stakingManagerAddress == address(0) || _nodesManagerAddress == address(0) || _membershipManagerAddress == address(0) || _tNftAddress == address(0)) revert DataNotSet();
-        
+    function initialize() external initializer {
         __UUPSUpgradeable_init();
     }
 
@@ -445,7 +426,7 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
      * @param _user The address of the Validator Spawner to register
      * @dev The admin can register an address to become a BNFT holder
      */
-    function registerValidatorSpawner(address _user) public onlyAdmin {
+    function registerValidatorSpawner(address _user) public onlyOperatingTimelock {
         if (validatorSpawner[_user].registered) revert AlreadyRegistered();  
         validatorSpawner[_user] = ValidatorSpawner({registered: true});
         emit ValidatorSpawnerRegistered(_user);
@@ -555,7 +536,7 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
      *      forwards into confirmAndFundBeaconValidators(). In a future upgrade this will be a
      *      parameter to that call but was done like this to limit changes to other dependent contracts.
      */
-    function setValidatorSizeWei(uint256 _validatorSizeWei) external onlyAdmin {
+    function setValidatorSizeWei(uint256 _validatorSizeWei) external onlyOperatingTimelock {
         _requireValidValidatorSize(_validatorSizeWei);
         validatorSizeWei = _validatorSizeWei;
     }
@@ -565,7 +546,7 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
      * @param _feeRecipient The address to set as the fee recipient
      * @dev Only callable by the admin
      */
-    function setFeeRecipient(address _feeRecipient) external onlyAdmin {
+    function setFeeRecipient(address _feeRecipient) external onlyOperatingTimelock {
         feeRecipient = _feeRecipient;
         emit UpdatedFeeRecipient(_feeRecipient);
     }

@@ -27,13 +27,12 @@ contract WeETHWithdrawAdapterTest is TestSetup {
             address(weEthInstance),
             address(eETHInstance),
             address(liquidityPoolInstance),
-            address(withdrawRequestNFTInstance),
             address(roleRegistryInstance),
             address(blacklisterInstance)
         );
         UUPSProxy proxy = new UUPSProxy(address(impl), "");
         adapter = WeETHWithdrawAdapter(address(proxy));
-        adapter.initialize(owner);
+        adapter.initialize();
     }
 
     function _grantPauseUntilRoles() internal {
@@ -311,7 +310,6 @@ contract WeETHWithdrawAdapterTest is TestSetup {
             address(weEthInstance),
             address(eETHInstance),
             address(liquidityPoolInstance),
-            address(withdrawRequestNFTInstance),
             address(roleRegistryInstance),
             address(0)
         );

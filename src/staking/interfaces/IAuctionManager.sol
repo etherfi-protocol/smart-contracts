@@ -9,7 +9,7 @@ interface IAuctionManager {
         bool isActive;
     }
 
-    function initialize(address _nodeOperatorManagerContract) external;
+    function initialize() external;
 
     function getBidOwner(uint256 _bidId) external view returns (address);
 
@@ -25,8 +25,6 @@ interface IAuctionManager {
     function cancelBidBatch(uint256[] calldata _bidIds) external;
 
     function cancelBid(uint256 _bidId) external;
-
-    function reEnterAuction(uint256 _bidId) external;
 
     function updateSelectedBidInformation(uint256 _bidId) external;
 }

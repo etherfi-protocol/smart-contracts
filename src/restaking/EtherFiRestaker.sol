@@ -2,13 +2,10 @@
 pragma solidity ^0.8.23;
 
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
-import "@etherfi/deposits/Liquifier.sol";
-import "@etherfi/core/LiquidityPool.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 import "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
@@ -126,10 +123,8 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, DeprecatedOZOwnable,
     //--------------------------------------------------------------------------------------
     /**
      * @notice Initialize the EtherFiRestaker
-     * @param _liquidityPool The address of the liquidity pool
-     * @param _liquifier The address of the liquifier
      */
-    function initialize(address _liquidityPool, address _liquifier) initializer external {
+    function initialize() external initializer {
         __UUPSUpgradeable_init();
 
         (,, IStrategy strategy,,,,,,,,) = liquifier.tokenInfos(address(lido));
@@ -232,7 +227,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, DeprecatedOZOwnable,
      * @notice Set the claimer of the restaking rewards of this contract
      * @param _claimer The address of the claimer
      */
-    function setRewardsClaimer(address _claimer) external onlyAdmin {
+    function setRewardsClaimer(address _claimer) external onlyOperatingTimelock {
         rewardsCoordinator.setClaimerFor(_claimer);
     }
 

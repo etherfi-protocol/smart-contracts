@@ -65,7 +65,6 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
 
     struct WRNSnap {
         address lp;
-        address eeth;
         uint32 nextId;
         uint32 lastFin;
         bool paused;
@@ -93,7 +92,6 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
 
     function _snapWRN(WithdrawRequestNFT wrn) internal view returns (WRNSnap memory s) {
         s.lp = address(wrn.liquidityPool());
-        s.eeth = address(wrn.eETH());
         s.nextId = wrn.nextRequestId();
         s.lastFin = wrn.lastFinalizedRequestId();
         s.paused = wrn.paused();
@@ -117,7 +115,6 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
 
     function _assertWRNEq(WRNSnap memory a, WRNSnap memory b) internal {
         assertEq(a.lp,         b.lp,         "WRN.liquidityPool");
-        assertEq(a.eeth,       b.eeth,       "WRN.eETH");
         assertEq(a.nextId,     b.nextId,     "WRN.nextRequestId");
         assertEq(a.lastFin,    b.lastFin,    "WRN.lastFinalizedRequestId");
         assertEq(a.paused,     b.paused,     "WRN.paused");
@@ -149,7 +146,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
     ///      `onlyUpgradeTimelock` (e.g. `initializeOnUpgradeV2`) can pass.
     function _upgradeRoleRegistry() internal {
         address roleRegOwner = IOwnableRead(ROLE_REGISTRY).owner();
-        address newRoleRegistryImpl = address(new RoleRegistry(address(0)));
+        address newRoleRegistryImpl = address(new RoleRegistry(address(0xdead)));
         vm.prank(roleRegOwner);
         IUUPSProxy(ROLE_REGISTRY).upgradeTo(newRoleRegistryImpl);
 
@@ -218,7 +215,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
                 membershipManager: MEMBERSHIP_MANAGER
             })
         ));
-        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, EETH, LIQUIDITY_POOL, ROLE_REGISTRY, address(blacklisterInstance), ETHERFI_ADMIN));
+        address newWRN = address(new WithdrawRequestNFT(LIQUIDITY_POOL, ROLE_REGISTRY, address(blacklisterInstance), ETHERFI_ADMIN));
 
         // ------------------------------------------------------------------
         // 3. Upgrade the proxies in place
@@ -407,9 +404,9 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
                 membershipManager: MEMBERSHIP_MANAGER
             })
         ));
-        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, EETH, LIQUIDITY_POOL, ROLE_REGISTRY, address(blacklisterInstance), ETHERFI_ADMIN));
+        address newWRN = address(new WithdrawRequestNFT(LIQUIDITY_POOL, ROLE_REGISTRY, address(blacklisterInstance), ETHERFI_ADMIN));
         address newPQ = address(new PriorityWithdrawalQueue(
-            LIQUIDITY_POOL, EETH, WEETH, address(blacklisterInstance), ROLE_REGISTRY, TREASURY, 1 hours
+            LIQUIDITY_POOL, EETH, WEETH, address(blacklisterInstance), ROLE_REGISTRY, 1 hours
         ));
 
         // Upgrade proxies against the LIVE (pre-upgrade) RoleRegistry, since

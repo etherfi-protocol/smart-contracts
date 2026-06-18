@@ -3,7 +3,6 @@ pragma solidity ^0.8.13;
 import "@openzeppelin-upgradeable/contracts/token/ERC721/ERC721Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
-import "@etherfi/core/interfaces/IeETH.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
 import "@etherfi/withdrawals/interfaces/IWithdrawRequestNFT.sol";
 import "@etherfi/governance/interfaces/IBlacklister.sol";
@@ -73,10 +72,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, DeprecatedOZO
     //---------------------------------  IMMUTABLES  --------------------------------------
     //--------------------------------------------------------------------------------------
     ILiquidityPool public immutable liquidityPool;
-    IeETH public immutable eETH;
     IBlacklister public immutable blacklister;
-    // this treasury address is set to ethfi buyback wallet address
-    address public immutable treasury;
     address public immutable etherFiAdmin;
 
     //--------------------------------------------------------------------------------------
@@ -98,7 +94,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, DeprecatedOZO
     //-------------------------------------  ERRORS  ---------------------------------------
     //--------------------------------------------------------------------------------------
     error IncorrectCaller();
-    error AddressZero();
     error RequestValid();
     error RequestNotValid();
     error RequestNotFound();
@@ -108,7 +103,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, DeprecatedOZO
     error RequestAmountGreaterThanAvailableLiquidity();
     error InsufficientEscrow();
     error EthTransferFailed();
-    error AlreadyClaimed();
     error RequestNotFinalized();
     error AlreadyInitialized();
     error NotInitialized();
@@ -118,17 +112,13 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, DeprecatedOZO
     //--------------------------------------------------------------------------------------
     /**
      * @notice Constructor
-     * @param _treasury The address of the treasury.
-     * @param _eETH The address of the eETH token.
      * @param _liquidityPool The address of the liquidity pool.
      * @param _roleRegistry The address of the role registry.
      * @param _blacklister The address of the blacklister.
      * @param _etherFiAdmin The address of the etherFi admin.
      * @custom:oz-upgrades-unsafe-allow constructor
      */
-    constructor(address _treasury, address _eETH, address _liquidityPool, address _roleRegistry, address _blacklister,  address _etherFiAdmin) RolesLibrary(_roleRegistry) {
-        treasury = _treasury;
-        eETH = IeETH(_eETH);
+    constructor(address _liquidityPool, address _roleRegistry, address _blacklister,  address _etherFiAdmin) RolesLibrary(_roleRegistry) {
         liquidityPool = ILiquidityPool(_liquidityPool);
         blacklister = IBlacklister(_blacklister);
         etherFiAdmin = _etherFiAdmin;
@@ -140,12 +130,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, DeprecatedOZO
     //--------------------------------------------------------------------------------------
     /**
      * @notice Initialize the contract
-     * @param _liquidityPoolAddress The address of the liquidity pool.
-     * @param _eEthAddress The address of the eETH token.
-     * @param _membershipManagerAddress The address of the membership manager.
      */
-    function initialize(address _liquidityPoolAddress, address _eEthAddress, address _membershipManagerAddress) initializer external {
-        if (_liquidityPoolAddress == address(0) || _eEthAddress == address(0) || _membershipManagerAddress == address(0)) revert AddressZero();
+    function initialize() external initializer {
         __ERC721_init("Withdraw Request NFT", "WithdrawRequestNFT");
         __UUPSUpgradeable_init();
 
@@ -281,7 +267,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, DeprecatedOZO
      * @notice Validates a withdrawal request
      * @param requestId The ID of the withdrawal request
      */
-    function validateRequest(uint256 requestId) external onlyAdmin {
+    function validateRequest(uint256 requestId) external onlyOperatingTimelock {
         if (!_exists(requestId)) revert RequestNotFound();
         if (_requests[requestId].isValid) revert RequestValid();
         if (requestId <= lastFinalizedRequestId) {
@@ -308,7 +294,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, DeprecatedOZO
      */
     function _getClaimableAmount(uint256 tokenId) internal view returns (uint256 amountToWithdraw) {
         if (tokenId > lastFinalizedRequestId) revert RequestNotFinalized();
-        if (ownerOf(tokenId) == address(0)) revert AlreadyClaimed();
 
         IWithdrawRequestNFT.WithdrawRequest memory request = _requests[tokenId];
 
@@ -386,11 +371,12 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, DeprecatedOZO
      *      - the transfer is not allowed if the from or to is blacklisted
      */
     function _beforeTokenTransfer(address from, address to, uint256 firstTokenId, uint256 batchSize) internal view override {
-        blacklister.nonBlacklisted(from);
+        blacklister.nonBlacklisted(msg.sender);
         blacklister.nonBlacklisted(to);
         for (uint256 i = 0; i < batchSize; i++) {
             uint256 tokenId = firstTokenId + i;
-            if (!_requests[tokenId].isValid) roleRegistry.onlyUpgradeTimelock(msg.sender);
+            if (_requests[tokenId].isValid) blacklister.nonBlacklisted(from);
+            else roleRegistry.onlyUpgradeTimelock(msg.sender);
         }
     }
 

@@ -60,7 +60,7 @@ contract ConsolidationThroughEOATest is Test {
 
         // Now swap RoleRegistry so newly-added role getters defined in
         // RolesLibrary are reachable on the deployed proxy.
-        address newRoleRegistryImpl = address(new RoleRegistry(address(0)));
+        address newRoleRegistryImpl = address(new RoleRegistry(address(0xdead)));
         vm.prank(roleRegistry.owner());
         roleRegistry.upgradeTo(newRoleRegistryImpl);
 

@@ -121,14 +121,14 @@ contract BlacklistTest is TestSetup {
         ILiquifier.PermitInput memory permit;
         vm.prank(blacklisted);
         _expectBlacklistedRevert(blacklisted);
-        depositAdapter.depositStETHForWeETHWithPermit(1 ether, address(0), permit);
+        depositAdapter.depositStETHForWeETHWithPermit(1 ether, 0, address(0), permit);
     }
 
     function test_blacklist_DepositAdapter_depositWstETHForWeETHWithPermit_reverts() public {
         ILiquifier.PermitInput memory permit;
         vm.prank(blacklisted);
         _expectBlacklistedRevert(blacklisted);
-        depositAdapter.depositWstETHForWeETHWithPermit(1 ether, address(0), permit);
+        depositAdapter.depositWstETHForWeETHWithPermit(1 ether, 0, address(0), permit);
     }
 
     // -------------------------------------------------------------------------
@@ -222,14 +222,14 @@ contract BlacklistTest is TestSetup {
     function test_blacklist_Liquifier_depositWithERC20_reverts() public {
         vm.prank(blacklisted);
         _expectBlacklistedRevert(blacklisted);
-        liquifierInstance.depositWithERC20(address(stEth), 1 ether, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), 1 ether, 0, address(0));
     }
 
     function test_blacklist_Liquifier_depositWithERC20WithPermit_reverts() public {
         ILiquifier.PermitInput memory permit;
         vm.prank(blacklisted);
         _expectBlacklistedRevert(blacklisted);
-        liquifierInstance.depositWithERC20WithPermit(address(stEth), 1 ether, address(0), permit);
+        liquifierInstance.depositWithERC20WithPermit(address(stEth), 1 ether, 0, address(0), permit);
     }
 
     // -------------------------------------------------------------------------

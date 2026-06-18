@@ -16,8 +16,6 @@ import "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
 import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
 import "@etherfi/governance/utils/DeprecatedOZReentrancyGuard.sol";
 
-import "@etherfi/interfaces/eigenlayer-interfaces/IStrategyManager.sol";
-import "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
 
 /// Go wild, spread eETH/weETH to the world
 contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, DeprecatedOZPausable, PausableUntil, DeprecatedOZReentrancyGuard, ReentrancyGuardTransient, ILiquifier {
@@ -63,6 +61,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
     uint256 public immutable minDiscountRateInBps;
     uint256 public immutable stalePriceWindow;
     uint256 public immutable maxPriceDeviationInBps;
+    uint256 public immutable maxPriceThreshold;
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  CONSTANTS  ---------------------------------------
@@ -80,12 +79,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
     event Liquified(address _user, uint256 _toEEthAmount, address _fromToken, bool _isRestaked);
-    // This event is deprecated. will be removed in the next release.
-    // event RegisteredQueuedWithdrawal(bytes32 _withdrawalRoot, IStrategyManager.DeprecatedStruct_QueuedWithdrawal _queuedWithdrawal);
-    event RegisteredQueuedWithdrawal_V2(bytes32 _withdrawalRoot, IDelegationManager.Withdrawal _queuedWithdrawal);
-    event CompletedQueuedWithdrawal(bytes32 _withdrawalRoot);
-    event QueuedStEthWithdrawals(uint256[] _reqIds);
-    event CompletedStEthQueuedWithdrawals(uint256[] _reqIds);
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ERRORS  ---------------------------------------
@@ -112,6 +105,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
     error Capped();
     error AddressZero();
     error InvalidTotalSupply();
+    error InvalidSlippage();
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  CONSTRUCTOR  ----------------------------------
@@ -124,7 +118,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
      * @param _maxPriceDeviationInBps The maximum price deviation in basis points
      * @custom:oz-upgrades-unsafe-allow constructor
      */
-    constructor(ConstructorAddresses memory _constructorAddresses, uint256 _minDiscountInBasisPoints, uint256 _stalePriceWindow, uint256 _maxPriceDeviationInBps) RolesLibrary(_constructorAddresses.roleRegistry) {
+    constructor(ConstructorAddresses memory _constructorAddresses, uint256 _minDiscountInBasisPoints, uint256 _stalePriceWindow, uint256 _maxPriceDeviationInBps, uint256 _maxPriceThreshold) RolesLibrary(_constructorAddresses.roleRegistry) {
         if (_minDiscountInBasisPoints == 0 || _minDiscountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
         if (_stalePriceWindow == 0) revert InvalidPriceWindow();
         if (_maxPriceDeviationInBps == 0 || _maxPriceDeviationInBps > BASIS_POINT_SCALE) revert InvalidMaxPriceDeviationInBps();
@@ -147,6 +141,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
         minDiscountRateInBps = _minDiscountInBasisPoints;
         stalePriceWindow = _stalePriceWindow;
         maxPriceDeviationInBps = _maxPriceDeviationInBps;
+        maxPriceThreshold = _maxPriceThreshold;
         _disableInitializers();
     }
 
@@ -155,17 +150,9 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
     //--------------------------------------------------------------------------------------
     /**
      * @notice Initialize the Liquifier
-     * @param _treasury The address of the treasury
-     * @param _liquidityPool The address of the liquidity pool
-     * @param _eigenLayerStrategyManager The address of the eigen layer strategy manager
-     * @param _lidoWithdrawalQueue The address of the lido withdrawal queue
-     * @param _stEth The address of the stEth
-     * @param _stEth_Eth_Pool The address of the stEth_Eth_Pool
      * @param _timeBoundCapRefreshInterval The time bounded cap refresh interval
     */
-    function initialize(address _treasury, address _liquidityPool, address _eigenLayerStrategyManager, address _lidoWithdrawalQueue, 
-                        address _stEth, address _stEth_Eth_Pool,
-                        uint32 _timeBoundCapRefreshInterval) initializer external {
+    function initialize(uint32 _timeBoundCapRefreshInterval) external initializer {
         __UUPSUpgradeable_init();
 
         timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
@@ -186,11 +173,12 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
      * @notice Deposit Liquid Staking Token such as stETH and Mint eETH
      * @param _token The address of the token to deposit
      * @param _amount The amount of the token to deposit
+     * @param _minOutAmount The minimum out amount
      * @param _referral The referral address
      * @return mintedAmount the amount of eETH minted to the caller (= msg.sender)
      * @dev If the token is l2Eth, only the l1SyncPool can call this function
      */
-    function depositWithERC20(address _token, uint256 _amount, address _referral) public nonReentrant whenNotPaused nonBlacklisted returns (uint256) {        
+    function depositWithERC20(address _token, uint256 _amount, uint256 _minOutAmount, address _referral) public nonReentrant whenNotPaused nonBlacklisted returns (uint256) {        
         if (!isTokenWhitelisted(_token) || (tokenInfos[_token].isL2Eth && msg.sender != l1SyncPool)) revert NotAllowed();
 
         // Measure actual amount received to handle stETH's 1-2 wei rounding issue
@@ -208,7 +196,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
         // The L1SyncPool's `_anticipatedDeposit` should be the only place to mint the `token` and always send its entirety to the Liquifier contract
         if(tokenInfos[_token].isL2Eth) _L2SanityChecks(_token);
     
-        uint256 dx = quoteByDiscountedValue(_token, amountReceived);
+        uint256 dx = quoteByDiscountedValue(_token, amountReceived, _minOutAmount);
         if (isDepositCapReached(_token, dx)) revert Capped();
 
         uint256 eEthShare = liquidityPool.depositToRecipient(msg.sender, dx, _referral);
@@ -223,15 +211,16 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
      * @notice Deposit Liquid Staking Token such as stETH and Mint eETH with Permit
      * @param _token The address of the token to deposit
      * @param _amount The amount of the token to deposit
+     * @param _minOutAmount The minimum out amount
      * @param _referral The referral address
      * @param _permit The permit input
      * @return mintedAmount the amount of eETH minted to the caller (= msg.sender)
      * @dev Only callable when contract is not paused
      * @dev Only callable when sender is not blacklisted
      */
-    function depositWithERC20WithPermit(address _token, uint256 _amount, address _referral, PermitInput calldata _permit) external whenNotPaused nonBlacklisted returns (uint256) {
+    function depositWithERC20WithPermit(address _token, uint256 _amount, uint256 _minOutAmount, address _referral, PermitInput calldata _permit) external whenNotPaused nonBlacklisted returns (uint256) {
         try IERC20Permit(_token).permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} catch {}
-        return depositWithERC20(_token, _amount, _referral);
+        return depositWithERC20(_token, _amount, _minOutAmount, _referral);
     }
 
     //--------------------------------------------------------------------------------------
@@ -274,7 +263,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
      * @param _totalCapInEther The total cap in ether
      * @dev Only callable by the admin
      */
-    function updateDepositCap(address _token, uint32 _timeBoundCapInEther, uint32 _totalCapInEther) public onlyAdmin {
+    function updateDepositCap(address _token, uint32 _timeBoundCapInEther, uint32 _totalCapInEther) public onlyOperatingTimelock {
         if (_timeBoundCapInEther > MAX_TIME_BOUND_CAP_IN_ETHER || _totalCapInEther > MAX_TOTAL_CAP_IN_ETHER) revert InvalidDepositCap();
         tokenInfos[_token].timeBoundCapInEther = _timeBoundCapInEther;
         tokenInfos[_token].totalCapInEther = _totalCapInEther;
@@ -310,7 +299,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
      * @param _timeBoundCapRefreshInterval The time bound cap refresh interval
      * @dev Only callable by the admin
      */
-    function updateTimeBoundCapRefreshInterval(uint32 _timeBoundCapRefreshInterval) external onlyAdmin {
+    function updateTimeBoundCapRefreshInterval(uint32 _timeBoundCapRefreshInterval) external onlyOperatingTimelock {
         timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
     }
 
@@ -320,7 +309,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
      * @param _discountInBasisPoints The discount in basis points
      * @dev Only callable by the admin
      */
-    function updateDiscountInBasisPoints(address _token, uint16 _discountInBasisPoints) external onlyAdmin {
+    function updateDiscountInBasisPoints(address _token, uint16 _discountInBasisPoints) external onlyOperatingTimelock {
         if (_discountInBasisPoints < minDiscountRateInBps || _discountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
         tokenInfos[_token].discountInBasisPoints = _discountInBasisPoints;
     }
@@ -330,7 +319,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
      * @param _quoteStEthWithCurve The boolean value to set the quote stEth with curve
      * @dev Only callable by the admin
      */
-    function updateQuoteStEthWithCurve(bool _quoteStEthWithCurve) external onlyAdmin {
+    function updateQuoteStEthWithCurve(bool _quoteStEthWithCurve) external onlyOperatingMultisig {
         quoteStEthWithCurve = _quoteStEthWithCurve;
     }
 
@@ -391,21 +380,22 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
         if (!isTokenWhitelisted(_token)) revert NotSupportedToken();
 
         if (_token == address(lido)) {
+            // We also validate against chainlink price feed to ensure there's no significant price deviation
+            // If price feed is stale, we BLOCK the stETH deposit (revert StalePriceFeed)
+            // If price feed is negative or deviation is too high, we do not allow the stETH deposit at all, something is wrong with the markets and deposit
+            // via stETH will be blocked until it stablises (either because of underlying lido solvency/liquidity issue or oracle manipulation)
+            (, int256 answer, , uint256 updatedAt,) = stEthPriceFeed.latestRoundData();
+            if (answer <= 0) revert InvalidPriceFeed();
+            if (updatedAt + stalePriceWindow < block.timestamp) revert StalePriceFeed();
+            if (SHARE_UNIT > uint256(answer) + maxPriceThreshold) revert InvalidStEthPrice();
             if (quoteStEthWithCurve) {
                 // check market value from curve pool, stETH price is on avrage always lower than ETH (this is essentially the capital efficiency of the protocol)
-                // if stETH price is temporarily larger than underlying ETH value, we set market value as 1:1 
-                _marketValue = Math.min(_amount, ICurvePoolQuoter1(address(stEth_Eth_Pool)).get_dy(1, 0, _amount));
-
-                // We also validate against chainlink price feed to ensure there's no significant price deviation
-                // If price feed is stale, we BLOCK the stETH deposit (revert StalePriceFeed) — we do NOT skip the check
-                // If price feed is negative or deviation is too high, we do not allow the stETH deposit at all, something is wrong with the markets and deposit
-                // via stETH will be blocked until it stablises (either because of underlying lido solvency/liquidity issue or oracle manipulation)
-                (, int256 answer, , uint256 updatedAt,) = stEthPriceFeed.latestRoundData();
-                if (answer <= 0) revert InvalidPriceFeed();
-                if (updatedAt + stalePriceWindow < block.timestamp) revert StalePriceFeed();
+                _marketValue = ICurvePoolQuoter1(address(stEth_Eth_Pool)).get_dy(1, 0, _amount);
                 uint256 pricefeedValue = uint256(answer).mulDiv(_amount, SHARE_UNIT);
                 uint256 deviation = pricefeedValue > _marketValue ? pricefeedValue - _marketValue : _marketValue - pricefeedValue;
                 if (deviation.mulDiv(BASIS_POINT_SCALE, _marketValue) > maxPriceDeviationInBps) revert InvalidStEthPrice();
+                // if stETH price is temporarily larger than underlying ETH value, we set market value as 1:1
+                _marketValue = Math.min(_marketValue, _amount);
             } else {
                 _marketValue = _amount; /// 1:1 from stETH to eETH
             }
@@ -421,12 +411,15 @@ contract Liquifier is Initializable, UUPSUpgradeable, DeprecatedOZOwnable, Depre
      * @notice Quote the discounted value of the token
      * @param _token The address of the token to quote
      * @param _amount The amount of the token to quote
+     * @param _minOutAmount The minimum out amount
      * @return The discounted value of the token
      */
-    function quoteByDiscountedValue(address _token, uint256 _amount) public view returns (uint256) {
+    function quoteByDiscountedValue(address _token, uint256 _amount, uint256 _minOutAmount) public view returns (uint256) {
         uint256 marketValue = quoteByMarketValue(_token, _amount);
 
-        return (BASIS_POINT_SCALE - tokenInfos[_token].discountInBasisPoints).mulDiv(marketValue, BASIS_POINT_SCALE);
+        uint256 discountedValue = (BASIS_POINT_SCALE - tokenInfos[_token].discountInBasisPoints).mulDiv(marketValue, BASIS_POINT_SCALE);
+        if (discountedValue < _minOutAmount) revert InvalidSlippage();
+        return discountedValue;
     }
 
     /**

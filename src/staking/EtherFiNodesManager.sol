@@ -4,8 +4,6 @@ pragma solidity ^0.8.24;
 import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {ReentrancyGuardTransient} from "solady/utils/ReentrancyGuardTransient.sol";
-import "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
-import "@etherfi/staking/interfaces/IAuctionManager.sol";
 import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 import "@etherfi/staking/interfaces/IEtherFiNode.sol";
 import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
@@ -360,7 +358,7 @@ contract EtherFiNodesManager is
      * @param target call target for forwarded call
      * @param allowed enable or disable the call
      */
-    function updateAllowedForwardedExternalCalls(address user, bytes4 selector, address target, bool allowed) external onlyAdmin {
+    function updateAllowedForwardedExternalCalls(address user, bytes4 selector, address target, bool allowed) external onlyOperatingTimelock {
         allowedForwardedExternalCalls[user][selector][target] = allowed;
         emit UserAllowedForwardedExternalCallsUpdated(user, selector, target, allowed);
     }
@@ -371,7 +369,7 @@ contract EtherFiNodesManager is
      * @param selector method selector
      * @param allowed enable or disable the call
      */
-    function updateAllowedForwardedEigenpodCalls(address user, bytes4 selector, bool allowed) external onlyAdmin {
+    function updateAllowedForwardedEigenpodCalls(address user, bytes4 selector, bool allowed) external onlyOperatingTimelock {
         allowedForwardedEigenpodCalls[user][selector] = allowed;
         emit UserAllowedForwardedEigenpodCallsUpdated(user, selector, allowed);
     }

@@ -824,7 +824,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     function _grantNmPauseUntilRoles() internal {
         // Upgrade the RoleRegistry impl on the fork so consolidated roles are present.
         vm.startPrank(roleRegistryInstance.owner());
-        RoleRegistry newImpl = new RoleRegistry(address(0));
+        RoleRegistry newImpl = new RoleRegistry(address(0xdead));
         roleRegistryInstance.upgradeTo(address(newImpl));
         // pauseContractUntil → GUARDIAN_ROLE; unpause + setPauseUntilDuration → OPERATION_MULTISIG_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), nmPauseUntilPauser);

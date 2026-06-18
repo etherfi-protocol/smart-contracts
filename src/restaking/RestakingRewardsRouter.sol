@@ -91,7 +91,7 @@ contract RestakingRewardsRouter is UUPSUpgradeable, RolesLibrary {
      * @notice Set the recipient address
      * @param _recipient The address of the recipient
      */
-    function setRecipientAddress(address _recipient) external onlyAdmin {
+    function setRecipientAddress(address _recipient) external onlyOperatingTimelock {
         if (_recipient == address(0)) revert InvalidAddress();
         recipientAddress = _recipient;
         emit RecipientAddressSet(_recipient);

@@ -71,7 +71,7 @@ abstract contract PausableUntil is Pausable {
      * @notice Set the duration applied by {pauseUntil}
      * @dev gated to the operating timelock (admin)
      */
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyOperatingTimelock {
         if (_pauseUntilDuration < MIN_PAUSE_DURATION || _pauseUntilDuration > MAX_PAUSE_DURATION) revert InvalidPauseUntilDuration();
         _getPausableUntilStorage().pauseUntilDuration = _pauseUntilDuration;
         emit PauseUntilDurationSet(_pauseUntilDuration);

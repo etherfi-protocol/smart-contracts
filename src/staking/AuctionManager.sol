@@ -56,7 +56,6 @@ contract AuctionManager is
     //--------------------------------------------------------------------------------------
     event BidCreated(address indexed bidder, uint256 amountPerBid, uint256[] bidIdArray, uint64[] ipfsIndexArray);
     event BidCancelled(uint256 indexed bidId);
-    event BidReEnteredAuction(uint256 indexed bidId);
     event BidRevenueForwarded(uint256 indexed bidId, address indexed treasury, uint256 amount);
     event WhitelistDisabled(bool whitelistStatus);
     event WhitelistEnabled(bool whitelistStatus);
@@ -64,13 +63,11 @@ contract AuctionManager is
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ERRORS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-    error AddressZero();
     error InvalidBidSize();
     error NotWhitelisted();
     error IncorrectBidValue();
     error InsufficientPublicKeys();
     error BidNotActive();
-    error BidAlreadyActive();
     error EtherTransferFailed();
     error InvalidBid();
     error BidAlreadyCancelled();
@@ -103,13 +100,8 @@ contract AuctionManager is
     //--------------------------------------------------------------------------------------
     /**
      * @notice Initialize to set variables on deployment
-     * @param _nodeOperatorManagerContract The address of the node operator manager contract
      */
-    function initialize(
-        address _nodeOperatorManagerContract
-    ) external initializer {
-        if (_nodeOperatorManagerContract == address(0)) revert AddressZero();
-        
+    function initialize() external initializer {
         whitelistBidAmount = 0.001 ether;
         minBidAmount = 0.01 ether;
         maxBidAmount = 5 ether;
@@ -229,21 +221,6 @@ contract AuctionManager is
             if (!sent) revert EtherTransferFailed();
             emit BidRevenueForwarded(_bidId, treasury, amount);
         }
-    }
-
-    /**
-     * @notice Lets a bid that was matched to a cancelled stake re-enter the auction
-     * @param _bidId the ID of the bid which was matched to the cancelled stake.
-     */
-    function reEnterAuction(
-        uint256 _bidId
-    ) external onlyStakingManagerContract {
-        Bid storage bid = bids[_bidId];
-        if (bid.isActive) revert BidAlreadyActive();
-
-        bid.isActive = true;
-        numberOfActiveBids++;
-        emit BidReEnteredAuction(_bidId);
     }
 
     //--------------------------------------------------------------------------------------

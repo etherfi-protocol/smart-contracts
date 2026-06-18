@@ -46,7 +46,7 @@ contract EtherFiRestakerTest is TestSetup {
 
         stEth.approve(address(liquifierInstance), _amount);
 
-        liquifierInstance.depositWithERC20(address(stEth), _amount, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), _amount, 0, address(0));
 
 
         // Aliice has 10 ether eETH

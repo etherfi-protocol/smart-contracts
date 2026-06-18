@@ -10,7 +10,6 @@ import "@etherfi/governance/utils/Pausable.sol";
 import "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
 import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
 
-
 contract EtherFiOracle is Initializable, DeprecatedOZOwnable, DeprecatedOZPausable, UUPSUpgradeable, IEtherFiOracle, Pausable {
 
     //--------------------------------------------------------------------------------------
@@ -54,7 +53,6 @@ contract EtherFiOracle is Initializable, DeprecatedOZOwnable, DeprecatedOZPausab
     event QuorumUpdated(uint32 newQuorumSize);
     event ConsensusVersionUpdated(uint32 newConsensusVersion);
     event OracleReportPeriodUpdated(uint32 newOracleReportPeriod);
-    event ReportStartSlotUpdated(uint32 reportStartSlot);
 
     event ReportPublished(uint32 consensusVersion, uint32 refSlotFrom, uint32 refSlotTo, uint32 refBlockFrom, uint32 refBlockTo, bytes32 indexed hash);
     event ReportSubmitted(uint32 consensusVersion, uint32 refSlotFrom, uint32 refSlotTo, uint32 refBlockFrom, uint32 refBlockTo, bytes32 indexed hash, address indexed committeeMember);
@@ -83,6 +81,8 @@ contract EtherFiOracle is Initializable, DeprecatedOZOwnable, DeprecatedOZPausab
     error InvalidReportPeriod();
     error InvalidConsensusVersion();
     error InvalidQuorum();
+    error InvalidMembersLength();
+    error MemberNotParticipated();
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  CONSTRUCTOR  ----------------------------------
@@ -180,7 +180,7 @@ contract EtherFiOracle is Initializable, DeprecatedOZOwnable, DeprecatedOZPausab
      * @param _address The address of the committee member
      * @param _quorumSize The quorum size
      */
-    function addCommitteeMember(address _address, uint32 _quorumSize) public onlyAdmin {
+    function addCommitteeMember(address _address, uint32 _quorumSize) public onlyOperatingTimelock {
         if (committeeMemberStates[_address].registered) revert AlreadyRegistered();
         numCommitteeMembers++;
         numActiveCommitteeMembers++;
@@ -195,7 +195,7 @@ contract EtherFiOracle is Initializable, DeprecatedOZOwnable, DeprecatedOZPausab
      * @param _address The address of the committee member
      * @param _quorumSize The quorum size
      */
-    function removeCommitteeMember(address _address, uint32 _quorumSize) public onlyAdmin {
+    function removeCommitteeMember(address _address, uint32 _quorumSize) public onlyOperatingTimelock {
         if (!committeeMemberStates[_address].registered) revert NotRegistered();
         numCommitteeMembers--;
         if (committeeMemberStates[_address].enabled) numActiveCommitteeMembers--;
@@ -229,7 +229,7 @@ contract EtherFiOracle is Initializable, DeprecatedOZOwnable, DeprecatedOZPausab
      * @notice Set the quorum size
      * @param _quorumSize The quorum size
      */
-    function setQuorumSize(uint32 _quorumSize) public onlyAdmin {
+    function setQuorumSize(uint32 _quorumSize) public onlyOperatingTimelock {
         quorumSize = _quorumSize;
         _checkQuorum();
         emit QuorumUpdated(_quorumSize);
@@ -239,7 +239,7 @@ contract EtherFiOracle is Initializable, DeprecatedOZOwnable, DeprecatedOZPausab
      * @notice Set the oracle report period
      * @param _reportPeriodSlot The report period slot
      */
-    function setOracleReportPeriod(uint32 _reportPeriodSlot) public onlyAdmin {
+    function setOracleReportPeriod(uint32 _reportPeriodSlot) public onlyOperatingTimelock {
         if (_reportPeriodSlot == 0 || _reportPeriodSlot % SLOTS_PER_EPOCH != 0) revert InvalidReportPeriod();
         reportPeriodSlot = _reportPeriodSlot;
 
@@ -250,7 +250,7 @@ contract EtherFiOracle is Initializable, DeprecatedOZOwnable, DeprecatedOZPausab
      * @notice Set the consensus version
      * @param _consensusVersion The consensus version
      */
-    function setConsensusVersion(uint32 _consensusVersion) public onlyAdmin {
+    function setConsensusVersion(uint32 _consensusVersion) public onlyOperatingTimelock {
         if (_consensusVersion <= consensusVersion) revert InvalidConsensusVersion();
         consensusVersion = _consensusVersion;
 
@@ -261,10 +261,24 @@ contract EtherFiOracle is Initializable, DeprecatedOZOwnable, DeprecatedOZPausab
      * @notice Unpublish a report
      * @param _report The report
      */
-    function unpublishReport(OracleReport calldata _report) public onlyOperatingMultisig {
+    function unpublishReport(OracleReport calldata _report, address[] calldata _members) public onlyOperatingMultisig {
         bytes32 _hash = generateReportHash(_report);
         if (!consensusStates[_hash].consensusReached) revert ConsensusNotReached();
         if (_report.refSlotTo <= etherFiAdmin.lastHandledReportRefSlot()) revert ReportExecuted();
+        if (_members.length < quorumSize) revert InvalidMembersLength();
+        for (uint256 i = 0; i < _members.length; i++) {
+            CommitteeMemberState storage memberState = committeeMemberStates[_members[i]];
+            if (memberState.lastReportRefSlot != _report.refSlotTo) revert MemberNotParticipated();
+            memberState.numReports = memberState.numReports == 0 ? 0 : memberState.numReports - 1;
+            // `lastReportRefSlot` marks the most recent slot this member submitted for (set on
+            // every submit, not just consensus-winning ones); it gates re-submission via
+            // shouldSubmitReport's `slot > lastReportRefSlot`. Rolling it back to refSlotFrom - 1
+            // re-enables re-submission of the unpublished report. That equals the member's true
+            // prior value only if they submitted the contiguous previous report; if they skipped
+            // it we set this slightly higher than the real value, which is harmless because every
+            // period before refSlotFrom is already handled and can never need a submission.
+            memberState.lastReportRefSlot = _report.refSlotFrom - 1;
+        }
         consensusStates[_hash].support = 0;
         consensusStates[_hash].consensusReached = false;
         lastPublishedReportRefSlot = _report.refSlotFrom - 1;
