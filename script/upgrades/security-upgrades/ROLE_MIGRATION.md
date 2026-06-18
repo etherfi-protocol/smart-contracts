@@ -319,13 +319,11 @@ buckets (`createNewLimiter`) and wires each to its consumer (`updateConsumers`).
 | `EETH_MINT_LIMIT_ID` | `EETH_MINT_CAPACITY`, `EETH_MINT_REFILL_RATE` | `EETH` |
 | `EETH_BURN_LIMIT_ID` | `EETH_BURN_CAPACITY`, `EETH_BURN_REFILL_RATE` | `EETH` |
 
-**EtherFiRestaker buckets** (consumer = `ETHERFI_RESTAKER`):
+**EtherFiRestaker bucket** (consumer = `ETHERFI_RESTAKER`):
 
 | Bucket ID | Capacity / refill constants |
 |---|---|
 | `STETH_REQUEST_WITHDRAWAL_LIMIT_ID` | `STETH_REQUEST_WITHDRAWAL_CAPACITY`, `STETH_REQUEST_WITHDRAWAL_REFILL_RATE` |
-| `QUEUE_WITHDRAWALS_LIMIT_ID` | `QUEUE_WITHDRAWALS_CAPACITY`, `QUEUE_WITHDRAWALS_REFILL_RATE` |
-| `DEPOSIT_INTO_STRATEGY_LIMIT_ID` | `DEPOSIT_INTO_STRATEGY_CAPACITY`, `DEPOSIT_INTO_STRATEGY_REFILL_RATE` |
 
 Sizing guidance:
 - **Token mint/burn**: capacity ≥ ~1 week of typical volume with headroom;

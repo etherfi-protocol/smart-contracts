@@ -213,13 +213,9 @@ abstract contract SecurityUpgradesConstants is Deployed {
     uint64 internal constant EETH_BURN_CAPACITY    = 25000000000000;
     uint64 internal constant EETH_BURN_REFILL_RATE = 1736111111;
 
-    // restaking — EtherFiRestaker buckets (consume).
+    // restaking — EtherFiRestaker bucket (consume).
     uint64 internal constant STETH_REQUEST_WITHDRAWAL_CAPACITY    = 50000000000000;
     uint64 internal constant STETH_REQUEST_WITHDRAWAL_REFILL_RATE = 3472222222;
-    uint64 internal constant QUEUE_WITHDRAWALS_CAPACITY           = 0;
-    uint64 internal constant QUEUE_WITHDRAWALS_REFILL_RATE        = 0;
-    uint64 internal constant DEPOSIT_INTO_STRATEGY_CAPACITY       = 0;
-    uint64 internal constant DEPOSIT_INTO_STRATEGY_REFILL_RATE    = 0;
 
     // ─────────────────────────────────────────────────────────────────────
     // PausableUntil durations (sec; TBD). Gated to contracts that mix in
@@ -252,8 +248,6 @@ abstract contract SecurityUpgradesConstants is Deployed {
 
     // restaking
     bytes32 internal constant STETH_REQUEST_WITHDRAWAL_LIMIT_ID = keccak256("STETH_REQUEST_WITHDRAWAL_LIMIT_ID");
-    bytes32 internal constant QUEUE_WITHDRAWALS_LIMIT_ID        = keccak256("QUEUE_WITHDRAWALS_LIMIT_ID");
-    bytes32 internal constant DEPOSIT_INTO_STRATEGY_LIMIT_ID    = keccak256("DEPOSIT_INTO_STRATEGY_LIMIT_ID");
 
     // ─────────────────────────────────────────────────────────────────────
     // TIMELOCKS / REGISTRY HANDLES + DELAYS + OUTPUT DIR.

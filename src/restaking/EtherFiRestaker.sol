@@ -55,8 +55,6 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, DeprecatedOZOwnable,
     //---------------------------------  CONSTANTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
     bytes32 public constant STETH_REQUEST_WITHDRAWAL_LIMIT_ID = keccak256("STETH_REQUEST_WITHDRAWAL_LIMIT_ID");
-    bytes32 public constant QUEUE_WITHDRAWALS_LIMIT_ID        = keccak256("QUEUE_WITHDRAWALS_LIMIT_ID");
-    bytes32 public constant DEPOSIT_INTO_STRATEGY_LIMIT_ID    = keccak256("DEPOSIT_INTO_STRATEGY_LIMIT_ID");
     /// @dev Suggested gas stipend for contract receiving ETH to perform a few
     /// storage reads and writes, but low enough to prevent griefing.
     uint256 internal constant GAS_STIPEND_NO_GRIEF = 100_000;
@@ -266,8 +264,6 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, DeprecatedOZOwnable,
      * @return The shares deposited
      */
     function depositIntoStrategy(address token, uint256 amount) external onlyExecutorOperations whenNotPaused returns (uint256) {
-        rateLimiter.consume(DEPOSIT_INTO_STRATEGY_LIMIT_ID, _amountToGwei(amount));
-
         IERC20(token).safeIncreaseAllowance(address(eigenLayerStrategyManager), amount);
 
         IStrategy strategy = tokenInfos[token].elStrategy;
@@ -283,8 +279,6 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, DeprecatedOZOwnable,
      * @return The withdrawal roots
      */
     function queueWithdrawals(address token, uint256 amount) public onlyExecutorOperations whenNotPaused returns (bytes32[] memory) {
-        rateLimiter.consume(QUEUE_WITHDRAWALS_LIMIT_ID, _amountToGwei(amount));
-
         uint256 shares = getEigenLayerRestakingStrategy(token).underlyingToSharesView(amount);
         bytes32[] memory withdrawalRoots = _queueWithdrawalsByShares(token, shares);
 
