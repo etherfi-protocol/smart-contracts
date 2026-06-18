@@ -564,7 +564,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
                 liquidityPool: LIQUIDITY_POOL,
                 eEth: EETH,
                 weEth: WEETH,
-                treasury: WITHDRAW_REQUEST_NFT_BUYBACK_SAFE,
+                treasury: TREASURY,
                 roleRegistry: ROLE_REGISTRY,
                 etherFiRestaker: ETHERFI_RESTAKER,
                 priorityWithdrawalQueue: PRIORITY_WITHDRAWAL_QUEUE,
@@ -843,48 +843,51 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
     }
     // withdrawals
     function _redemptionImmSels() internal pure returns (bytes4[] memory s) {
-        s = new bytes4[](12);
-        s[0]  = bytes4(keccak256("treasury()"));
-        s[1]  = bytes4(keccak256("roleRegistry()"));
-        s[2]  = bytes4(keccak256("eEth()"));
-        s[3]  = bytes4(keccak256("weEth()"));
-        s[4]  = bytes4(keccak256("liquidityPool()"));
-        s[5]  = bytes4(keccak256("etherFiRestaker()"));
-        s[6]  = bytes4(keccak256("lido()"));
-        s[7]  = bytes4(keccak256("priorityWithdrawalQueue()"));
-        s[8]  = bytes4(keccak256("blacklister()"));
-        s[9]  = bytes4(keccak256("maxExitFeeSplitToTreasuryInBps()"));
-        s[10] = bytes4(keccak256("maxExitFeeInBps()"));
-        s[11] = bytes4(keccak256("maxLowWatermarkInBpsOfTvl()"));
+        // treasury() intentionally CHANGES in this upgrade (live buyback-safe -> TREASURY), so it
+        // is excluded from the preservation diff; the new value is asserted in _verifyImmutablesWithdrawals.
+        s = new bytes4[](11);
+        s[0]  = bytes4(keccak256("roleRegistry()"));
+        s[1]  = bytes4(keccak256("eEth()"));
+        s[2]  = bytes4(keccak256("weEth()"));
+        s[3]  = bytes4(keccak256("liquidityPool()"));
+        s[4]  = bytes4(keccak256("etherFiRestaker()"));
+        s[5]  = bytes4(keccak256("lido()"));
+        s[6]  = bytes4(keccak256("priorityWithdrawalQueue()"));
+        s[7]  = bytes4(keccak256("blacklister()"));
+        s[8]  = bytes4(keccak256("maxExitFeeSplitToTreasuryInBps()"));
+        s[9]  = bytes4(keccak256("maxExitFeeInBps()"));
+        s[10] = bytes4(keccak256("maxLowWatermarkInBpsOfTvl()"));
     }
     function _pwqImmSels() internal pure returns (bytes4[] memory s) {
-        s = new bytes4[](7);
+        // treasury() removed: the new PriorityWithdrawalQueue constructor no longer takes a
+        // treasury/buyback address (intentional removal in this upgrade).
+        s = new bytes4[](6);
         s[0] = bytes4(keccak256("liquidityPool()"));
         s[1] = bytes4(keccak256("eETH()"));
         s[2] = bytes4(keccak256("weETH()"));
-        s[3] = bytes4(keccak256("treasury()"));
-        s[4] = bytes4(keccak256("minDelay()"));
-        s[5] = bytes4(keccak256("roleRegistry()"));
+        s[3] = bytes4(keccak256("minDelay()"));
+        s[4] = bytes4(keccak256("roleRegistry()"));
         // blacklister immutable added by this PR; skipped pre-upgrade by _safeSnapshot
-        s[6] = bytes4(keccak256("blacklister()"));
+        s[5] = bytes4(keccak256("blacklister()"));
     }
     function _weethWithdrawAdapterImmSels() internal pure returns (bytes4[] memory s) {
-        s = new bytes4[](6);
+        // withdrawRequestNFT() removed: the new WeETHWithdrawAdapter constructor no longer
+        // takes a withdrawRequestNFT address (intentional removal in this upgrade).
+        s = new bytes4[](5);
         s[0] = bytes4(keccak256("weETH()"));
         s[1] = bytes4(keccak256("eETH()"));
         s[2] = bytes4(keccak256("liquidityPool()"));
-        s[3] = bytes4(keccak256("withdrawRequestNFT()"));
-        s[4] = bytes4(keccak256("blacklister()"));
-        s[5] = bytes4(keccak256("roleRegistry()"));
+        s[3] = bytes4(keccak256("blacklister()"));
+        s[4] = bytes4(keccak256("roleRegistry()"));
     }
     function _nftImmSels() internal pure returns (bytes4[] memory s) {
-        s = new bytes4[](6);
-        s[0] = bytes4(keccak256("treasury()"));
-        s[1] = bytes4(keccak256("liquidityPool()"));
-        s[2] = bytes4(keccak256("eETH()"));
-        s[3] = bytes4(keccak256("roleRegistry()"));
-        s[4] = bytes4(keccak256("blacklister()"));
-        s[5] = bytes4(keccak256("etherFiAdmin()"));
+        // treasury() and eETH() removed: the new WithdrawRequestNFT constructor is
+        // (liquidityPool, roleRegistry, blacklister, etherFiAdmin) — no treasury/buyback or eETH.
+        s = new bytes4[](4);
+        s[0] = bytes4(keccak256("liquidityPool()"));
+        s[1] = bytes4(keccak256("roleRegistry()"));
+        s[2] = bytes4(keccak256("blacklister()"));
+        s[3] = bytes4(keccak256("etherFiAdmin()"));
     }
 
     function _upgradedProxies() internal pure returns (address[22] memory list) {
@@ -1402,7 +1405,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
 
     function _verifyImmutablesWithdrawals() internal view {
         EtherFiRedemptionManager r = EtherFiRedemptionManager(payable(ETHERFI_REDEMPTION_MANAGER));
-        require(r.treasury()                          == WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, "EFRedemption.treasury");
+        require(r.treasury()                          == TREASURY, "EFRedemption.treasury");
         require(address(r.roleRegistry())             == ROLE_REGISTRY,             "EFRedemption.roleRegistry");
         require(address(r.eEth())                     == EETH,                      "EFRedemption.eEth");
         require(address(r.weEth())                    == WEETH,                     "EFRedemption.weEth");
