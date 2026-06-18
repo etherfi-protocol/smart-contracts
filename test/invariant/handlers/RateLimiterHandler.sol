@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import "forge-std/StdUtils.sol";
 import "forge-std/Vm.sol";
 
-import "../../../src/EtherFiRateLimiter.sol";
+import "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
 
 /// @notice Stateful-invariant handler (fuzz target) for the GENERAL
 ///         EtherFiRateLimiter — the global-bucket path (createNewLimiter +

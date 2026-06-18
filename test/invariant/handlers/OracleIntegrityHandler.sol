@@ -2,10 +2,10 @@
 pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
-import "../../../src/EtherFiOracle.sol";
-import "../../../src/EtherFiAdmin.sol";
-import "../../../src/interfaces/IEtherFiOracle.sol";
-import "../../../src/interfaces/ILiquidityPool.sol";
+import "@etherfi/oracle/EtherFiOracle.sol";
+import "@etherfi/oracle/EtherFiAdmin.sol";
+import "@etherfi/oracle/interfaces/IEtherFiOracle.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
 
 /// @notice Stateful-fuzz handler for invariant I5 (Oracle Integrity).
 ///
@@ -353,8 +353,11 @@ contract OracleIntegrityHandler is Test {
         _executeAndCheck(r);
         // RECOVERY: published-but-unappliable. Unpublish to un-stick the oracle.
         if (oracle.isConsensusReached(reportHash) && r.refSlotTo > admin.lastHandledReportRefSlot()) {
+            address[] memory members = new address[](2);
+            members[0] = memberA;
+            members[1] = memberB;
             vm.prank(multisig);
-            try oracle.unpublishReport(r) {} catch {}
+            try oracle.unpublishReport(r, members) {} catch {}
         }
     }
 

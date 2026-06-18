@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 import "../../TestSetup.sol";
-import "../../../src/EtherFiNodesManager.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
 
 /// @notice Stateful-fuzz handler driving EtherFiNodesManager.linkPubkeyToNode
 ///         directly, to prove invariant I11 (pubkey -> node uniqueness).

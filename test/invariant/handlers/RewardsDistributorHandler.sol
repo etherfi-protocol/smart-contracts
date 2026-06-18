@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import "forge-std/StdUtils.sol";
 import "forge-std/Vm.sol";
 
-import "../../../src/CumulativeMerkleRewardsDistributor.sol";
+import "@etherfi/rewards/CumulativeMerkleRewardsDistributor.sol";
 
 /// @notice Stateful-invariant handler (fuzz target) for
 ///         CumulativeMerkleRewardsDistributor. It drives the full lifecycle

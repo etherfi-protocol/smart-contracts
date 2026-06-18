@@ -95,7 +95,7 @@ contract WithdrawalSolvencyInvariantTest is TestSetup {
         // block; unpause defensively only if needed (OPERATION_MULTISIG = alice).
         if (withdrawRequestNFTInstance.paused()) {
             vm.prank(alice);
-            withdrawRequestNFTInstance.unPauseContract();
+            withdrawRequestNFTInstance.unpause();
         }
 
         // 5 actors. Deposit generously so totalValueInLp can back finalizing

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 import "../TestSetup.sol";
-import "../../src/interfaces/ILiquidityPool.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
 import "./handlers/OracleIntegrityHandler.sol";
 
 /// @notice Stateful FUZZ-INVARIANT suite for invariant I5 (Oracle Integrity).

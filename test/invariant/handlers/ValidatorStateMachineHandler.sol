@@ -2,11 +2,11 @@
 pragma solidity ^0.8.13;
 
 import "../../TestSetup.sol";
-import "../../../src/interfaces/IStakingManager.sol";
-import "../../../src/interfaces/IEtherFiNode.sol";
-import "../../../src/LiquidityPool.sol";
-import "../../../src/StakingManager.sol";
-import "../../../src/EtherFiNodesManager.sol";
+import "@etherfi/staking/interfaces/IStakingManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNode.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/staking/StakingManager.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
 
 interface ILPValidator {
     function batchRegister(IStakingManager.DepositData[] calldata, uint256[] calldata, address) external;

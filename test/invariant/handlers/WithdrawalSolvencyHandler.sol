@@ -4,10 +4,10 @@ pragma solidity ^0.8.13;
 import "forge-std/StdUtils.sol";
 import "forge-std/Vm.sol";
 
-import "../../../src/LiquidityPool.sol";
-import "../../../src/EETH.sol";
-import "../../../src/WithdrawRequestNFT.sol";
-import "../../../src/interfaces/IWithdrawRequestNFT.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/core/EETH.sol";
+import "@etherfi/withdrawals/WithdrawRequestNFT.sol";
+import "@etherfi/withdrawals/interfaces/IWithdrawRequestNFT.sol";
 
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
@@ -319,20 +319,12 @@ contract WithdrawalSolvencyHandler is StdUtils {
         IWithdrawRequestNFT.WithdrawRequest memory req = wrn.getRequest(tokenId);
         if (!req.isValid) { callCounts["claim_skipped_invalid"]++; return; }
 
-        // Frozen rate must resolve inside the acceptable band. For OUR tokenIds
-        // (finalized post-upgrade) the trace always returns a non-zero snapshot;
-        // we still defensively resolve the legacy fallback the contract uses.
+        // For OUR tokenIds (finalized post-upgrade) the trace always returns a
+        // non-zero snapshot; legacy tokenIds fall back to the live rate exactly
+        // as _getClaimableAmount does (no rate-band guard exists anymore).
         uint224 frozenRate = wrn.frozenRateFor(tokenId);
         if (frozenRate == 0) {
-            uint256 live = lp.amountPerShareCeil();
-            if (live < wrn.minAcceptableShareRate() || live > wrn.maxAcceptableShareRate()) {
-                // Live-rate fallback out of band: the contract would revert
-                // InvalidLiveRate. This is NOT a claimability-of-finalized
-                // violation (it's the rate guard), so skip cleanly.
-                callCounts["claim_skipped_rate"]++;
-                return;
-            }
-            frozenRate = uint224(live);
+            frozenRate = uint224(lp.amountPerShareCeil());
         }
 
         // Independent recompute of the payout the contract will pay.
@@ -384,7 +376,7 @@ contract WithdrawalSolvencyHandler is StdUtils {
         if (cap > uint256(uint128(type(int128).max))) cap = uint256(uint128(type(int128).max));
         int128 delta = int128(int256(bound(uint256(deltaSeed), 0, cap)));
         vm.prank(membershipManager);
-        try lp.rebase(delta) { callCounts["rebase_pos"]++; }
+        try lp.rebase(delta, 0) { callCounts["rebase_pos"]++; }
         catch { callCounts["rebase_pos_revert"]++; }
     }
 
@@ -407,7 +399,7 @@ contract WithdrawalSolvencyHandler is StdUtils {
         if (cap > uint256(uint128(type(int128).max))) cap = uint256(uint128(type(int128).max));
         int128 delta = -int128(int256(bound(uint256(deltaSeed), 1, cap)));
         vm.prank(membershipManager);
-        try lp.rebase(delta) { callCounts["rebase_neg"]++; }
+        try lp.rebase(delta, 0) { callCounts["rebase_neg"]++; }
         catch { callCounts["rebase_neg_revert"]++; }
     }
 
