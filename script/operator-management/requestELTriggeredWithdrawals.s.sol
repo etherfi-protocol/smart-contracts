@@ -5,12 +5,12 @@ import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 import "forge-std/StdJson.sol";
 
-import {EtherFiNodesManager} from "../../src/EtherFiNodesManager.sol";
-import {IEtherFiNode} from "../../src/interfaces/IEtherFiNode.sol";
-import "../../src/eigenlayer-interfaces/IEigenPod.sol";
-import {EtherFiRateLimiter} from "../../src/EtherFiRateLimiter.sol";
+import {EtherFiNodesManager} from "@etherfi/staking/EtherFiNodesManager.sol";
+import {IEtherFiNode} from "@etherfi/staking/interfaces/IEtherFiNode.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
+import {EtherFiRateLimiter} from "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
 
-import "../utils/utils.sol";
+import "@scripts/utils/utils.sol";
 
 /**
  * @notice Broadcasts `EtherFiNodesManager.requestExecutionLayerTriggeredWithdrawal()` for every pubkey in

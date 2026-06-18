@@ -2,8 +2,8 @@
 pragma solidity ^0.8.4;
 
 import {Test} from "forge-std/Test.sol";
-import {RoleRegistry} from "../src/RoleRegistry.sol";
-import {UUPSProxy} from "../src/UUPSProxy.sol";
+import {RoleRegistry} from "@etherfi/governance/RoleRegistry.sol";
+import {UUPSProxy} from "@etherfi/utils/UUPSProxy.sol";
 
 contract RoleRegistryTest is Test {
     RoleRegistry public implementation;
@@ -132,7 +132,7 @@ contract RoleRegistryTest is Test {
     
     function test_Upgradeability() public {
         // Deploy new implementation
-        RoleRegistry newImplementation = new RoleRegistry(address(0));
+        RoleRegistry newImplementation = new RoleRegistry(address(0xdead));
         
         // Only owner can upgrade
         vm.prank(user1);

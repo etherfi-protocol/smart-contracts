@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import "../../src/eigenlayer-interfaces/IStrategy.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IStrategy.sol";
 
 // See MockStrategy contract below this contract for testing overrides
 contract MockStrategyBase is IStrategy {

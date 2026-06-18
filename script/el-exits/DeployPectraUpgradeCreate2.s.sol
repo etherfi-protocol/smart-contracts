@@ -5,14 +5,14 @@ import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 import "forge-std/StdJson.sol";
 
-import "../Create2Factory.sol";
+import "@scripts/Create2Factory.sol";
 
-import "../../src/EtherFiNode.sol";
-import "../../src/EtherFiNodesManager.sol";
-import "../../src/EtherFiRateLimiter.sol";
-import "../../src/StakingManager.sol";
-import "../../src/UUPSProxy.sol";
-import "../../src/RoleRegistry.sol";
+import "@etherfi/staking/EtherFiNode.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
+import "@etherfi/staking/StakingManager.sol";
+import "@etherfi/utils/UUPSProxy.sol";
+import "@etherfi/governance/RoleRegistry.sol";
 
 interface IUpgradable {
     function upgradeTo(address newImplementation) external;

@@ -2,14 +2,14 @@
 pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
-import "../../script/deploys/Deployed.s.sol";
-import "../../src/LiquidityPool.sol";
-import "../../src/WithdrawRequestNFT.sol";
-import "../../src/PriorityWithdrawalQueue.sol";
-import "../../src/utils/ReentrancyGuardNamespaced.sol";
-import "../../src/RoleRegistry.sol";
-import "../../src/UUPSProxy.sol";
-import "../../src/helpers/Blacklister.sol";
+import "@scripts/deploys/Deployed.s.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/withdrawals/WithdrawRequestNFT.sol";
+import "@etherfi/withdrawals/PriorityWithdrawalQueue.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/utils/UUPSProxy.sol";
+import "@etherfi/governance/Blacklister.sol";
 
 interface IUUPSProxy {
     function upgradeTo(address newImpl) external;
@@ -65,12 +65,8 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
 
     struct WRNSnap {
         address lp;
-        address eeth;
-        address membership;
         uint32 nextId;
         uint32 lastFin;
-        uint16 split;
-        uint256 remainder;
         bool paused;
     }
 
@@ -96,12 +92,8 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
 
     function _snapWRN(WithdrawRequestNFT wrn) internal view returns (WRNSnap memory s) {
         s.lp = address(wrn.liquidityPool());
-        s.eeth = address(wrn.eETH());
-        s.membership = address(wrn.membershipManager());
         s.nextId = wrn.nextRequestId();
         s.lastFin = wrn.lastFinalizedRequestId();
-        s.split = wrn.shareRemainderSplitToTreasuryInBps();
-        s.remainder = wrn.totalRemainderEEthShares();
         s.paused = wrn.paused();
     }
 
@@ -123,12 +115,8 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
 
     function _assertWRNEq(WRNSnap memory a, WRNSnap memory b) internal {
         assertEq(a.lp,         b.lp,         "WRN.liquidityPool");
-        assertEq(a.eeth,       b.eeth,       "WRN.eETH");
-        assertEq(a.membership, b.membership, "WRN.membershipManager");
         assertEq(a.nextId,     b.nextId,     "WRN.nextRequestId");
         assertEq(a.lastFin,    b.lastFin,    "WRN.lastFinalizedRequestId");
-        assertEq(a.split,      b.split,      "WRN.split");
-        assertEq(a.remainder,  b.remainder,  "WRN.remainder");
         assertEq(a.paused,     b.paused,     "WRN.paused");
     }
 
@@ -158,8 +146,9 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
     ///      `onlyUpgradeTimelock` (e.g. `initializeOnUpgradeV2`) can pass.
     function _upgradeRoleRegistry() internal {
         address roleRegOwner = IOwnableRead(ROLE_REGISTRY).owner();
+        address newRoleRegistryImpl = address(new RoleRegistry(address(0xdead)));
         vm.prank(roleRegOwner);
-        IUUPSProxy(ROLE_REGISTRY).upgradeTo(address(new RoleRegistry(address(0))));
+        IUUPSProxy(ROLE_REGISTRY).upgradeTo(newRoleRegistryImpl);
 
         RoleRegistry rr = RoleRegistry(ROLE_REGISTRY);
         // Cache the role bytes32 in a local first — calling `rr.UPGRADE_TIMELOCK_ROLE()`
@@ -212,7 +201,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         // 2. Deploy new implementation contracts (with the added guard)
         // ------------------------------------------------------------------
         address newLP  = address(new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: STAKING_MANAGER,
                 nodesManager: ETHERFI_NODES_MANAGER,
                 eETH: EETH,
@@ -224,10 +213,9 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: ETHERFI_ADMIN,
                 membershipManager: MEMBERSHIP_MANAGER
-            }),
-            0
+            })
         ));
-        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), ETHERFI_ADMIN, 1, 4e18));
+        address newWRN = address(new WithdrawRequestNFT(LIQUIDITY_POOL, ROLE_REGISTRY, address(blacklisterInstance), ETHERFI_ADMIN));
 
         // ------------------------------------------------------------------
         // 3. Upgrade the proxies in place
@@ -270,20 +258,16 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         _assertWRNEq(_snapWRN(wrn), wrnPre);
 
         // ------------------------------------------------------------------
-        // 7. Smoke test: a guarded function executes end-to-end on the
-        //    upgraded proxy and the guard slot cycles correctly.
+        // 7. Smoke test: a `nonReentrant` function executes end-to-end on the
+        //    upgraded proxy. The guard is now Solady's transient guard, which
+        //    keeps no persistent slot to inspect — a successful deposit through
+        //    the modifier is the meaningful post-upgrade check.
         // ------------------------------------------------------------------
         if (!lp.paused()) {
             address user = address(0xB0B0);
             vm.deal(user, 5 ether);
             vm.prank(user);
             lp.deposit{value: 1 ether}();
-
-            assertEq(
-                vm.load(LIQUIDITY_POOL, GUARD_SLOT),
-                bytes32(uint256(1)),
-                "guard slot not NOT_ENTERED after guarded deposit"
-            );
         }
     }
 
@@ -389,7 +373,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         vm.stopPrank();
         require(granted, "role grant failed");
 
-        wrn.pauseContract();
+        wrn.pause();
         assertTrue(wrn.paused(), "precondition: WRN paused");
 
         uint256 balBefore = nftOwner.balance;
@@ -406,7 +390,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
     ///      receive(); the master queue impl has no receive() and would revert.
     function _doUpgrade() internal {
         address newLP = address(new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: STAKING_MANAGER,
                 nodesManager: ETHERFI_NODES_MANAGER,
                 eETH: EETH,
@@ -418,12 +402,11 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: ETHERFI_ADMIN,
                 membershipManager: MEMBERSHIP_MANAGER
-            }),
-            0
+            })
         ));
-        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), ETHERFI_ADMIN, 1, 4e18));
+        address newWRN = address(new WithdrawRequestNFT(LIQUIDITY_POOL, ROLE_REGISTRY, address(blacklisterInstance), ETHERFI_ADMIN));
         address newPQ = address(new PriorityWithdrawalQueue(
-            LIQUIDITY_POOL, EETH, WEETH, ROLE_REGISTRY, TREASURY, 1 hours
+            LIQUIDITY_POOL, EETH, WEETH, address(blacklisterInstance), ROLE_REGISTRY, 1 hours
         ));
 
         // Upgrade proxies against the LIVE (pre-upgrade) RoleRegistry, since
@@ -459,40 +442,9 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
     /// @dev Separately verify that, post-upgrade, the guard actually blocks
     ///      re-entry. This is defence-in-depth in case some ABI mismatch made
     ///      the modifier no-op.
-    function test_postUpgrade_guardBlocksReentry() public {
-        address newLP = address(new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
-                stakingManager: STAKING_MANAGER,
-                nodesManager: ETHERFI_NODES_MANAGER,
-                eETH: EETH,
-                withdrawRequestNFT: WITHDRAW_REQUEST_NFT,
-                liquifier: LIQUIFIER,
-                etherFiRedemptionManager: ETHERFI_REDEMPTION_MANAGER,
-                roleRegistry: ROLE_REGISTRY,
-                priorityWithdrawalQueue: PRIORITY_WITHDRAWAL_QUEUE,
-                blacklister: address(blacklisterInstance),
-                etherFiAdminContract: ETHERFI_ADMIN,
-                membershipManager: MEMBERSHIP_MANAGER
-            }),
-            0
-        ));
-        address roleRegOwner = IOwnableRead(ROLE_REGISTRY).owner();
-        vm.prank(roleRegOwner);
-        IUUPSProxy(LIQUIDITY_POOL).upgradeTo(newLP);
-
-        // Plant ENTERED directly; the next guarded call must revert with the
-        // reentrancy error selector — proves the modifier reads the slot we
-        // expect on the upgraded proxy.
-        vm.store(LIQUIDITY_POOL, GUARD_SLOT, bytes32(uint256(2)));
-
-        address user = address(0xB0B0);
-        vm.deal(user, 1 ether);
-
-        LiquidityPool lp = LiquidityPool(payable(LIQUIDITY_POOL));
-        if (!lp.paused()) {
-            vm.expectRevert(ReentrancyGuardNamespaced.ReentrancyGuardReentrantCall.selector);
-            vm.prank(user);
-            lp.deposit{value: 1 ether}();
-        }
-    }
+    // NOTE: a former `test_postUpgrade_guardBlocksReentry` planted ENTERED at the
+    // namespaced guard slot via `vm.store` and expected the next call to revert. That
+    // mechanism no longer exists: the guard is Solady's transient `ReentrancyGuardTransient`,
+    // which has no plantable persistent slot. Actual reentry-blocking on the upgraded
+    // contracts is covered by `test/ReentrancyGuard.t.sol` (real reentrant attacker).
 }

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "../TestSetup.sol";
-import "../../src/Liquifier.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/deposits/Liquifier.sol";
 
 /// @notice Mainnet-fork tests scoped narrowly to the stETH price-feed sanity
 ///         check in `Liquifier.quoteByMarketValue`. Confirms the upgraded
@@ -108,7 +108,7 @@ contract LiquifierStEthPriceFeedForkTest is TestSetup {
         vm.startPrank(alice);
         stEth.approve(address(liquifierInstance), 1 ether);
         vm.expectRevert(Liquifier.InvalidStEthPrice.selector);
-        liquifierInstance.depositWithERC20(address(stEth), 1 ether, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), 1 ether, 0, address(0));
         vm.stopPrank();
     }
 
@@ -122,7 +122,7 @@ contract LiquifierStEthPriceFeedForkTest is TestSetup {
         vm.startPrank(alice);
         stEth.approve(address(liquifierInstance), 1 ether);
         vm.expectRevert(Liquifier.StalePriceFeed.selector);
-        liquifierInstance.depositWithERC20(address(stEth), 1 ether, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), 1 ether, 0, address(0));
         vm.stopPrank();
     }
 
@@ -147,21 +147,28 @@ contract LiquifierStEthPriceFeedForkTest is TestSetup {
         uint256 curveOut =
             ICurvePoolQuoter1(address(liquifierInstance.stEth_Eth_Pool())).get_dy(1, 0, amount);
 
-        uint256 marketValue = curveOut < amount ? curveOut : amount;
+        // Deviation is measured against the RAW curve quote; the 1:1 cap is applied
+        // only after the check passes.
         uint256 chainlinkValue = (uint256(answer) * amount) / 1e18;
         bool fresh = updatedAt + staleWindow >= block.timestamp;
-        uint256 deviation = chainlinkValue > marketValue ? chainlinkValue - marketValue : marketValue - chainlinkValue;
+        uint256 deviation = chainlinkValue > curveOut ? chainlinkValue - curveOut : curveOut - chainlinkValue;
+        uint256 cappedValue = curveOut < amount ? curveOut : amount;
         uint256 bps = liquifierInstance.BASIS_POINT_SCALE();
 
         if (!fresh) {
             vm.expectRevert(Liquifier.StalePriceFeed.selector);
             liquifierInstance.quoteByMarketValue(address(stEth), amount);
-        } else if ((deviation * bps) / marketValue > liquifierInstance.maxPriceDeviationInBps()) {
+        } else if (1e18 > uint256(answer) + liquifierInstance.maxPriceThreshold()) {
+            // Depeg floor: stETH below (1e18 - maxPriceThreshold) is rejected. Runs before
+            // the curve-deviation check, so it takes precedence on a down-depeg.
+            vm.expectRevert(Liquifier.InvalidStEthPrice.selector);
+            liquifierInstance.quoteByMarketValue(address(stEth), amount);
+        } else if ((deviation * bps) / curveOut > liquifierInstance.maxPriceDeviationInBps()) {
             vm.expectRevert(Liquifier.InvalidStEthPrice.selector);
             liquifierInstance.quoteByMarketValue(address(stEth), amount);
         } else {
             uint256 q = liquifierInstance.quoteByMarketValue(address(stEth), amount);
-            assertEq(q, marketValue);
+            assertEq(q, cappedValue);
         }
     }
 

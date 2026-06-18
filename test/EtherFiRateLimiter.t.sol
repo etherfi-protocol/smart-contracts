@@ -3,11 +3,11 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Test.sol";
 import "forge-std/console2.sol";
-import "./TestSetup.sol";
-import "../src/EtherFiRateLimiter.sol";
-import "../src/interfaces/IEtherFiRateLimiter.sol";
-import "../src/utils/PausableUntil.sol";
-import "../lib/BucketLimiter.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
+import "@etherfi/governance/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
+import "@etherfi/governance/rate-limiting/libraries/BucketLimiter.sol";
 
 contract EtherFiRateLimiterTest is TestSetup {
     EtherFiRateLimiter public rateLimiter;
@@ -140,33 +140,33 @@ contract EtherFiRateLimiterTest is TestSetup {
     function test_onlyPauserCanPause() public {
         // Should succeed with pauser
         vm.prank(pauser);
-        rateLimiter.pauseContract();
+        rateLimiter.pause();
         assertTrue(rateLimiter.paused());
 
         // Should fail with unauthorized user
         vm.prank(unauthorizedUser);
         vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
-        rateLimiter.pauseContract();
+        rateLimiter.pause();
     }
 
     function test_onlyUnpauserCanUnpause() public {
         // Setup: Pause first
         vm.prank(pauser);
-        rateLimiter.pauseContract();
+        rateLimiter.pause();
 
         // Should succeed with unpauser
         vm.prank(unpauser);
-        rateLimiter.unPauseContract();
+        rateLimiter.unpause();
         assertFalse(rateLimiter.paused());
 
         // Pause again for next test
         vm.prank(pauser);
-        rateLimiter.pauseContract();
+        rateLimiter.pause();
 
         // Should fail with unauthorized user
         vm.prank(unauthorizedUser);
         vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
-        rateLimiter.unPauseContract();
+        rateLimiter.unpause();
     }
 
     //--------------------------------------------------------------------------------------
@@ -349,11 +349,11 @@ contract EtherFiRateLimiterTest is TestSetup {
 
         // Pause contract
         vm.prank(pauser);
-        rateLimiter.pauseContract();
+        rateLimiter.pause();
 
         // Try to consume while paused
         vm.prank(consumer1);
-        vm.expectRevert("Pausable: paused");
+        vm.expectRevert(Pausable.ContractPaused.selector);
         rateLimiter.consume(LIMIT_ID_1, SMALL_AMOUNT);
     }
 

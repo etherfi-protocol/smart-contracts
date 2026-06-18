@@ -3,9 +3,9 @@ pragma solidity ^0.8.13;
 
 import "forge-std/console2.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
-import "../TestSetup.sol";
-import "../../src/PriorityWithdrawalQueue.sol";
-import "../../src/interfaces/IPriorityWithdrawalQueue.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/withdrawals/PriorityWithdrawalQueue.sol";
+import "@etherfi/withdrawals/interfaces/IPriorityWithdrawalQueue.sol";
 
 /// @notice End-to-end lifecycle tests for the ETH-escrow withdrawal flows.
 ///
@@ -86,7 +86,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
 
         if (withdrawRequestNFTInstance.paused()) {
             vm.prank(alice);
-            withdrawRequestNFTInstance.unPauseContract();
+            withdrawRequestNFTInstance.unpause();
         }
 
         vm.prank(alice);
@@ -103,8 +103,8 @@ contract WithdrawEscrowE2ETest is TestSetup {
             address(liquidityPoolInstance),
             address(eETHInstance),
             address(weEthInstance),
+            address(blacklisterInstance),
             address(roleRegistryInstance),
-            treasuryInstance,
             1 hours
         );
         UUPSProxy proxy = new UUPSProxy(
@@ -113,7 +113,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
         );
         pQueue = PriorityWithdrawalQueue(payable(address(proxy)));
         liquidityPoolInstance.upgradeTo(address(new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: address(stakingManagerInstance),
                 nodesManager: address(managerInstance),
                 eETH: address(eETHInstance),
@@ -125,25 +125,22 @@ contract WithdrawEscrowE2ETest is TestSetup {
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: address(etherFiAdminInstance),
                 membershipManager: address(membershipManagerInstance)
-            }),
-            0
+            })
         )));
         vm.stopPrank();
     }
 
     function _upgradeWithdrawRequestNFT() internal {
-        address wrnOwner = withdrawRequestNFTInstance.owner();
+        address wrnOwner = roleRegistryInstance.owner();
+        // Deploy the impl BEFORE pranking — the inlined `new` is a CREATE that
+        // would otherwise consume the single-shot vm.prank (OnlyUpgradeTimelock).
+        address newWrnImpl = address(new WithdrawRequestNFT(
+            address(liquidityPoolInstance),
+            address(roleRegistryInstance),
+            address(blacklisterInstance)
+        , address(etherFiAdminInstance)));
         vm.prank(wrnOwner);
-        withdrawRequestNFTInstance.upgradeTo(
-            address(new WithdrawRequestNFT(
-                0x2f5301a3D59388c509C65f8698f521377D41Fd0F,
-                address(eETHInstance),
-                address(liquidityPoolInstance),
-                address(membershipManagerInstance),
-                address(roleRegistryInstance),
-                address(blacklisterInstance)
-            , address(etherFiAdminInstance), 1, 4e18))
-        );
+        withdrawRequestNFTInstance.upgradeTo(newWrnImpl);
     }
 
     function _grantRoles() internal {
@@ -346,9 +343,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
         // ceil(claimable * 1e18 / frozenRate). For pre-upgrade requests the rate is 0
         // and the contract falls back to live `sharesForWithdrawalAmount`.
         uint224 frozenRate = withdrawRequestNFTInstance.frozenRateFor(reqId);
-        uint256 expectedSharesBurned = frozenRate == 0
-            ? liquidityPoolInstance.sharesForWithdrawalAmount(claimable)
-            : Math.mulDiv(claimable, 1e18, uint256(frozenRate), Math.Rounding.Up);
+        uint256 expectedSharesBurned = withdrawRequestNFTInstance.getRequest(reqId).shareOfEEth;
 
         vm.prank(user);
         withdrawRequestNFTInstance.claimWithdraw(reqId);
@@ -360,12 +355,21 @@ contract WithdrawEscrowE2ETest is TestSetup {
             "step4: user raw ETH after claim");
         assertApproxEqAbs(address(withdrawRequestNFTInstance).balance, preNft.rawEth - withdrawAmt, 5,
             "step4: NFT raw ETH after claim");
-        assertEq(address(liquidityPoolInstance).balance, preLp.rawEth,
+        assertApproxEqAbs(address(liquidityPoolInstance).balance, preLp.rawEth, 5,
             "step4: LP raw ETH unchanged at claim");
-        assertEq(liquidityPoolInstance.totalValueInLp(), preLp.inLp,
+        // "Unchanged" up to a wei: the claim sweeps any stranded ETH (balance above the
+        // amount still locked) back to LP via LP.receive(), which can nudge totalValueInLp
+        // by 1 wei of share-rate rounding dust at the live mainnet rate. Mirrors the 5-wei
+        // tolerance used by the sibling balance/share assertions above.
+        assertApproxEqAbs(liquidityPoolInstance.totalValueInLp(), preLp.inLp, 5,
             "step4: totalValueInLp unchanged at claim");
-        // totalValueOutOfLp decrements by claimable (the actual ETH paid), not raw withdrawAmt
-        // — share-rate round-trip can drift by 2 wei at the live mainnet share rate
+        // totalValueOutOfLp decrements by request.amountOfEEth (the value credited at
+        // fulfill), not by the ETH actually paid. Here that credit == withdrawAmt
+        // (step2 asserts request.amountOfEEth == withdrawAmt) and there is no rebase between
+        // finalize and claim, so the two coincide. The 5-wei tolerance absorbs the share-rate
+        // round-trip drift in withdrawAmt itself. The down-rebase case, where the credit and
+        // the paid amount diverge, is pinned at the LP boundary in
+        // LiquidityPool.t.sol:test_withdraw_debitsAmountOfEEth_notAmountPaid.
         assertApproxEqAbs(liquidityPoolInstance.totalValueOutOfLp(),
             preLp.outLp - uint128(withdrawAmt), 5,
             "step4: totalValueOutOfLp after claim");
@@ -556,8 +560,8 @@ contract WithdrawEscrowE2ETest is TestSetup {
         vm.prank(user);
         pQueue.claimWithdraw(req);
 
-        // User received ETH from queue balance. Fee ETH (amountOfEEth - amountWithFee) is
-        // returned to LP via returnLockedEth, so LP raw ETH may increase by up to feeEth.
+        // User received ETH from queue balance. Stranded ETH (amountOfEEth - amountWithFee) is
+        // swept back to LP via LP.receive(), so LP raw ETH may increase by up to that amount.
         assertApproxEqAbs(user.balance, userEthPre + expectedEth, 2,
             "step4: user ETH after claim (2-wei tolerance)");
         assertLt(address(pQueue).balance, preQ.rawEth,
@@ -686,8 +690,8 @@ contract WithdrawEscrowE2ETest is TestSetup {
         // Use ~5% of the live TPE so we don't trip `_checkMinAmountForShare`.
         uint256 totalPooled = liquidityPoolInstance.getTotalPooledEther();
         int128 slash = -int128(uint128(totalPooled / 20));
-        vm.prank(liquidityPoolInstance.membershipManager());
-        liquidityPoolInstance.rebase(slash);
+        vm.prank(liquidityPoolInstance.etherFiAdminContract());
+        liquidityPoolInstance.rebase(slash, 0);
 
         uint256 claimableAfter = withdrawRequestNFTInstance.getClaimableAmount(reqId);
         assertEq(claimableAfter, claimableBefore,

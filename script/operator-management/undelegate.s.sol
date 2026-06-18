@@ -5,12 +5,12 @@ import "forge-std/console2.sol";
 import "forge-std/StdJson.sol";
 import "forge-std/Script.sol";
 
-import "../utils/utils.sol";
+import "@scripts/utils/utils.sol";
 
-import {EtherFiTimelock} from "../../src/EtherFiTimelock.sol";
-import {EtherFiNodesManager} from "../../src/EtherFiNodesManager.sol";
-import {RoleRegistry} from "../../src/RoleRegistry.sol";
-import {IDelegationManager} from "../../src/eigenlayer-interfaces/IDelegationManager.sol";
+import {EtherFiTimelock} from "@etherfi/governance/EtherFiTimelock.sol";
+import {EtherFiNodesManager} from "@etherfi/staking/EtherFiNodesManager.sol";
+import {RoleRegistry} from "@etherfi/governance/RoleRegistry.sol";
+import {IDelegationManager} from "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
 
 /**
  * @title UndelegateAllStakers

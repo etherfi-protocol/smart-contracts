@@ -2,12 +2,12 @@
 pragma solidity ^0.8.24;
 
 import "forge-std/Test.sol";
-import "../src/RestakingRewardsRouter.sol";
-import "../src/RoleRegistry.sol";
-import "../src/UUPSProxy.sol";
-import "../src/LiquidityPool.sol";
-import "./TestERC20.sol";
-import "../src/interfaces/ILiquidityPool.sol";
+import "@etherfi/restaking/RestakingRewardsRouter.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/utils/UUPSProxy.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@tests/TestERC20.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
 
 contract RestakingRewardsRouterTest is Test {
     RestakingRewardsRouter public router;
@@ -39,7 +39,7 @@ contract RestakingRewardsRouterTest is Test {
     function setUp() public {
         // Deploy RoleRegistry
         vm.startPrank(owner);
-        roleRegistryImpl = new RoleRegistry(address(0));
+        roleRegistryImpl = new RoleRegistry(address(0xdead));
         roleRegistryProxy = new UUPSProxy(
             address(roleRegistryImpl),
             abi.encodeWithSelector(RoleRegistry.initialize.selector, owner)
@@ -52,7 +52,7 @@ contract RestakingRewardsRouterTest is Test {
 
         // Deploy LiquidityPool
         liquidityPoolImpl = new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: address(0),
                 nodesManager: address(0),
                 eETH: address(0),
@@ -64,8 +64,7 @@ contract RestakingRewardsRouterTest is Test {
                 blacklister: address(0),
                 etherFiAdminContract: address(0),
                 membershipManager: address(0)
-            }),
-            0
+            })
         );
         liquidityPoolProxy = new UUPSProxy(address(liquidityPoolImpl), "");
         liquidityPool = LiquidityPool(payable(address(liquidityPoolProxy)));

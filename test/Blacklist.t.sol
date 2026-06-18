@@ -1,19 +1,20 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
-import "../src/AuctionManager.sol";
-import "../src/DepositAdapter.sol";
-import "../src/EtherFiRedemptionManager.sol";
-import "../src/LiquidityPool.sol";
-import "../src/Liquifier.sol";
-import "../src/MembershipManager.sol";
-import "../src/WithdrawRequestNFT.sol";
-import "../src/helpers/Blacklister.sol";
-import "../src/interfaces/ILiquidityPool.sol";
-import "../src/interfaces/ILiquifier.sol";
-import "../src/interfaces/IeETH.sol";
-import "../src/interfaces/IWeETH.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/staking/AuctionManager.sol";
+import "@etherfi/deposits/DepositAdapter.sol";
+import "@etherfi/withdrawals/EtherFiRedemptionManager.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/deposits/Liquifier.sol";
+import "@etherfi/archive/membership/MembershipManager.sol";
+import "@etherfi/withdrawals/WithdrawRequestNFT.sol";
+import "@etherfi/governance/Blacklister.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/deposits/interfaces/IDepositAdapter.sol";
+import "@etherfi/deposits/interfaces/ILiquifier.sol";
+import "@etherfi/core/interfaces/IeETH.sol";
+import "@etherfi/core/interfaces/IWeETH.sol";
 
 contract BlacklistTest is TestSetup {
     address blacklisted;
@@ -33,15 +34,17 @@ contract BlacklistTest is TestSetup {
         // The exact token wirings don't matter for blacklist checks since the
         // modifier runs before any state-changing logic.
         DepositAdapter impl = new DepositAdapter(
-            address(liquidityPoolInstance),
-            address(liquifierInstance),
-            address(weEthInstance),
-            address(eETHInstance),
-            address(0),
-            address(0),
-            address(0),
-            address(roleRegistryInstance),
-            address(blacklisterInstance)
+            IDepositAdapter.ConstructorAddresses({
+                liquidityPool: address(liquidityPoolInstance),
+                liquifier: address(liquifierInstance),
+                weETH: address(weEthInstance),
+                eETH: address(eETHInstance),
+                wETH: address(0),
+                stETH: address(0),
+                wstETH: address(0),
+                blacklister: address(blacklisterInstance),
+                roleRegistry: address(roleRegistryInstance)
+            })
         );
         UUPSProxy proxy = new UUPSProxy(address(impl), "");
         depositAdapter = DepositAdapter(payable(address(proxy)));
@@ -118,14 +121,14 @@ contract BlacklistTest is TestSetup {
         ILiquifier.PermitInput memory permit;
         vm.prank(blacklisted);
         _expectBlacklistedRevert(blacklisted);
-        depositAdapter.depositStETHForWeETHWithPermit(1 ether, address(0), permit);
+        depositAdapter.depositStETHForWeETHWithPermit(1 ether, 0, address(0), permit);
     }
 
     function test_blacklist_DepositAdapter_depositWstETHForWeETHWithPermit_reverts() public {
         ILiquifier.PermitInput memory permit;
         vm.prank(blacklisted);
         _expectBlacklistedRevert(blacklisted);
-        depositAdapter.depositWstETHForWeETHWithPermit(1 ether, address(0), permit);
+        depositAdapter.depositWstETHForWeETHWithPermit(1 ether, 0, address(0), permit);
     }
 
     // -------------------------------------------------------------------------
@@ -219,14 +222,14 @@ contract BlacklistTest is TestSetup {
     function test_blacklist_Liquifier_depositWithERC20_reverts() public {
         vm.prank(blacklisted);
         _expectBlacklistedRevert(blacklisted);
-        liquifierInstance.depositWithERC20(address(stEth), 1 ether, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), 1 ether, 0, address(0));
     }
 
     function test_blacklist_Liquifier_depositWithERC20WithPermit_reverts() public {
         ILiquifier.PermitInput memory permit;
         vm.prank(blacklisted);
         _expectBlacklistedRevert(blacklisted);
-        liquifierInstance.depositWithERC20WithPermit(address(stEth), 1 ether, address(0), permit);
+        liquifierInstance.depositWithERC20WithPermit(address(stEth), 1 ether, 0, address(0), permit);
     }
 
     // -------------------------------------------------------------------------

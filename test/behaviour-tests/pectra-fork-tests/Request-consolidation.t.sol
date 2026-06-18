@@ -3,18 +3,18 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Test.sol";
 import "forge-std/console2.sol";
-import "../../../src/EtherFiNodesManager.sol";
-import "../../../src/EtherFiNode.sol";
-import "../../../src/EtherFiTimelock.sol";
-import "../../../src/EtherFiRateLimiter.sol";
-import "../../../src/RoleRegistry.sol";
-import "../../../src/interfaces/IRoleRegistry.sol";
-import "../../../src/interfaces/IEtherFiRateLimiter.sol";
-import "../../../src/interfaces/IStakingManager.sol";
-import {IEigenPod, IEigenPodTypes } from "../../../src/eigenlayer-interfaces/IEigenPod.sol";
-import {EigenPodTestHelpers} from "../../utils/EigenPodTestHelpers.sol";
-import "../../TestSetup.sol";
-import "../../../script/deploys/Deployed.s.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/staking/EtherFiNode.sol";
+import "@etherfi/governance/EtherFiTimelock.sol";
+import "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/governance/interfaces/IRoleRegistry.sol";
+import "@etherfi/governance/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
+import "@etherfi/staking/interfaces/IStakingManager.sol";
+import {IEigenPod, IEigenPodTypes } from "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
+import {EigenPodTestHelpers} from "@tests/utils/EigenPodTestHelpers.sol";
+import "@tests/TestSetup.sol";
+import "@scripts/deploys/Deployed.s.sol";
 /**
  * @title RequestConsolidationTest
  * @notice test for request consolidation

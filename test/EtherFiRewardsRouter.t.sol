@@ -2,11 +2,11 @@
 pragma solidity ^0.8.24;
 
 import "forge-std/Test.sol";
-import "../src/EtherFiRewardsRouter.sol";
-import "../src/RoleRegistry.sol";
-import "../src/UUPSProxy.sol";
-import "./TestERC20.sol";
-import "./TestERC721.sol";
+import "@etherfi/rewards/EtherFiRewardsRouter.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/utils/UUPSProxy.sol";
+import "@tests/TestERC20.sol";
+import "@tests/TestERC721.sol";
 
 contract MockLiquidityPool {
     uint128 public totalValueOutOfLp;
@@ -48,7 +48,7 @@ contract EtherFiRewardsRouterTest is Test {
     function setUp() public {
         // Deploy RoleRegistry
         vm.startPrank(owner);
-        roleRegistryImpl = new RoleRegistry(address(0));
+        roleRegistryImpl = new RoleRegistry(address(0xdead));
         roleRegistryProxy = new UUPSProxy(
             address(roleRegistryImpl),
             abi.encodeWithSelector(RoleRegistry.initialize.selector, owner)
@@ -77,10 +77,7 @@ contract EtherFiRewardsRouterTest is Test {
             abi.encodeWithSelector(EtherFiRewardsRouter.initialize.selector)
         );
         rewardsRouter = EtherFiRewardsRouter(payable(address(proxy)));
-        
-        // Transfer ownership to owner address
-        rewardsRouter.transferOwnership(owner);
-        
+
         // Deploy test tokens
         testToken = new TestERC20("Test Token", "TEST");
         testNFT = new TestERC721("Test NFT", "TNFT");
@@ -106,8 +103,9 @@ contract EtherFiRewardsRouterTest is Test {
     // ============ Initialization Tests ============
     
     function test_initialize_setsOwner() public {
-        // Owner is transferred to owner address in setUp
-        assertEq(rewardsRouter.owner(), owner);
+        // Ownership is now governed by the RoleRegistry rather than a per-contract
+        // Ownable owner; the router defers all access control to it.
+        assertEq(roleRegistry.owner(), owner);
     }
     
     function test_initialize_canOnlyBeCalledOnce() public {

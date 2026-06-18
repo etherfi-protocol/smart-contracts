@@ -3,21 +3,21 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
 import "forge-std/StdJson.sol";
-import "../src/MembershipManager.sol";
-import "../src/interfaces/IMembershipManager.sol";
-import "../script/operations/v0-migration/MembershipV0Migrator.sol";
+import "@etherfi/archive/membership/MembershipManager.sol";
+import "@etherfi/archive/membership/interfaces/IMembershipManager.sol";
+import "@scripts/operations/v0-migration/MembershipV0Migrator.sol";
 
-/// @notice Fork test for the V0 → V1 batch migration. Confirms three things:
+/// @notice Fork test for the V0 → V1 batch migration. Confirms two things:
 ///   (1) Every V0 NFT in v0_ids_flat.json gets fully migrated (no leftovers).
-///   (2) `MembershipManager.rebase()` still works correctly *after* the
-///       migration — i.e. zeroed V0 tier deposits do not cause reverts and
-///       the V1 reward path continues to run (zero / positive / negative
-///       accrual branches).
-///   (3) The migrated NFTs can actually exit through the withdrawal path
+///   (2) The migrated NFTs can actually exit through the withdrawal path
 ///       (the real reason we run the migration in the first place). We
 ///       exercise both `unwrapForEEthAndBurn` (burn for eETH) and
 ///       `requestWithdrawAndBurn` (burn for a WithdrawRequestNFT) using
 ///       on-chain owners of two of the 279 V0 holdouts.
+///
+/// Rebase routing is no longer a MembershipManager concern (EARN-1440 routes
+/// rebase EtherFiAdmin → LiquidityPool directly), so it is covered separately
+/// by the EtherFiOracle `executeTasks` and LiquidityPool rebase tests.
 ///
 /// Run with:
 ///   forge test --match-contract V0MigrationForkTest \
@@ -49,7 +49,7 @@ contract V0MigrationForkTest is Test {
         mm = MembershipManager(payable(MEMBERSHIP_MANAGER));
     }
 
-    function test_migrateAll_thenRebase() public {
+    function test_migrateAll_thenWithdraw() public {
         string memory json = vm.readFile("script/operations/v0-migration/v0_ids_flat.json");
         uint256[] memory ids = json.readUintArray(".ids");
         assertGt(ids.length, 0, "ids missing");
@@ -82,36 +82,7 @@ contract V0MigrationForkTest is Test {
             assertEq(amounts, 0, "V0 amounts not cleared post-migration");
         }
 
-        // ---- Rebase must still work as etherFiAdmin, for all three branches ----
-        // We exercise rebase three ways so we don't only prove "doesn't revert
-        // on the trivial path":
-        //   (a) 0      -> no rewards delta. Confirms the zero-delta codepath.
-        //   (b) +N     -> positive accrual. Exercises the V1 share recomputation
-        //                  (`liquidityPool.sharesForAmount(newEthAmount)`) with a
-        //                  real reward delta after the LP rate has moved up.
-        //   (c) -N     -> negative accrual. Exercises the `isLoss` branch in
-        //                  `globalIndexLibrary.calculate{GlobalIndex,VaultEEthShares}`,
-        //                  i.e. the slashing path. Failing to exercise this is
-        //                  how slashing-time bugs hide in normal operation.
-        //
-        // For each branch we verify two things:
-        //   1. `mm.rebase(...)` did not revert.
-        //   2. The LP rate moved in the expected direction (this is the load-bearing
-        //      observable signal — V0/V1 reward redistribution among tiers depends on
-        //      weights vs current pool composition and may move any single tier vault
-        //      either way, but the LP rate change is deterministic in sign).
-        ILP lp = ILP(LIQUIDITY_POOL);
-
-        // (a) zero
-        _rebaseAndAssertRateDir(lp, 0, 0);
-
-        // (b) positive accrual
-        _rebaseAndAssertRateDir(lp, int128(1 ether), 1);
-
-        // (c) negative accrual (slashing path)
-        _rebaseAndAssertRateDir(lp, -int128(1 ether), -1);
-
-        // ---- (3) Withdrawal path: migrated NFTs can actually exit ----
+        // ---- (2) Withdrawal path: migrated NFTs can actually exit ----
         // The whole point of the migration is to clear the way for deleting V0
         // code. That only makes sense if migrated NFTs still behave correctly
         // under the withdrawal path. We exercise both burn-for-eETH and
@@ -167,33 +138,6 @@ contract V0MigrationForkTest is Test {
         emit log_named_uint("requestWithdrawAndBurn: returned withdraw-request id", withdrawRequestId);
     }
 
-    /// @param sign 1 = rate must strictly increase, -1 = rate must strictly decrease,
-    ///             0 = rate must stay within rounding tolerance.
-    function _rebaseAndAssertRateDir(ILP lp, int128 accrual, int8 sign) internal {
-        uint256 rateBefore = lp.amountForShare(1 ether);
-
-        vm.prank(ETHERFI_ADMIN);
-        mm.rebase(accrual);
-
-        uint256 rateAfter = lp.amountForShare(1 ether);
-
-        if (sign > 0) {
-            assertGt(rateAfter, rateBefore, "LP rate did not rise on +accrual");
-        } else if (sign < 0) {
-            assertLt(rateAfter, rateBefore, "LP rate did not fall on -accrual");
-        } else {
-            uint256 drift = rateAfter > rateBefore ? rateAfter - rateBefore
-                                                    : rateBefore - rateAfter;
-            assertLt(drift, 1e6, "LP rate drifted on zero accrual");
-        }
-        emit log_named_int("rebased with accrual (wei)", accrual);
-        emit log_named_uint("LP amountForShare(1e18) before", rateBefore);
-        emit log_named_uint("LP amountForShare(1e18) after", rateAfter);
-    }
-}
-
-interface ILP {
-    function amountForShare(uint256 _share) external view returns (uint256);
 }
 
 interface IERC1155Like {

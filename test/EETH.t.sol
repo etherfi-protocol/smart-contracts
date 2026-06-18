@@ -1,10 +1,10 @@
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
-import "./TestERC20.sol";
-import "./TestERC721.sol";
-import "../src/helpers/Blacklister.sol";
-import "../src/utils/PausableUntil.sol";
+import "@tests/TestSetup.sol";
+import "@tests/TestERC20.sol";
+import "@tests/TestERC721.sol";
+import "@etherfi/governance/Blacklister.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
 
 // Helper contract to force ETH into a contract using selfdestruct
 contract ForceETHSender {
@@ -84,72 +84,62 @@ contract EETHTest is TestSetup {
     function test_EEthRebase() public {
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 0 ether);
 
-        // Total pooled ether = 10
+        // Amounts scaled so each rebase stays within the 25 bps per-report cap (0.25% of
+        // TVL) while preserving clean share math. Total pooled ether = 10000
         startHoax(alice);
-        liquidityPoolInstance.deposit{value: 10 ether}();
+        liquidityPoolInstance.deposit{value: 10000 ether}();
         vm.stopPrank();
 
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 10 ether);
-        assertEq(eETHInstance.totalSupply(), 10 ether);
-        assertEq(eETHInstance.totalShares(), 10 ether);
-        assertEq(eETHInstance.shares(alice), 10 ether);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 10000 ether);
+        assertEq(eETHInstance.totalSupply(), 10000 ether);
+        assertEq(eETHInstance.totalShares(), 10000 ether);
+        assertEq(eETHInstance.shares(alice), 10000 ether);
 
-        // Total pooled ether = 20
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(10 ether);
-        _transferTo(address(liquidityPoolInstance), 10 ether);
+        // +25 ether reward = 0.25% of 10000 (exactly at the cap). Pooled = 10025
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.rebase(25 ether, 0);
+        _transferTo(address(liquidityPoolInstance), 25 ether);
 
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 20 ether);
-        assertEq(eETHInstance.totalSupply(), 20 ether);
-        assertEq(eETHInstance.totalShares(), 10 ether);
-        assertEq(eETHInstance.shares(alice), 10 ether);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 10025 ether);
+        assertEq(eETHInstance.totalSupply(), 10025 ether);
+        assertEq(eETHInstance.totalShares(), 10000 ether);
+        assertEq(eETHInstance.shares(alice), 10000 ether);
 
-        // ALice total claimable Ether
-        /// (20 * 10) / 10
-        assertEq(liquidityPoolInstance.getTotalEtherClaimOf(alice), 20 ether);
+        // Alice total claimable Ether: (10025 * 10000) / 10000 = 10025
+        assertEq(liquidityPoolInstance.getTotalEtherClaimOf(alice), 10025 ether);
 
         startHoax(bob);
-        liquidityPoolInstance.deposit{value: 5 ether}();
+        liquidityPoolInstance.deposit{value: 10025 ether}();
         vm.stopPrank();
 
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 25 ether);
-        assertEq(eETHInstance.totalSupply(), 25 ether);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 20050 ether);
+        assertEq(eETHInstance.totalSupply(), 20050 ether);
 
-        // Bob Shares = (5 * 10) / (25 - 5) = 2,5
-        assertEq(eETHInstance.shares(bob), 2.5 ether);
-        assertEq(eETHInstance.totalShares(), 12.5 ether);
+        // Bob Shares = (10025 * 10000) / (20050 - 10025) = 10000
+        assertEq(eETHInstance.shares(bob), 10000 ether);
+        assertEq(eETHInstance.totalShares(), 20000 ether);
 
-        // Bob claimable Ether
-        /// (25 * 2,5) / 12,5 = 5 ether
+        // claimable: (20050 * 10000) / 20000 = 10025 each
+        assertEq(liquidityPoolInstance.getTotalEtherClaimOf(alice), 10025 ether);
+        assertEq(liquidityPoolInstance.getTotalEtherClaimOf(bob), 10025 ether);
 
-        //ALice Claimable Ether
-        /// (25 * 10) / 12,5 = 20 ether
-        assertEq(liquidityPoolInstance.getTotalEtherClaimOf(alice), 20 ether);
-        assertEq(liquidityPoolInstance.getTotalEtherClaimOf(bob), 5 ether);
+        assertEq(eETHInstance.balanceOf(alice), 10025 ether);
+        assertEq(eETHInstance.balanceOf(bob), 10025 ether);
 
-        assertEq(eETHInstance.balanceOf(alice), 20 ether);
-        assertEq(eETHInstance.balanceOf(bob), 5 ether);
+        // +50 ether reward = ~0.25% of 20050 (within cap). Pooled = 20100
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.rebase(50 ether, 0);
+        _transferTo(address(liquidityPoolInstance), 50 ether);
 
-        // Staking Rewards sent to liquidity pool
-        /// vm.deal sets the balance of whoever its called on
-        /// In this case 10 ether is added as reward 
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(10 ether);
-        _transferTo(address(liquidityPoolInstance), 10 ether);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 20100 ether);
+        assertEq(eETHInstance.totalSupply(), 20100 ether);
 
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 35 ether);
-        assertEq(eETHInstance.totalSupply(), 35 ether);
+        // claimable: (20100 * 10000) / 20000 = 10050 each
+        assertEq(liquidityPoolInstance.getTotalEtherClaimOf(bob), 10050 ether);
+        assertEq(liquidityPoolInstance.getTotalEtherClaimOf(alice), 10050 ether);
 
-        // Bob claimable Ether
-        /// (35 * 2,5) / 12,5 = 7 ether
-        assertEq(liquidityPoolInstance.getTotalEtherClaimOf(bob), 7 ether);
-
-        // Alice Claimable Ether
-        /// (35 * 10) / 12,5 = 20 ether
-        assertEq(liquidityPoolInstance.getTotalEtherClaimOf(alice), 28 ether);
-
-        assertEq(eETHInstance.balanceOf(alice), 28 ether);
-        assertEq(eETHInstance.balanceOf(bob), 7 ether);
+        assertEq(eETHInstance.balanceOf(alice), 10050 ether);
+        assertEq(eETHInstance.balanceOf(bob), 10050 ether);
     }
 
     function test_TransferWithAmount() public {
@@ -525,7 +515,7 @@ contract EETHTest is TestSetup {
         eETHInstance.pause();
 
         vm.prank(address(liquidityPoolInstance));
-        vm.expectRevert(EETH.ContractPaused.selector);
+        vm.expectRevert(Pausable.ContractPaused.selector);
         eETHInstance.mintShares(alice, 100);
     }
 
@@ -537,7 +527,7 @@ contract EETHTest is TestSetup {
         eETHInstance.pause();
 
         vm.prank(address(liquidityPoolInstance));
-        vm.expectRevert(EETH.ContractPaused.selector);
+        vm.expectRevert(Pausable.ContractPaused.selector);
         eETHInstance.burnShares(alice, 50);
     }
 
@@ -548,7 +538,7 @@ contract EETHTest is TestSetup {
         eETHInstance.pause();
 
         vm.prank(alice);
-        vm.expectRevert(EETH.ContractPaused.selector);
+        vm.expectRevert(Pausable.ContractPaused.selector);
         eETHInstance.transfer(bob, 0.5 ether);
     }
 
@@ -707,24 +697,24 @@ contract EETHTest is TestSetup {
 
         vm.prank(bob);
         vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
 
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
         assertEq(_eETHPausedUntil(), block.timestamp + eETHInstance.MAX_PAUSE_DURATION());
     }
 
     function test_EETH_unpauseContractUntil_requiresRole() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
 
         vm.prank(bob);
         vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
-        eETHInstance.unpauseContractUntil();
+        eETHInstance.unpauseUntil();
 
         vm.prank(unpauseUntilUnpauser);
-        eETHInstance.unpauseContractUntil();
+        eETHInstance.unpauseUntil();
         assertEq(_eETHPausedUntil(), 0);
     }
 
@@ -732,43 +722,43 @@ contract EETHTest is TestSetup {
         _grantPauseUntilRoles();
         vm.prank(unpauseUntilUnpauser);
         vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
-        eETHInstance.unpauseContractUntil();
+        eETHInstance.unpauseUntil();
     }
 
     function test_EETH_pauseContractUntil_revertsIfAlreadyPaused() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
 
         // Re-pausing while already paused-until hits _requireNotPausedUntil inside _pauseUntil.
         vm.prank(pauseUntilPauser);
         vm.expectRevert(
             abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _eETHPausedUntil())
         );
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
     }
 
     function test_EETH_pauseContractUntil_cooldownEnforced() public {
         _grantPauseUntilRoles();
 
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
 
         // Unpause and re-attempt before cooldown ends. Cooldown = MAX_PAUSE_DURATION + PAUSER_UNTIL_COOLDOWN.
         vm.prank(unpauseUntilUnpauser);
-        eETHInstance.unpauseContractUntil();
+        eETHInstance.unpauseUntil();
 
         // Warp past MAX_PAUSE_DURATION (so we are no longer pausedUntil) but not past the cooldown.
         vm.warp(block.timestamp + eETHInstance.MAX_PAUSE_DURATION() + 1);
 
         vm.prank(pauseUntilPauser);
         vm.expectRevert(PausableUntil.PauserCooldownStillActive.selector);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
 
         // After the cooldown window also passes, same pauser can re-pause.
         vm.warp(block.timestamp + eETHInstance.PAUSER_UNTIL_COOLDOWN());
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
     }
 
     // ---- pause-until blocks mint/burn ---------------------------------------
@@ -776,7 +766,7 @@ contract EETHTest is TestSetup {
     function test_EETH_mintShares_revertsWhenPausedUntil() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
 
         uint256 pausedUntilTs = _eETHPausedUntil();
 
@@ -794,7 +784,7 @@ contract EETHTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
 
         uint256 pausedUntilTs = _eETHPausedUntil();
 
@@ -812,7 +802,7 @@ contract EETHTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
         uint256 pausedUntilTs = _eETHPausedUntil();
 
         vm.prank(alice);
@@ -829,7 +819,7 @@ contract EETHTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
         uint256 pausedUntilTs = _eETHPausedUntil();
 
         vm.prank(bob);
@@ -844,7 +834,7 @@ contract EETHTest is TestSetup {
     function test_EETH_mintShares_unblockedAfterPauseExpires() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
 
         // Strict `>=` comparison in _requireNotPausedUntil ⇒ opens at exactly `pausedUntil + 1`.
         vm.warp(block.timestamp + eETHInstance.MAX_PAUSE_DURATION() + 1);
@@ -857,10 +847,10 @@ contract EETHTest is TestSetup {
     function test_EETH_mintShares_unblockedAfterManualUnpause() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
 
         vm.prank(unpauseUntilUnpauser);
-        eETHInstance.unpauseContractUntil();
+        eETHInstance.unpauseUntil();
 
         vm.prank(address(liquidityPoolInstance));
         eETHInstance.mintShares(alice, 100);
@@ -872,7 +862,7 @@ contract EETHTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
 
         vm.warp(block.timestamp + eETHInstance.MAX_PAUSE_DURATION() + 1);
 
@@ -886,10 +876,10 @@ contract EETHTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
 
         vm.prank(unpauseUntilUnpauser);
-        eETHInstance.unpauseContractUntil();
+        eETHInstance.unpauseUntil();
 
         vm.prank(alice);
         eETHInstance.transfer(bob, 0.5 ether);
@@ -941,7 +931,7 @@ contract EETHTest is TestSetup {
         eETHInstance.setPauseUntilDuration(d);
 
         vm.prank(pauseUntilPauser);
-        eETHInstance.pauseContractUntil();
+        eETHInstance.pauseUntil();
         assertEq(eETHInstance.pausedUntil(), block.timestamp + d);
     }
 

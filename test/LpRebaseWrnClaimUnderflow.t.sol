@@ -16,7 +16,7 @@ import "./TestSetup.sol";
 ///         has driven `totalValueOutOfLp` below `amount`, the contract's
 ///         checked subtraction
 ///
-///             totalValueOutOfLp -= uint128(_amount);     // LiquidityPool.sol:297
+///             totalValueOutOfLp -= uint128(_amountOfEEth);   // LiquidityPool.sol
 ///
 ///         underflows and the entire claim transaction reverts with
 ///         `Panic(0x11)`. This is a **user-facing DoS on a finalized
@@ -70,7 +70,7 @@ contract LpRebaseWrnClaimUnderflowTest is TestSetup {
         // Unpause WRN — TestSetup leaves it paused; claimWithdraw is not
         // gated by that flag but the rest of the WRN surface is.
         vm.prank(alice);
-        withdrawRequestNFTInstance.unPauseContract();
+        withdrawRequestNFTInstance.unpause();
 
         claimant = address(uint160(uint256(keccak256("rebase-underflow.claimant"))));
         vm.deal(claimant, 200 ether);
@@ -113,8 +113,8 @@ contract LpRebaseWrnClaimUnderflowTest is TestSetup {
         // leaving 5 ether. The WRN.lock counter does NOT decrease.
         // After this, `outOfLp (5) < requestAmount (50)`.
         int128 rebaseDelta = -int128(int256(uint256(45 ether)));
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(rebaseDelta);
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.rebase(rebaseDelta, 0);
 
         assertEq(uint256(liquidityPoolInstance.totalValueOutOfLp()), 5 ether, "outOfLp wrong post-rebase");
         assertEq(uint256(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal()), requestAmount, "WRN lock should be UNCHANGED");
@@ -147,13 +147,13 @@ contract LpRebaseWrnClaimUnderflowTest is TestSetup {
     function test_small_rebase_after_finalize_claim_succeeds() public {
         uint256 requestAmount = 50 ether;
 
-        // Seed 10 ether of headroom in outOfLp via a positive rebase.
-        // This simulates legitimate accrued rewards: outOfLp grows
-        // without ETH actually moving into the LP. Without this, the
-        // lock transfer at finalize would leave outOfLp == lock exactly,
-        // and ANY negative rebase would underflow at claim time.
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(int128(int256(uint256(10 ether))));
+        // Seed 0.25 ether of headroom in outOfLp via a positive rebase (within the 25 bps
+        // cap: 0.25% of the 100 ETH pool). This simulates legitimate accrued rewards:
+        // outOfLp grows without ETH actually moving into the LP. Without this, the lock
+        // transfer at finalize would leave outOfLp == lock exactly, and a negative rebase
+        // would underflow at claim time.
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.rebase(int128(int256(uint256(0.25 ether))), 0);
 
         vm.prank(claimant);
         uint256 tokenId = liquidityPoolInstance.requestWithdraw(claimant, requestAmount);
@@ -163,12 +163,12 @@ contract LpRebaseWrnClaimUnderflowTest is TestSetup {
         withdrawRequestNFTInstance.finalizeRequests(tokenId);
         vm.stopPrank();
 
-        // outOfLp == 60 ether (10 seeded + 50 from lock), lock == 50.
-        // A small negative rebase (-1 ether) drops outOfLp to 59 —
-        // still well above the lock.
-        int128 rebaseDelta = -int128(int256(uint256(1 ether)));
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(rebaseDelta);
+        // outOfLp == 50.25 ether (0.25 seeded + 50 from lock), lock == 50.
+        // A small negative rebase (-0.1 ether) drops outOfLp to 50.15 —
+        // still above the lock.
+        int128 rebaseDelta = -int128(int256(uint256(0.1 ether)));
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.rebase(rebaseDelta, 0);
 
         assertGt(uint256(liquidityPoolInstance.totalValueOutOfLp()), requestAmount, "outOfLp dropped below lock");
 
@@ -212,8 +212,8 @@ contract LpRebaseWrnClaimUnderflowTest is TestSetup {
         uint256 maxSafeRebase = outOfLpBefore - amountToWithdraw;
         int128 rebaseDelta = -int128(int256(maxSafeRebase));
 
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(rebaseDelta);
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.rebase(rebaseDelta, 0);
 
         // outOfLp == amountToWithdraw. The claim's LP.withdraw decrement
         // brings it to exactly 0 — no underflow.

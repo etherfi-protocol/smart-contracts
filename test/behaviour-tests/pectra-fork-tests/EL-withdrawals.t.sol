@@ -3,14 +3,14 @@
 pragma solidity ^0.8.27;
 
 import "forge-std/console2.sol";
-import "../../../src/EtherFiNodesManager.sol";
-import "../../../src/EtherFiNode.sol";
-import "../../../src/EtherFiTimelock.sol";
-import "../../../src/interfaces/IRoleRegistry.sol";
-import "../../../src/RoleRegistry.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/staking/EtherFiNode.sol";
+import "@etherfi/governance/EtherFiTimelock.sol";
+import "@etherfi/governance/interfaces/IRoleRegistry.sol";
+import "@etherfi/governance/RoleRegistry.sol";
 
-import {IEigenPod, IEigenPodTypes } from "../../../src/eigenlayer-interfaces/IEigenPod.sol";
-import "../../TestSetup.sol";
+import {IEigenPod, IEigenPodTypes } from "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
+import "@tests/TestSetup.sol";
 /**
  * @title ELExitsTest
  * @notice test for EL exits

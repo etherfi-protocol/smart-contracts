@@ -4,8 +4,8 @@ pragma solidity ^0.8.13;
 import "forge-std/Script.sol";
 import "forge-std/console.sol";
 import "forge-std/StdJson.sol";
-import "../src/helpers/WeETHWithdrawAdapter.sol";
-import "../src/UUPSProxy.sol";
+import "@etherfi/withdrawals/WeETHWithdrawAdapter.sol";
+import "@etherfi/utils/UUPSProxy.sol";
 
 interface ICreate2Factory {
     function deploy(bytes memory code, bytes32 salt) external payable returns (address);
@@ -102,7 +102,6 @@ contract DeployWeETHWithdrawAdapter is Script {
                 weETHAddress,
                 eETHAddress,
                 liquidityPoolAddress,
-                withdrawRequestNFTAddress,
                 roleRegistryAddress
             );
             bytes memory bytecode = abi.encodePacked(
@@ -122,7 +121,6 @@ contract DeployWeETHWithdrawAdapter is Script {
                 weETHAddress,
                 eETHAddress,
                 liquidityPoolAddress,
-                withdrawRequestNFTAddress,
                 roleRegistryAddress
             );
             bytes memory implBytecode = abi.encodePacked(
@@ -150,13 +148,7 @@ contract DeployWeETHWithdrawAdapter is Script {
             
             // Wrap proxy in implementation interface
             WeETHWithdrawAdapter adapter = WeETHWithdrawAdapter(proxyAddress);
-            
-            // Verify ownership is already set to timelock (no transfer needed)
-            console.log("\nVerifying ownership...");
-            address currentOwner = adapter.owner();
-            require(currentOwner == timelockAddress, "Owner should be timelock");
-            console.log("Owner correctly set to timelock:", currentOwner);
-            
+
             // Final verification
             console.log("\nVerifying deployment...");
             verifyDeployment(adapter, implementationAddress);
@@ -184,7 +176,6 @@ contract DeployWeETHWithdrawAdapter is Script {
             weETHAddress,
             eETHAddress,
             liquidityPoolAddress,
-            withdrawRequestNFTAddress,
             roleRegistryAddress
         );
         bytes memory implBytecode = abi.encodePacked(
@@ -288,19 +279,13 @@ contract DeployWeETHWithdrawAdapter is Script {
         require(address(adapter.liquidityPool()) == liquidityPoolAddress, "LiquidityPool address mismatch");
         console.log("[PASS] LiquidityPool address verified");
         
-        require(address(adapter.withdrawRequestNFT()) == withdrawRequestNFTAddress, "WithdrawRequestNFT address mismatch");
-        console.log("[PASS] WithdrawRequestNFT address verified");
-        
         require(address(adapter.roleRegistry()) == roleRegistryAddress, "RoleRegistry address mismatch");
         console.log("[PASS] RoleRegistry address verified");
         
         // Verify initialization state
         require(!adapter.paused(), "Contract should not be paused");
         console.log("[PASS] Contract is not paused");
-        
-        require(adapter.owner() == timelockAddress, "Owner should be timelock");
-        console.log("[PASS] Owner is timelock");
-        
+
         // Verify implementation
         address actualImpl = adapter.getImplementation();
         require(actualImpl == implementationAddress, "Implementation address mismatch");

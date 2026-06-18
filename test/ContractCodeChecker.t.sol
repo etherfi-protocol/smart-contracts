@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
-import "../src/EtherFiNode.sol";
-import "../src/EtherFiNodesManager.sol";
-import "../src/EtherFiRestaker.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/staking/EtherFiNode.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/restaking/EtherFiRestaker.sol";
 
 /**
  * @title TestByteCodeMatch

@@ -3,25 +3,25 @@ pragma solidity ^0.8.27;
 import "forge-std/console2.sol";
 import "forge-std/Test.sol";
 import {StdStorage, stdStorage} from "forge-std/StdStorage.sol";
-import "../../test/common/ArrayTestHelper.sol";
-import {fundContract} from "../TestSetup.sol";
-import "../../src/interfaces/ILiquidityPool.sol";
-import "../../src/interfaces/IStakingManager.sol";
-import "../../src/StakingManager.sol";
-import "../../src/interfaces/IEtherFiNodesManager.sol";
-import "../../src/EtherFiNodesManager.sol";
-import "../../src/interfaces/IEtherFiNode.sol";
-import {IEigenPod, IEigenPodTypes } from "../../src/eigenlayer-interfaces/IEigenPod.sol";
-import "../../src/EtherFiNode.sol";
-import "../../src/EtherFiRateLimiter.sol";
-import "../../src/UUPSProxy.sol";
-import "../../src/NodeOperatorManager.sol";
-import "../../src/interfaces/ITNFT.sol";
-import "../../src/interfaces/IBNFT.sol";
-import "../../src/AuctionManager.sol";
-import "../../src/RoleRegistry.sol";
-import "../../src/helpers/Blacklister.sol";
-import "../../src/libraries/DepositDataRootGenerator.sol";
+import "@tests/common/ArrayTestHelper.sol";
+import {fundContract} from "@tests/TestSetup.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/staking/interfaces/IStakingManager.sol";
+import "@etherfi/staking/StakingManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNode.sol";
+import {IEigenPod, IEigenPodTypes } from "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
+import "@etherfi/staking/EtherFiNode.sol";
+import "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
+import "@etherfi/utils/UUPSProxy.sol";
+import "@etherfi/staking/NodeOperatorManager.sol";
+import "@etherfi/archive/interfaces/ITNFT.sol";
+import "@etherfi/archive/interfaces/IBNFT.sol";
+import "@etherfi/staking/AuctionManager.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/governance/Blacklister.sol";
+import "@etherfi/staking/libraries/DepositDataRootGenerator.sol";
 
 
 contract PreludeTest is Test, ArrayTestHelper {
@@ -100,13 +100,13 @@ contract PreludeTest is Test, ArrayTestHelper {
             address(etherFiNodeBeacon),
             address(roleRegistry)
         );
-        vm.prank(stakingManager.owner());
+        vm.prank(roleRegistry.owner());
         stakingManager.upgradeTo(address(stakingManagerImpl));
 
         // Wire LP immutables to the real mainnet proxy addresses so calls into
         // eETH / withdrawRequestNFT / etc. land on live contracts rather than 0x0.
         LiquidityPool liquidityPoolImpl = new LiquidityPool(
-            LiquidityPool.ConstructorAddresses({
+            ILiquidityPool.ConstructorAddresses({
                 stakingManager: address(stakingManager),
                 nodesManager: address(etherFiNodesManager),
                 eETH: 0x35fA164735182de50811E8e2E824cFb9B6118ac2,
@@ -118,27 +118,27 @@ contract PreludeTest is Test, ArrayTestHelper {
                 blacklister: address(blacklisterInstance),
                 etherFiAdminContract: 0x0EF8fa4760Db8f5Cd4d993f3e3416f30f942D705,
                 membershipManager: 0x3d320286E014C3e1ce99Af6d6B00f0C1D63E3000
-            }),
-            0
+            })
         );
-        vm.prank(LiquidityPool(payable(address(liquidityPool))).owner());
+        vm.prank(roleRegistry.owner());
         LiquidityPool(payable(address(liquidityPool))).upgradeTo(address(liquidityPoolImpl));
 
         EtherFiNodesManager etherFiNodesManagerImpl = new EtherFiNodesManager(address(stakingManager), address(roleRegistry), address(rateLimiter));
-        vm.prank(etherFiNodesManager.owner());
+        vm.prank(roleRegistry.owner());
         etherFiNodesManager.upgradeTo(address(etherFiNodesManagerImpl));
 
         // Now swap RoleRegistry in place so newly-added role getters defined in
         // RolesLibrary are reachable from the freshly-upgraded impls.
+        address newRoleRegistryImpl = address(new RoleRegistry(address(0xdead)));
         vm.prank(roleRegistry.owner());
-        RoleRegistry(address(roleRegistry)).upgradeTo(address(new RoleRegistry(address(0))));
+        RoleRegistry(address(roleRegistry)).upgradeTo(newRoleRegistryImpl);
 
         // `upgradeEtherFiNode` checks UPGRADE_TIMELOCK_ROLE via
         // `onlyUpgradeTimelock`. Grant it to every proxy owner pranked below.
         vm.startPrank(roleRegistry.owner());
-        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), stakingManager.owner());
-        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), LiquidityPool(payable(address(liquidityPool))).owner());
-        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), etherFiNodesManager.owner());
+        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), roleRegistry.owner());
+        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), roleRegistry.owner());
+        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), roleRegistry.owner());
         vm.stopPrank();
 
         // upgrade etherFiNode impl
@@ -148,10 +148,10 @@ contract PreludeTest is Test, ArrayTestHelper {
             eigenPodManager,
             delegationManager
         );
-        vm.prank(stakingManager.owner());
+        vm.prank(roleRegistry.owner());
         stakingManager.upgradeEtherFiNode(address(etherFiNodeImpl));
 
-        vm.prank(auctionManager.owner());
+        vm.prank(roleRegistry.owner());
         auctionManager.disableWhitelist();
 
         // permissions
@@ -606,7 +606,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         stakingManager.upgradeTo(address(stakingManagerImpl));
 
         // should succeed when called by owner
-        address owner = stakingManager.owner();
+        address owner = roleRegistry.owner();
         vm.prank(owner);
         stakingManager.upgradeTo(address(stakingManagerImpl));
     }

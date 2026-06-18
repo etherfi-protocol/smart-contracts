@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
+import "@tests/TestSetup.sol";
 import "forge-std/Test.sol";
 
-import "../src/utils/ReentrancyGuardNamespaced.sol";
-import "../src/WithdrawRequestNFT.sol";
+import {ReentrancyGuardTransient} from "solady/utils/ReentrancyGuardTransient.sol";
+import "@etherfi/withdrawals/WithdrawRequestNFT.sol";
 
 /// @dev Attacker contract that owns two withdrawal NFTs. On receiving ETH during
 ///      a claimWithdraw call, it attempts to re-enter WithdrawRequestNFT via
 ///      claimWithdraw or batchClaimWithdraw using a *different* tokenId. The
-///      ReentrancyGuardNamespaced on WithdrawRequestNFT must cause the re-entry
+///      transient reentrancy guard on WithdrawRequestNFT must cause the re-entry
 ///      to revert; the try/catch lets the outer claim complete so the test can
 ///      inspect the `reentryBlocked` flag.
 contract ReentrancyAttacker {
@@ -75,7 +75,7 @@ contract ReentrancyGuardTest is TestSetup {
     function setUp() public {
         setUpTests();
         vm.prank(admin);
-        withdrawRequestNFTInstance.unPauseContract();
+        withdrawRequestNFTInstance.unpause();
 
         attacker = new ReentrancyAttacker(withdrawRequestNFTInstance);
     }
@@ -124,9 +124,9 @@ contract ReentrancyGuardTest is TestSetup {
         assertEq(attacker.reentryAttempts(), 1, "attacker attempted re-entry");
         assertEq(attacker.reentryBlocked(), 1, "guard must block re-entry into claimWithdraw");
 
-        // Decoding the revert: must be ReentrancyGuardReentrantCall() (selector match).
+        // Decoding the revert: must be the transient guard's Reentrancy() (selector match).
         bytes4 sel = bytes4(attacker.lastRevert());
-        assertEq(sel, ReentrancyGuardNamespaced.ReentrancyGuardReentrantCall.selector, "wrong revert selector");
+        assertEq(sel, ReentrancyGuardTransient.Reentrancy.selector, "wrong revert selector");
 
         // Outer claim still completed and paid out; id2 is still claimable later.
         assertEq(address(attacker).balance, 1 ether, "outer claim paid out");
@@ -142,7 +142,7 @@ contract ReentrancyGuardTest is TestSetup {
 
         assertEq(attacker.reentryBlocked(), 1, "guard must block cross-fn re-entry via batchClaimWithdraw");
         bytes4 sel = bytes4(attacker.lastRevert());
-        assertEq(sel, ReentrancyGuardNamespaced.ReentrancyGuardReentrantCall.selector, "wrong revert selector");
+        assertEq(sel, ReentrancyGuardTransient.Reentrancy.selector, "wrong revert selector");
     }
 
     function test_batchClaimWithdraw_reentry_viaClaim_isBlocked() public {

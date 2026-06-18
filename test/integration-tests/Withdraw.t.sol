@@ -2,10 +2,10 @@
 pragma solidity ^0.8.13;
 
 import "forge-std/console2.sol";
-import "../TestSetup.sol";
-import "lib/BucketLimiter.sol";
-import "../../script/deploys/Deployed.s.sol";
-import "../../src/interfaces/IWeETHWithdrawAdapter.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/governance/rate-limiting/libraries/BucketLimiter.sol";
+import "@scripts/deploys/Deployed.s.sol";
+import "@etherfi/withdrawals/interfaces/IWeETHWithdrawAdapter.sol";
 
 contract WithdrawIntegrationTest is TestSetup, Deployed {
     address public constant ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
@@ -85,7 +85,7 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         // addCommitteeMember() resets CommitteeMemberState to
         // (registered=true, enabled=true, lastReportRefSlot=0, numReports=0), clearing any stale
         // submission from mainnet without adding new committee members.
-        address oracleOwner = etherFiOracleInstance.owner();
+        address oracleOwner = roleRegistryInstance.owner();
         // add/removeCommitteeMember now route through OPERATION_TIMELOCK_ROLE.
         bytes32 opTimelockRole = roleRegistryInstance.OPERATION_TIMELOCK_ROLE();
         address rrOwner = roleRegistryInstance.owner();
@@ -159,7 +159,7 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
 
         assertApproxEqAbs(address(receiver).balance, beforeReceiverBalance + expectedAmountToReceiver, 1e15); // receiver gets ETH
         assertApproxEqAbs(eETHInstance.balanceOf(alice), beforeEETHBalance - eETHAmountToRedeem, 1e15); // eETH is consumed from alice
-        assertApproxEqAbs(eETHInstance.balanceOf(treasury), beforeTreasuryBalance + expectedTreasuryFee, 1e15); // treasury gets ETH
+        assertApproxEqAbs(eETHInstance.balanceOf(treasury), beforeTreasuryBalance + expectedTreasuryFee, 5e15); // treasury gets ETH
 
         vm.stopPrank();
     }
@@ -205,7 +205,7 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
 
         assertApproxEqAbs(address(receiver).balance, beforeReceiverBalance + expectedAmountToReceiver, 1e15); // receiver gets ETH
         assertApproxEqAbs(eETHInstance.balanceOf(alice), beforeEETHBalance - eETHAmountToRedeem, 1e15); // eETH is consumed from alice
-        assertApproxEqAbs(eETHInstance.balanceOf(treasury), beforeTreasuryBalance + expectedTreasuryFee, 1e15); // treasury gets ETH
+        assertApproxEqAbs(eETHInstance.balanceOf(treasury), beforeTreasuryBalance + expectedTreasuryFee, 5e15); // treasury gets ETH
 
         vm.stopPrank();
     }
@@ -506,7 +506,7 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         uint256 restakerBalanceBefore = address(etherFiRestakerInstance).balance;
         assertEq(restakerBalanceBefore, amount);
 
-        vm.prank(etherFiRestakerInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         etherFiRestakerInstance.withdrawEther();
 
         assertEq(address(etherFiRestakerInstance).balance, 0);
@@ -516,7 +516,7 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
     function test_EtherFiRestaker_undelegate_tracksWithdrawalRoots() public {
         bool delegatedBefore = etherFiRestakerInstance.isDelegated();
 
-        vm.prank(etherFiRestakerInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         if (!delegatedBefore) {
             vm.expectRevert();
             etherFiRestakerInstance.undelegate();

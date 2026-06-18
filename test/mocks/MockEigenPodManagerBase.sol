@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import "../../src/eigenlayer-interfaces/IEigenPodManager.sol";
-import "./MockShareManagerBase.sol";
-import "./MockEigenPod.sol";
-import "./MockPausableBase.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPodManager.sol";
+import "@tests/mocks/MockShareManagerBase.sol";
+import "@tests/mocks/MockEigenPod.sol";
+import "@tests/mocks/MockPausableBase.sol";
 
 
 // IEigenPodManager but all functions are virtual

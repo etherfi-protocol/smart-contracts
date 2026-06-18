@@ -3,16 +3,16 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Test.sol";
 import "forge-std/console2.sol";
-import "../../../src/EtherFiNodesManager.sol";
-import "../../../src/EtherFiNode.sol";
-import "../../../src/EtherFiTimelock.sol";
-import "../../../src/EtherFiRateLimiter.sol";
-import "../../../src/RoleRegistry.sol";
-import "../../../src/interfaces/IRoleRegistry.sol";
-import "../../../src/interfaces/IStakingManager.sol";
-import "../../../src/interfaces/IEtherFiRateLimiter.sol";
-import {IEigenPod, IEigenPodTypes } from "../../../src/eigenlayer-interfaces/IEigenPod.sol";
-import {EigenPodTestHelpers} from "../../utils/EigenPodTestHelpers.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/staking/EtherFiNode.sol";
+import "@etherfi/governance/EtherFiTimelock.sol";
+import "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/governance/interfaces/IRoleRegistry.sol";
+import "@etherfi/staking/interfaces/IStakingManager.sol";
+import "@etherfi/governance/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
+import {IEigenPod, IEigenPodTypes } from "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
+import {EigenPodTestHelpers} from "@tests/utils/EigenPodTestHelpers.sol";
 
 /**
  * @title ConsolidationThroughEOATest
@@ -60,8 +60,9 @@ contract ConsolidationThroughEOATest is Test {
 
         // Now swap RoleRegistry so newly-added role getters defined in
         // RolesLibrary are reachable on the deployed proxy.
+        address newRoleRegistryImpl = address(new RoleRegistry(address(0xdead)));
         vm.prank(roleRegistry.owner());
-        roleRegistry.upgradeTo(address(new RoleRegistry(address(0))));
+        roleRegistry.upgradeTo(newRoleRegistryImpl);
 
         vm.startPrank(roleRegistry.owner());
         roleRegistry.grantRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), realElExiter);

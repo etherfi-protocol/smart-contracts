@@ -3,22 +3,22 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
-import "../src/interfaces/IStakingManager.sol";
-import "../src/interfaces/IEtherFiNodesManager.sol";
-import "../src/interfaces/IEtherFiNode.sol";
-import "../src/interfaces/ILiquidityPool.sol";
-import "../src/interfaces/IEtherFiOracle.sol";
-import "../src/interfaces/IEtherFiAdmin.sol";
-import "../src/interfaces/IeETH.sol";
-import "../src/interfaces/IWeETH.sol";
-import "../src/interfaces/ITNFT.sol";
-import "../src/StakingManager.sol";
-import "../src/EtherFiNodesManager.sol";
-import "../src/EtherFiNode.sol";
-import "../src/LiquidityPool.sol";
-import "../src/AuctionManager.sol";
-import "../src/RoleRegistry.sol";
-import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "@etherfi/staking/interfaces/IStakingManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNode.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/oracle/interfaces/IEtherFiOracle.sol";
+import "@etherfi/oracle/interfaces/IEtherFiAdmin.sol";
+import "@etherfi/core/interfaces/IeETH.sol";
+import "@etherfi/core/interfaces/IWeETH.sol";
+import "@etherfi/archive/interfaces/ITNFT.sol";
+import "@etherfi/staking/StakingManager.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/staking/EtherFiNode.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/staking/AuctionManager.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 interface IUpgrade {
     function upgradeTo(address) external;

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import "../../test/mocks/MockDelegationManagerBase.sol";
-import "../../src/eigenlayer-interfaces/IDelegationManager.sol";
-import "../../test/mocks/MockStrategy.sol";
+import "@tests/mocks/MockDelegationManagerBase.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
+import "@tests/mocks/MockStrategy.sol";
 import "forge-std/console2.sol";
 import "forge-std/Test.sol";
 

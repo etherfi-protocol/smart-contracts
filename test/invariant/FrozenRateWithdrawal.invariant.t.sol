@@ -17,7 +17,6 @@ import "./handlers/FrozenRateWithdrawalHandler.sol";
 ///           flag, no longer silently swallowed by fail-on-revert = false.
 ///         - (F-016) NFT transfer + cross-owner claim covered.
 ///         - (F-022) Tolerance boundary explicit fuzz op.
-///         - (F-023) handleRemainder paths exercised.
 ///         - (F-026) invalidate / validate / seize state transitions exercised.
 ///         - (F-027) Cancel exercises both pending and finalized branches.
 ///
@@ -33,7 +32,7 @@ contract FrozenRateWithdrawalInvariantTest is TestSetup {
         setUpTests();
 
         vm.prank(alice);
-        withdrawRequestNFTInstance.unPauseContract();
+        withdrawRequestNFTInstance.unpause();
 
         for (uint256 i = 0; i < 5; i++) {
             address a = address(uint160(uint256(keccak256(abi.encodePacked("frozen.actor.", i)))));
@@ -43,8 +42,9 @@ contract FrozenRateWithdrawalInvariantTest is TestSetup {
             liquidityPoolInstance.deposit{value: 100 ether}();
         }
 
-        // F-023 prereq: grant HOUSEKEEPING_OPERATIONS_ROLE to alice. Pre-
-        // extract the role constant so it doesn't consume the vm.prank.
+        // Grant HOUSEKEEPING_OPERATIONS_ROLE to alice (used by other admin
+        // paths in setUp). Pre-extract the role constant so it doesn't
+        // consume the vm.prank.
         bytes32 housekeepingRole = roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE();
         vm.prank(owner);
         roleRegistryInstance.grantRole(housekeepingRole, alice);
@@ -104,19 +104,6 @@ contract FrozenRateWithdrawalInvariantTest is TestSetup {
     // =====================================================================
     // FROZEN-RATE INTEGRITY
     // =====================================================================
-
-    function invariant_frozen_rate_within_bounds() public view {
-        assertFalse(
-            handler.ghost_frozenRateOutOfBounds(),
-            "frozen rate observed outside [min, max]"
-        );
-    }
-
-    function invariant_all_checkpoints_in_bounds() public view {
-        (bool ok, uint256 firstOOB) = handler.verifyAllFinalizationCheckpointsInBounds();
-        assertTrue(ok, string.concat("frozen rate OOB for tokenId=", vm.toString(firstOOB)));
-    }
-
     function invariant_frozen_rate_persists_under_rebase() public {
         handler.verifyFrozenRatePersistence();
         assertFalse(
@@ -197,7 +184,6 @@ contract FrozenRateWithdrawalInvariantTest is TestSetup {
         emit log_named_uint("wrn_xfer                 ", handler.callCounts("wrn_xfer"));
         emit log_named_uint("wrn_invalidate           ", handler.callCounts("wrn_invalidate"));
         emit log_named_uint("wrn_validate             ", handler.callCounts("wrn_validate"));
-        emit log_named_uint("wrn_remainder            ", handler.callCounts("wrn_remainder"));
         emit log_named_uint("pq_req                   ", handler.callCounts("pq_req"));
         emit log_named_uint("pq_reqWeETH              ", handler.callCounts("pq_reqWeETH"));
         emit log_named_uint("pq_boundary              ", handler.callCounts("pq_boundary"));
@@ -207,7 +193,6 @@ contract FrozenRateWithdrawalInvariantTest is TestSetup {
         emit log_named_uint("pq_cancel_finalized      ", handler.callCounts("pq_cancel_finalized"));
         emit log_named_uint("pq_cancel_not_matured    ", handler.callCounts("pq_cancel_not_matured"));
         emit log_named_uint("pq_invalidate            ", handler.callCounts("pq_invalidate"));
-        emit log_named_uint("pq_remainder             ", handler.callCounts("pq_remainder"));
         emit log_named_uint("rebase_positive          ", handler.callCounts("rebase_positive"));
         emit log_named_uint("rebase_negative          ", handler.callCounts("rebase_negative"));
         emit log_named_uint("rebaseExtreme            ", handler.callCounts("rebaseExtreme"));

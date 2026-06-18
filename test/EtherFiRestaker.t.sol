@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
+import "@tests/TestSetup.sol";
 import "forge-std/Test.sol";
 
 import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20BurnableUpgradeable.sol";
 
-import "../src/eigenlayer-interfaces/IDelegationManager.sol";
-import "../src/eigenlayer-interfaces/IStrategyManager.sol";
-import "../src/eigenlayer-interfaces/ISignatureUtils.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IStrategyManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/ISignatureUtils.sol";
 
 
 contract EtherFiRestakerTest is TestSetup {
@@ -45,7 +46,7 @@ contract EtherFiRestakerTest is TestSetup {
 
         stEth.approve(address(liquifierInstance), _amount);
 
-        liquifierInstance.depositWithERC20(address(stEth), _amount, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), _amount, 0, address(0));
 
 
         // Aliice has 10 ether eETH
@@ -229,7 +230,7 @@ contract EtherFiRestakerTest is TestSetup {
 
         address newRestakerImpl = address(new EtherFiRestaker(address(liquidityPoolInstance), address(liquifierInstance), address(eigenLayerRewardsCoordinator), address(etherFiRedemptionManagerInstance), address(roleRegistryInstance), address(rateLimiterInstance), address(eigenLayerStrategyManager), address(eigenLayerDelegationManager)));
 
-        address restakerOwner = restaker.owner();
+        address restakerOwner = roleRegistryInstance.owner();
         vm.startPrank(roleRegistryInstance.owner());
         // ETHERFI_RESTAKER_ADMIN_ROLE consolidated into OPERATION_MULTISIG_ROLE.
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), restakerOwner);
@@ -271,25 +272,76 @@ contract EtherFiRestakerTest is TestSetup {
         roleRegistryInstance.grantRole(roleRegistryInstance.EXECUTOR_OPERATIONS_ROLE(), owner);
         vm.stopPrank();
 
-        // Create rate-limiter buckets and register restaker as a consumer (idempotent)
+        // Create the stETH-withdrawal rate-limiter bucket and register the restaker as a
+        // consumer (idempotent). queue-withdrawals / deposit-into-strategy are no longer
+        // rate-limited, so they have no bucket.
         uint64 maxUint64 = type(uint64).max;
         address restakerAddr = address(etherFiRestakerInstance);
         vm.startPrank(owner);
         bytes32 stEthId = etherFiRestakerInstance.STETH_REQUEST_WITHDRAWAL_LIMIT_ID();
-        bytes32 queueId = etherFiRestakerInstance.QUEUE_WITHDRAWALS_LIMIT_ID();
-        bytes32 depositId = etherFiRestakerInstance.DEPOSIT_INTO_STRATEGY_LIMIT_ID();
         if (!rateLimiterInstance.limitExists(stEthId)) rateLimiterInstance.createNewLimiter(stEthId, maxUint64, maxUint64);
         rateLimiterInstance.updateConsumers(stEthId, restakerAddr, true);
-        if (!rateLimiterInstance.limitExists(queueId)) rateLimiterInstance.createNewLimiter(queueId, maxUint64, maxUint64);
-        rateLimiterInstance.updateConsumers(queueId, restakerAddr, true);
-        if (!rateLimiterInstance.limitExists(depositId)) rateLimiterInstance.createNewLimiter(depositId, maxUint64, maxUint64);
-        rateLimiterInstance.updateConsumers(depositId, restakerAddr, true);
         vm.stopPrank();
     }
 
     function test_updatePendingSharesState_after_upgrade() public {
         etherFiRestakerInstance.getAmountInEigenLayerPendingForWithdrawals(address(stEth));
         etherFiRestakerInstance.getTotalPooledEther();
+    }
+
+    // PR #385 security review (H1 + Yash's review): the restaker's pause previously gated
+    // nothing — pauseContract() flipped a flag but no money-movement function checked it.
+    // It now uses the protocol-wide PausableUntil model: the Guardian (HN/EOA keys) fires
+    // an auto-expiring halt, the multisig has a boolean pause, and both stop fund movement.
+    function test_guardianPauseUntil_halts_fund_movement() public {
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), bob);
+        vm.stopPrank();
+
+        // operating timelock (owner) sets the auto-expiry duration
+        vm.prank(owner);
+        etherFiRestakerInstance.setPauseUntilDuration(8 hours);
+
+        // Guardian fast-halt (auto-expiring)
+        vm.prank(bob);
+        etherFiRestakerInstance.pauseUntil();
+        uint256 until = etherFiRestakerInstance.pausedUntil();
+        assertGt(until, block.timestamp);
+
+        // whenNotHalted is the first gate on transferStETH, so the halt fires before the
+        // caller check — proves fund movement is actually stopped.
+        vm.expectRevert(abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, until));
+        etherFiRestakerInstance.transferStETH(bob, 1);
+
+        // undelegate (owner holds OPERATION_MULTISIG) queues withdrawal of ALL restaked
+        // assets — same fund-flow category, so it must also be halted.
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, until));
+        etherFiRestakerInstance.undelegate();
+
+        // a non-guardian cannot fire the auto-expiring halt
+        vm.prank(alice);
+        vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
+        etherFiRestakerInstance.pauseUntil();
+
+        // resume is deliberate / multisig-only
+        vm.prank(owner);
+        etherFiRestakerInstance.unpauseUntil();
+        assertEq(etherFiRestakerInstance.pausedUntil(), 0);
+    }
+
+    // The boolean multisig pause also halts fund movement (reverts via OZ Pausable).
+    function test_booleanPause_also_halts_fund_movement() public {
+        vm.prank(owner); // owner holds OPERATION_MULTISIG
+        etherFiRestakerInstance.pause();
+        assertTrue(etherFiRestakerInstance.paused());
+
+        vm.expectRevert(Pausable.ContractPaused.selector);
+        etherFiRestakerInstance.transferStETH(bob, 1);
+
+        vm.prank(owner);
+        etherFiRestakerInstance.unpause();
+        assertFalse(etherFiRestakerInstance.paused());
     }
 
 }

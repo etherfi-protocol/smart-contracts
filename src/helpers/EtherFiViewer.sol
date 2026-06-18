@@ -5,12 +5,12 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
-import "src/interfaces/IEtherFiNodesManager.sol";
-import "src/eigenlayer-interfaces/IEigenPod.sol";
-import "src/eigenlayer-interfaces/IEigenPodManager.sol";
-import "src/eigenlayer-interfaces/IDelegationManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPodManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
 
-import "src/helpers/AddressProvider.sol";
+import "@etherfi/helpers/AddressProvider.sol";
 
 contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 

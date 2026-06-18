@@ -2,11 +2,11 @@
 pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
-import "../../script/deploys/Deployed.s.sol";
-import "../../src/EtherFiOracle.sol";
-import "../../src/NodeOperatorManager.sol";
-import "../../src/AuctionManager.sol";
-import "../../src/EtherFiRestaker.sol";
+import "@scripts/deploys/Deployed.s.sol";
+import "@etherfi/oracle/EtherFiOracle.sol";
+import "@etherfi/staking/NodeOperatorManager.sol";
+import "@etherfi/staking/AuctionManager.sol";
+import "@etherfi/restaking/EtherFiRestaker.sol";
 
 interface IUUPSProxy {
     function upgradeTo(address newImpl) external;
@@ -99,7 +99,7 @@ contract RoleMigrationStorageIntegrityTest is Test, Deployed {
         bytes32[] memory preAM = _snapshot(AUCTION_MANAGER);
         bytes32[] memory preER = _snapshot(ETHERFI_RESTAKER);
 
-        address newAM = address(new AuctionManager(ROLE_REGISTRY, address(0), NODE_OPERATOR_MANAGER, STAKING_MANAGER, MEMBERSHIP_MANAGER, TREASURY));
+        address newAM = address(new AuctionManager(ROLE_REGISTRY, address(0), NODE_OPERATOR_MANAGER, STAKING_MANAGER, TREASURY));
         address newER = address(new EtherFiRestaker(
             LIQUIDITY_POOL,
             LIQUIFIER,

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
-import "../src/EtherFiTimelock.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/governance/EtherFiTimelock.sol";
 import "forge-std/console2.sol";
 
 contract TimelockTest is TestSetup {
@@ -10,7 +10,7 @@ contract TimelockTest is TestSetup {
     function test_timelock() public {
         initializeRealisticFork(MAINNET_FORK);
 
-        address owner = managerInstance.owner();
+        address owner = roleRegistryInstance.owner();
         address admin = vm.addr(0x1234);
         console2.log("adminAddr:", admin);
         console2.log("ownerAddr:", owner);
@@ -26,21 +26,25 @@ contract TimelockTest is TestSetup {
 
         EtherFiTimelock tl = new EtherFiTimelock(2 days, proposers, executors, address(0x0));
 
-        // transfer ownership to new timelock
+        // transfer RoleRegistry ownership to the new timelock (Ownable2Step) so the
+        // timelock itself can later execute owner-gated calls against it.
         vm.prank(owner);
-        managerInstance.transferOwnership(address(tl));
-        assertEq(managerInstance.owner(), address(tl));
+        roleRegistryInstance.transferOwnership(address(tl));
+        vm.prank(address(tl));
+        roleRegistryInstance.acceptOwnership();
+        assertEq(roleRegistryInstance.owner(), address(tl));
 
-        // Note: EtherFiNodesManager no longer has updateAdmin - it uses role registry
-        // Using transferOwnership to a test address to test timelock functionality
+        // Exercise the timelock by scheduling an ownership transfer to a test
+        // address. RoleRegistry is Ownable2Step, so a successful execute sets the
+        // pending owner (verified at the end).
         address testOwner = vm.addr(0x9999);
-        bytes memory data = abi.encodeWithSelector(Ownable.transferOwnership.selector, testOwner);
+        bytes memory data = abi.encodeWithSelector(Ownable2StepUpgradeable.transferOwnership.selector, testOwner);
 
         // attempt to directly execute with timelock. Not allowed to do tx before queuing it
         vm.prank(owner);
         vm.expectRevert("TimelockController: operation is not ready");
         tl.execute(
-            address(managerInstance), // target
+            address(roleRegistryInstance), // target
             0,                        // value
             data,                     // encoded call data
             0,                        // optional predecessor
@@ -51,7 +55,7 @@ contract TimelockTest is TestSetup {
         vm.prank(owner);
         vm.expectRevert("TimelockController: insufficient delay");
         tl.schedule(
-            address(managerInstance), // target
+            address(roleRegistryInstance), // target
             0,                        // value
             data,                     // encoded call data
             0,                        // optional predecessor
@@ -62,7 +66,7 @@ contract TimelockTest is TestSetup {
         // schedule updateAdmin tx
         vm.prank(owner);
         tl.schedule(
-            address(managerInstance), // target
+            address(roleRegistryInstance), // target
             0,                        // value
             data,                     // encoded call data
             0,                        // optional predecessor
@@ -71,7 +75,7 @@ contract TimelockTest is TestSetup {
         );
 
         // find operation id by hashing relevant data
-        bytes32 operationId = tl.hashOperation(address(managerInstance), 0, data, 0, 0);
+        bytes32 operationId = tl.hashOperation(address(roleRegistryInstance), 0, data, 0, 0);
 
         // cancel the scheduled tx
         vm.prank(owner);
@@ -84,7 +88,7 @@ contract TimelockTest is TestSetup {
         vm.prank(owner);
         vm.expectRevert("TimelockController: operation is not ready");
         tl.execute(
-            address(managerInstance), // target
+            address(roleRegistryInstance), // target
             0,                        // value
             data,                     // encoded call data
             0,                        // optional predecessor
@@ -94,7 +98,7 @@ contract TimelockTest is TestSetup {
         // schedule again and wait
         vm.prank(owner);
         tl.schedule(
-            address(managerInstance), // target
+            address(roleRegistryInstance), // target
             0,                        // value
             data,                     // encoded call data
             0,                        // optional predecessor
@@ -107,7 +111,7 @@ contract TimelockTest is TestSetup {
         vm.prank(admin);
         vm.expectRevert();
         tl.execute(
-            address(managerInstance), // target
+            address(roleRegistryInstance), // target
             0,                        // value
             data,                     // encoded call data
             0,                        // optional predecessor
@@ -117,15 +121,15 @@ contract TimelockTest is TestSetup {
         // exec account should be able to execute tx
         vm.prank(owner);
         tl.execute(
-            address(managerInstance), // target
+            address(roleRegistryInstance), // target
             0,                        // value
             data,                     // encoded call data
             0,                        // optional predecessor
             0                         // optional salt
         );
         
-        // Verify ownership was transferred
-        assertEq(managerInstance.owner(), testOwner);
+        // Verify the pending owner was set via the timelock-executed call.
+        assertEq(roleRegistryInstance.pendingOwner(), testOwner);
 
 
         // TODO(dave): update test with role registry changes
@@ -208,7 +212,7 @@ contract TimelockTest is TestSetup {
             0,                        // optional predecessor
             0                         // optional salt
         );
-        assertEq(managerInstance.owner(), newOwner);
+        assertEq(roleRegistryInstance.owner(), newOwner);
         */
     }
 
@@ -293,7 +297,7 @@ contract TimelockTest is TestSetup {
         
         // Check if liquifier is paused first
         if (liquifierInstance.paused()) {
-            bytes memory data = abi.encodeWithSelector(Liquifier.unPauseContract.selector);
+            bytes memory data = abi.encodeWithSelector(Pausable.unpause.selector);
             _execute_timelock(target, data, true, true, true, true);
         } else {
             // Skip test if not paused

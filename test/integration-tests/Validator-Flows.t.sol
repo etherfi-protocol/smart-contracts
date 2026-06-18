@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "../TestSetup.sol";
-import "../../script/deploys/Deployed.s.sol";
+import "@tests/TestSetup.sol";
+import "@scripts/deploys/Deployed.s.sol";
 
-import "../../src/interfaces/IStakingManager.sol";
-import "../../src/interfaces/IEtherFiNode.sol";
+import "@etherfi/staking/interfaces/IStakingManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNode.sol";
 
-import "../../src/libraries/DepositDataRootGenerator.sol";
+import "@etherfi/staking/libraries/DepositDataRootGenerator.sol";
 
 contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
     function setUp() public {
@@ -17,12 +17,12 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         // so its NODE_OPERATOR_MANAGER_ADMIN_ROLE() getter doesn't exist on-chain.
         // Upgrade in place so the new role getters used by _ensureValCreationRoles are reachable.
         NodeOperatorManager nodeOperatorManagerImpl = new NodeOperatorManager(address(roleRegistryInstance), address(auctionInstance));
-        vm.prank(nodeOperatorManagerInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         nodeOperatorManagerInstance.upgradeTo(address(nodeOperatorManagerImpl));
 
         // Upgrade LiquidityPool to the consolidated role model — the on-chain impl
         // still checks LIQUIDITY_POOL_ADMIN_ROLE on registerValidatorSpawner.
-        LiquidityPool newLpImpl = new LiquidityPool(LiquidityPool.ConstructorAddresses({
+        LiquidityPool newLpImpl = new LiquidityPool(ILiquidityPool.ConstructorAddresses({
             stakingManager: address(stakingManagerInstance),
             nodesManager: address(managerInstance),
             eETH: address(eETHInstance),
@@ -34,25 +34,26 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
             blacklister: address(blacklisterInstance),
             etherFiAdminContract: address(etherFiAdminInstance),
             membershipManager: address(membershipManagerInstance)
-        }), 0);
-        address lpOwner = liquidityPoolInstance.owner();
+        }));
+        address lpOwner = roleRegistryInstance.owner();
         vm.prank(lpOwner);
         liquidityPoolInstance.upgradeTo(address(newLpImpl));
 
         // Upgrade WithdrawRequestNFT so it has a receive() function and accepts the
         // ETH-escrow transfer triggered by initializeOnUpgradeV2.
-        address wrnOwner = withdrawRequestNFTInstance.owner();
+        address wrnOwner = roleRegistryInstance.owner();
+        // Deploy the impl BEFORE pranking — the inlined `new` is a CREATE that
+        // would otherwise consume the single-shot vm.prank (OnlyUpgradeTimelock).
+        address newWrnImpl = address(new WithdrawRequestNFT(address(liquidityPoolInstance), address(roleRegistryInstance), address(blacklisterInstance), address(etherFiAdminInstance)));
         vm.prank(wrnOwner);
-        withdrawRequestNFTInstance.upgradeTo(
-            address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(eETHInstance), address(liquidityPoolInstance), address(membershipManagerInstance), address(roleRegistryInstance), address(blacklisterInstance), address(etherFiAdminInstance), 1, 4e18))
-        );
+        withdrawRequestNFTInstance.upgradeTo(newWrnImpl);
 
         // The production queue proxy on mainnet still runs the master impl which
         // has no receive(); initializeOnUpgradeV2 below sweeps queue-locked ETH
         // into the queue and would revert with SendFail. Upgrade the queue first.
         address newPQ = address(new PriorityWithdrawalQueue(
             address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance),
-            address(roleRegistryInstance), treasuryInstance, 1 hours
+            address(blacklisterInstance), address(roleRegistryInstance), 1 hours
         ));
         vm.prank(UPGRADE_TIMELOCK);
         PriorityWithdrawalQueue(payable(PRIORITY_WITHDRAWAL_QUEUE)).upgradeTo(newPQ);
@@ -105,7 +106,7 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         // addCommitteeMember() resets CommitteeMemberState to
         // (registered=true, enabled=true, lastReportRefSlot=0, numReports=0), clearing any stale
         // submission from mainnet without adding new committee members.
-        address oracleOwner = etherFiOracleInstance.owner();
+        address oracleOwner = roleRegistryInstance.owner();
         // Each add/remove now requires a _quorumSize that satisfies the strict-majority
         // invariant for the resulting numActive. Compute a fresh value at each step
         // so this works regardless of mainnet's current quorum.
@@ -146,7 +147,7 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         // does not expose NODE_OPERATOR_MANAGER_ADMIN_ROLE(). Upgrade in place
         // so the new role getter and role-gated modifier are reachable, then
         // grant the role used by whitelist ops.
-        address nodeOpMgrOwner = nodeOperatorManagerInstance.owner();
+        address nodeOpMgrOwner = roleRegistryInstance.owner();
         vm.startPrank(nodeOpMgrOwner);
         NodeOperatorManager newNodeOpMgrImpl = new NodeOperatorManager(address(roleRegistryInstance), address(auctionInstance));
         nodeOperatorManagerInstance.upgradeTo(address(newNodeOpMgrImpl));

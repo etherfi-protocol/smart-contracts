@@ -2,13 +2,27 @@
 pragma solidity ^0.8.27;
 
 import "forge-std/Test.sol";
-import "./TestSetup.sol";
-import "../src/utils/PausableUntil.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
 
 contract PausableUntilHarness is PausableUntil {
-    function pauseUntil() external { _pauseUntil(); }
-    function unpauseUntil() external { _unpauseUntil(); }
-    function setPauseUntilDuration(uint256 d) external { _setPauseUntilDuration(d); }
+    // These unit tests exercise the internal pause-until mechanics (cooldowns, expiry,
+    // storage isolation) independent of role gating. `pauseUntil` is virtual in the base
+    // (eETH/weETH override its gating), so we override it ungated here. `unpauseUntil` and
+    // `setPauseUntilDuration` are intentionally non-virtual, so we expose ungated test-only
+    // twins that replicate their logic against the same namespaced storage.
+    constructor(address _roleRegistry) RolesLibrary(_roleRegistry) {}
+    function pauseUntil() external override { _pauseUntil(); }
+    function harnessUnpauseUntil() external {
+        _requirePausedUntil();
+        _getPausableUntilStorage().pausedUntil = 0;
+        emit UnpausedUntil();
+    }
+    function harnessSetPauseUntilDuration(uint256 d) external {
+        if (d < MIN_PAUSE_DURATION || d > MAX_PAUSE_DURATION) revert InvalidPauseUntilDuration();
+        _getPausableUntilStorage().pauseUntilDuration = d;
+        emit PauseUntilDurationSet(d);
+    }
     function requireNotPausedUntil() external view { _requireNotPausedUntil(); }
     function requirePausedUntil() external view { _requirePausedUntil(); }
 
@@ -27,12 +41,12 @@ contract PausableUntilTest is Test {
     event UnpausedUntil();
 
     function setUp() public {
-        harness = new PausableUntilHarness();
+        harness = new PausableUntilHarness(address(0));
         // warp past MAX_PAUSE_DURATION + PAUSER_UNTIL_COOLDOWN so the initial cooldown check
         // (which treats lastPauseTimestamp[pauser] = 0 as literally "last paused at unix 0")
         // does not block the first pause in tests. On mainnet this is a non-issue.
         vm.warp(1_700_000_000);
-        harness.setPauseUntilDuration(harness.MAX_PAUSE_DURATION());
+        harness.harnessSetPauseUntilDuration(harness.MAX_PAUSE_DURATION());
     }
 
     // --------------------------------------------------------
@@ -67,40 +81,40 @@ contract PausableUntilTest is Test {
         uint256 d = harness.MIN_PAUSE_DURATION() + 1 hours;
         vm.expectEmit(false, false, false, true);
         emit PauseUntilDurationSet(d);
-        harness.setPauseUntilDuration(d);
+        harness.harnessSetPauseUntilDuration(d);
         assertEq(harness.pauseUntilDuration(), d);
     }
 
     function test_setPauseUntilDuration_acceptsMinBoundary() public {
-        harness.setPauseUntilDuration(harness.MIN_PAUSE_DURATION());
+        harness.harnessSetPauseUntilDuration(harness.MIN_PAUSE_DURATION());
         assertEq(harness.pauseUntilDuration(), harness.MIN_PAUSE_DURATION());
     }
 
     function test_setPauseUntilDuration_acceptsMaxBoundary() public {
-        harness.setPauseUntilDuration(harness.MAX_PAUSE_DURATION());
+        harness.harnessSetPauseUntilDuration(harness.MAX_PAUSE_DURATION());
         assertEq(harness.pauseUntilDuration(), harness.MAX_PAUSE_DURATION());
     }
 
     function test_setPauseUntilDuration_revertsBelowMin() public {
         uint256 belowMin = harness.MIN_PAUSE_DURATION() - 1;
         vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
-        harness.setPauseUntilDuration(belowMin);
+        harness.harnessSetPauseUntilDuration(belowMin);
     }
 
     function test_setPauseUntilDuration_revertsAboveMax() public {
         uint256 aboveMax = harness.MAX_PAUSE_DURATION() + 1;
         vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
-        harness.setPauseUntilDuration(aboveMax);
+        harness.harnessSetPauseUntilDuration(aboveMax);
     }
 
     function test_setPauseUntilDuration_revertsOnZero() public {
         vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
-        harness.setPauseUntilDuration(0);
+        harness.harnessSetPauseUntilDuration(0);
     }
 
     function test_setPauseUntilDuration_pausesForUpdatedDuration() public {
         uint256 d = harness.MIN_PAUSE_DURATION();
-        harness.setPauseUntilDuration(d);
+        harness.harnessSetPauseUntilDuration(d);
 
         vm.prank(pauserA);
         harness.pauseUntil();
@@ -109,14 +123,14 @@ contract PausableUntilTest is Test {
 
     function testFuzz_setPauseUntilDuration_acceptsInRange(uint256 d) public {
         d = bound(d, harness.MIN_PAUSE_DURATION(), harness.MAX_PAUSE_DURATION());
-        harness.setPauseUntilDuration(d);
+        harness.harnessSetPauseUntilDuration(d);
         assertEq(harness.pauseUntilDuration(), d);
     }
 
     function testFuzz_setPauseUntilDuration_rejectsOutOfRange(uint256 d) public {
         vm.assume(d < harness.MIN_PAUSE_DURATION() || d > harness.MAX_PAUSE_DURATION());
         vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
-        harness.setPauseUntilDuration(d);
+        harness.harnessSetPauseUntilDuration(d);
     }
 
     // --------------------------------------------------------
@@ -206,7 +220,7 @@ contract PausableUntilTest is Test {
 
         vm.expectEmit(false, false, false, false);
         emit UnpausedUntil();
-        harness.unpauseUntil();
+        harness.harnessUnpauseUntil();
 
         assertEq(harness.pausedUntil(), 0);
         harness.gated(); // should pass
@@ -214,7 +228,7 @@ contract PausableUntilTest is Test {
 
     function test_unpauseUntil_revertsWhenNotPaused() public {
         vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
-        harness.unpauseUntil();
+        harness.harnessUnpauseUntil();
     }
 
     function test_unpauseUntil_revertsAfterExpiry() public {
@@ -225,7 +239,7 @@ contract PausableUntilTest is Test {
 
         // pause has already naturally expired — unpause should revert
         vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
-        harness.unpauseUntil();
+        harness.harnessUnpauseUntil();
     }
 
     function test_unpauseUntil_doesNotClearPauserCooldown() public {
@@ -233,7 +247,7 @@ contract PausableUntilTest is Test {
         harness.pauseUntil();
         uint256 pauseStart = block.timestamp;
 
-        harness.unpauseUntil();
+        harness.harnessUnpauseUntil();
 
         // pauserA's cooldown remains — early unpause should NOT let them re-pause
         vm.warp(pauseStart + 1);
@@ -256,7 +270,7 @@ contract PausableUntilTest is Test {
     function test_unpauseUntil_newPauserCanPauseImmediately() public {
         vm.prank(pauserA);
         harness.pauseUntil();
-        harness.unpauseUntil();
+        harness.harnessUnpauseUntil();
 
         // pauserB hasn't paused before, so no cooldown applies
         vm.prank(pauserB);

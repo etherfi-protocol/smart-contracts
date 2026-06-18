@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
-import "../src/helpers/WeETHWithdrawAdapter.sol";
-import "../src/helpers/Blacklister.sol";
-import "../src/interfaces/IWeETHWithdrawAdapter.sol";
-import "../src/utils/PausableUntil.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/withdrawals/WeETHWithdrawAdapter.sol";
+import "@etherfi/governance/Blacklister.sol";
+import "@etherfi/withdrawals/interfaces/IWeETHWithdrawAdapter.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
 
 contract WeETHWithdrawAdapterTest is TestSetup {
     WeETHWithdrawAdapter public adapter;
@@ -20,20 +20,19 @@ contract WeETHWithdrawAdapterTest is TestSetup {
     function setUp() public {
         setUpTests();
         vm.prank(admin);
-        withdrawRequestNFTInstance.unPauseContract();
+        withdrawRequestNFTInstance.unpause();
 
         // Deploy the adapter standalone (TestSetup only wires it up in fork mode)
         WeETHWithdrawAdapter impl = new WeETHWithdrawAdapter(
             address(weEthInstance),
             address(eETHInstance),
             address(liquidityPoolInstance),
-            address(withdrawRequestNFTInstance),
             address(roleRegistryInstance),
             address(blacklisterInstance)
         );
         UUPSProxy proxy = new UUPSProxy(address(impl), "");
         adapter = WeETHWithdrawAdapter(address(proxy));
-        adapter.initialize(owner);
+        adapter.initialize();
     }
 
     function _grantPauseUntilRoles() internal {
@@ -68,33 +67,33 @@ contract WeETHWithdrawAdapterTest is TestSetup {
         _grantPauseUntilRoles();
         vm.prank(bob);
         vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
-        adapter.pauseContractUntil();
+        adapter.pauseUntil();
     }
 
     function test_pauseContractUntil_setsState() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        adapter.pauseContractUntil();
+        adapter.pauseUntil();
         assertEq(_pausedUntil(), block.timestamp + adapter.MAX_PAUSE_DURATION());
     }
 
     function test_unpauseContractUntil_requiresRole() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        adapter.pauseContractUntil();
+        adapter.pauseUntil();
 
         vm.prank(bob);
         vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
-        adapter.unpauseContractUntil();
+        adapter.unpauseUntil();
     }
 
     function test_unpauseContractUntil_clearsState() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        adapter.pauseContractUntil();
+        adapter.pauseUntil();
 
         vm.prank(unpauseUntilUnpauser);
-        adapter.unpauseContractUntil();
+        adapter.unpauseUntil();
         assertEq(_pausedUntil(), 0);
     }
 
@@ -102,7 +101,7 @@ contract WeETHWithdrawAdapterTest is TestSetup {
         _grantPauseUntilRoles();
         vm.prank(unpauseUntilUnpauser);
         vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
-        adapter.unpauseContractUntil();
+        adapter.unpauseUntil();
     }
 
     // --- setPauseUntilDuration ---
@@ -129,7 +128,7 @@ contract WeETHWithdrawAdapterTest is TestSetup {
         adapter.setPauseUntilDuration(d);
 
         vm.prank(pauseUntilPauser);
-        adapter.pauseContractUntil();
+        adapter.pauseUntil();
         assertEq(_pausedUntil(), block.timestamp + d);
     }
 
@@ -154,7 +153,7 @@ contract WeETHWithdrawAdapterTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        adapter.pauseContractUntil();
+        adapter.pauseUntil();
 
         vm.prank(bob);
         vm.expectRevert(
@@ -166,7 +165,7 @@ contract WeETHWithdrawAdapterTest is TestSetup {
     function test_requestWithdrawWithPermit_blockedByPauseContractUntil() public {
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        adapter.pauseContractUntil();
+        adapter.pauseUntil();
 
         IWeETHWithdrawAdapter.PermitInput memory emptyPermit;
         vm.prank(bob);
@@ -181,7 +180,7 @@ contract WeETHWithdrawAdapterTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        adapter.pauseContractUntil();
+        adapter.pauseUntil();
 
         vm.warp(block.timestamp + adapter.MAX_PAUSE_DURATION() + 1);
 
@@ -194,9 +193,9 @@ contract WeETHWithdrawAdapterTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        adapter.pauseContractUntil();
+        adapter.pauseUntil();
         vm.prank(unpauseUntilUnpauser);
-        adapter.unpauseContractUntil();
+        adapter.unpauseUntil();
 
         vm.prank(bob);
         adapter.requestWithdraw(0.5 ether, bob);
@@ -285,7 +284,7 @@ contract WeETHWithdrawAdapterTest is TestSetup {
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
-        adapter.pauseContractUntil();
+        adapter.pauseUntil();
 
         vm.prank(owner);
         blacklisterInstance.blacklistUser(bob);
@@ -298,7 +297,7 @@ contract WeETHWithdrawAdapterTest is TestSetup {
 
         // After unpause, the blacklist gate takes over.
         vm.prank(unpauseUntilUnpauser);
-        adapter.unpauseContractUntil();
+        adapter.unpauseUntil();
 
         vm.prank(bob);
         _expectBlacklistedRevert(bob);
@@ -311,7 +310,6 @@ contract WeETHWithdrawAdapterTest is TestSetup {
             address(weEthInstance),
             address(eETHInstance),
             address(liquidityPoolInstance),
-            address(withdrawRequestNFTInstance),
             address(roleRegistryInstance),
             address(0)
         );
