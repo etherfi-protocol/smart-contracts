@@ -281,13 +281,6 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(DEPOSIT_INTO_STRATEGY_CAPACITY       != 0, "preflight: DEPOSIT_INTO_STRATEGY_CAPACITY unset");
         require(DEPOSIT_INTO_STRATEGY_REFILL_RATE    != 0, "preflight: DEPOSIT_INTO_STRATEGY_REFILL_RATE unset");
 
-        require(UNRESTAKING_CAPACITY              != 0, "preflight: UNRESTAKING_CAPACITY unset");
-        require(UNRESTAKING_REFILL_RATE           != 0, "preflight: UNRESTAKING_REFILL_RATE unset");
-        require(EXIT_REQUEST_CAPACITY             != 0, "preflight: EXIT_REQUEST_CAPACITY unset");
-        require(EXIT_REQUEST_REFILL_RATE          != 0, "preflight: EXIT_REQUEST_REFILL_RATE unset");
-        require(CONSOLIDATION_REQUEST_CAPACITY    != 0, "preflight: CONSOLIDATION_REQUEST_CAPACITY unset");
-        require(CONSOLIDATION_REQUEST_REFILL_RATE != 0, "preflight: CONSOLIDATION_REQUEST_REFILL_RATE unset");
-
         // core
         require(PAUSE_UNTIL_EETH != 0,                   "preflight: PAUSE_UNTIL_EETH unset");
         require(PAUSE_UNTIL_LIQUIDITY_POOL != 0,         "preflight: PAUSE_UNTIL_LIQUIDITY_POOL unset");
@@ -390,9 +383,6 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         console2.log("STETH_REQUEST_WITHDRAWAL cap/refill: ", STETH_REQUEST_WITHDRAWAL_CAPACITY, STETH_REQUEST_WITHDRAWAL_REFILL_RATE);
         console2.log("QUEUE_WITHDRAWALS cap/refill:        ", QUEUE_WITHDRAWALS_CAPACITY,        QUEUE_WITHDRAWALS_REFILL_RATE);
         console2.log("DEPOSIT_INTO_STRATEGY cap/refill:    ", DEPOSIT_INTO_STRATEGY_CAPACITY,    DEPOSIT_INTO_STRATEGY_REFILL_RATE);
-        console2.log("UNRESTAKING cap/refill:              ", UNRESTAKING_CAPACITY,              UNRESTAKING_REFILL_RATE);
-        console2.log("EXIT_REQUEST cap/refill:             ", EXIT_REQUEST_CAPACITY,             EXIT_REQUEST_REFILL_RATE);
-        console2.log("CONSOLIDATION_REQUEST cap/refill:    ", CONSOLIDATION_REQUEST_CAPACITY,    CONSOLIDATION_REQUEST_REFILL_RATE);
         console2.log("");
         console2.log("--- PausableUntil durations (sec; TBD) ---");
         console2.log("PAUSE_UNTIL_EETH:                    ", PAUSE_UNTIL_EETH);

@@ -321,14 +321,6 @@ buckets (`createNewLimiter`) and wires each to its consumer (`updateConsumers`).
 | `WEETH_MINT_LIMIT_ID` | `WEETH_MINT_CAPACITY`, `WEETH_MINT_REFILL_RATE` | `WEETH` |
 | `WEETH_BURN_LIMIT_ID` | `WEETH_BURN_CAPACITY`, `WEETH_BURN_REFILL_RATE` | `WEETH` |
 
-**EtherFiNodesManager buckets** (consumer = `ETHERFI_NODES_MANAGER`):
-
-| Bucket ID | Capacity / refill constants |
-|---|---|
-| `UNRESTAKING_LIMIT_ID` | `UNRESTAKING_CAPACITY`, `UNRESTAKING_REFILL_RATE` |
-| `EXIT_REQUEST_LIMIT_ID` | `EXIT_REQUEST_CAPACITY`, `EXIT_REQUEST_REFILL_RATE` |
-| `CONSOLIDATION_REQUEST_LIMIT_ID` | `CONSOLIDATION_REQUEST_CAPACITY`, `CONSOLIDATION_REQUEST_REFILL_RATE` |
-
 **EtherFiRestaker buckets** (consumer = `ETHERFI_RESTAKER`):
 
 | Bucket ID | Capacity / refill constants |
