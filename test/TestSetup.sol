@@ -666,8 +666,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(eETHInstance),
             address(liquidityPoolInstance),
             address(roleRegistryInstance),
-            address(blacklisterInstance),
-            address(rateLimiterInstance)
+            address(blacklisterInstance)
         ));
         vm.prank(roleRegistryInstance.owner());
         weEthInstance.upgradeTo(newWeETHImpl);
@@ -1169,7 +1168,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         eETHInstance.initialize();
 
         // WeETH
-        weEthImplementation = new WeETH(address(eETHProxy), address(liquidityPoolProxy), address(roleRegistryInstance), address(blacklisterInstance), address(rateLimiterInstance));
+        weEthImplementation = new WeETH(address(eETHProxy), address(liquidityPoolProxy), address(roleRegistryInstance), address(blacklisterInstance));
         vm.expectRevert("Initializable: contract is already initialized");
         weEthImplementation.initialize();
         weEthInstance.upgradeTo(address(weEthImplementation));
@@ -1470,44 +1469,36 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function _upgrade_weETH() internal {
-        address newWeETHImpl = address(new WeETH(address(eETHInstance), address(liquidityPoolInstance), address(roleRegistryInstance), address(blacklisterInstance), address(rateLimiterInstance)));
+        address newWeETHImpl = address(new WeETH(address(eETHInstance), address(liquidityPoolInstance), address(roleRegistryInstance), address(blacklisterInstance)));
         vm.prank(owner);
         weEthInstance.upgradeTo(newWeETHImpl);
-        // The upgraded weETH calls consumeToken(WEETH_{MINT,BURN}_LIMIT_ID, ...)
-        // on every mint/burn; bootstrap those at unbounded capacity for fork tests.
-        // Caller has no active prank here, so prank as `owner` (granted OPERATION_TIMELOCK_ROLE upstream).
+        // eETH calls consumeToken(EETH_{MINT,BURN}_LIMIT_ID, ...) on every mint/burn;
+        // bootstrap those at unbounded capacity for fork tests. (weETH is no longer
+        // rate-limited.) Caller has no active prank here, so prank as `owner`
+        // (granted OPERATION_TIMELOCK_ROLE upstream).
         vm.startPrank(owner);
         _setupGlobalMintBurnBuckets();
         vm.stopPrank();
     }
 
-    /// @dev Idempotently creates the 4 global MINT/BURN buckets at unbounded capacity
-    ///      and whitelists eETH/weETH as consumers of their respective IDs. IDs are
-    ///      computed via keccak256 directly so this works even on the realistic-fork
-    ///      path where eETH isn't upgraded yet (calling `eETHInstance.EETH_MINT_LIMIT_ID()`
-    ///      on the deployed impl would revert with "unrecognized selector").
+    /// @dev Idempotently creates the 2 global eETH MINT/BURN buckets at unbounded
+    ///      capacity and whitelists eETH as consumer of each ID. IDs are computed via
+    ///      keccak256 directly so this works even on the realistic-fork path where eETH
+    ///      isn't upgraded yet (calling `eETHInstance.EETH_MINT_LIMIT_ID()` on the
+    ///      deployed impl would revert with "unrecognized selector").
     ///      Caller must already be pranked as a holder of OPERATION_TIMELOCK_ROLE.
     function _setupGlobalMintBurnBuckets() internal {
         uint64 maxUint64 = type(uint64).max;
         bytes32 eethMintId   = keccak256("EETH_MINT_LIMIT_ID");
         bytes32 eethBurnId   = keccak256("EETH_BURN_LIMIT_ID");
-        bytes32 weethMintId  = keccak256("WEETH_MINT_LIMIT_ID");
-        bytes32 weethBurnId  = keccak256("WEETH_BURN_LIMIT_ID");
 
         bytes32[2] memory eethIds  = [eethMintId,  eethBurnId];
-        bytes32[2] memory weethIds = [weethMintId, weethBurnId];
 
         for (uint256 i = 0; i < eethIds.length; i++) {
             if (!rateLimiterInstance.limitExists(eethIds[i])) {
                 rateLimiterInstance.createNewLimiter(eethIds[i], maxUint64, maxUint64);
             }
             rateLimiterInstance.updateConsumers(eethIds[i], address(eETHInstance), true);
-        }
-        for (uint256 i = 0; i < weethIds.length; i++) {
-            if (!rateLimiterInstance.limitExists(weethIds[i])) {
-                rateLimiterInstance.createNewLimiter(weethIds[i], maxUint64, maxUint64);
-            }
-            rateLimiterInstance.updateConsumers(weethIds[i], address(weEthInstance), true);
         }
     }
 

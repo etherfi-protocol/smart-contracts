@@ -269,10 +269,6 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(EETH_MINT_REFILL_RATE != 0, "preflight: EETH_MINT_REFILL_RATE unset");
         require(EETH_BURN_CAPACITY    != 0, "preflight: EETH_BURN_CAPACITY unset");
         require(EETH_BURN_REFILL_RATE != 0, "preflight: EETH_BURN_REFILL_RATE unset");
-        require(WEETH_MINT_CAPACITY   != 0, "preflight: WEETH_MINT_CAPACITY unset");
-        require(WEETH_MINT_REFILL_RATE!= 0, "preflight: WEETH_MINT_REFILL_RATE unset");
-        require(WEETH_BURN_CAPACITY   != 0, "preflight: WEETH_BURN_CAPACITY unset");
-        require(WEETH_BURN_REFILL_RATE!= 0, "preflight: WEETH_BURN_REFILL_RATE unset");
 
         require(STETH_REQUEST_WITHDRAWAL_CAPACITY    != 0, "preflight: STETH_REQUEST_WITHDRAWAL_CAPACITY unset");
         require(STETH_REQUEST_WITHDRAWAL_REFILL_RATE != 0, "preflight: STETH_REQUEST_WITHDRAWAL_REFILL_RATE unset");
@@ -378,8 +374,6 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         console2.log("--- Rate-limiter buckets (gwei units; TBD) ---");
         console2.log("EETH_MINT  cap / refill:             ", EETH_MINT_CAPACITY,  EETH_MINT_REFILL_RATE);
         console2.log("EETH_BURN  cap / refill:             ", EETH_BURN_CAPACITY,  EETH_BURN_REFILL_RATE);
-        console2.log("WEETH_MINT cap / refill:             ", WEETH_MINT_CAPACITY, WEETH_MINT_REFILL_RATE);
-        console2.log("WEETH_BURN cap / refill:             ", WEETH_BURN_CAPACITY, WEETH_BURN_REFILL_RATE);
         console2.log("STETH_REQUEST_WITHDRAWAL cap/refill: ", STETH_REQUEST_WITHDRAWAL_CAPACITY, STETH_REQUEST_WITHDRAWAL_REFILL_RATE);
         console2.log("QUEUE_WITHDRAWALS cap/refill:        ", QUEUE_WITHDRAWALS_CAPACITY,        QUEUE_WITHDRAWALS_REFILL_RATE);
         console2.log("DEPOSIT_INTO_STRATEGY cap/refill:    ", DEPOSIT_INTO_STRATEGY_CAPACITY,    DEPOSIT_INTO_STRATEGY_REFILL_RATE);
@@ -444,7 +438,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         );
         codeChecker.verifyContractByteCodeMatch(liquidityPoolImpl, address(fresh2));
 
-        WeETHToken fresh3 = new WeETHToken(EETH, LIQUIDITY_POOL, ROLE_REGISTRY, blacklisterProxy, ETHERFI_RATE_LIMITER);
+        WeETHToken fresh3 = new WeETHToken(EETH, LIQUIDITY_POOL, ROLE_REGISTRY, blacklisterProxy);
         codeChecker.verifyContractByteCodeMatch(weEthImpl, address(fresh3));
     }
 
@@ -1285,7 +1279,6 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(address(w.liquidityPool()) == LIQUIDITY_POOL,  "WeETH.liquidityPool");
         require(address(w.roleRegistry())  == ROLE_REGISTRY,   "WeETH.roleRegistry");
         require(address(w.blacklister())   == blacklisterProxy,"WeETH.blacklister");
-        require(address(w.rateLimiter())   == ETHERFI_RATE_LIMITER, "WeETH.rateLimiter");
     }
 
     function _verifyImmutablesDeposits() internal view {
@@ -1719,16 +1712,12 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         uint256[] memory values  = new uint256[](60);
         uint256 i;
 
-        // ───────── core — Token-side global buckets (consumeToken on eETH/weETH) ─────────
+        // ───────── core — Token-side global buckets (consumeToken on eETH mint/burn) ─────────
         (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(EETH_MINT_LIMIT_ID,  EETH_MINT_CAPACITY,  EETH_MINT_REFILL_RATE));  i++;
         (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(EETH_BURN_LIMIT_ID,  EETH_BURN_CAPACITY,  EETH_BURN_REFILL_RATE));  i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(WEETH_MINT_LIMIT_ID, WEETH_MINT_CAPACITY, WEETH_MINT_REFILL_RATE)); i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(WEETH_BURN_LIMIT_ID, WEETH_BURN_CAPACITY, WEETH_BURN_REFILL_RATE)); i++;
 
         (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(EETH_MINT_LIMIT_ID,  EETH));  i++;
         (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(EETH_BURN_LIMIT_ID,  EETH));  i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(WEETH_MINT_LIMIT_ID, WEETH)); i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(WEETH_BURN_LIMIT_ID, WEETH)); i++;
 
         // ───────── restaking — EtherFiRestaker buckets (consume) ─────────
         (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(STETH_REQUEST_WITHDRAWAL_LIMIT_ID, STETH_REQUEST_WITHDRAWAL_CAPACITY, STETH_REQUEST_WITHDRAWAL_REFILL_RATE)); i++;
@@ -1830,16 +1819,12 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         EtherFiRateLimiter rl = EtherFiRateLimiter(payable(ETHERFI_RATE_LIMITER));
         require(rl.limitExists(EETH_MINT_LIMIT_ID),                "EETH_MINT bucket missing");
         require(rl.limitExists(EETH_BURN_LIMIT_ID),                "EETH_BURN bucket missing");
-        require(rl.limitExists(WEETH_MINT_LIMIT_ID),               "WEETH_MINT bucket missing");
-        require(rl.limitExists(WEETH_BURN_LIMIT_ID),               "WEETH_BURN bucket missing");
         require(rl.limitExists(STETH_REQUEST_WITHDRAWAL_LIMIT_ID), "STETH_REQUEST_WITHDRAWAL bucket missing");
         require(rl.limitExists(QUEUE_WITHDRAWALS_LIMIT_ID),        "QUEUE_WITHDRAWALS bucket missing");
         require(rl.limitExists(DEPOSIT_INTO_STRATEGY_LIMIT_ID),    "DEPOSIT_INTO_STRATEGY bucket missing");
 
         require(rl.isConsumerAllowed(EETH_MINT_LIMIT_ID,                EETH),                  "EETH consumer (mint) not allowed");
         require(rl.isConsumerAllowed(EETH_BURN_LIMIT_ID,                EETH),                  "EETH consumer (burn) not allowed");
-        require(rl.isConsumerAllowed(WEETH_MINT_LIMIT_ID,               WEETH),                 "WeETH consumer (mint) not allowed");
-        require(rl.isConsumerAllowed(WEETH_BURN_LIMIT_ID,               WEETH),                 "WeETH consumer (burn) not allowed");
         require(rl.isConsumerAllowed(STETH_REQUEST_WITHDRAWAL_LIMIT_ID, ETHERFI_RESTAKER),      "EFRestaker consumer (stEth) not allowed");
         require(rl.isConsumerAllowed(QUEUE_WITHDRAWALS_LIMIT_ID,        ETHERFI_RESTAKER),      "EFRestaker consumer (queue) not allowed");
         require(rl.isConsumerAllowed(DEPOSIT_INTO_STRATEGY_LIMIT_ID,    ETHERFI_RESTAKER),      "EFRestaker consumer (deposit) not allowed");

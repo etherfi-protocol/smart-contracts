@@ -207,7 +207,7 @@ contract DeploySecurityUpgrades is Script, SecurityUpgradesConstants, Utils {
         }
         {
             string memory name = "WeETH";
-            bytes memory args = abi.encode(EETH, LIQUIDITY_POOL, ROLE_REGISTRY, blacklisterProxy, ETHERFI_RATE_LIMITER);
+            bytes memory args = abi.encode(EETH, LIQUIDITY_POOL, ROLE_REGISTRY, blacklisterProxy);
             bytes memory bc = abi.encodePacked(type(WeETHToken).creationCode, args);
             weEthImpl = deploy(name, args, bc, commitHashSalt, true, factory);
         }

@@ -318,8 +318,6 @@ buckets (`createNewLimiter`) and wires each to its consumer (`updateConsumers`).
 |---|---|---|
 | `EETH_MINT_LIMIT_ID` | `EETH_MINT_CAPACITY`, `EETH_MINT_REFILL_RATE` | `EETH` |
 | `EETH_BURN_LIMIT_ID` | `EETH_BURN_CAPACITY`, `EETH_BURN_REFILL_RATE` | `EETH` |
-| `WEETH_MINT_LIMIT_ID` | `WEETH_MINT_CAPACITY`, `WEETH_MINT_REFILL_RATE` | `WEETH` |
-| `WEETH_BURN_LIMIT_ID` | `WEETH_BURN_CAPACITY`, `WEETH_BURN_REFILL_RATE` | `WEETH` |
 
 **EtherFiRestaker buckets** (consumer = `ETHERFI_RESTAKER`):
 

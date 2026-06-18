@@ -206,16 +206,12 @@ abstract contract SecurityUpgradesConstants is Deployed {
     // ─────────────────────────────────────────────────────────────────────
     // RATE-LIMITER BUCKETS (gwei units; TBD).
     // ─────────────────────────────────────────────────────────────────────
-    // core — Token-side global buckets (consumeToken on eETH/weETH paths).
+    // core — Token-side global buckets (consumeToken on the eETH mint/burn paths).
     // Transfer is now per-address (consumeForAddressIfConfigured); no global TRANSFER bucket.
     uint64 internal constant EETH_MINT_CAPACITY    = 30000000000000;
     uint64 internal constant EETH_MINT_REFILL_RATE = 2083333333;
     uint64 internal constant EETH_BURN_CAPACITY    = 25000000000000;
     uint64 internal constant EETH_BURN_REFILL_RATE = 1736111111;
-    uint64 internal constant WEETH_MINT_CAPACITY   = 0;
-    uint64 internal constant WEETH_MINT_REFILL_RATE = 0;
-    uint64 internal constant WEETH_BURN_CAPACITY   = 0;
-    uint64 internal constant WEETH_BURN_REFILL_RATE = 0;
 
     // restaking — EtherFiRestaker buckets (consume).
     uint64 internal constant STETH_REQUEST_WITHDRAWAL_CAPACITY    = 50000000000000;
@@ -253,8 +249,6 @@ abstract contract SecurityUpgradesConstants is Deployed {
     // core
     bytes32 internal constant EETH_MINT_LIMIT_ID                = keccak256("EETH_MINT_LIMIT_ID");
     bytes32 internal constant EETH_BURN_LIMIT_ID                = keccak256("EETH_BURN_LIMIT_ID");
-    bytes32 internal constant WEETH_MINT_LIMIT_ID               = keccak256("WEETH_MINT_LIMIT_ID");
-    bytes32 internal constant WEETH_BURN_LIMIT_ID               = keccak256("WEETH_BURN_LIMIT_ID");
 
     // restaking
     bytes32 internal constant STETH_REQUEST_WITHDRAWAL_LIMIT_ID = keccak256("STETH_REQUEST_WITHDRAWAL_LIMIT_ID");
