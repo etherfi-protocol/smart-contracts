@@ -140,6 +140,13 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
     address constant priorityWithdrawalQueueImpl  = address(0);
     address constant weETHWithdrawAdapterImpl     = address(0);
     address constant withdrawRequestNFTImpl       = address(0);
+    // cross-chain — EtherfiL1SyncPoolETH new impl (deployed from the WeETH-cross-chain repo,
+    // PR #77). Fill from that repo's deploy output. Its proxy (ETHERFI_L1_SYNC_POOL_ETH) is an
+    // OZ5 TransparentUpgradeableProxy, upgraded through its ProxyAdmin (below), not via upgradeTo.
+    address constant l1SyncPoolImpl = address(0);
+    // ProxyAdmin of the L1SyncPool transparent proxy (on-chain admin slot of 0xD789…). Owner is
+    // currently ETHERFI_OPERATING_ADMIN; must be transferred to UPGRADE_TIMELOCK before this batch.
+    address constant L1_SYNC_POOL_PROXY_ADMIN     = 0xDBf6bE120D4dc72f01534673a1223182D9F6261D;
 
     // ─────────────────────────────────────────────────────────────────────
     // All configuration constants — immutable constructor params, operational
@@ -275,6 +282,8 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(priorityWithdrawalQueueImpl            != address(0), "preflight: priorityWithdrawalQueueImpl unset");
         require(weETHWithdrawAdapterImpl               != address(0), "preflight: weETHWithdrawAdapterImpl unset");
         require(withdrawRequestNFTImpl != address(0), "preflight: withdrawRequestNFTImpl unset");
+        // cross-chain
+        require(l1SyncPoolImpl != address(0), "preflight: l1SyncPoolImpl unset (deploy from WeETH-cross-chain repo)");
 
         require(EETH_MINT_CAPACITY    != 0, "preflight: EETH_MINT_CAPACITY unset");
         require(EETH_MINT_REFILL_RATE != 0, "preflight: EETH_MINT_REFILL_RATE unset");
@@ -1020,8 +1029,9 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         uint256 revokeCount = _countLegacyRoleHolders();
 
         // 18 grants (9 HOLDER_* + 6 operating-multisig RevokeAdmin roles + 2 exec guardian safe
-        // + 1 UPGRADE_TIMELOCK CANCELLER_ROLE) + (21 proxy upgrades + 1 beacon + 1 RR swap +
-        // 2 initializers + 2 Liquifier token unwhitelists) = 45, <=50 headroom + N legacy revokes.
+        // + 1 UPGRADE_TIMELOCK CANCELLER_ROLE) + (21 UUPS upgrades + 1 transparent (L1SyncPool via
+        // ProxyAdmin) + 1 beacon + 1 RR swap + 2 initializers + 2 Liquifier token unwhitelists) = 46,
+        // <=50 headroom + N legacy revokes.
         address[] memory targets = new address[](50 + revokeCount);
         bytes[]   memory data    = new bytes[](50 + revokeCount);
         uint256[] memory values  = new uint256[](50 + revokeCount);
@@ -1115,6 +1125,17 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         (targets[i], data[i]) = (WEETH_WITHDRAW_ADAPTER,                _upgradeTo(weETHWithdrawAdapterImpl));               i++;
         (targets[i], data[i]) = (WITHDRAW_REQUEST_NFT,       _upgradeTo(withdrawRequestNFTImpl));     i++;
 
+        // cross-chain — EtherfiL1SyncPoolETH (WeETH-cross-chain repo, PR #77: adds PausableUntil).
+        // UNLIKE every entry above, this proxy is an OZ5 TransparentUpgradeableProxy, NOT UUPS: it
+        // has no `upgradeTo`, so the upgrade goes through its ProxyAdmin via
+        // upgradeAndCall(proxy, impl, "") rather than a self-call. ProxyAdmin.upgradeAndCall is
+        // `onlyOwner`, so this requires the ProxyAdmin owner to be UPGRADE_TIMELOCK at execution.
+        // PRECONDITION: the owner is currently ETHERFI_OPERATING_ADMIN — the operating multisig must
+        // transferOwnership(UPGRADE_TIMELOCK) before this batch is scheduled, else the batch reverts.
+        // Independent of the RR-swap ordering (ProxyAdmin-owner-gated, not roleRegistry-gated).
+        (targets[i], data[i]) = (L1_SYNC_POOL_PROXY_ADMIN,
+            _upgradeTransparent(ETHERFI_L1_SYNC_POOL_ETH, l1SyncPoolImpl));                            i++;
+
         // ─── Phase B: RoleRegistry impl swap ─────────────────────────────────────────────
         // Run AFTER every other upgradeTo so those upgrades resolve against the OLD RR's
         // `onlyProtocolUpgrader` (owner-check). The OLD RR's own `_authorizeUpgrade` is
@@ -1186,6 +1207,8 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         _assertImpl(PRIORITY_WITHDRAWAL_QUEUE,             priorityWithdrawalQueueImpl,            "PriorityWithdrawalQueue");
         _assertImpl(WEETH_WITHDRAW_ADAPTER,                weETHWithdrawAdapterImpl,               "WeETHWithdrawAdapter");
         _assertImpl(WITHDRAW_REQUEST_NFT,       withdrawRequestNFTImpl,       "WithdrawRequestNFT");
+        // cross-chain — same ERC1967 impl slot read works for the transparent proxy too.
+        _assertImpl(ETHERFI_L1_SYNC_POOL_ETH,   l1SyncPoolImpl,               "EtherfiL1SyncPoolETH");
         console2.log("");
     }
 
@@ -2026,6 +2049,14 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
     //--------------------------------------------------------------------------------------
     function _upgradeTo(address newImpl) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, newImpl);
+    }
+
+    /// @dev Calldata for an OZ5 ProxyAdmin to upgrade a TransparentUpgradeableProxy. OZ5 dropped
+    ///      the bare `upgrade(proxy,impl)`; only `upgradeAndCall(proxy,impl,data)` exists. Empty
+    ///      data => no post-upgrade call, just the impl swap. Sent TO the ProxyAdmin (its owner
+    ///      must be the caller), not to the proxy itself.
+    function _upgradeTransparent(address proxy, address newImpl) internal pure returns (bytes memory) {
+        return abi.encodeWithSignature("upgradeAndCall(address,address,bytes)", proxy, newImpl, bytes(""));
     }
 
     function _createLimiter(bytes32 id, uint64 capacity, uint64 refillRate) internal pure returns (bytes memory) {
