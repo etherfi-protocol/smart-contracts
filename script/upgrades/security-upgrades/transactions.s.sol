@@ -47,6 +47,8 @@ import {ILiquidityPool} from "@etherfi/core/interfaces/ILiquidityPool.sol";
 import {IDepositAdapter} from "@etherfi/deposits/interfaces/IDepositAdapter.sol";
 import {ILiquifier} from "@etherfi/deposits/interfaces/ILiquifier.sol";
 import {IEtherFiAdmin} from "@etherfi/oracle/interfaces/IEtherFiAdmin.sol";
+import {IEtherFiOracle} from "@etherfi/oracle/interfaces/IEtherFiOracle.sol";
+import {IWithdrawRequestNFT} from "@etherfi/withdrawals/interfaces/IWithdrawRequestNFT.sol";
 
 import {ContractCodeChecker} from "@scripts/ContractCodeChecker.sol";
 import {Utils} from "@scripts/utils/utils.sol";
@@ -222,6 +224,13 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         // the single-tx gas budget is confirmed.) Emit AFTER the dry-runs so we don't
         // re-schedule the same timelock op on the fork.
         emitExecutionDayOpsAndBounds();
+
+        // ── Step 11: functional smoke test on the simulated post-upgrade fork ───────
+        // Exercises the core user/operator flows against the upgraded contracts. Runs LAST,
+        // after every Safe JSON is emitted, so its state mutations (deposits, a backlog flush,
+        // bucket draining) can't affect broadcast output. Requires the buckets (Batch 2) + LP
+        // bounds (Batch 3) to be live, which is why it can't sit in the view verifyUpgrades.
+        verifyPostUpgradeFlows();
     }
 
     /// @dev Fail loudly the moment a required constant is unset.
@@ -2089,5 +2098,325 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         vm.stopPrank();
         console2.log(string.concat("[OK] ", b.label, " executed on fork"));
         console2.log("");
+    }
+
+    //--------------------------------------------------------------------------------------
+    // STEP 11: verifyPostUpgradeFlows — functional smoke test on the simulated post-upgrade fork
+    //
+    // Proves the upgrade is functionally live (not just structurally correct): deposit, wrap/
+    // unwrap, oracle report submit+execute, the full withdraw lifecycle (request -> finalize ->
+    // claim), instant redemption, and eETH mint/burn rate-limiting. State-changing via vm cheats
+    // (simulation only — runs after every Safe JSON is emitted, so it can't affect broadcast
+    // output). Replaces the former test/fork-tests/PostUpgradeFlows.t.sol. Asserts via require()
+    // (a forge Script has no StdAssertions). EETH + the EETH_MINT/BURN buckets are already in
+    // their real post-upgrade state here (upgraded in Batch 1, buckets created in Batch 2), so no
+    // vm.store force-upgrade or bucket bootstrap is needed (unlike the standalone fork test).
+    //--------------------------------------------------------------------------------------
+    address private constant FLOW_ETH_TOKEN = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+
+    function verifyPostUpgradeFlows() public {
+        console2.log("=== Step 11: Verifying Post-Upgrade Functional Flows ===");
+        _syncOracleReportState();
+        _flushPendingWithdrawalBacklog();
+
+        _flowDeposit();
+        _flowWrapUnwrap();
+        _flowOracleReport();
+        _flowWithdrawLifecycle();
+        _flowInstantRedeem();
+        _flowEEthRateLimits();
+
+        console2.log("  [OK] flows: deposit, wrap/unwrap, oracle report, withdraw lifecycle, instant redeem, eETH rate-limits");
+        console2.log("");
+    }
+
+    function _flowUser(string memory tag) private returns (address u) {
+        u = vm.addr(uint256(keccak256(abi.encodePacked("efi.postupgrade.flow:", tag))));
+        vm.etch(u, bytes("")); // ensure EOA (no code) so NFT _safeMint + ETH receive succeed
+    }
+
+    function _approx(uint256 a, uint256 b, uint256 tol) private pure returns (bool) {
+        return a > b ? a - b <= tol : b - a <= tol;
+    }
+
+    // flow 1: deposit -> eETH minted + TVL up
+    function _flowDeposit() private {
+        LiquidityPool lp = LiquidityPool(payable(LIQUIDITY_POOL));
+        EETHToken eeth = EETHToken(EETH);
+        address user = _flowUser("deposit");
+        uint256 amount = 10 ether;
+        vm.deal(user, amount);
+        uint256 tvlBefore  = lp.getTotalPooledEther();
+        uint256 eethBefore = eeth.balanceOf(user);
+        vm.prank(user);
+        lp.deposit{value: amount}();
+        require(_approx(eeth.balanceOf(user) - eethBefore, amount, 1e9), "flow.deposit: eETH minted != deposit");
+        require(_approx(lp.getTotalPooledEther() - tvlBefore, amount, 1e9), "flow.deposit: TVL not increased");
+        console2.log("  [flow] deposit -> eETH + TVL OK");
+    }
+
+    // flow 2: deposit -> wrap -> unwrap round-trip
+    function _flowWrapUnwrap() private {
+        LiquidityPool lp = LiquidityPool(payable(LIQUIDITY_POOL));
+        EETHToken eeth = EETHToken(EETH);
+        WeETHToken weeth = WeETHToken(WEETH);
+        address user = _flowUser("wrap");
+        uint256 amount = 10 ether;
+        vm.deal(user, amount);
+        vm.startPrank(user);
+        lp.deposit{value: amount}();
+        uint256 eethBal = eeth.balanceOf(user);
+        eeth.approve(address(weeth), eethBal);
+        uint256 weethOut = weeth.wrap(eethBal);
+        require(weethOut > 0, "flow.wrap: no weETH minted");
+        require(weeth.balanceOf(user) == weethOut, "flow.wrap: weETH balance mismatch");
+        uint256 eethOut = weeth.unwrap(weethOut);
+        require(_approx(eethOut, eethBal, 1e9), "flow.unwrap: did not round-trip");
+        vm.stopPrank();
+        console2.log("  [flow] wrap/unwrap round-trip OK");
+    }
+
+    // flow 3: oracle report submit + execute (no-op finalization isolates the pipeline)
+    function _flowOracleReport() private {
+        EtherFiAdmin admin = EtherFiAdmin(ETHERFI_ADMIN);
+        WithdrawRequestNFT wrn = WithdrawRequestNFT(payable(WITHDRAW_REQUEST_NFT));
+        uint32 handledBefore = admin.lastHandledReportRefSlot();
+        IEtherFiOracle.OracleReport memory report = _emptyReport();
+        report.lastFinalizedWithdrawalRequestId = wrn.lastFinalizedRequestId();
+        _submitAndExecuteReport(report);
+        require(admin.lastHandledReportRefSlot() > handledBefore, "flow.oracle: report not handled");
+        console2.log("  [flow] oracle report submit+execute OK");
+    }
+
+    // flow 4: full withdraw lifecycle request -> finalize (report) -> claim
+    function _flowWithdrawLifecycle() private {
+        LiquidityPool lp = LiquidityPool(payable(LIQUIDITY_POOL));
+        EETHToken eeth = EETHToken(EETH);
+        WithdrawRequestNFT wrn = WithdrawRequestNFT(payable(WITHDRAW_REQUEST_NFT));
+        address user = _flowUser("withdraw");
+        uint256 amount = 5 ether;
+        vm.deal(user, amount);
+        vm.startPrank(user);
+        lp.deposit{value: amount}();
+        eeth.approve(address(lp), amount);
+        uint256 requestId = lp.requestWithdraw(user, amount);
+        vm.stopPrank();
+        require(wrn.ownerOf(requestId) == user, "flow.withdraw: NFT not owned by requester");
+        require(wrn.getRequest(requestId).isValid, "flow.withdraw: request not valid");
+
+        IEtherFiOracle.OracleReport memory report = _emptyReport();
+        report.lastFinalizedWithdrawalRequestId = uint32(requestId);
+        report.finalizedWithdrawalAmount = _sumValidRequestAmounts(uint32(requestId));
+        _submitAndExecuteReport(report);
+        require(wrn.lastFinalizedRequestId() >= requestId, "flow.withdraw: not finalized");
+
+        uint256 balBefore = user.balance;
+        vm.prank(user);
+        wrn.claimWithdraw(requestId);
+        require(_approx(user.balance - balBefore, amount, 1e12), "flow.withdraw: claim payout != requested");
+        console2.log("  [flow] withdraw lifecycle request->finalize->claim OK");
+    }
+
+    // flow 5: instant redemption via EtherFiRedemptionManager
+    function _flowInstantRedeem() private {
+        LiquidityPool lp = LiquidityPool(payable(LIQUIDITY_POOL));
+        EETHToken eeth = EETHToken(EETH);
+        EtherFiRedemptionManager erm = EtherFiRedemptionManager(payable(ETHERFI_REDEMPTION_MANAGER));
+        _makeRedemptionPermissive();
+
+        address user = _flowUser("redeem");
+        vm.deal(user, 2010 ether);
+        address receiver = _flowUser("redeem-recv");
+
+        vm.startPrank(user);
+        lp.deposit{value: 2005 ether}();
+        uint256 redeemAmount = 2000 ether;
+        (, , uint16 feeBps, ) = erm.tokenToRedemptionInfo(FLOW_ETH_TOKEN);
+        uint256 shares = lp.sharesForAmount(redeemAmount);
+        uint256 expected = lp.amountForShare((shares * (10000 - feeBps)) / 10000);
+        uint256 recvBefore = receiver.balance;
+        eeth.approve(address(erm), redeemAmount);
+        erm.redeemEEth(redeemAmount, receiver, FLOW_ETH_TOKEN);
+        vm.stopPrank();
+        require(_approx(receiver.balance - recvBefore, expected, 1e15), "flow.redeem: receiver payout wrong");
+        console2.log("  [flow] instant redeem OK");
+    }
+
+    // flow 6: eETH mint/burn rate-limit consumption (buckets already at Constants values from Batch 2)
+    function _flowEEthRateLimits() private {
+        LiquidityPool lp = LiquidityPool(payable(LIQUIDITY_POOL));
+        EETHToken eeth = EETHToken(EETH);
+        EtherFiRedemptionManager erm = EtherFiRedemptionManager(payable(ETHERFI_REDEMPTION_MANAGER));
+        EtherFiRateLimiter rl = EtherFiRateLimiter(payable(ETHERFI_RATE_LIMITER));
+
+        // mint: a deposit decrements the mint bucket by ~amount (gwei)
+        address u1 = _flowUser("rl-mint");
+        vm.deal(u1, 100 ether);
+        (, uint64 mintRemBefore, , ) = rl.getLimit(EETH_MINT_LIMIT_ID);
+        vm.prank(u1);
+        lp.deposit{value: 100 ether}();
+        (, uint64 mintRemAfter, , ) = rl.getLimit(EETH_MINT_LIMIT_ID);
+        require(mintRemBefore - mintRemAfter >= 99_000_000_000, "flow.rl: mint bucket not decremented");
+
+        // mint over-remaining reverts LimitExceeded
+        vm.prank(OPERATING_TIMELOCK);
+        rl.setRemaining(EETH_MINT_LIMIT_ID, 5_000_000_000); // 5 ETH-equiv
+        address u2 = _flowUser("rl-mint-over");
+        vm.deal(u2, 6 ether);
+        vm.prank(u2);
+        vm.expectRevert(bytes4(keccak256("LimitExceeded()")));
+        lp.deposit{value: 6 ether}();
+
+        // mint refills at the configured rate
+        vm.prank(OPERATING_TIMELOCK);
+        rl.setRemaining(EETH_MINT_LIMIT_ID, 0);
+        address u3 = _flowUser("rl-mint-refill");
+        vm.deal(u3, 1 ether);
+        vm.prank(u3);
+        vm.expectRevert(bytes4(keccak256("LimitExceeded()")));
+        lp.deposit{value: 1 ether}();
+        vm.warp(block.timestamp + 10);
+        require(rl.consumable(EETH_MINT_LIMIT_ID) > 1_000_000_000, "flow.rl: mint bucket did not refill");
+        vm.deal(u3, 1 ether);
+        vm.prank(u3);
+        lp.deposit{value: 1 ether}();
+        vm.prank(OPERATING_TIMELOCK);
+        rl.setRemaining(EETH_MINT_LIMIT_ID, EETH_MINT_CAPACITY); // restore
+
+        // burn: a redemption decrements the burn bucket
+        _makeRedemptionPermissive();
+        address u4 = _flowUser("rl-burn");
+        vm.deal(u4, 200 ether);
+        vm.startPrank(u4);
+        lp.deposit{value: 200 ether}();
+        (, uint64 burnRemBefore, , ) = rl.getLimit(EETH_BURN_LIMIT_ID);
+        eeth.approve(address(erm), 50 ether);
+        erm.redeemEEth(50 ether, _flowUser("rl-burn-recv"), FLOW_ETH_TOKEN);
+        vm.stopPrank();
+        (, uint64 burnRemAfter, , ) = rl.getLimit(EETH_BURN_LIMIT_ID);
+        require(burnRemAfter < burnRemBefore, "flow.rl: burn bucket not decremented");
+
+        // burn over-remaining reverts LimitExceeded
+        vm.prank(OPERATING_TIMELOCK);
+        rl.setRemaining(EETH_BURN_LIMIT_ID, 5_000_000_000);
+        address u5 = _flowUser("rl-burn-over");
+        vm.deal(u5, 200 ether);
+        vm.startPrank(u5);
+        lp.deposit{value: 200 ether}();
+        eeth.approve(address(erm), 50 ether);
+        vm.expectRevert(bytes4(keccak256("LimitExceeded()")));
+        erm.redeemEEth(50 ether, _flowUser("rl-burn-over-recv"), FLOW_ETH_TOKEN);
+        vm.stopPrank();
+        vm.prank(OPERATING_TIMELOCK);
+        rl.setRemaining(EETH_BURN_LIMIT_ID, EETH_BURN_CAPACITY); // restore
+
+        console2.log("  [flow] eETH mint/burn rate-limits OK");
+    }
+
+    // ── post-upgrade flow helpers (ported from test/fork-tests/PostUpgradeFlows.t.sol) ──
+
+    function _emptyReport() private view returns (IEtherFiOracle.OracleReport memory report) {
+        uint256[] memory emptyVals = new uint256[](0);
+        uint32 cv = EtherFiOracle(ETHERFI_ORACLE).consensusVersion();
+        report = IEtherFiOracle.OracleReport(cv, 0, 0, 0, 0, 0, 0, emptyVals, 0, 0);
+    }
+
+    function _makeRedemptionPermissive() private {
+        EtherFiRedemptionManager erm = EtherFiRedemptionManager(payable(ETHERFI_REDEMPTION_MANAGER));
+        vm.startPrank(OPERATING_TIMELOCK);
+        erm.setCapacity(100_000 ether, FLOW_ETH_TOKEN);
+        erm.setRefillRatePerSecond(100_000 ether, FLOW_ETH_TOKEN);
+        erm.setLowWatermarkInBpsOfTvl(0, FLOW_ETH_TOKEN);
+        vm.stopPrank();
+        vm.warp(block.timestamp + 1); // refill
+    }
+
+    /// @dev Advance the oracle epoch, submit via both operators, wait the post-report window,
+    ///      then executeTasks. Mirrors the inline flow in test/integration-tests/Withdraw.t.sol.
+    function _submitAndExecuteReport(IEtherFiOracle.OracleReport memory report) private {
+        EtherFiOracle oracle = EtherFiOracle(ETHERFI_ORACLE);
+        EtherFiAdmin admin = EtherFiAdmin(ETHERFI_ADMIN);
+        while (true) {
+            uint32 slot = oracle.slotForNextReport();
+            uint32 curr = oracle.computeSlotAtTimestamp(block.timestamp);
+            uint32 min = ((slot / 32) + 3) * 32;
+            if (curr >= min) break;
+            uint256 d = min - curr;
+            vm.roll(block.number + d);
+            vm.warp(oracle.beaconGenesisTimestamp() + 12 * (curr + uint32(d)));
+        }
+
+        (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = oracle.blockStampForNextReport();
+        report.refBlockTo = uint32(block.number - 1);
+        if (report.refBlockTo <= admin.lastAdminExecutionBlock()) {
+            report.refBlockTo = admin.lastAdminExecutionBlock() + 1;
+        }
+
+        vm.prank(AVS_OPERATOR_1);
+        oracle.submitReport(report);
+        vm.prank(AVS_OPERATOR_2);
+        oracle.submitReport(report);
+
+        uint256 slotsToWait = uint256(admin.postReportWaitTimeInSlots() + 1);
+        uint32 slotAfter = oracle.computeSlotAtTimestamp(block.timestamp);
+        vm.roll(block.number + slotsToWait);
+        vm.warp(oracle.beaconGenesisTimestamp() + 12 * (slotAfter + slotsToWait));
+
+        vm.prank(ADMIN_EOA);
+        admin.executeTasks(report);
+    }
+
+    function _flushPendingWithdrawalBacklog() private {
+        // Finalize the pre-existing mainnet pending-withdrawal backlog so the lifecycle flow's
+        // report finalizes only its own fresh request, and lift the per-day finalized cap to its
+        // immutable ceiling. OPERATING_TIMELOCK already holds OPERATION_TIMELOCK_ROLE (granted in
+        // Batch 1), so no self-grant is needed (scripts forbid address(this)).
+        WithdrawRequestNFT wrn = WithdrawRequestNFT(payable(WITHDRAW_REQUEST_NFT));
+        EtherFiAdmin admin = EtherFiAdmin(ETHERFI_ADMIN);
+
+        uint32 head = wrn.nextRequestId();
+        if (head > 0) {
+            vm.prank(ETHERFI_ADMIN);
+            wrn.finalizeRequests(head - 1);
+        }
+        // Read the ceiling BEFORE the prank — a call in the argument would consume the
+        // single-shot vm.prank, leaving updateMax... to run as the script (OnlyOperatingTimelock).
+        uint256 maxCap = admin.maxAcceptableFinalizedWithdrawalAmountPerDay();
+        vm.prank(OPERATING_TIMELOCK);
+        admin.updateMaxFinalizedWithdrawalAmountPerDay(maxCap);
+    }
+
+    function _syncOracleReportState() private {
+        EtherFiOracle oracle = EtherFiOracle(ETHERFI_ORACLE);
+        EtherFiAdmin admin = EtherFiAdmin(ETHERFI_ADMIN);
+        uint32 lastPublished = oracle.lastPublishedReportRefSlot();
+        uint32 lastHandled   = admin.lastHandledReportRefSlot();
+        if (lastPublished != lastHandled) {
+            // Align EtherFiAdmin.lastHandledReportRefSlot/Block (packed in slot 209) with the
+            // oracle's last published report so the next report is cleanly "the next one".
+            uint32 lastPublishedBlock = oracle.lastPublishedReportRefBlock();
+            uint256 val = uint256(vm.load(address(admin), bytes32(uint256(209))));
+            val &= ~uint256(0xFFFFFFFFFFFFFFFF);
+            val |= uint256(lastPublished);
+            val |= uint256(lastPublishedBlock) << 32;
+            vm.store(address(admin), bytes32(uint256(209)), bytes32(val));
+        }
+        // NOTE: no committee reconfiguration. AVS_OPERATOR_1/2 are active committee members on
+        // mainnet, and `submitReport` consumes the live storage `quorumSize` (2) at runtime — the
+        // post-upgrade `minQuorumSize`=3 floor only gates committee-management calls (_checkQuorum),
+        // not report submission. So submitting from the 2 active operators for a fresh report
+        // period reaches quorum without touching the committee (which can't shrink below the
+        // min-quorum floor anyway, hence the original toggle reverted InvalidQuorum post-upgrade).
+    }
+
+    function _sumValidRequestAmounts(uint32 _lastFinalizedRequestIdInclusive) private view returns (uint128) {
+        WithdrawRequestNFT wrn = WithdrawRequestNFT(payable(WITHDRAW_REQUEST_NFT));
+        uint256 sum;
+        uint32 from = wrn.lastFinalizedRequestId() + 1;
+        for (uint256 i = from; i <= _lastFinalizedRequestIdInclusive; i++) {
+            IWithdrawRequestNFT.WithdrawRequest memory r = wrn.getRequest(i);
+            if (r.isValid) sum += r.amountOfEEth;
+        }
+        return uint128(sum);
     }
 }
