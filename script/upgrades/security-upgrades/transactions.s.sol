@@ -16,6 +16,8 @@ import {Liquifier} from "@etherfi/deposits/Liquifier.sol";
 // governance
 import {EtherFiTimelock} from "@etherfi/governance/EtherFiTimelock.sol";
 import {RoleRegistry} from "@etherfi/governance/RoleRegistry.sol";
+import {Blacklister} from "@etherfi/governance/Blacklister.sol";
+import {RevokeAdmin} from "@etherfi/governance/RevokeAdmin.sol";
 import {EtherFiRateLimiter} from "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
 // membership
 import {MembershipManager} from "@etherfi/archive/membership/MembershipManager.sol";
@@ -416,7 +418,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         _verifyRewardsBytecode();
         _verifyStakingBytecode();
         _verifyWithdrawalsBytecode();
-        console2.log("[OK] RoleRegistry + all 22 implementations matched local bytecode");
+        console2.log("[OK] RoleRegistry + Blacklister + RevokeAdmin + all 22 implementations matched local bytecode");
         console2.log("");
     }
 
@@ -485,6 +487,15 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
 
         EtherFiRateLimiter fresh2 = new EtherFiRateLimiter(ROLE_REGISTRY, EETH, WEETH);
         codeChecker.verifyContractByteCodeMatch(etherFiRateLimiterImpl, address(fresh2));
+
+        // Blacklister + RevokeAdmin are deployed as fresh proxy+impl pairs in this upgrade.
+        // transactions.s.sol only tracks their proxies, so read each proxy's implementation from
+        // its ERC1967 slot and verify that bytecode against a freshly-constructed instance.
+        Blacklister fresh3 = new Blacklister(ROLE_REGISTRY);
+        codeChecker.verifyContractByteCodeMatch(getImplementation(blacklisterProxy), address(fresh3));
+
+        RevokeAdmin fresh4 = new RevokeAdmin(ROLE_REGISTRY);
+        codeChecker.verifyContractByteCodeMatch(getImplementation(revokeAdminProxy), address(fresh4));
     }
 
     function _verifyMembershipBytecode() internal {
