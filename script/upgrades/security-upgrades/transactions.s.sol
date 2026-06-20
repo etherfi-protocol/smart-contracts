@@ -181,12 +181,17 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
     ContractCodeChecker internal codeChecker;
 
     function run() public {
-        string memory forkUrl = vm.envString("MAINNET_RPC_URL");
+        // Prefer FORK_RPC_URL when set (e.g. a Tenderly virtual testnet that already has the
+        // deploy.s.sol broadcast applied) so verifyDeployedBytecode can read the new impls'
+        // code; fall back to mainnet. On bare mainnet the new impls have no code yet and the
+        // bytecode gate reverts with "on-chain bytecode empty".
+        string memory forkUrl = vm.envOr("FORK_RPC_URL", vm.envString("MAINNET_RPC_URL"));
         vm.selectFork(vm.createFork(forkUrl));
 
         _printPleaseEyeball();
         _preflight();
         _preflightRoleHashes();
+        _verifyReleaseCommit();
         codeChecker = new ContractCodeChecker();
 
         verifyDeployedBytecode();
@@ -322,6 +327,59 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(HOLDER_CANCELLER_GUARDIAN           != address(0), "preflight: HOLDER_CANCELLER_GUARDIAN unset");
     }
 
+    /// @dev verifyDeployedBytecode rebuilds each impl by compiling the CURRENT working tree, so a
+    ///      bytecode match only proves "on-chain impl == my checkout", NOT "== the audited release
+    ///      commit". This pins the checkout to GIT_COMMIT_SHA and rejects a dirty tree, closing that
+    ///      gap. Requires `--ffi`. For the production verification run:
+    ///          VERIFY_GIT_COMMIT=true forge script ... --ffi
+    ///      from a clean checkout of the release commit. When the env flag is unset the check is
+    ///      skipped but logs a LOUD warning so the gap is never silent.
+    function _verifyReleaseCommit() internal {
+        if (!vm.envOr("VERIFY_GIT_COMMIT", false)) {
+            console2.log("[WARN] ============================================================");
+            console2.log("[WARN] GIT COMMIT PIN NOT VERIFIED. Step 1 rebuilds every impl from the");
+            console2.log("[WARN] CURRENT working tree, which may differ from the audited release");
+            console2.log("[WARN] commit. For the production broadcast verification, run with:");
+            console2.log("[WARN]   VERIFY_GIT_COMMIT=true forge script ... --ffi");
+            console2.log("[WARN] from a clean checkout of GIT_COMMIT_SHA.");
+            console2.log("[WARN] ============================================================");
+            return;
+        }
+
+        // HEAD must equal GIT_COMMIT_SHA. `git rev-parse HEAD` emits 40 lowercase hex chars + "\n",
+        // which ffi returns as UTF-8 bytes (the trailing newline prevents hex auto-decoding).
+        string[] memory headCmd = new string[](3);
+        headCmd[0] = "git";
+        headCmd[1] = "rev-parse";
+        headCmd[2] = "HEAD";
+        bytes memory head = vm.ffi(headCmd);
+        require(head.length >= 40, "release-commit: unexpected `git rev-parse HEAD` output");
+        bytes memory expected = bytes(_bytes20ToLowerHex(GIT_COMMIT_SHA));
+        for (uint256 i = 0; i < 40; i++) {
+            require(head[i] == expected[i], "release-commit: HEAD != GIT_COMMIT_SHA (wrong checkout)");
+        }
+
+        // Working tree must be clean, else the rebuilt impls reflect uncommitted edits.
+        string[] memory statusCmd = new string[](3);
+        statusCmd[0] = "git";
+        statusCmd[1] = "status";
+        statusCmd[2] = "--porcelain";
+        require(vm.ffi(statusCmd).length == 0, "release-commit: working tree dirty - commit or stash first");
+
+        console2.log("[OK] release commit verified: HEAD == GIT_COMMIT_SHA and working tree clean");
+    }
+
+    /// @dev Lowercase hex (no 0x prefix) of a bytes20, for comparing against `git rev-parse` output.
+    function _bytes20ToLowerHex(bytes20 v) internal pure returns (string memory) {
+        bytes memory alphabet = "0123456789abcdef";
+        bytes memory out = new bytes(40);
+        for (uint256 i = 0; i < 20; i++) {
+            out[2 * i]     = alphabet[uint8(v[i]) >> 4];
+            out[2 * i + 1] = alphabet[uint8(v[i]) & 0x0f];
+        }
+        return string(out);
+    }
+
     /// @dev Cross-check every hardcoded keccak256 role-ID string against a freshly-built
     ///      RoleRegistry instance, so a typo in any of the 9 role strings fails BEFORE
     ///      any JSON is written (see H8 in PR #420 review). Non-pure because `new`
@@ -433,7 +491,13 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
 
     function _verifyCoreBytecode() internal {
         EETHToken fresh = new EETHToken(LIQUIDITY_POOL, ROLE_REGISTRY, blacklisterProxy, ETHERFI_RATE_LIMITER);
-        codeChecker.verifyContractByteCodeMatch(eEthImpl, address(fresh));
+        // EETH bakes its EIP-712 domain separator (keccak over address(this)) as an immutable, so
+        // the on-chain impl and the fresh copy differ at that 32-byte word in addition to the
+        // self-address. Read both via DOMAIN_SEPARATOR() so the gate can tolerate exactly that word.
+        codeChecker.assertByteCodeMatch(
+            eEthImpl, address(fresh),
+            EETHToken(eEthImpl).DOMAIN_SEPARATOR(), fresh.DOMAIN_SEPARATOR()
+        );
 
         LiquidityPool fresh2 = new LiquidityPool(
             ILiquidityPool.ConstructorAddresses({
@@ -450,10 +514,10 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
                 membershipManager: MEMBERSHIP_MANAGER
             })
         );
-        codeChecker.verifyContractByteCodeMatch(liquidityPoolImpl, address(fresh2));
+        codeChecker.assertByteCodeMatch(liquidityPoolImpl, address(fresh2));
 
         WeETHToken fresh3 = new WeETHToken(EETH, LIQUIDITY_POOL, ROLE_REGISTRY, blacklisterProxy);
-        codeChecker.verifyContractByteCodeMatch(weEthImpl, address(fresh3));
+        codeChecker.assertByteCodeMatch(weEthImpl, address(fresh3));
     }
 
     function _verifyDepositsBytecode() internal {
@@ -470,7 +534,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
                 blacklister: blacklisterProxy
             })
         );
-        codeChecker.verifyContractByteCodeMatch(depositAdapterImpl, address(fresh));
+        codeChecker.assertByteCodeMatch(depositAdapterImpl, address(fresh));
 
         Liquifier fresh2 = new Liquifier(
             ILiquifier.ConstructorAddresses({
@@ -487,36 +551,36 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
             LIQUIFIER_MIN_DISCOUNT_BPS, LIQUIFIER_STALE_PRICE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS,
             LIQUIFIER_MAX_PRICE_THRESHOLD
         );
-        codeChecker.verifyContractByteCodeMatch(liquifierImpl, address(fresh2));
+        codeChecker.assertByteCodeMatch(liquifierImpl, address(fresh2));
     }
 
     function _verifyGovernanceBytecode() internal {
         RoleRegistry fresh = new RoleRegistry(revokeAdminProxy);
-        codeChecker.verifyContractByteCodeMatch(roleRegistryImpl, address(fresh));
+        codeChecker.assertByteCodeMatch(roleRegistryImpl, address(fresh));
 
         EtherFiRateLimiter fresh2 = new EtherFiRateLimiter(ROLE_REGISTRY, EETH, WEETH);
-        codeChecker.verifyContractByteCodeMatch(etherFiRateLimiterImpl, address(fresh2));
+        codeChecker.assertByteCodeMatch(etherFiRateLimiterImpl, address(fresh2));
 
         // Blacklister + RevokeAdmin are deployed as fresh proxy+impl pairs in this upgrade.
         // transactions.s.sol only tracks their proxies, so read each proxy's implementation from
         // its ERC1967 slot and verify that bytecode against a freshly-constructed instance.
         Blacklister fresh3 = new Blacklister(ROLE_REGISTRY);
-        codeChecker.verifyContractByteCodeMatch(getImplementation(blacklisterProxy), address(fresh3));
+        codeChecker.assertByteCodeMatch(getImplementation(blacklisterProxy), address(fresh3));
 
         RevokeAdmin fresh4 = new RevokeAdmin(ROLE_REGISTRY);
-        codeChecker.verifyContractByteCodeMatch(getImplementation(revokeAdminProxy), address(fresh4));
+        codeChecker.assertByteCodeMatch(getImplementation(revokeAdminProxy), address(fresh4));
     }
 
     function _verifyMembershipBytecode() internal {
         MembershipManager fresh = new MembershipManager(
             EETH, LIQUIDITY_POOL, MEMBERSHIP_NFT, ROLE_REGISTRY, blacklisterProxy
         );
-        codeChecker.verifyContractByteCodeMatch(membershipManagerImpl, address(fresh));
+        codeChecker.assertByteCodeMatch(membershipManagerImpl, address(fresh));
 
         MembershipNFT fresh2 = new MembershipNFT(
             LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, blacklisterProxy
         );
-        codeChecker.verifyContractByteCodeMatch(membershipNFTImpl, address(fresh2));
+        codeChecker.assertByteCodeMatch(membershipNFTImpl, address(fresh2));
     }
 
     function _verifyOracleBytecode() internal {
@@ -538,10 +602,10 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
             ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY,
             ADMIN_MAX_REQUESTS_TO_FINALIZE_PER_REPORT
         );
-        codeChecker.verifyContractByteCodeMatch(etherFiAdminImpl, address(fresh));
+        codeChecker.assertByteCodeMatch(etherFiAdminImpl, address(fresh));
 
         EtherFiOracle fresh2 = new EtherFiOracle(ORACLE_MIN_QUORUM_SIZE, ETHERFI_ADMIN, ROLE_REGISTRY);
-        codeChecker.verifyContractByteCodeMatch(etherFiOracleImpl, address(fresh2));
+        codeChecker.assertByteCodeMatch(etherFiOracleImpl, address(fresh2));
     }
 
     function _verifyRestakingBytecode() internal {
@@ -549,42 +613,42 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
             LIQUIDITY_POOL, LIQUIFIER, EIGENLAYER_REWARDS_COORDINATOR, ETHERFI_REDEMPTION_MANAGER,
             ROLE_REGISTRY, ETHERFI_RATE_LIMITER, EIGENLAYER_STRATEGY_MANAGER, EIGENLAYER_DELEGATION_MANAGER
         );
-        codeChecker.verifyContractByteCodeMatch(etherFiRestakerImpl, address(fresh));
+        codeChecker.assertByteCodeMatch(etherFiRestakerImpl, address(fresh));
 
         RestakingRewardsRouter fresh2 = new RestakingRewardsRouter(
             ROLE_REGISTRY, EIGEN, LIQUIDITY_POOL
         );
-        codeChecker.verifyContractByteCodeMatch(restakingRewardsRouterImpl, address(fresh2));
+        codeChecker.assertByteCodeMatch(restakingRewardsRouterImpl, address(fresh2));
     }
 
     function _verifyRewardsBytecode() internal {
         CumulativeMerkleRewardsDistributor fresh = new CumulativeMerkleRewardsDistributor(ROLE_REGISTRY);
-        codeChecker.verifyContractByteCodeMatch(cumulativeMerkleRewardsDistributorImpl, address(fresh));
+        codeChecker.assertByteCodeMatch(cumulativeMerkleRewardsDistributorImpl, address(fresh));
 
         EtherFiRewardsRouter fresh2 = new EtherFiRewardsRouter(LIQUIDITY_POOL, TREASURY, ROLE_REGISTRY);
-        codeChecker.verifyContractByteCodeMatch(etherFiRewardsRouterImpl, address(fresh2));
+        codeChecker.assertByteCodeMatch(etherFiRewardsRouterImpl, address(fresh2));
     }
 
     function _verifyStakingBytecode() internal {
         AuctionManager fresh = new AuctionManager(
             ROLE_REGISTRY, blacklisterProxy, NODE_OPERATOR_MANAGER, STAKING_MANAGER, TREASURY
         );
-        codeChecker.verifyContractByteCodeMatch(auctionManagerImpl, address(fresh));
+        codeChecker.assertByteCodeMatch(auctionManagerImpl, address(fresh));
 
         EtherFiNode fresh2 = new EtherFiNode(LIQUIDITY_POOL, ETHERFI_NODES_MANAGER, EIGENLAYER_POD_MANAGER, EIGENLAYER_DELEGATION_MANAGER);
-        codeChecker.verifyContractByteCodeMatch(etherFiNodeImpl, address(fresh2));
+        codeChecker.assertByteCodeMatch(etherFiNodeImpl, address(fresh2));
 
         EtherFiNodesManager fresh3 = new EtherFiNodesManager(STAKING_MANAGER, ROLE_REGISTRY, ETHERFI_RATE_LIMITER);
-        codeChecker.verifyContractByteCodeMatch(etherFiNodesManagerImpl, address(fresh3));
+        codeChecker.assertByteCodeMatch(etherFiNodesManagerImpl, address(fresh3));
 
         NodeOperatorManager fresh4 = new NodeOperatorManager(ROLE_REGISTRY, AUCTION_MANAGER);
-        codeChecker.verifyContractByteCodeMatch(nodeOperatorManagerImpl, address(fresh4));
+        codeChecker.assertByteCodeMatch(nodeOperatorManagerImpl, address(fresh4));
 
         StakingManager fresh5 = new StakingManager(
             LIQUIDITY_POOL, ETHERFI_NODES_MANAGER, ETH2_DEPOSIT_CONTRACT,
             AUCTION_MANAGER, ETHERFI_NODE_BEACON, ROLE_REGISTRY
         );
-        codeChecker.verifyContractByteCodeMatch(stakingManagerImpl, address(fresh5));
+        codeChecker.assertByteCodeMatch(stakingManagerImpl, address(fresh5));
     }
 
     function _verifyWithdrawalsBytecode() internal {
@@ -603,22 +667,22 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
             RM_MAX_EXIT_FEE_SPLIT_TO_TREASURY_BPS, RM_MAX_EXIT_FEE_BPS, RM_MAX_LOW_WATERMARK_BPS_OF_TVL,
             RM_STALE_PRICE_WINDOW, RM_MAX_PRICE_THRESHOLD
         );
-        codeChecker.verifyContractByteCodeMatch(etherFiRedemptionManagerImpl, address(fresh));
+        codeChecker.assertByteCodeMatch(etherFiRedemptionManagerImpl, address(fresh));
 
         PriorityWithdrawalQueue fresh2 = new PriorityWithdrawalQueue(
             LIQUIDITY_POOL, EETH, WEETH, blacklisterProxy, ROLE_REGISTRY, PWQ_MIN_DELAY
         );
-        codeChecker.verifyContractByteCodeMatch(priorityWithdrawalQueueImpl, address(fresh2));
+        codeChecker.assertByteCodeMatch(priorityWithdrawalQueueImpl, address(fresh2));
 
         WeETHWithdrawAdapter fresh3 = new WeETHWithdrawAdapter(
             WEETH, EETH, LIQUIDITY_POOL, ROLE_REGISTRY, blacklisterProxy
         );
-        codeChecker.verifyContractByteCodeMatch(weETHWithdrawAdapterImpl, address(fresh3));
+        codeChecker.assertByteCodeMatch(weETHWithdrawAdapterImpl, address(fresh3));
 
         WithdrawRequestNFT fresh4 = new WithdrawRequestNFT(
             LIQUIDITY_POOL, ROLE_REGISTRY, blacklisterProxy, ETHERFI_ADMIN
         );
-        codeChecker.verifyContractByteCodeMatch(withdrawRequestNFTImpl, address(fresh4));
+        codeChecker.assertByteCodeMatch(withdrawRequestNFTImpl, address(fresh4));
     }
 
     //--------------------------------------------------------------------------------------

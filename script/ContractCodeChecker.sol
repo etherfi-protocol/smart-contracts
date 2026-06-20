@@ -193,5 +193,92 @@ contract ContractCodeChecker {
         // If no metadata marker found, return as is.
         return code;
     }
-    
+
+    // -------------------------------------------------------------------------
+    // STRICT, REVERTING bytecode equality gate.
+    //
+    // The logging-only `verifyContractByteCodeMatch` above can never fail a
+    // script (it only `console2.log`s "Fail"), so a wrong/malicious impl address
+    // would still be accepted. `assertByteCodeMatch` is a hard gate: it REVERTS
+    // on any genuine bytecode difference.
+    //
+    // The only legitimate differences between an on-chain UUPS impl and a freshly
+    // re-deployed copy of the same source are address-derived immutables:
+    //   1. `UUPSUpgradeable.__self == address(this)` — a 20-byte PUSH operand that
+    //      equals each contract's OWN deployed address. Present in every impl.
+    //   2. EIP-712 cached domain separator — a 32-byte word = keccak256(... , this).
+    //      Only contracts that bake it as an immutable (e.g. EETH) carry one.
+    // Both are normalized below: occurrence #1 is matched against the respective
+    // self-address; occurrence #2 only against a caller-supplied allowed word that
+    // the caller independently reads via `DOMAIN_SEPARATOR()`. ANY other differing
+    // byte reverts.
+    // -------------------------------------------------------------------------
+
+    /// @notice Strict equality gate with no extra allowed words. Use for every
+    ///         impl that has no address-derived 32-byte immutable.
+    function assertByteCodeMatch(address deployedImpl, address localDeployed) public {
+        assertByteCodeMatch(deployedImpl, localDeployed, bytes32(0), bytes32(0));
+    }
+
+    /// @notice Strict equality gate that additionally tolerates a single 32-byte
+    ///         word (e.g. the EIP-712 domain separator). The on-chain code may
+    ///         differ from local code at that word ONLY if the on-chain word
+    ///         equals `onchainAllowedWord` and the local word equals
+    ///         `localAllowedWord`; the caller must read both off-chain (e.g. via
+    ///         `DOMAIN_SEPARATOR()`), so an attacker cannot use this as a hiding
+    ///         spot for arbitrary code.
+    /// @dev    Reverts unless the two runtime codes are byte-identical after
+    ///         masking each contract's own 20-byte address and the allowed word.
+    function assertByteCodeMatch(
+        address deployedImpl,
+        address localDeployed,
+        bytes32 onchainAllowedWord,
+        bytes32 localAllowedWord
+    ) public {
+        bytes memory a = deployedImpl.code;   // on-chain runtime code (the thing we trust)
+        bytes memory b = localDeployed.code;  // freshly compiled+deployed reference
+        require(a.length != 0, "ContractCodeChecker: on-chain bytecode empty (impl not deployed?)");
+        require(b.length != 0, "ContractCodeChecker: local bytecode empty");
+        require(a.length == b.length, "ContractCodeChecker: bytecode length mismatch");
+
+        bytes20 selfA = bytes20(deployedImpl);
+        bytes20 selfB = bytes20(localDeployed);
+        bool allowWord = onchainAllowedWord != bytes32(0);
+
+        uint256 len = a.length;
+        uint256 i = 0;
+        while (i < len) {
+            if (a[i] == b[i]) {
+                i++;
+                continue;
+            }
+            // Difference at i: is it each contract's own 20-byte self-address?
+            if (i + 20 <= len && _eq20(a, i, selfA) && _eq20(b, i, selfB)) {
+                i += 20;
+                continue;
+            }
+            // Or the single caller-verified 32-byte allowed word?
+            if (allowWord && i + 32 <= len && _eq32(a, i, onchainAllowedWord) && _eq32(b, i, localAllowedWord)) {
+                i += 32;
+                continue;
+            }
+            // Anything else is a genuine code difference — fail hard, after logging.
+            emitMismatchSegment(a, b, i, i);
+            revert("ContractCodeChecker: bytecode mismatch beyond address-derived immutables");
+        }
+    }
+
+    function _eq20(bytes memory data, uint256 offset, bytes20 target) private pure returns (bool) {
+        for (uint256 j = 0; j < 20; j++) {
+            if (data[offset + j] != target[j]) return false;
+        }
+        return true;
+    }
+
+    function _eq32(bytes memory data, uint256 offset, bytes32 target) private pure returns (bool) {
+        for (uint256 j = 0; j < 32; j++) {
+            if (data[offset + j] != target[j]) return false;
+        }
+        return true;
+    }
 }
