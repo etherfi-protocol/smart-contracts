@@ -1925,6 +1925,12 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(rl.isConsumerAllowed(EETH_BURN_LIMIT_ID,                EETH),                  "EETH consumer (burn) not allowed");
         require(rl.isConsumerAllowed(STETH_REQUEST_WITHDRAWAL_LIMIT_ID, ETHERFI_RESTAKER),      "EFRestaker consumer (stEth) not allowed");
 
+        // Each bucket's capacity + refillRate must equal the Constants the batch configured them
+        // with — otherwise the rate-limit boundaries enforced on-chain differ from spec.
+        _assertBucketConfig(rl, EETH_MINT_LIMIT_ID,                EETH_MINT_CAPACITY,                EETH_MINT_REFILL_RATE,                "EETH_MINT");
+        _assertBucketConfig(rl, EETH_BURN_LIMIT_ID,                EETH_BURN_CAPACITY,                EETH_BURN_REFILL_RATE,                "EETH_BURN");
+        _assertBucketConfig(rl, STETH_REQUEST_WITHDRAWAL_LIMIT_ID, STETH_REQUEST_WITHDRAWAL_CAPACITY, STETH_REQUEST_WITHDRAWAL_REFILL_RATE, "STETH_REQUEST_WITHDRAWAL");
+
         require(EETHToken(EETH).pauseUntilDuration()                                  == PAUSE_UNTIL_EETH,                  "EETH pause duration mismatch");
         require(LiquidityPool(payable(LIQUIDITY_POOL)).pauseUntilDuration()           == PAUSE_UNTIL_LIQUIDITY_POOL,        "LP pause duration mismatch");
         require(WeETHToken(WEETH).pauseUntilDuration()                                == PAUSE_UNTIL_WEETH,                 "WeETH pause duration mismatch");
@@ -1986,6 +1992,19 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
 
         console2.log("[OK] rate-limiter buckets + pause durations + role grants + LP withdraw bounds + finalized-withdrawal cap verified");
         console2.log("");
+    }
+
+    /// @dev Assert a bucket's configured capacity + refillRate equal the Constants values.
+    function _assertBucketConfig(
+        EtherFiRateLimiter rl,
+        bytes32 id,
+        uint64 expectedCapacity,
+        uint64 expectedRefillRate,
+        string memory tag
+    ) private view {
+        (uint64 capacity, , uint64 refillRate, ) = rl.getLimit(id);
+        require(capacity   == expectedCapacity,   string.concat(tag, ": capacity != Constants"));
+        require(refillRate == expectedRefillRate, string.concat(tag, ": refillRate != Constants"));
     }
 
     //--------------------------------------------------------------------------------------
@@ -2416,7 +2435,44 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         vm.prank(OPERATING_TIMELOCK);
         rl.setRemaining(EETH_BURN_LIMIT_ID, EETH_BURN_CAPACITY); // restore
 
-        console2.log("  [flow] eETH mint/burn rate-limits OK");
+        // ── exact boundaries: drain each configured bucket to PRECISELY zero through its own
+        //    on-chain consumer, then assert one unit over reverts LimitExceeded. Proves the limit
+        //    fires exactly at the configured edge (not merely "somewhere above a small value").
+        //    This is also the ONLY place the STETH_REQUEST_WITHDRAWAL bucket's enforcement is
+        //    exercised, since no cheap fork flow mints a stETH withdrawal request.
+        _assertExactBoundary(rl, EETH_MINT_LIMIT_ID,                EETH,             EETH_MINT_CAPACITY,                9_000_000_000, "mint");
+        _assertExactBoundary(rl, EETH_BURN_LIMIT_ID,                EETH,             EETH_BURN_CAPACITY,                7_000_000_000, "burn");
+        _assertExactBoundary(rl, STETH_REQUEST_WITHDRAWAL_LIMIT_ID, ETHERFI_RESTAKER, STETH_REQUEST_WITHDRAWAL_CAPACITY, 8_000_000_000, "stETH");
+
+        console2.log("  [flow] eETH mint/burn + stETH rate-limit exact boundaries OK");
+    }
+
+    /// @dev Drain a bucket to EXACTLY zero through its whitelisted consumer, then assert that one
+    ///      unit over the edge reverts LimitExceeded. A `consume(id, 0)` first flushes the
+    ///      time-based refill so `lastRefill == now`; with no vm.warp before the real drain the
+    ///      boundary is exact regardless of how stale the bucket was (by Step 11 the fork clock
+    ///      has advanced days past the buckets' creation). Restores capacity afterwards.
+    function _assertExactBoundary(
+        EtherFiRateLimiter rl,
+        bytes32 id,
+        address consumer,
+        uint64 capacity,
+        uint64 drain,
+        string memory tag
+    ) private {
+        vm.prank(consumer);
+        rl.consume(id, 0); // flush refill -> lastRefill = now
+        vm.prank(OPERATING_TIMELOCK);
+        rl.setRemaining(id, drain);
+        vm.prank(consumer);
+        rl.consume(id, drain); // no elapsed time since flush -> no refill -> exact drain
+        (, uint64 remaining, , ) = rl.getLimit(id);
+        require(remaining == 0, string.concat("flow.rl: ", tag, " boundary not exact (remaining != 0)"));
+        vm.prank(consumer);
+        vm.expectRevert(bytes4(keccak256("LimitExceeded()")));
+        rl.consume(id, 1); // one unit over the drained edge must revert
+        vm.prank(OPERATING_TIMELOCK);
+        rl.setRemaining(id, capacity); // restore
     }
 
     // ── post-upgrade flow helpers (ported from test/fork-tests/PostUpgradeFlows.t.sol) ──
