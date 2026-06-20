@@ -246,25 +246,33 @@ contract ContractCodeChecker {
         bool allowWord = onchainAllowedWord != bytes32(0);
 
         uint256 len = a.length;
-        uint256 i = 0;
-        while (i < len) {
-            if (a[i] == b[i]) {
-                i++;
-                continue;
+
+        // Mark every byte that belongs to an address-derived immutable so it is exempt from the
+        // equality check. We must NOT key off "the first differing byte starts a region": if the
+        // on-chain and local addresses (or words) share leading bytes, the difference first shows
+        // up at an interior offset, and a region check anchored there would misalign and wrongly
+        // reject matching source. Instead, scan for the region at its TRUE boundary and mask it
+        // only where the on-chain side holds its own address/word AND the local side holds its
+        // address/word at the SAME offset — so both sides stay aligned. The `selfA[0]` / word[0]
+        // first-byte guards keep the scan ~O(n) by skipping the full compare at most positions.
+        bool[] memory exempt = new bool[](len);
+        bytes1 selfA0 = selfA[0];
+        bytes1 word0 = onchainAllowedWord[0];
+        for (uint256 p = 0; p < len; p++) {
+            if (a[p] == selfA0 && p + 20 <= len && _eq20(a, p, selfA) && _eq20(b, p, selfB)) {
+                for (uint256 k = 0; k < 20; k++) exempt[p + k] = true;
             }
-            // Difference at i: is it each contract's own 20-byte self-address?
-            if (i + 20 <= len && _eq20(a, i, selfA) && _eq20(b, i, selfB)) {
-                i += 20;
-                continue;
+            if (allowWord && a[p] == word0 && p + 32 <= len && _eq32(a, p, onchainAllowedWord) && _eq32(b, p, localAllowedWord)) {
+                for (uint256 k = 0; k < 32; k++) exempt[p + k] = true;
             }
-            // Or the single caller-verified 32-byte allowed word?
-            if (allowWord && i + 32 <= len && _eq32(a, i, onchainAllowedWord) && _eq32(b, i, localAllowedWord)) {
-                i += 32;
-                continue;
+        }
+
+        for (uint256 i = 0; i < len; i++) {
+            if (!exempt[i] && a[i] != b[i]) {
+                // Genuine code difference outside any address-derived immutable — fail hard.
+                emitMismatchSegment(a, b, i, i);
+                revert("ContractCodeChecker: bytecode mismatch beyond address-derived immutables");
             }
-            // Anything else is a genuine code difference — fail hard, after logging.
-            emitMismatchSegment(a, b, i, i);
-            revert("ContractCodeChecker: bytecode mismatch beyond address-derived immutables");
         }
     }
 

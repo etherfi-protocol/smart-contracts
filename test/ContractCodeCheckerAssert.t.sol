@@ -86,4 +86,35 @@ contract ContractCodeCheckerAssertTest is Test {
         SelfRef a = new SelfRef();
         checker.assertByteCodeMatch(address(a), address(a));
     }
+
+    /// @dev Regression for the "immutable mask misaligned mid-slot" bug: when the on-chain and
+    ///      local addresses share leading bytes, the difference first appears at an interior
+    ///      offset of the embedded-address region. The gate must still recognize the region at
+    ///      its true boundary and accept. Here X and Y share their first 19 bytes (differ only
+    ///      in the last), so the mismatch is at offset+19 — the worst case for the old anchor.
+    function test_passes_whenSelfAddressesShareLeadingBytes() public {
+        address X = 0x1111111111111111111111111111111111111101;
+        address Y = 0x1111111111111111111111111111111111111102;
+        // Identical surrounding code; the only difference is each address embedded as its own
+        // 20-byte self-reference, exactly like UUPSUpgradeable.__self.
+        bytes memory codeX = abi.encodePacked(hex"60006000", bytes20(X), hex"00fe");
+        bytes memory codeY = abi.encodePacked(hex"60006000", bytes20(Y), hex"00fe");
+        vm.etch(X, codeX);
+        vm.etch(Y, codeY);
+        // Must NOT revert: the sole difference is the aligned 20-byte self-address.
+        checker.assertByteCodeMatch(X, Y);
+    }
+
+    /// @dev Same shared-leading-bytes layout, but with an EXTRA genuine code difference outside
+    ///      the address region — must still revert.
+    function test_reverts_whenRealDiffAlongsideSharedLeadingAddress() public {
+        address X = 0x2222222222222222222222222222222222222201;
+        address Y = 0x2222222222222222222222222222222222222202;
+        bytes memory codeX = abi.encodePacked(hex"60006000", bytes20(X), hex"00fe", hex"aa");
+        bytes memory codeY = abi.encodePacked(hex"60006000", bytes20(Y), hex"00fe", hex"bb");
+        vm.etch(X, codeX);
+        vm.etch(Y, codeY);
+        vm.expectRevert();
+        checker.assertByteCodeMatch(X, Y);
+    }
 }
