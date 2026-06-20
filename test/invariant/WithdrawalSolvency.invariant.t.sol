@@ -84,10 +84,6 @@ contract WithdrawalSolvencyInvariantTest is TestSetup {
     WithdrawalSolvencyHandler internal handler;
     address[5] internal handlerActors;
 
-    // Captured initial mainnet baselines (delta-aware assertions).
-    uint256 internal baseLocked;
-    uint256 internal baseOutOfLp;
-
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
 
@@ -113,9 +109,6 @@ contract WithdrawalSolvencyInvariantTest is TestSetup {
             eETHInstance.approve(address(liquidityPoolInstance), type(uint256).max);
         }
 
-        baseLocked = uint256(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal());
-        baseOutOfLp = uint256(liquidityPoolInstance.totalValueOutOfLp());
-
         // Finalize the PRE-EXISTING mainnet pending range once, mirroring what
         // EtherFiAdmin does in production (lock the summed eETH of the range via
         // addEthAmountLockedForWithdrawal, then finalizeRequests). This clears
@@ -133,7 +126,6 @@ contract WithdrawalSolvencyInvariantTest is TestSetup {
             eETHInstance,
             withdrawRequestNFTInstance,
             address(etherFiAdminInstance),
-            address(membershipManagerInstance),
             handlerActors
         );
 
@@ -142,12 +134,17 @@ contract WithdrawalSolvencyInvariantTest is TestSetup {
         // Restrict fuzzing to the action functions. Without this, the engine
         // also targets the handler's public getters/counters, burning call
         // budget on no-ops. probeOverLiquidityLock is included so the I3/P1
-        // liquidity guard is positively driven on every run.
-        bytes4[] memory sel = new bytes4[](4);
+        // liquidity guard is positively driven on every run. rebasePositive/
+        // rebaseNegative add rate churn (bounded so the share rate stays well
+        // above minAmountForShare) and are driven through the real
+        // etherFiAdminContract caller that LiquidityPool.rebase requires.
+        bytes4[] memory sel = new bytes4[](6);
         sel[0] = handler.requestWithdraw.selector;
         sel[1] = handler.finalizeRequests.selector;
         sel[2] = handler.claimWithdraw.selector;
         sel[3] = handler.probeOverLiquidityLock.selector;
+        sel[4] = handler.rebasePositive.selector;
+        sel[5] = handler.rebaseNegative.selector;
         targetSelector(FuzzSelector({addr: address(handler), selectors: sel}));
 
         // Pre-seed a batch of OUR OWN requests and finalize them, so every fuzz
