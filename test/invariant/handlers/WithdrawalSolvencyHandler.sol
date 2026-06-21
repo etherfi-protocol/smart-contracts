@@ -65,7 +65,6 @@ contract WithdrawalSolvencyHandler is StdUtils {
     EETH               public immutable eETH;
     WithdrawRequestNFT public immutable wrn;
     address            public immutable etherFiAdminAddr;
-    address            public immutable membershipManager;
 
     address[N_EOAS] public actors;
 
@@ -130,14 +129,12 @@ contract WithdrawalSolvencyHandler is StdUtils {
         EETH _eETH,
         WithdrawRequestNFT _wrn,
         address _etherFiAdmin,
-        address _membershipManager,
         address[N_EOAS] memory _actors
     ) {
         lp = _lp;
         eETH = _eETH;
         wrn = _wrn;
         etherFiAdminAddr = _etherFiAdmin;
-        membershipManager = _membershipManager;
         for (uint256 i = 0; i < N_EOAS; i++) {
             actors[i] = _actors[i];
         }
@@ -369,13 +366,17 @@ contract WithdrawalSolvencyHandler is StdUtils {
 
     /// @notice Positive rebase stress — keeps the rate climbing (frozen-rate
     ///         shield is irrelevant to solvency here, just adds state churn).
+    ///         Bounded to <= 0.2% of TVL so it stays under the contract's
+    ///         MAX_POSITIVE_REBASE_BPS (0.25%) cap and actually applies.
+    ///         Caller is the etherFiAdminContract — the only address
+    ///         `LiquidityPool.rebase` accepts (LiquidityPool.sol:456).
     function rebasePositive(uint128 deltaSeed) external {
         uint256 outOfLp = uint256(lp.totalValueOutOfLp());
-        uint256 cap = outOfLp == 0 ? 1 ether : (outOfLp * 50) / 1e4; // <=0.5%
+        uint256 cap = outOfLp == 0 ? 1 ether : (outOfLp * 20) / 1e4; // <=0.2%
         if (cap == 0) cap = 1;
         if (cap > uint256(uint128(type(int128).max))) cap = uint256(uint128(type(int128).max));
         int128 delta = int128(int256(bound(uint256(deltaSeed), 0, cap)));
-        vm.prank(membershipManager);
+        vm.prank(etherFiAdminAddr);
         try lp.rebase(delta, 0) { callCounts["rebase_pos"]++; }
         catch { callCounts["rebase_pos_revert"]++; }
     }
@@ -398,7 +399,7 @@ contract WithdrawalSolvencyHandler is StdUtils {
         if (cap == 0) { callCounts["rebase_neg_skipped"]++; return; }
         if (cap > uint256(uint128(type(int128).max))) cap = uint256(uint128(type(int128).max));
         int128 delta = -int128(int256(bound(uint256(deltaSeed), 1, cap)));
-        vm.prank(membershipManager);
+        vm.prank(etherFiAdminAddr);
         try lp.rebase(delta, 0) { callCounts["rebase_neg"]++; }
         catch { callCounts["rebase_neg_revert"]++; }
     }

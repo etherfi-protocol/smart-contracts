@@ -74,9 +74,12 @@ contract ValidatorStateMachineInvariantTest is TestSetup, Deployed {
         // The production queue proxy on mainnet still runs the master impl which
         // has no receive(); initializeOnUpgradeV2 below sweeps queue-locked ETH
         // into the queue and would revert with SendFail. Upgrade the queue first.
+        // Constructor order is (liquidityPool, eETH, weETH, blacklister, roleRegistry, minDelay).
+        // Pass blacklisterInstance + roleRegistryInstance in their correct slots so the
+        // upgraded mainnet queue proxy's role checks match production wiring.
         address newPQ = address(new PriorityWithdrawalQueue(
             address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance),
-            address(roleRegistryInstance), treasuryInstance, 1 hours
+            address(blacklisterInstance), address(roleRegistryInstance), 1 hours
         ));
         vm.prank(UPGRADE_TIMELOCK);
         PriorityWithdrawalQueue(payable(PRIORITY_WITHDRAWAL_QUEUE)).upgradeTo(newPQ);
