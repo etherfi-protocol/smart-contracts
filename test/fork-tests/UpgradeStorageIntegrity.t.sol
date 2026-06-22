@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
-import "@scripts/deploys/Deployed.s.sol";
+import {SecurityUpgradesConstants} from "@scripts/upgrades/security-upgrades/Constants.s.sol";
 import "@etherfi/core/LiquidityPool.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
 import "@etherfi/withdrawals/WithdrawRequestNFT.sol";
@@ -10,6 +10,21 @@ import "@etherfi/withdrawals/PriorityWithdrawalQueue.sol";
 import "@etherfi/governance/RoleRegistry.sol";
 import "@etherfi/utils/UUPSProxy.sol";
 import "@etherfi/governance/Blacklister.sol";
+// Additional upgraded proxies covered by the extended sequential-storage checks at the bottom
+// of this file (security review Vuln 2 / storage-F1). They live here — rather than a separate
+// test file — so they inherit this contract's `setUp()` mainnet fork and therefore actually run
+// under plain `forge test` in CI (chainid 1 via createSelectFork), not vacuously skip.
+import {EETH as EETHToken} from "@etherfi/core/EETH.sol";
+import {WeETH as WeETHToken} from "@etherfi/core/WeETH.sol";
+import {Liquifier} from "@etherfi/deposits/Liquifier.sol";
+import {EtherFiAdmin} from "@etherfi/oracle/EtherFiAdmin.sol";
+import {StakingManager} from "@etherfi/staking/StakingManager.sol";
+import {EtherFiNodesManager} from "@etherfi/staking/EtherFiNodesManager.sol";
+import {EtherFiRedemptionManager} from "@etherfi/withdrawals/EtherFiRedemptionManager.sol";
+import {MembershipManager} from "@etherfi/archive/membership/MembershipManager.sol";
+import {ILiquifier} from "@etherfi/deposits/interfaces/ILiquifier.sol";
+import {IEtherFiAdmin} from "@etherfi/oracle/interfaces/IEtherFiAdmin.sol";
+import {IEtherFiRedemptionManager} from "@etherfi/withdrawals/interfaces/IEtherFiRedemptionManager.sol";
 
 interface IUUPSProxy {
     function upgradeTo(address newImpl) external;
@@ -40,7 +55,7 @@ interface IOwnableRead {
 ///     ~2^252) is also outside the scan window and is checked separately.
 ///   - The ERC-1967 implementation slot changes by design (that's the point of
 ///     the upgrade) and is also outside 0..399, so it won't produce false drift.
-contract UpgradeStorageIntegrityTest is Test, Deployed {
+contract UpgradeStorageIntegrityTest is Test, SecurityUpgradesConstants {
     uint256 internal constant SCAN_SLOTS = 400;
     bytes32 internal constant GUARD_SLOT =
         0xcd24049d7dcc1fde21494dba8ad7a067afb6b8f14dfe804abeeec84903344e97;
@@ -447,4 +462,131 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
     // mechanism no longer exists: the guard is Solady's transient `ReentrancyGuardTransient`,
     // which has no plantable persistent slot. Actual reentry-blocking on the upgraded
     // contracts is covered by `test/ReentrancyGuard.t.sol` (real reentrant attacker).
+
+    // ───────────────────────────────────────────────────────────────────────────
+    // Extended sequential-storage coverage for the 8 upgraded proxies that the LP/WRN
+    // checks above (and RoleMigrationStorageIntegrity.t.sol) did not slot-scan. These
+    // run on the same `setUp()` mainnet fork, so CI exercises them (no chainid guard).
+    //
+    // Each swaps in a freshly-built impl via the ERC1967 implementation slot (auth-free;
+    // plain upgradeTo runs no initializer and writes no app storage, so a direct poke is a
+    // faithful stand-in) and asserts 0 sequential drift. For the value-bearing tokens it
+    // also asserts the storage-backed totalSupply() reads identically THROUGH the new impl
+    // — a getter that resolves via the new layout, so a shifted slot would surface.
+    // ───────────────────────────────────────────────────────────────────────────
+    bytes32 internal constant IMPL_SLOT =
+        0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
+
+    function _swapImpl(address proxy, address newImpl) internal {
+        vm.store(proxy, IMPL_SLOT, bytes32(uint256(uint160(newImpl))));
+        assertEq(vm.load(proxy, IMPL_SLOT), bytes32(uint256(uint160(newImpl))), "impl slot not set");
+    }
+
+    function _checkLayout(string memory label, address proxy, address newImpl) internal {
+        bytes32[] memory pre = _snap(proxy, SCAN_SLOTS);
+        _swapImpl(proxy, newImpl);
+        assertEq(_diff(label, proxy, pre), 0, string.concat(label, ": sequential storage drifted"));
+    }
+
+    function test_extStorage_EETH() public {
+        uint256 preSupply = EETHToken(EETH).totalSupply();
+        address newImpl = address(new EETHToken(LIQUIDITY_POOL, ROLE_REGISTRY, address(blacklisterInstance), ETHERFI_RATE_LIMITER));
+        _checkLayout("EETH", EETH, newImpl);
+        assertEq(EETHToken(EETH).totalSupply(), preSupply, "EETH.totalSupply changed across upgrade");
+        assertEq(EETHToken(EETH).getImplementation(), newImpl, "EETH impl mismatch");
+    }
+
+    function test_extStorage_WeETH() public {
+        uint256 preSupply = WeETHToken(WEETH).totalSupply();
+        address newImpl = address(new WeETHToken(EETH, LIQUIDITY_POOL, ROLE_REGISTRY, address(blacklisterInstance)));
+        _checkLayout("WeETH", WEETH, newImpl);
+        assertEq(WeETHToken(WEETH).totalSupply(), preSupply, "WeETH.totalSupply changed across upgrade");
+        assertEq(WeETHToken(WEETH).getImplementation(), newImpl, "WeETH impl mismatch");
+    }
+
+    function test_extStorage_EtherFiAdmin() public {
+        uint32 preSlot = EtherFiAdmin(ETHERFI_ADMIN).lastHandledReportRefSlot();
+        address newImpl = address(new EtherFiAdmin(
+            IEtherFiAdmin.ConstructorAddresses({
+                etherFiOracle: ETHERFI_ORACLE,
+                stakingManager: STAKING_MANAGER,
+                auctionManager: AUCTION_MANAGER,
+                etherFiNodesManager: ETHERFI_NODES_MANAGER,
+                liquidityPool: LIQUIDITY_POOL,
+                withdrawRequestNft: WITHDRAW_REQUEST_NFT,
+                roleRegistry: ROLE_REGISTRY,
+                priorityWithdrawalQueue: PRIORITY_WITHDRAWAL_QUEUE
+            }),
+            ADMIN_MAX_REBASE_APR_BPS,
+            ADMIN_MAX_VALIDATOR_TASK_BATCH_SIZE,
+            ADMIN_STALE_ORACLE_REPORT_BLOCK_WINDOW,
+            ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY,
+            ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY,
+            ADMIN_MAX_REQUESTS_TO_FINALIZE_PER_REPORT
+        ));
+        _checkLayout("EtherFiAdmin", ETHERFI_ADMIN, newImpl);
+        // Storage-backed getter resolved through the new impl must be unchanged.
+        assertEq(EtherFiAdmin(ETHERFI_ADMIN).lastHandledReportRefSlot(), preSlot, "EFAdmin.lastHandledReportRefSlot shifted");
+        assertEq(EtherFiAdmin(ETHERFI_ADMIN).getImplementation(), newImpl, "EtherFiAdmin impl mismatch");
+    }
+
+    function test_extStorage_Liquifier() public {
+        address newImpl = address(new Liquifier(
+            ILiquifier.ConstructorAddresses({
+                liquidityPool: LIQUIDITY_POOL,
+                lidoWithdrawalQueue: LIDO_WITHDRAWAL_QUEUE,
+                lido: STETH,
+                stEth_Eth_Pool: STETH_ETH_CURVE_POOL,
+                roleRegistry: ROLE_REGISTRY,
+                stEthPriceFeed: STETH_PRICE_FEED,
+                blacklister: address(blacklisterInstance),
+                etherfiRestaker: ETHERFI_RESTAKER,
+                l1SyncPool: ETHERFI_L1_SYNC_POOL_ETH
+            }),
+            LIQUIFIER_MIN_DISCOUNT_BPS, LIQUIFIER_STALE_PRICE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS,
+            LIQUIFIER_MAX_PRICE_THRESHOLD
+        ));
+        _checkLayout("Liquifier", LIQUIFIER, newImpl);
+        assertEq(Liquifier(payable(LIQUIFIER)).getImplementation(), newImpl, "Liquifier impl mismatch");
+    }
+
+    function test_extStorage_StakingManager() public {
+        address newImpl = address(new StakingManager(
+            LIQUIDITY_POOL, ETHERFI_NODES_MANAGER, ETH2_DEPOSIT_CONTRACT,
+            AUCTION_MANAGER, ETHERFI_NODE_BEACON, ROLE_REGISTRY
+        ));
+        _checkLayout("StakingManager", STAKING_MANAGER, newImpl);
+    }
+
+    function test_extStorage_EtherFiNodesManager() public {
+        address newImpl = address(new EtherFiNodesManager(STAKING_MANAGER, ROLE_REGISTRY, ETHERFI_RATE_LIMITER));
+        _checkLayout("EtherFiNodesManager", ETHERFI_NODES_MANAGER, newImpl);
+    }
+
+    function test_extStorage_EtherFiRedemptionManager() public {
+        address newImpl = address(new EtherFiRedemptionManager(
+            IEtherFiRedemptionManager.ConstructorAddresses({
+                liquidityPool: LIQUIDITY_POOL,
+                eEth: EETH,
+                weEth: WEETH,
+                treasury: TREASURY,
+                roleRegistry: ROLE_REGISTRY,
+                etherFiRestaker: ETHERFI_RESTAKER,
+                priorityWithdrawalQueue: PRIORITY_WITHDRAWAL_QUEUE,
+                blacklister: address(blacklisterInstance),
+                stEthPriceFeed: STETH_PRICE_FEED
+            }),
+            RM_MAX_EXIT_FEE_SPLIT_TO_TREASURY_BPS, RM_MAX_EXIT_FEE_BPS, RM_MAX_LOW_WATERMARK_BPS_OF_TVL,
+            RM_STALE_PRICE_WINDOW, RM_MAX_PRICE_THRESHOLD
+        ));
+        _checkLayout("EtherFiRedemptionManager", ETHERFI_REDEMPTION_MANAGER, newImpl);
+        assertEq(EtherFiRedemptionManager(payable(ETHERFI_REDEMPTION_MANAGER)).getImplementation(), newImpl, "ERM impl mismatch");
+    }
+
+    function test_extStorage_MembershipManager() public {
+        address newImpl = address(new MembershipManager(
+            EETH, LIQUIDITY_POOL, MEMBERSHIP_NFT, ROLE_REGISTRY, address(blacklisterInstance)
+        ));
+        _checkLayout("MembershipManager", MEMBERSHIP_MANAGER, newImpl);
+    }
 }
