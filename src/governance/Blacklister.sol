@@ -27,6 +27,7 @@ contract Blacklister is Initializable, UUPSUpgradeable, RolesLibrary {
     //--------------------------------------------------------------------------------------
     //-----------------------------------  ERRORS  -----------------------------------------
     //--------------------------------------------------------------------------------------
+    error InvalidUser();
     error BlacklistedUser(address user);
     error UserAlreadyBlacklisted(address user);
 
@@ -62,6 +63,7 @@ contract Blacklister is Initializable, UUPSUpgradeable, RolesLibrary {
      */
 
     function blacklistUserUntil(address user) external onlyGuardian {
+        if (user == address(0)) revert InvalidUser();
         if (blacklistedUntil[user] > block.timestamp) revert UserAlreadyBlacklisted(user);
         blacklistedUntil[user] = block.timestamp + BLACKLIST_DURATION;
         emit UserBlacklistedUntil(user, block.timestamp + BLACKLIST_DURATION);
@@ -75,6 +77,7 @@ contract Blacklister is Initializable, UUPSUpgradeable, RolesLibrary {
      * reverts with UserAlreadyBlacklisted if the user is already blacklisted
      */
     function setBlacklistUntil(address user, uint256 until) external onlyOperatingMultisig {
+        if (user == address(0)) revert InvalidUser();
         blacklistedUntil[user] = block.timestamp + until;
         emit UserBlacklistedUntil(user, block.timestamp + until);
     }
@@ -86,6 +89,7 @@ contract Blacklister is Initializable, UUPSUpgradeable, RolesLibrary {
      * reverts with UserAlreadyBlacklisted if the user is already blacklisted
      */
     function blacklistUser(address user) external onlyOperatingMultisig {
+        if (user == address(0)) revert InvalidUser();
         blacklistedUntil[user] = type(uint256).max;
         emit UserBlacklisted(user);
     }
