@@ -94,7 +94,9 @@ import {SecurityUpgradesConstants} from "./Constants.s.sol";
  *  7b. verifyLiquifierWhitelistRemoved — assert cbETH + wBETH unwhitelisted on Liquifier (EARN-1421)
  *
  *   8. executeOperatingConfig      — Batch 2 (OPERATING_TIMELOCK, 2d): rate-limiter buckets,
- *                                    pause durations, EtherFiAdmin daily finalized-withdrawal cap
+ *                                    pause durations, EtherFiAdmin daily finalized-withdrawal cap,
+ *                                    and the ENM forwarded-call whitelist re-grant (the pinned SEL_*
+ *                                    set, re-keyed to the eigenpod-operations role holder)
  *   9. executeLpWithdrawBounds     — Batch 3 (OPERATION_MULTISIG, instant): LP min/max withdraw bounds
  *  10. verifyOperatingConfig       — buckets + pause durations + role grants + LP bounds + finalized-withdrawal cap
  */
@@ -180,6 +182,48 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
 
     ContractCodeChecker internal codeChecker;
 
+    // ─────────────────────────────────────────────────────────────────────
+    // FORWARDED-CALL WHITELIST MIGRATION (EtherFiNodesManager)
+    //
+    // The pre-upgrade ENM whitelisted forwarded eigenpod/external calls in a GLOBAL mapping; the new
+    // impl keys the whitelist per caller. forwardEigenPodCall / forwardExternalCall are gated by BOTH
+    // onlyEigenpodOperations AND allowedForwardedX[msg.sender], so the whitelisted caller must be the
+    // EIGENPOD_OPERATIONS_ROLE holder. Batch 2 re-grants the historically-whitelisted set below to that
+    // holder (HOLDER_EIGENPOD_OPERATIONS_ROLE) under the new per-user layout. The legacy pod-prover EOA
+    // (0x7835…) is intentionally NOT re-granted: the new per-user mapping starts empty, so its
+    // forwarding authority is dropped without any explicit revoke call.
+    //
+    // The set below is the union of every (selector[, target]) ever enabled via the legacy
+    // AllowedForwarded*Updated events; selectors are pinned as named constants so the batch and the
+    // verifier share one auditable source of truth. _preflight() already requires
+    // HOLDER_EIGENPOD_OPERATIONS_ROLE != address(0) before broadcast.
+
+    // forwardEigenPodCall selectors — forwarded to the validator's EigenPod (msg.sender == EtherFiNode).
+    bytes4 internal constant SEL_START_CHECKPOINT              = 0x88676cad; // startCheckpoint(bool)
+    bytes4 internal constant SEL_VERIFY_CHECKPOINT_PROOFS      = 0xf074ba62; // verifyCheckpointProofs((bytes32,bytes),(bytes32,bytes32,bytes)[])
+    bytes4 internal constant SEL_VERIFY_STALE_BALANCE          = 0x039157d2; // verifyStaleBalance(uint64,(bytes32,bytes),(bytes32[],bytes)) — permissionless; starts a checkpoint for a slashed validator (no ETH movement)
+    bytes4 internal constant SEL_VERIFY_WITHDRAWAL_CREDENTIALS = 0x3f65cf19; // verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])
+    // NOTE: withdrawRestakedBeaconChainETH(address,uint256) (0xc4907442) is intentionally NOT included:
+    // it is onlyEigenPodManager, so a forwarded call (msg.sender == EtherFiNode) always reverts. ETH
+    // exits the pod via the EigenPodManager during completeQueuedWithdrawals, not via this selector.
+
+    // forwardExternalCall selectors — EigenLayer DelegationManager.
+    bytes4 internal constant SEL_QUEUE_WITHDRAWALS               = 0x0dd8dd02; // queueWithdrawals((address[],uint256[],address)[])
+    bytes4 internal constant SEL_COMPLETE_QUEUED_WITHDRAWALS     = 0x9435bb43; // completeQueuedWithdrawals((address,address,address,uint256,uint32,address[],uint256[])[],address[][],bool[])
+    bytes4 internal constant SEL_COMPLETE_QUEUED_WITHDRAWALS_AMT = 0x33404396; // completeQueuedWithdrawals((...)[],address[][],uint256[],bool[]) (with shares/amounts)
+    bytes4 internal constant SEL_DELEGATE_TO                     = 0xeea9064b; // delegateTo(address,(bytes,uint256),bytes32)
+    bytes4 internal constant SEL_DELEGATE_TO_BY_SIGNATURE        = 0x7f548071; // delegateToBySignature(address,address,(bytes,uint256),(bytes,uint256),bytes32)
+    bytes4 internal constant SEL_UNDELEGATE                      = 0xda8be864; // undelegate(address)
+
+    // forwardExternalCall selectors — rewards / token movements.
+    bytes4 internal constant SEL_PROCESS_CLAIM = 0x3ccc861d; // processClaim((uint32,uint32,bytes,(address,bytes32),uint32[],bytes[],(address,uint256)[]),address) on RewardsCoordinator
+    bytes4 internal constant SEL_ERC20_TRANSFER = 0xa9059cbb; // transfer(address,uint256) on the EIGEN token
+    bytes4 internal constant SEL_MERKLE_CLAIM   = 0x9a15bf92; // claim(uint256,bytes32[],bytes) on the EIGEN claim distributor
+
+    // External-call target that has no Deployed.s.sol constant: the EIGEN merkle-claim distributor
+    // (paired with EIGEN transfers in script/el-exits/ELExitsTransactions.s.sol).
+    address internal constant EIGEN_CLAIM_DISTRIBUTOR = 0x035bdAeaB85E47710C27EdA7FD754bA80aD4ad02;
+
     function run() public {
         // Prefer FORK_RPC_URL when set (e.g. a Tenderly virtual testnet that already has the
         // deploy.s.sol broadcast applied) so verifyDeployedBytecode can read the new impls'
@@ -217,8 +261,9 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
 
         // ── Batch 2: the OPERATING_TIMELOCK batch (2d) ─────────────────────────────
         // Scheduled at the same time as Batch 1; executed after it. One schedule +
-        // one execute JSON: rate-limiter buckets, pause durations, and the EtherFiAdmin
-        // daily finalized-withdrawal cap (all OPERATION_TIMELOCK_ROLE).
+        // one execute JSON: rate-limiter buckets, pause durations, the EtherFiAdmin
+        // daily finalized-withdrawal cap, and the ENM forwarded-call whitelist re-grant
+        // (all OPERATION_TIMELOCK_ROLE / onlyOperatingTimelock).
         executeOperatingConfig();
 
         // ── Batch 3: the OPERATION_MULTISIG batch (instant) ────────────────────────
@@ -730,6 +775,34 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
 
         console2.log("[OK] snapshotted owner + paused + immutable getters for", proxies.length, "proxies");
         console2.log("");
+    }
+
+    /// @dev The forwarded eigenpod-call selectors to whitelist (forwardEigenPodCall). Pinned from the
+    ///      named SEL_* constants so the batch builder and verifier read the same auditable list.
+    function _forwardedEigenpodSelectors() internal pure returns (bytes4[] memory s) {
+        s = new bytes4[](6);
+        s[0] = SEL_START_CHECKPOINT;
+        s[1] = SEL_VERIFY_CHECKPOINT_PROOFS;
+        s[2] = SEL_VERIFY_STALE_BALANCE;
+        s[3] = SEL_VERIFY_WITHDRAWAL_CREDENTIALS;
+        s[4] = SEL_QUEUE_WITHDRAWALS;
+        s[5] = SEL_COMPLETE_QUEUED_WITHDRAWALS;
+    }
+
+    /// @dev The forwarded external-call (selector,target) pairs to whitelist (forwardExternalCall).
+    ///      Targets reuse the Deployed.s.sol EigenLayer constants where they exist.
+    function _forwardedExternalCalls() internal pure returns (bytes4[] memory s, address[] memory t) {
+        s = new bytes4[](9);
+        t = new address[](9);
+        (s[0], t[0]) = (SEL_MERKLE_CLAIM,                    EIGEN_CLAIM_DISTRIBUTOR);
+        (s[1], t[1]) = (SEL_ERC20_TRANSFER,                  EIGEN);
+        (s[2], t[2]) = (SEL_PROCESS_CLAIM,                   EIGENLAYER_REWARDS_COORDINATOR);
+        (s[3], t[3]) = (SEL_DELEGATE_TO,                     EIGENLAYER_DELEGATION_MANAGER);
+        (s[4], t[4]) = (SEL_DELEGATE_TO_BY_SIGNATURE,        EIGENLAYER_DELEGATION_MANAGER);
+        (s[5], t[5]) = (SEL_UNDELEGATE,                      EIGENLAYER_DELEGATION_MANAGER);
+        (s[6], t[6]) = (SEL_QUEUE_WITHDRAWALS,               EIGENLAYER_DELEGATION_MANAGER);
+        (s[7], t[7]) = (SEL_COMPLETE_QUEUED_WITHDRAWALS_AMT, EIGENLAYER_DELEGATION_MANAGER);
+        (s[8], t[8]) = (SEL_COMPLETE_QUEUED_WITHDRAWALS,     EIGENLAYER_DELEGATION_MANAGER);
     }
 
     /// @dev Capture `staticcall` returns for every selector; silently skip the
@@ -1860,6 +1933,23 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         (targets[i], data[i]) = (OPERATING_TIMELOCK,
             abi.encodeWithSelector(operatingTimelock.grantRole.selector, TIMELOCK_CANCELLER_ROLE, HOLDER_CANCELLER_GUARDIAN)); i++;
 
+        // ───────── staking — re-grant the forwarded-call whitelist (onlyOperatingTimelock) ─────────
+        // The upgrade re-keys ENM's forwarded-call whitelist from global to per-caller, orphaning the
+        // legacy entries. Re-grant the pinned SEL_* set to the eigenpod-operations role holder so
+        // forwardEigenPodCall / forwardExternalCall keep working post-upgrade.
+        bytes4[] memory eigSelectors = _forwardedEigenpodSelectors();
+        for (uint256 j = 0; j < eigSelectors.length; j++) {
+            (targets[i], data[i]) = (ETHERFI_NODES_MANAGER, abi.encodeWithSelector(
+                EtherFiNodesManager.updateAllowedForwardedEigenpodCalls.selector,
+                HOLDER_EIGENPOD_OPERATIONS_ROLE, eigSelectors[j], true)); i++;
+        }
+        (bytes4[] memory extSelectors, address[] memory extTargets) = _forwardedExternalCalls();
+        for (uint256 j = 0; j < extSelectors.length; j++) {
+            (targets[i], data[i]) = (ETHERFI_NODES_MANAGER, abi.encodeWithSelector(
+                EtherFiNodesManager.updateAllowedForwardedExternalCalls.selector,
+                HOLDER_EIGENPOD_OPERATIONS_ROLE, extSelectors[j], extTargets[j], true)); i++;
+        }
+
         return _shrink(targets, values, data, i);
     }
 
@@ -1990,7 +2080,21 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
 
         require(EtherFiAdmin(ETHERFI_ADMIN).maxFinalizedWithdrawalAmountPerDay() == ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT, "EFAdmin.maxFinalizedWithdrawalAmountPerDay mismatch");
 
-        console2.log("[OK] rate-limiter buckets + pause durations + role grants + LP withdraw bounds + finalized-withdrawal cap verified");
+        // Every pinned forwarded-call whitelist entry must now be set for the eigenpod-operations role
+        // holder under the new per-user layout, else forwardEigenPodCall/forwardExternalCall revert.
+        EtherFiNodesManager enm = EtherFiNodesManager(payable(ETHERFI_NODES_MANAGER));
+        bytes4[] memory eigSelectors = _forwardedEigenpodSelectors();
+        for (uint256 j = 0; j < eigSelectors.length; j++) {
+            require(enm.allowedForwardedEigenpodCalls(HOLDER_EIGENPOD_OPERATIONS_ROLE, eigSelectors[j]),
+                "forwarded eigenpod call not re-whitelisted for role holder");
+        }
+        (bytes4[] memory extSelectors, address[] memory extTargets) = _forwardedExternalCalls();
+        for (uint256 j = 0; j < extSelectors.length; j++) {
+            require(enm.allowedForwardedExternalCalls(HOLDER_EIGENPOD_OPERATIONS_ROLE, extSelectors[j], extTargets[j]),
+                "forwarded external call not re-whitelisted for role holder");
+        }
+
+        console2.log("[OK] rate-limiter buckets + pause durations + role grants + LP withdraw bounds + finalized-withdrawal cap + forwarded-call whitelist verified");
         console2.log("");
     }
 
