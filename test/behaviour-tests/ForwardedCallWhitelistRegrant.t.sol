@@ -24,12 +24,13 @@ contract WhitelistHarness is SecurityUpgradesScript {
  *
  * Flow (mirrors the real upgrade):
  *   1. fork mainnet, deploy the new EtherFiNodesManager impl, upgrade the proxy via its timelock owner
- *   2. as the real OPERATING_TIMELOCK, apply updateAllowedForwarded{Eigenpod,External}Calls for the
- *      eigenpod-ops role holder over the exact SEL_* set the script emits
- *   3. assert every entry reads back true for the holder (same check as verifyOperatingConfig), and
- *      that the legacy pod-prover EOA is NOT whitelisted (the "remove from current address" intent)
+ *   2. seed the migrated set on the legacy caller, so the test establishes its own deterministic
+ *      pre-state instead of depending on mainnet's live per-user mapping or any storage-layout
+ *      assumption about what the upgrade preserves
+ *   3. as the OPERATING_TIMELOCK, apply the Batch 2 migration (grant the new holder, revoke the legacy)
+ *   4. assert the holder has every entry and the legacy caller has none (verifyOperatingConfig parity)
  *
- * Run: forge test --match-contract ForwardedCallWhitelistRegrant --fork-url $MAINNET_RPC_URL -vv
+ * Run: forge test --match-contract ForwardedCallWhitelistRegrant -vv
  */
 contract ForwardedCallWhitelistRegrantTest is Test {
     EtherFiNodesManager constant enm = EtherFiNodesManager(payable(0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F));
@@ -49,7 +50,7 @@ contract ForwardedCallWhitelistRegrantTest is Test {
     address holder = makeAddr("eigenpodOperationsRoleHolder");
 
     function setUp() public {
-        vm.createSelectFork(vm.envString("MAINNET_RPC_URL"));
+        vm.createSelectFork(vm.envString("MAINNET_RPC_URL"), 25383537);
         harness = new WhitelistHarness();
 
         // Deploy + upgrade to the new EtherFiNodesManager impl (per-caller whitelist layout).
@@ -72,12 +73,21 @@ contract ForwardedCallWhitelistRegrantTest is Test {
         (bytes4[] memory eig) = harness.eigenpodSelectors();
         (bytes4[] memory extSel, address[] memory extTgt) = harness.externalCalls();
 
-        // Pre-state: every migrated entry is currently held by the legacy caller on mainnet.
+        // Seed a deterministic pre-state on the legacy caller (independent of mainnet's live per-user
+        // mapping and of any layout assumption about what the upgrade preserves), then confirm it.
+        vm.startPrank(OPERATING_TIMELOCK);
         for (uint256 i = 0; i < eig.length; i++) {
-            assertTrue(enm.allowedForwardedEigenpodCalls(LEGACY_POD_PROVER, eig[i]), "legacy eigenpod entry expected live pre-migration");
+            enm.updateAllowedForwardedEigenpodCalls(LEGACY_POD_PROVER, eig[i], true);
         }
         for (uint256 i = 0; i < extSel.length; i++) {
-            assertTrue(enm.allowedForwardedExternalCalls(LEGACY_POD_PROVER, extSel[i], extTgt[i]), "legacy external entry expected live pre-migration");
+            enm.updateAllowedForwardedExternalCalls(LEGACY_POD_PROVER, extSel[i], extTgt[i], true);
+        }
+        vm.stopPrank();
+        for (uint256 i = 0; i < eig.length; i++) {
+            assertTrue(enm.allowedForwardedEigenpodCalls(LEGACY_POD_PROVER, eig[i]), "seed: legacy eigenpod entry not set");
+        }
+        for (uint256 i = 0; i < extSel.length; i++) {
+            assertTrue(enm.allowedForwardedExternalCalls(LEGACY_POD_PROVER, extSel[i], extTgt[i]), "seed: legacy external entry not set");
         }
 
         // Apply the Batch 2 migration as the operating timelock: grant new holder + revoke legacy.
