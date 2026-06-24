@@ -198,6 +198,13 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
     // forwardExternalCall selector — processClaim on the EigenLayer RewardsCoordinator.
     bytes4 internal constant SEL_PROCESS_CLAIM = 0x3ccc861d; // processClaim((...),address)
 
+    // forwardExternalCall selectors on the EigenLayer DelegationManager, newly whitelisted in 3CP #580
+    // (batch queue/complete across backfilled nodes). GRANT-ONLY to the new holder here; the legacy
+    // caller's copies are revoked in a separate later 3CP.
+    bytes4 internal constant SEL_QUEUE_WITHDRAWALS           = 0x0dd8dd02; // queueWithdrawals((address[],uint256[],address)[])
+    bytes4 internal constant SEL_COMPLETE_QUEUED_WITHDRAWALS = 0x9435bb43; // completeQueuedWithdrawals((...)[],address[][],bool[]) (plural)
+    bytes4 internal constant SEL_COMPLETE_QUEUED_WITHDRAWAL  = 0xe4cc3f90; // completeQueuedWithdrawal((...),address[],bool) (singular; used by completeQueuedETHWithdrawals)
+
     function run() public {
         // Prefer FORK_RPC_URL when set (e.g. a Tenderly virtual testnet that already has the
         // deploy.s.sol broadcast applied) so verifyDeployedBytecode can read the new impls'
@@ -764,6 +771,16 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         s = new bytes4[](1);
         t = new address[](1);
         (s[0], t[0]) = (SEL_PROCESS_CLAIM, EIGENLAYER_REWARDS_COORDINATOR);
+    }
+
+    /// @dev forwardExternalCall (selector,target) pairs newly whitelisted in 3CP #580. Grant-only to
+    ///      the new holder; the legacy caller's copies are revoked in a later 3CP.
+    function _grantOnlyExternalCalls() internal pure returns (bytes4[] memory s, address[] memory t) {
+        s = new bytes4[](3);
+        t = new address[](3);
+        (s[0], t[0]) = (SEL_QUEUE_WITHDRAWALS,           EIGENLAYER_DELEGATION_MANAGER);
+        (s[1], t[1]) = (SEL_COMPLETE_QUEUED_WITHDRAWALS, EIGENLAYER_DELEGATION_MANAGER);
+        (s[2], t[2]) = (SEL_COMPLETE_QUEUED_WITHDRAWAL,  EIGENLAYER_DELEGATION_MANAGER);
     }
 
     /// @dev Capture `staticcall` returns for every selector; silently skip the
@@ -1913,6 +1930,14 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
                 EtherFiNodesManager.updateAllowedForwardedExternalCalls.selector,
                 LEGACY_FORWARD_CALLER, extSelectors[j], extTargets[j], false)); i++;
         }
+        // Grant-only (3CP #580): newly-whitelisted DelegationManager selectors granted to the new
+        // holder; the legacy caller's copies are revoked in a separate later 3CP, not here.
+        (bytes4[] memory goSelectors, address[] memory goTargets) = _grantOnlyExternalCalls();
+        for (uint256 j = 0; j < goSelectors.length; j++) {
+            (targets[i], data[i]) = (ETHERFI_NODES_MANAGER, abi.encodeWithSelector(
+                EtherFiNodesManager.updateAllowedForwardedExternalCalls.selector,
+                HOLDER_EIGENPOD_OPERATIONS_ROLE, goSelectors[j], goTargets[j], true)); i++;
+        }
 
         return _shrink(targets, values, data, i);
     }
@@ -2059,6 +2084,12 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
                 "forwarded external call not granted to role holder");
             require(!enm.allowedForwardedExternalCalls(LEGACY_FORWARD_CALLER, extSelectors[j], extTargets[j]),
                 "forwarded external call not revoked from legacy caller");
+        }
+        // Grant-only (3CP #580): the new holder must hold each; legacy is untouched here.
+        (bytes4[] memory goSelectors, address[] memory goTargets) = _grantOnlyExternalCalls();
+        for (uint256 j = 0; j < goSelectors.length; j++) {
+            require(enm.allowedForwardedExternalCalls(HOLDER_EIGENPOD_OPERATIONS_ROLE, goSelectors[j], goTargets[j]),
+                "grant-only external call not granted to role holder");
         }
 
         console2.log("[OK] rate-limiter buckets + pause durations + role grants + LP withdraw bounds + finalized-withdrawal cap + forwarded-call whitelist verified");

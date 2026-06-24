@@ -16,6 +16,9 @@ contract WhitelistHarness is SecurityUpgradesScript {
     function externalCalls() external pure returns (bytes4[] memory, address[] memory) {
         return _forwardedExternalCalls();
     }
+    function grantOnlyExternalCalls() external pure returns (bytes4[] memory, address[] memory) {
+        return _grantOnlyExternalCalls();
+    }
 }
 
 /**
@@ -29,6 +32,7 @@ contract WhitelistHarness is SecurityUpgradesScript {
  *      assumption about what the upgrade preserves
  *   3. as the OPERATING_TIMELOCK, apply the Batch 2 migration (grant the new holder, revoke the legacy)
  *   4. assert the holder has every entry and the legacy caller has none (verifyOperatingConfig parity)
+ *   5. apply + assert the grant-only set (3CP #580 selectors): granted to the holder, legacy untouched
  *
  * Run: forge test --match-contract ForwardedCallWhitelistRegrant -vv
  */
@@ -115,15 +119,30 @@ contract ForwardedCallWhitelistRegrantTest is Test {
         // A selector outside the set stays false (the grant is specific, not blanket).
         assertFalse(enm.allowedForwardedEigenpodCalls(holder, bytes4(0xdeadbeef)), "unexpected selector granted");
 
+        // Grant-only set (3CP #580): granted to the holder, legacy caller deliberately untouched.
+        (bytes4[] memory goSel, address[] memory goTgt) = harness.grantOnlyExternalCalls();
+        vm.startPrank(OPERATING_TIMELOCK);
+        for (uint256 i = 0; i < goSel.length; i++) {
+            enm.updateAllowedForwardedExternalCalls(holder, goSel[i], goTgt[i], true);
+        }
+        vm.stopPrank();
+        for (uint256 i = 0; i < goSel.length; i++) {
+            assertTrue(enm.allowedForwardedExternalCalls(holder, goSel[i], goTgt[i]), "grant-only call not granted to holder");
+        }
+
         console2.log("[OK] migrated eigenpod selectors:", eig.length);
         console2.log("[OK] migrated external (selector,target) pairs:", extSel.length);
+        console2.log("[OK] grant-only external (selector,target) pairs:", goSel.length);
     }
 
-    /// @dev Sanity-check the harness exposes the verified set (3 eigenpod + 1 external).
+    /// @dev Sanity-check the harness exposes the verified sets (3 eigenpod + 1 external migrated,
+    ///      3 grant-only external).
     function test_whitelistSetCounts() public view {
         (bytes4[] memory eig) = harness.eigenpodSelectors();
         (bytes4[] memory extSel,) = harness.externalCalls();
+        (bytes4[] memory goSel,) = harness.grantOnlyExternalCalls();
         assertEq(eig.length, 3, "eigenpod selector count");
         assertEq(extSel.length, 1, "external call count");
+        assertEq(goSel.length, 3, "grant-only external call count");
     }
 }
