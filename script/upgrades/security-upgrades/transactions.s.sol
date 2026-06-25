@@ -64,20 +64,24 @@ import {SecurityUpgradesConstants} from "./Constants.s.sol";
  * `_preflight()` reverts otherwise.
  *
  * Everything is packed into FOUR batches → SIX Safe JSON files:
- *   • Batch 0 — OPERATION_MULTISIG (now): auction_sweep.json   (PRE-UPGRADE; must execute first)
+ *   • Batch 0 — OPERATION_MULTISIG (now): pre_upgrade_multisig.json (PRE-UPGRADE; execute first)
+ *                                         (AuctionManager sweep + eETH MINT/BURN buckets, one multiSend)
  *   • Batch 1 — UPGRADE_TIMELOCK (10d):   upgrade_schedule.json + upgrade_execute.json
  *   • Batch 2 — OPERATING_TIMELOCK (2d):  ops_schedule.json + ops_execute.json
  *   • Batch 3 — OPERATION_MULTISIG (now): lp_withdraw_bounds.json
- * Execute Batch 0 first (flushes AuctionManager revenue while the old impl still can).
+ * Execute Batch 0 first (flushes AuctionManager revenue while the old impl still can, and creates
+ * the eETH buckets before the upgrade makes EETH rate-limited).
  * Both timelock batches are SCHEDULED together; after the 10-day delay, execute
  * Batch 1, then Batch 2, then the instant Batch 3.
  *
  * `run()` builds + dry-runs them in execution order:
  *   1. verifyDeployedBytecode      — fresh deploys match the recorded impls
  *   2. takePreUpgradeSnapshots     — owners + paused, per upgraded proxy
- *   2.5 executeAuctionSweep        — Batch 0 (OPERATION_MULTISIG, instant, PRE-UPGRADE):
- *                                    flush AuctionManager.accumulatedRevenue to MembershipManager
- *                                    before the impl swap deletes that slot + its transfer fn.
+ *   2.5 executePreUpgradeMultisig  — Batch 0 (OPERATION_MULTISIG, instant, PRE-UPGRADE): one
+ *                                    multiSend that flushes AuctionManager.accumulatedRevenue to
+ *                                    the MembershipManager (before the impl swap deletes that slot)
+ *                                    AND creates the eETH MINT/BURN buckets + EETH consumer (before
+ *                                    the upgrade makes EETH rate-limited).
  *   3. executeUpgrade              — Batch 1 (UPGRADE_TIMELOCK, 10d). ONE batch, in order:
  *                                    (a) grant the 9 RolesLibrary roles (owner-gated; owner == UPGRADE_TIMELOCK),
  *                                    (b) upgrade RoleRegistry + every proxy + the EtherFiNode beacon,
@@ -222,12 +226,15 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         verifyDeployedBytecode();
         takePreUpgradeSnapshots();
 
-        // ── Batch 0: the pre-upgrade AuctionManager sweep (instant) ────────────────
-        // Flush the OLD AuctionManager's pending accumulatedRevenue to the MembershipManager
-        // BEFORE the impl swap deletes that storage slot + its transfer function. Signed by
-        // ETHERFI_OPERATING_ADMIN (an `admins[]` entry on the old impl). Must execute before
-        // Batch 1 executes.
-        executeAuctionSweep();
+        // ── Batch 0: the pre-upgrade OPERATION_MULTISIG batch (instant) ────────────
+        // ONE multiSend signed by ETHERFI_OPERATING_ADMIN, executed BEFORE Batch 1:
+        //   • AuctionManager.transferAccumulatedRevenue() — flush pending revenue to the
+        //     MembershipManager before the impl swap deletes that slot + its transfer function.
+        //   • create the EETH_MINT/BURN buckets + wire EETH as consumer so eETH mint/burn never
+        //     reverts (UnknownLimit) in the gap between Batch 1 and the operating batch.
+        // Both are OPERATION_MULTISIG-gated instant calls (auction admins[]; rate-limiter
+        // ETHERFI_RATE_LIMITER_ADMIN_ROLE), so they share one signing ceremony.
+        executePreUpgradeMultisig();
 
         // ── Batch 1: the UPGRADE_TIMELOCK batch (10d) ──────────────────────────────
         // One schedule + one execute JSON. Internally ordered: role grants ->
@@ -1069,7 +1076,8 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
     }
 
     //--------------------------------------------------------------------------------------
-    // STEP 2.5: executeAuctionSweep — Batch 0, the OPERATION_MULTISIG pre-upgrade sweep (instant)
+    // STEP 2.5: executePreUpgradeMultisig — Batch 0, the OPERATION_MULTISIG pre-upgrade multiSend
+    // (instant): AuctionManager sweep + eETH-bucket creation in one signed Safe tx.
     //
     // MUST run BEFORE the upgrade batch executes. The currently-deployed AuctionManager
     // accrues consumed-bid fees in the `accumulatedRevenue` storage slot and only flushes
@@ -1088,26 +1096,52 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
     // The call is built via abi.encodeWithSignature because the NEW AuctionManager type
     // (imported here) no longer declares transferAccumulatedRevenue().
     //--------------------------------------------------------------------------------------
-    function executeAuctionSweep() public {
-        console2.log("=== Step 2.5: Executing AuctionManager Sweep (Batch 0, OPERATION_MULTISIG, instant, PRE-UPGRADE) ===");
+    function executePreUpgradeMultisig() public {
+        console2.log("=== Step 2.5: Pre-upgrade OPERATION_MULTISIG batch (AuctionManager sweep + eETH buckets, instant) ===");
 
+        // Both actions are ETHERFI_OPERATING_ADMIN calls that must land BEFORE the upgrade batch,
+        // and the order between them doesn't matter — so they ride ONE multiSend (one signing /
+        // one execution) rather than two separate Safe txs:
+        //   [0]   AuctionManager.transferAccumulatedRevenue() — flush residual bid revenue to the
+        //         MembershipManager while the OLD impl still has the function + slot. `onlyAdmin`
+        //         here = the legacy `admins[..]` mapping, true for 0x2aCA.
+        //   [1-4] rate-limiter createNewLimiter/updateConsumers for EETH MINT/BURN, so eETH
+        //         mint/burn never reverts (UnknownLimit) in the gap between the upgrade and the
+        //         operating batch. `onlyAdmin` here = ETHERFI_RATE_LIMITER_ADMIN_ROLE, held by
+        //         0x2aCA — direct/instant, no timelock or pre-grant. After the upgrade the gate
+        //         flips to onlyOperatingTimelock, but the buckets already exist + persist (storage).
+        // The sweep is built via abi.encodeWithSignature because the new AuctionManager type
+        // (imported here) no longer declares transferAccumulatedRevenue().
         bytes memory sweepData = abi.encodeWithSignature("transferAccumulatedRevenue()");
+        address[] memory targets   = new address[](5);
+        uint256[] memory values    = new uint256[](5);
+        bytes[]   memory calldatas = new bytes[](5);
+        targets[0] = AUCTION_MANAGER;      calldatas[0] = sweepData;
+        targets[1] = ETHERFI_RATE_LIMITER; calldatas[1] = _createLimiter(EETH_MINT_LIMIT_ID, EETH_MINT_CAPACITY, EETH_MINT_REFILL_RATE);
+        targets[2] = ETHERFI_RATE_LIMITER; calldatas[2] = _createLimiter(EETH_BURN_LIMIT_ID, EETH_BURN_CAPACITY, EETH_BURN_REFILL_RATE);
+        targets[3] = ETHERFI_RATE_LIMITER; calldatas[3] = _updateConsumer(EETH_MINT_LIMIT_ID, EETH);
+        targets[4] = ETHERFI_RATE_LIMITER; calldatas[4] = _updateConsumer(EETH_BURN_LIMIT_ID, EETH);
 
-        writeSafeJson(OUT_DIR, "auction_sweep.json", ETHERFI_OPERATING_ADMIN, AUCTION_MANAGER, 0, sweepData, 1);
+        writeSafeJson(OUT_DIR, "pre_upgrade_multisig.json", ETHERFI_OPERATING_ADMIN, targets, values, calldatas, 1);
 
-        console2.log("=== Dry-running AuctionManager sweep on fork (OLD impl, pre-upgrade) ===");
+        console2.log("=== Dry-running pre-upgrade multisig batch on fork (pre-upgrade impls) ===");
         uint256 pendingBefore = _auctionAccumulatedRevenue();
         uint256 mmBalBefore   = MEMBERSHIP_MANAGER.balance;
         console2.log("accumulatedRevenue (wei) to flush:   ", pendingBefore);
 
-        vm.prank(ETHERFI_OPERATING_ADMIN);
-        (bool ok, ) = AUCTION_MANAGER.call(sweepData);
-        require(ok, "auction sweep: transferAccumulatedRevenue reverted");
+        vm.startPrank(ETHERFI_OPERATING_ADMIN);
+        for (uint256 k = 0; k < targets.length; k++) {
+            (bool ok, ) = targets[k].call(calldatas[k]);
+            require(ok, "pre-upgrade multisig: call reverted");
+        }
+        vm.stopPrank();
 
         require(_auctionAccumulatedRevenue() == 0, "auction sweep: accumulatedRevenue not zeroed");
         require(MEMBERSHIP_MANAGER.balance == mmBalBefore + pendingBefore, "auction sweep: MembershipManager did not receive flushed revenue");
-
-        console2.log("[OK] AuctionManager accumulatedRevenue flushed to MembershipManager");
+        EtherFiRateLimiter rl = EtherFiRateLimiter(payable(ETHERFI_RATE_LIMITER));
+        require(rl.limitExists(EETH_MINT_LIMIT_ID) && rl.limitExists(EETH_BURN_LIMIT_ID), "eeth buckets: not created pre-upgrade");
+        require(rl.isConsumerAllowed(EETH_MINT_LIMIT_ID, EETH) && rl.isConsumerAllowed(EETH_BURN_LIMIT_ID, EETH), "eeth buckets: EETH consumer not whitelisted");
+        console2.log("[OK] AuctionManager revenue flushed + eETH MINT/BURN buckets created (single pre-upgrade multisig)");
         console2.log("");
     }
 
@@ -1867,12 +1901,9 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         uint256[] memory values  = new uint256[](60);
         uint256 i;
 
-        // ───────── core — Token-side global buckets (consumeToken on eETH mint/burn) ─────────
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(EETH_MINT_LIMIT_ID,  EETH_MINT_CAPACITY,  EETH_MINT_REFILL_RATE));  i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(EETH_BURN_LIMIT_ID,  EETH_BURN_CAPACITY,  EETH_BURN_REFILL_RATE));  i++;
-
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(EETH_MINT_LIMIT_ID,  EETH));  i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(EETH_BURN_LIMIT_ID,  EETH));  i++;
+        // NOTE: the eETH MINT/BURN buckets are created PRE-UPGRADE in executePreUpgradeMultisig
+        // (Batch 0, instant operating-multisig) so eETH mint/burn never reverts in the gap between
+        // the upgrade and this operating batch. Only the restaker bucket lives here (post-upgrade).
 
         // ───────── restaking — EtherFiRestaker bucket (consume) ─────────
         (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(STETH_REQUEST_WITHDRAWAL_LIMIT_ID, STETH_REQUEST_WITHDRAWAL_CAPACITY, STETH_REQUEST_WITHDRAWAL_REFILL_RATE)); i++;
