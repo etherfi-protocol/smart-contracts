@@ -56,6 +56,12 @@ import {ContractCodeChecker} from "@scripts/ContractCodeChecker.sol";
 import {Utils} from "@scripts/utils/utils.sol";
 import {SecurityUpgradesConstants} from "./Constants.s.sol";
 
+// EtherfiL1SyncPoolETH (WeETH-cross-chain repo, PR #77) is not compiled in this repo, so we
+// reach its PausableUntil getter through a minimal interface rather than importing the contract.
+interface IL1SyncPoolPausable {
+    function pauseUntilDuration() external view returns (uint256);
+}
+
 /**
  * 26Q2 Security Upgrades - Timelocked Upgrade + Configuration
  *
@@ -337,6 +343,8 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(PAUSE_UNTIL_WEETH != 0,                  "preflight: PAUSE_UNTIL_WEETH unset");
         // deposits
         require(PAUSE_UNTIL_LIQUIFIER != 0,              "preflight: PAUSE_UNTIL_LIQUIFIER unset");
+        // restaking
+        require(PAUSE_UNTIL_ETHERFI_RESTAKER != 0,       "preflight: PAUSE_UNTIL_ETHERFI_RESTAKER unset");
         // rewards
         require(PAUSE_UNTIL_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR != 0, "preflight: PAUSE_UNTIL_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR unset");
         // staking
@@ -347,6 +355,8 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(PAUSE_UNTIL_PRIORITY_WITHDRAWAL_QUEUE != 0,             "preflight: PAUSE_UNTIL_PRIORITY_WITHDRAWAL_QUEUE unset");
         require(PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER != 0,                "preflight: PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER unset");
         require(PAUSE_UNTIL_WITHDRAW_REQUEST_NFT != 0,   "preflight: PAUSE_UNTIL_WITHDRAW_REQUEST_NFT unset");
+        // cross-chain
+        require(PAUSE_UNTIL_L1_SYNC_POOL_ETH != 0,       "preflight: PAUSE_UNTIL_L1_SYNC_POOL_ETH unset");
 
         require(ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT != 0, "preflight: ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT unset");
         require(ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT <= ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY, "preflight: ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT exceeds acceptable ceiling");
@@ -488,6 +498,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         console2.log("PAUSE_UNTIL_WEETH:                   ", PAUSE_UNTIL_WEETH);
         console2.log("PAUSE_UNTIL_LIQUIDITY_POOL:          ", PAUSE_UNTIL_LIQUIDITY_POOL);
         console2.log("PAUSE_UNTIL_LIQUIFIER:               ", PAUSE_UNTIL_LIQUIFIER);
+        console2.log("PAUSE_UNTIL_ETHERFI_RESTAKER:        ", PAUSE_UNTIL_ETHERFI_RESTAKER);
         console2.log("PAUSE_UNTIL_CMRD:                    ", PAUSE_UNTIL_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR);
         console2.log("PAUSE_UNTIL_AUCTION_MANAGER:         ", PAUSE_UNTIL_AUCTION_MANAGER);
         console2.log("PAUSE_UNTIL_ETHERFI_NODES_MANAGER:   ", PAUSE_UNTIL_ETHERFI_NODES_MANAGER);
@@ -495,6 +506,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         console2.log("PAUSE_UNTIL_PRIORITY_WITHDRAWAL_QUEUE", PAUSE_UNTIL_PRIORITY_WITHDRAWAL_QUEUE);
         console2.log("PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER:  ", PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER);
         console2.log("PAUSE_UNTIL_WITHDRAW_REQUEST_NFT:    ", PAUSE_UNTIL_WITHDRAW_REQUEST_NFT);
+        console2.log("PAUSE_UNTIL_L1_SYNC_POOL_ETH:        ", PAUSE_UNTIL_L1_SYNC_POOL_ETH);
         console2.log("");
         console2.log("--- Operational setpoints ---");
         console2.log("ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT (TBD):", ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT);
@@ -723,7 +735,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
     //--------------------------------------------------------------------------------------
     function takePreUpgradeSnapshots() public {
         console2.log("=== Step 2: Taking Pre-Upgrade Snapshots ===");
-        address[22] memory proxies = _upgradedProxies();
+        address[23] memory proxies = _upgradedProxies();
         for (uint256 k = 0; k < proxies.length; k++) {
             preSnap[proxies[k]] = Snap({ owner: _getOwner(proxies[k]), paused: _getPaused(proxies[k]) });
         }
@@ -1041,7 +1053,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         s[3] = bytes4(keccak256("etherFiAdmin()"));
     }
 
-    function _upgradedProxies() internal pure returns (address[22] memory list) {
+    function _upgradedProxies() internal pure returns (address[23] memory list) {
         // core
         list[0]  = EETH;
         list[1]  = LIQUIDITY_POOL;
@@ -1073,6 +1085,12 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         list[19] = PRIORITY_WITHDRAWAL_QUEUE;
         list[20] = WEETH_WITHDRAW_ADAPTER;
         list[21] = WITHDRAW_REQUEST_NFT;
+        // governance — RoleRegistry impl is swapped in Phase B of the upgrade batch. Include it so
+        // its owner/paused are snapshotted (Step 2) + asserted preserved (Step 6) and
+        // verifyNotReinitializable runs on it. RoleRegistry keeps owner() (Ownable2Step, not
+        // DeprecatedOZOwnable) so it falls in the owner()==pre branch; it has no paused() so
+        // _getPaused() returns false pre/post. (audit I-08)
+        list[22] = ROLE_REGISTRY;
     }
 
     //--------------------------------------------------------------------------------------
@@ -1653,7 +1671,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
 
     function verifyAccessControlPreservation() public view {
         console2.log("=== Step 6: Verifying Access Control Preservation ===");
-        address[22] memory proxies = _upgradedProxies();
+        address[23] memory proxies = _upgradedProxies();
         for (uint256 k = 0; k < proxies.length; k++) {
             address p = proxies[k];
             Snap memory pre = preSnap[p];
@@ -1683,6 +1701,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         verifyNotReinitializable(LIQUIFIER,                  "Liquifier");
         // governance
         verifyNotReinitializable(ETHERFI_RATE_LIMITER,       "EtherFiRateLimiter");
+        verifyNotReinitializable(ROLE_REGISTRY,              "RoleRegistry");
         // membership
         verifyNotReinitializable(MEMBERSHIP_MANAGER,         "MembershipManager");
         verifyNotReinitializable(MEMBERSHIP_NFT,             "MembershipNFT");
@@ -1923,6 +1942,8 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         (targets[i], data[i]) = (WEETH,                      _pauseDur(PAUSE_UNTIL_WEETH));                  i++;
         // deposits
         (targets[i], data[i]) = (LIQUIFIER,                  _pauseDur(PAUSE_UNTIL_LIQUIFIER));              i++;
+        // restaking
+        (targets[i], data[i]) = (ETHERFI_RESTAKER,          _pauseDur(PAUSE_UNTIL_ETHERFI_RESTAKER));        i++;
         // rewards
         (targets[i], data[i]) = (CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR, _pauseDur(PAUSE_UNTIL_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR)); i++;
         // staking
@@ -1933,6 +1954,8 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         (targets[i], data[i]) = (PRIORITY_WITHDRAWAL_QUEUE,             _pauseDur(PAUSE_UNTIL_PRIORITY_WITHDRAWAL_QUEUE));             i++;
         (targets[i], data[i]) = (WEETH_WITHDRAW_ADAPTER,                _pauseDur(PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER));                i++;
         (targets[i], data[i]) = (WITHDRAW_REQUEST_NFT,       _pauseDur(PAUSE_UNTIL_WITHDRAW_REQUEST_NFT));   i++;
+        // cross-chain
+        (targets[i], data[i]) = (ETHERFI_L1_SYNC_POOL_ETH, _pauseDur(PAUSE_UNTIL_L1_SYNC_POOL_ETH)); i++;
 
         // governance — grant the guardian Safe CANCELLER_ROLE on the OPERATING_TIMELOCK so it
         // can cancel a scheduled-but-pending op during the 2-day delay. Target is the timelock
@@ -2045,6 +2068,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(LiquidityPool(payable(LIQUIDITY_POOL)).pauseUntilDuration()           == PAUSE_UNTIL_LIQUIDITY_POOL,        "LP pause duration mismatch");
         require(WeETHToken(WEETH).pauseUntilDuration()                                == PAUSE_UNTIL_WEETH,                 "WeETH pause duration mismatch");
         require(Liquifier(payable(LIQUIFIER)).pauseUntilDuration()                    == PAUSE_UNTIL_LIQUIFIER,             "Liquifier pause duration mismatch");
+        require(EtherFiRestaker(payable(ETHERFI_RESTAKER)).pauseUntilDuration()      == PAUSE_UNTIL_ETHERFI_RESTAKER,      "EFRestaker pause duration mismatch");
         require(CumulativeMerkleRewardsDistributor(payable(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR)).pauseUntilDuration() == PAUSE_UNTIL_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR, "CMRD pause duration mismatch");
         require(AuctionManager(AUCTION_MANAGER).pauseUntilDuration()                                           == PAUSE_UNTIL_AUCTION_MANAGER,                      "Auction pause duration mismatch");
         require(EtherFiNodesManager(payable(ETHERFI_NODES_MANAGER)).pauseUntilDuration()                       == PAUSE_UNTIL_ETHERFI_NODES_MANAGER,                "EFNodesMgr pause duration mismatch");
@@ -2052,6 +2076,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(PriorityWithdrawalQueue(payable(PRIORITY_WITHDRAWAL_QUEUE)).pauseUntilDuration()               == PAUSE_UNTIL_PRIORITY_WITHDRAWAL_QUEUE,             "PWQ pause duration mismatch");
         require(WeETHWithdrawAdapter(payable(WEETH_WITHDRAW_ADAPTER)).pauseUntilDuration()                     == PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER,               "WeETHWA pause duration mismatch");
         require(WithdrawRequestNFT(payable(WITHDRAW_REQUEST_NFT)).pauseUntilDuration()== PAUSE_UNTIL_WITHDRAW_REQUEST_NFT,  "NFT pause duration mismatch");
+        require(IL1SyncPoolPausable(ETHERFI_L1_SYNC_POOL_ETH).pauseUntilDuration() == PAUSE_UNTIL_L1_SYNC_POOL_ETH, "L1SyncPoolETH pause duration mismatch");
 
         // Cross-check the hardcoded role IDs (used by _appendGrantCalls, before the
         // getters existed) against the now-upgraded registry. This is the only guard
