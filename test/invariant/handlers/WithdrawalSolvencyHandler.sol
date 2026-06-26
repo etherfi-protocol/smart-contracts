@@ -169,11 +169,17 @@ contract WithdrawalSolvencyHandler is StdUtils {
         }
     }
 
-    /// @notice Mirror production finalize: lock the summed eETH amount of the
-    ///         newly-finalized range (`addEthAmountLockedForWithdrawal`) then
-    ///         `finalizeRequests`. Only finalizes ranges that include at least
-    ///         one of OUR tokenIds, capped to a modest batch so the checkpoint
-    ///         trace and per-op gas stay bounded on the fork.
+    /// @notice Mirror production finalize ATOMICALLY: `finalizeRequests` then
+    ///         `addEthAmountLockedForWithdrawal` for the summed eETH of the
+    ///         newly-finalized range, in a SINGLE frame (exactly as
+    ///         `EtherFiAdmin._finalizeWithdrawals` does). Running them as one
+    ///         atomic unit (via the `this._finalizeThenLock` self-call) is what
+    ///         prevents an orphaned lock: if either leg reverts the other rolls
+    ///         back, so a lock is never committed while `lastFinalizedRequestId`
+    ///         stays put (which would let a later step re-lock the SAME id range
+    ///         and double-move ETH out of the LP). Only finalizes ranges that
+    ///         include at least one of OUR tokenIds, capped to a modest batch so
+    ///         the checkpoint trace and per-op gas stay bounded on the fork.
     function finalizeRequests(uint256 countSeed) external {
         uint32 nextId = wrn.nextRequestId();
         uint32 lastFin = wrn.lastFinalizedRequestId();
@@ -200,60 +206,80 @@ contract WithdrawalSolvencyHandler is StdUtils {
 
         if (lockAmount > type(uint128).max) { callCounts["finalize_skipped_overflow"]++; return; }
 
-        // P1 PROBE (mirrors the correct I13 doFinalize pattern): do NOT
-        // pre-filter on liquidity. Attempt the lock UNCONDITIONALLY and let the
-        // contract decide. LiquidityPool._lockEth (LiquidityPool.sol:598)
-        // reverts InsufficientLiquidity when totalValueInLp < _amount — that
-        // revert IS the I3/P1 enforcement, so we must feed it the over-bound
-        // input, not refuse it.
-        //   - SUCCESS  => the contract permitted the lock; P1 demands the bound
-        //                 actually held (lockAmount <= inLpBefore). If a lock
-        //                 ever succeeds with lockAmount > inLpBefore, _lockEth
-        //                 wrongly let an unbacked lock through => trip the ghost.
-        //   - REVERT   => confirm it was the liquidity guard (or the migration
-        //                 guard, which precedes it) and that the bound was in
-        //                 fact violated; record it as a positive enforcement
-        //                 observation. A revert while lockAmount <= inLpBefore
-        //                 would be the contract wrongly rejecting a backed lock.
-        if (lockAmount > 0) {
-            vm.prank(etherFiAdminAddr);
-            try lp.addEthAmountLockedForWithdrawal(uint128(lockAmount)) {
-                // SUCCESS path: P1 must hold.
+        // ATOMIC finalize+lock (production order: finalize THEN lock, exactly as
+        // EtherFiAdmin._finalizeWithdrawals — EtherFiAdmin.sol:427-428). Both legs
+        // run inside the single `this._finalizeThenLock` frame, so the run gets
+        // all-or-nothing semantics: if EITHER leg reverts, the self-call reverts
+        // and BOTH state changes roll back. This is the fix for the orphaned-lock
+        // bug — previously the lock was committed in its own tx and a subsequent
+        // finalize revert left `ethAmountLockedForWithdrawal` bumped while
+        // `lastFinalizedRequestId` stayed put, so a later fuzz step could lock the
+        // SAME id range again and move extra ETH out of the LP. Production never
+        // exposes that window because the two calls share one transaction.
+        //
+        // P1 enforcement is still observed here (success => bound must have held;
+        // an InsufficientLiquidity revert => bound was genuinely violated), and is
+        // additionally driven adversarially & deterministically by the dedicated
+        // `probeOverLiquidityLock` op, which positively feeds the guard an
+        // over-bound lock every run so the non-vacuity gate never relies on the
+        // fuzzer stumbling onto one here.
+        try this._finalizeThenLock(uint256(target), lockAmount) {
+            // Whole unit committed: finalize landed AND (if non-zero) lock landed.
+            ghost_requestsFinalized++;
+            callCounts["finalize"]++;
+            if (lockAmount > 0) {
+                // SUCCESS path: a committed lock MUST have been backed.
                 if (lockAmount > inLpBefore) {
                     ghost_finalizeExceededLiquidity = true;
                     ghost_failLockAmount = lockAmount;
                     ghost_failInLp = inLpBefore;
                 }
                 ghost_finalizeBoundChecks++;
-            } catch (bytes memory err) {
-                bytes4 sel = err.length >= 4 ? bytes4(err) : bytes4(0);
-                if (sel == SEL_INSUFFICIENT_LIQUIDITY) {
-                    // Enforcement fired. It MUST have been because the bound was
-                    // genuinely violated; a liquidity revert while the range was
-                    // fully backed would itself be a bug.
-                    if (lockAmount <= inLpBefore) {
-                        ghost_lockRejectedWhileBacked = true;
-                        ghost_failLockAmount = lockAmount;
-                        ghost_failInLp = inLpBefore;
-                    } else {
-                        ghost_lockBoundEnforced++; // positive: guard rejected an unbacked lock
-                    }
-                    callCounts["lock_revert_liquidity"]++;
-                } else if (sel == SEL_MIGRATION_NOT_COMPLETE) {
-                    callCounts["lock_revert_migration"]++;
+            }
+        } catch (bytes memory err) {
+            // Atomic rollback: NEITHER finalize nor lock took effect, so there is
+            // no orphaned lock to undo and `lastFinalizedRequestId` is unchanged.
+            bytes4 sel = err.length >= 4 ? bytes4(err) : bytes4(0);
+            if (sel == SEL_INSUFFICIENT_LIQUIDITY) {
+                // The lock leg's liquidity guard fired. It MUST have been because
+                // the bound was genuinely violated; a liquidity revert while the
+                // range was fully backed would itself be a bug.
+                if (lockAmount <= inLpBefore) {
+                    ghost_lockRejectedWhileBacked = true;
+                    ghost_failLockAmount = lockAmount;
+                    ghost_failInLp = inLpBefore;
                 } else {
-                    callCounts["lock_revert_other"]++;
+                    ghost_lockBoundEnforced++; // positive: guard rejected an unbacked lock
                 }
-                return; // cannot finalize a range whose lock did not land
+                callCounts["lock_revert_liquidity"]++;
+            } else if (sel == SEL_MIGRATION_NOT_COMPLETE) {
+                callCounts["lock_revert_migration"]++;
+            } else {
+                // finalize-leg revert (e.g. CannotFinalizeFutureRequests) or any
+                // other classification — the whole unit rolled back regardless.
+                callCounts["finalize_revert"]++;
             }
         }
+    }
 
+    /// @notice Atomic production-order finalize+lock, executed in a SINGLE call
+    ///         frame so the caller can wrap it in try/catch for all-or-nothing
+    ///         semantics (the orphaned-lock fix). Mirrors
+    ///         `EtherFiAdmin._finalizeWithdrawals`: `finalizeRequests` first,
+    ///         then `addEthAmountLockedForWithdrawal` for the range's summed
+    ///         eETH. If the lock leg reverts, the finalize leg reverts with it —
+    ///         no committed lock can outlive a failed finalize.
+    /// @dev    `external` purely so it can be invoked via `this.` to get a fresh
+    ///         frame that reverts atomically. Self-call-gated so the fuzzer
+    ///         cannot drive it out of band (it is not in the targetSelector set
+    ///         either, but the guard is defensive).
+    function _finalizeThenLock(uint256 target, uint256 lockAmount) external {
+        require(msg.sender == address(this), "self-only");
         vm.prank(etherFiAdminAddr);
-        try wrn.finalizeRequests(uint256(target)) {
-            ghost_requestsFinalized++;
-            callCounts["finalize"]++;
-        } catch {
-            callCounts["finalize_revert"]++;
+        wrn.finalizeRequests(target);
+        if (lockAmount > 0) {
+            vm.prank(etherFiAdminAddr);
+            lp.addEthAmountLockedForWithdrawal(uint128(lockAmount));
         }
     }
 
