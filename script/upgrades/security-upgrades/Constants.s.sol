@@ -35,7 +35,7 @@ abstract contract SecurityUpgradesConstants is Deployed {
     // (transactions / revert), so every script must agree on it. Each script's
     // _preflight() rejects bytes20(0).
     // ─────────────────────────────────────────────────────────────────────
-    bytes20 internal constant GIT_COMMIT_SHA = bytes20(hex"87bc3d6783bf9b0278e3ffb98b6eba7f8f0e1769");
+    bytes20 internal constant GIT_COMMIT_SHA = bytes20(hex"0f1e8d966c85bcd3b352d94da15fe2eae61f897c");
     bytes32 internal constant commitHashSalt = bytes32(GIT_COMMIT_SHA);
 
     // ─────────────────────────────────────────────────────────────────────
@@ -135,15 +135,15 @@ abstract contract SecurityUpgradesConstants is Deployed {
     address internal constant HOLDER_SUPER_GUARDIAN_ROLE          = 0x9E26e096C1643ba9133e5562B4E1897031Ad3F66; // SUPER_GUARDIAN_HYPERNATIVE_KEY
     address internal constant HOLDER_GUARDIAN_ROLE                = 0x9AF1298993DC1f397973C62A5D47a284CF76844D; // GUARDIAN_HYPERNATIVE_KEY
 
-    address internal constant HOLDER_ORACLE_OPERATIONS_ROLE       = address(0);
-    address internal constant HOLDER_HOUSEKEEPING_OPERATIONS_ROLE = address(0);
-    address internal constant HOLDER_EXECUTOR_OPERATIONS_ROLE     = address(0);
-    address internal constant HOLDER_EIGENPOD_OPERATIONS_ROLE     = address(0);
+    address internal constant HOLDER_ORACLE_OPERATIONS_ROLE       = 0x62A44D2493AfC2B25B51b01706Ed7Ea10cF80e34;
+    address internal constant HOLDER_HOUSEKEEPING_OPERATIONS_ROLE = 0x67E10B7764A99165665557B3E6cF24555bfC88c3;
+    address internal constant HOLDER_EXECUTOR_OPERATIONS_ROLE     = 0xe09D681299230404b509597206535cb3398f8Dd7;
+    address internal constant HOLDER_EIGENPOD_OPERATIONS_ROLE     = 0xd55df81BE2Db8d2424ffE90a5E2b8Ecb0C71886a;
 
     // Guardian Safe granted TimelockController CANCELLER_ROLE on BOTH timelocks, so it can
     // veto a scheduled-but-not-yet-executed op during its delay window. Set to the chosen
     // guardian Safe before broadcast; _preflight reverts while it is address(0).
-    address internal constant HOLDER_CANCELLER_GUARDIAN           = address(0);
+    address internal constant HOLDER_CANCELLER_GUARDIAN           = 0x055a8B2B65d0aB4E0C17a0168d032464B7E97bdF;
 
     // ─────────────────────────────────────────────────────────────────────
     // ROLE IDs — hardcoded keccak256 of the role name. Mirror the constants in
