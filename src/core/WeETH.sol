@@ -14,9 +14,8 @@ import "@etherfi/governance/interfaces/IBlacklister.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
 import "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
-import "@etherfi/governance/rate-limiting/RateLimitedToken.sol";
 
-contract WeETH is ERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, PausableUntil, ERC20PermitUpgradeable, IRateProvider, AssetRecovery, RateLimitedToken {
+contract WeETH is ERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, PausableUntil, ERC20PermitUpgradeable, IRateProvider, AssetRecovery {
     using SafeERC20 for IERC20;
 
     //--------------------------------------------------------------------------------------
@@ -32,31 +31,6 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
     IeETH public immutable eETH;
     ILiquidityPool public immutable liquidityPool;
     IBlacklister public immutable blacklister;
-
-    //--------------------------------------------------------------------------------------
-    //---------------------------------  CONSTANTS  ---------------------------------------
-    //--------------------------------------------------------------------------------------
-    /// @dev Protocol-wide circuit breakers on supply changes.
-    ///      These globals fire on supply changes that are NOT a wrap/unwrap.
-    ///      wrap/unwrap is a value-neutral share swap (eETH↔weETH at the live rate);
-    ///      charging it against a gross-flow bucket would let an attacker grief the
-    ///      protocol with a wrap+unwrap loop (drain MINT and BURN with ~$5 of gas per
-    ///      cycle). Instead, `wrap()`/`unwrap()` set a transient flag (see _WRAP_CTX_SLOT
-    ///      below) and `_beforeTokenTransfer` skips the global on those paths. Any
-    ///      OTHER `_mint`/`_burn` reach — a future bridge adapter, a new mint
-    ///      authority, or an exploit that finds a new path — has no way to set the
-    ///      flag and so consumes the global bucket normally. That makes the global
-    ///      bucket a real circuit breaker for unauthorized supply changes while
-    ///      keeping wrap/unwrap non-griefable.
-    bytes32 public constant WEETH_MINT_LIMIT_ID = keccak256("WEETH_MINT_LIMIT_ID");
-    bytes32 public constant WEETH_BURN_LIMIT_ID = keccak256("WEETH_BURN_LIMIT_ID");
-    /// @dev Transient-storage slot (EIP-1153) marking that the currently-executing
-    ///      mint/burn is part of a wrap/unwrap call. Auto-clears at end of
-    ///      transaction; subcall reverts also revert any tstore writes, so the slot
-    ///      can never get "stuck set" across txs or after an aborted wrap. Any new
-    ///      wrap-like helper added in the future MUST follow the same set-before /
-    ///      clear-after pattern; otherwise its mints WILL trip the global bucket.
-    bytes32 private constant _WRAP_CTX_SLOT = keccak256("etherfi.weeth.wrap_ctx");
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  ERRORS  ------------------------------------------
@@ -75,14 +49,12 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
      * @param _liquidityPool The address of the liquidity pool contract
      * @param _roleRegistry The address of the role registry contract
      * @param _blacklister The address of the blacklister contract
-     * @param _rateLimiter The address of the rate limiter contract
      * @custom:oz-upgrades-unsafe-allow constructor
      */
-    constructor(address _eETH, address _liquidityPool, address _roleRegistry, address _blacklister, address _rateLimiter)
+    constructor(address _eETH, address _liquidityPool, address _roleRegistry, address _blacklister)
         RolesLibrary(_roleRegistry)
-        RateLimitedToken(_rateLimiter)
     {
-        if(_eETH == address(0) || _liquidityPool == address(0) || _blacklister == address(0) || _rateLimiter == address(0)) revert ZeroAddress();
+        if(_eETH == address(0) || _liquidityPool == address(0) || _blacklister == address(0)) revert ZeroAddress();
         eETH = IeETH(_eETH);
         liquidityPool = ILiquidityPool(_liquidityPool);
         blacklister = IBlacklister(_blacklister);
@@ -122,18 +94,12 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
      *         (weETH.totalSupply <= eETH.shares(proxy)); the deposit-first
      *         ordering means the proxy's share balance is already raised
      *         when the check fires, so the invariant holds with equality.
-     *      `_WRAP_CTX_SLOT` flags the mint so `_beforeTokenTransfer` skips
-     *      the global WEETH_MINT bucket on this value-neutral path; that's
-     *      a separate concern from the backing invariant.
      */
     function wrap(uint256 _eETHAmount) public returns (uint256) {
         if (_eETHAmount == 0) revert ZeroAmount();
         uint256 weEthAmount = liquidityPool.sharesForAmount(_eETHAmount);
         IERC20(address(eETH)).safeTransferFrom(msg.sender, address(this), _eETHAmount);
-        bytes32 slot = _WRAP_CTX_SLOT;
-        assembly { tstore(slot, 1) }
         _mint(msg.sender, weEthAmount);
-        assembly { tstore(slot, 0) }
         return weEthAmount;
     }
 
@@ -155,16 +121,11 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
      * @notice Unwraps weETH
      * @param _weETHAmount the amount of weETH to unwrap
      * @return returns the amount of eEth the user receives
-     * @dev Sets `_WRAP_CTX_SLOT = 1` around `_burn` for the same reason wrap()
-     *      does — see the doc comment on `wrap` and `_WRAP_CTX_SLOT`.
      */
     function unwrap(uint256 _weETHAmount) external returns (uint256) {
         if (_weETHAmount == 0) revert ZeroAmount();
         uint256 eETHAmount = liquidityPool.amountForShare(_weETHAmount);
-        bytes32 slot = _WRAP_CTX_SLOT;
-        assembly { tstore(slot, 1) }
         _burn(msg.sender, _weETHAmount);
-        assembly { tstore(slot, 0) }
         IERC20(address(eETH)).safeTransfer(msg.sender, eETHAmount);
         return eETHAmount;
     }
@@ -238,20 +199,6 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
         blacklister.nonBlacklisted(from);
         blacklister.nonBlacklisted(to);
         blacklister.nonBlacklisted(msg.sender);
-
-        bytes32 slot = _WRAP_CTX_SLOT;
-        uint256 wrapCtx;
-        assembly { wrapCtx := tload(slot) }
-
-        if (from == address(0)) {
-            // mint: value-neutral wraps skip the global; everything else (bridge,
-            // future mint authority, exploit) trips the global circuit breaker.
-            if (wrapCtx == 0) rateLimiter.consumeToken(WEETH_MINT_LIMIT_ID, toBucketUnit(amount));
-        } else if (to == address(0)) {
-            // burn: same — unwrap is value-neutral; anything else trips global BURN.
-            if (wrapCtx == 0) rateLimiter.consumeToken(WEETH_BURN_LIMIT_ID, toBucketUnit(amount));
-        }
-        // transfer (from != 0 && to != 0): no supply change, not rate-limited.
     }
 
     /**

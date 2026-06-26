@@ -42,18 +42,11 @@ contract TokenRateLimitTest is TestSetup {
     }
 
     function test_weETH_large_transfer_passes_unrestricted() public {
-        // Wrap a chunk while buckets are unbounded, then choke the weETH globals
-        // and prove a large weETH transfer still passes.
+        // weETH is not rate-limited at all (no mint/burn buckets). Wrap a chunk and
+        // prove a large weETH transfer passes — there is no bucket to choke.
         vm.startPrank(alice);
         eETHInstance.approve(address(weEthInstance), type(uint256).max);
         uint256 weAmount = weEthInstance.wrap(40 ether);
-        vm.stopPrank();
-
-        vm.startPrank(admin);
-        rateLimiterInstance.setCapacity(weEthInstance.WEETH_MINT_LIMIT_ID(), 1);
-        rateLimiterInstance.setRemaining(weEthInstance.WEETH_MINT_LIMIT_ID(), 1);
-        rateLimiterInstance.setCapacity(weEthInstance.WEETH_BURN_LIMIT_ID(), 1);
-        rateLimiterInstance.setRemaining(weEthInstance.WEETH_BURN_LIMIT_ID(), 1);
         vm.stopPrank();
 
         vm.prank(alice);
@@ -75,7 +68,7 @@ contract TokenRateLimitTest is TestSetup {
     }
 
     // =====================================================================
-    // Access control — eETH/weETH are the only callers of consumeToken.
+    // Access control — eETH is the only caller of consumeToken.
     // =====================================================================
 
     function test_rateLimiter_consumeToken_onlyToken_rejects_external_callers() public {
@@ -176,103 +169,20 @@ contract TokenRateLimitTest is TestSetup {
     }
 
     // =====================================================================
-    // Wrap-aware global bucket: wrap/unwrap do NOT trip WEETH_{MINT,BURN}.
-    // Non-wrap supply changes DO. This is what makes the global bucket useful as
-    // a circuit breaker without exposing wrap/unwrap as a grief surface.
+    // weETH is not rate-limited: wrap/unwrap (and any other weETH mint/burn)
+    // touch no bucket. The wrap/unwrap path is exercised by the deposit/flow
+    // tests; there is no weETH mint/burn circuit breaker to assert here.
     // =====================================================================
 
-    function test_wrap_does_NOT_consume_global_mint_bucket() public {
-        // Set MINT cap to 1 gwei — any consumption would revert. Wrap 40 ETH
-        // (massively over the cap) and assert it succeeds because the wrap
-        // path is intentionally exempted from the global MINT bucket.
-        vm.startPrank(admin);
-        rateLimiterInstance.setCapacity(weEthInstance.WEETH_MINT_LIMIT_ID(), 1);
-        rateLimiterInstance.setRefillRate(weEthInstance.WEETH_MINT_LIMIT_ID(), 0);
-        rateLimiterInstance.setRemaining(weEthInstance.WEETH_MINT_LIMIT_ID(), 1);
-        vm.stopPrank();
-
-        vm.startPrank(alice);
-        eETHInstance.approve(address(weEthInstance), type(uint256).max);
-        weEthInstance.wrap(40 ether);            // 40 ETH wrap with cap=1gwei
-        weEthInstance.wrap(0.001 ether);         // and again
-        vm.stopPrank();
-
-        // The bucket's remaining is untouched — wrap never drew on it.
-        (, uint64 remaining, , ) = rateLimiterInstance.getLimit(weEthInstance.WEETH_MINT_LIMIT_ID());
-        assertEq(remaining, 1, "wrap must not consume from global MINT bucket");
-    }
-
-    function test_unwrap_does_NOT_consume_global_burn_bucket() public {
-        // Pre-wrap while the bucket is unbounded.
-        vm.startPrank(alice);
-        eETHInstance.approve(address(weEthInstance), type(uint256).max);
-        uint256 weAmt = weEthInstance.wrap(2 ether);
-        vm.stopPrank();
-
-        // Choke the burn bucket — same argument as above.
-        vm.startPrank(admin);
-        rateLimiterInstance.setCapacity(weEthInstance.WEETH_BURN_LIMIT_ID(), 1);
-        rateLimiterInstance.setRefillRate(weEthInstance.WEETH_BURN_LIMIT_ID(), 0);
-        rateLimiterInstance.setRemaining(weEthInstance.WEETH_BURN_LIMIT_ID(), 1);
-        vm.stopPrank();
-
-        vm.prank(alice);
-        weEthInstance.unwrap(weAmt);             // unwrap full amount despite cap=1gwei
-
-        (, uint64 remaining, , ) = rateLimiterInstance.getLimit(weEthInstance.WEETH_BURN_LIMIT_ID());
-        assertEq(remaining, 1, "unwrap must not consume from global BURN bucket");
-    }
-
-    function test_wrap_unwrap_loop_is_NOT_griefable() public {
-        // The whole point of the wrap-aware flag: any number of wrap/unwrap cycles
-        // by anyone must NOT drain either global bucket. Run 50 cycles against a
-        // cap of 1 gwei (which would catastrophically fail without the flag).
-        vm.startPrank(admin);
-        rateLimiterInstance.setCapacity(weEthInstance.WEETH_MINT_LIMIT_ID(), 1);
-        rateLimiterInstance.setRemaining(weEthInstance.WEETH_MINT_LIMIT_ID(), 1);
-        rateLimiterInstance.setCapacity(weEthInstance.WEETH_BURN_LIMIT_ID(), 1);
-        rateLimiterInstance.setRemaining(weEthInstance.WEETH_BURN_LIMIT_ID(), 1);
-        vm.stopPrank();
-
-        vm.startPrank(alice);
-        eETHInstance.approve(address(weEthInstance), type(uint256).max);
-        for (uint256 i = 0; i < 50; i++) {
-            uint256 minted = weEthInstance.wrap(1 ether);
-            weEthInstance.unwrap(minted);
-        }
-        vm.stopPrank();
-
-        (, uint64 mintRem, , ) = rateLimiterInstance.getLimit(weEthInstance.WEETH_MINT_LIMIT_ID());
-        (, uint64 burnRem, , ) = rateLimiterInstance.getLimit(weEthInstance.WEETH_BURN_LIMIT_ID());
-        assertEq(mintRem, 1, "MINT bucket undrained after 50 wrap/unwrap cycles");
-        assertEq(burnRem, 1, "BURN bucket undrained after 50 wrap/unwrap cycles");
-    }
-
-    function test_global_mint_bucket_is_wired_for_non_wrap_paths() public {
-        // A non-wrap mint path (e.g., a future bridge adapter) would NOT set the
-        // transient wrap flag and so WOULD consume the global bucket. We can't
-        // reach `_mint` directly from outside (it's internal), but we can confirm
-        // the bucket exists and weETH is whitelisted — i.e. the circuit breaker is
-        // armed for any non-wrap supply change.
-        vm.startPrank(admin);
-        rateLimiterInstance.setCapacity(weEthInstance.WEETH_MINT_LIMIT_ID(), ONE_ETHER_GWEI);
-        rateLimiterInstance.setRefillRate(weEthInstance.WEETH_MINT_LIMIT_ID(), 0);
-        rateLimiterInstance.setRemaining(weEthInstance.WEETH_MINT_LIMIT_ID(), ONE_ETHER_GWEI);
-        vm.stopPrank();
-
-        assertTrue(rateLimiterInstance.limitExists(weEthInstance.WEETH_MINT_LIMIT_ID()));
-        assertTrue(rateLimiterInstance.isConsumerAllowed(weEthInstance.WEETH_MINT_LIMIT_ID(), address(weEthInstance)));
-    }
-
     // =====================================================================
-    // Bootstrap-ordering invariants  (READ THIS BEFORE UPGRADING eETH/weETH)
+    // Bootstrap-ordering invariants  (READ THIS BEFORE UPGRADING eETH)
     // =====================================================================
     //
-    // The four global MINT/BURN buckets — EETH_MINT_LIMIT_ID, EETH_BURN_LIMIT_ID,
-    // WEETH_MINT_LIMIT_ID, WEETH_BURN_LIMIT_ID — MUST be created via
-    // `createNewLimiter` AND have eETH/weETH whitelisted via `updateConsumers`
-    // BEFORE the new eETH/weETH impls are activated. `_setupGlobalMintBurnBuckets`
-    // in TestSetup is the reference bootstrap.
+    // The two global MINT/BURN buckets — EETH_MINT_LIMIT_ID, EETH_BURN_LIMIT_ID —
+    // MUST be created via `createNewLimiter` AND have eETH whitelisted via
+    // `updateConsumers` BEFORE the new eETH impl is activated.
+    // `_setupGlobalMintBurnBuckets` in TestSetup is the reference bootstrap.
+    // (weETH is not rate-limited, so it has no bucket to bootstrap.)
     //
     //   Global-bucket state                                    | consumeToken behavior
     //   -------------------------------------------------------|-----------------------------
@@ -285,16 +195,14 @@ contract TokenRateLimitTest is TestSetup {
     // To soft-disable a global rate limit without un-whitelisting the consumer,
     // set capacity to type(uint64).max (effectively unlimited, never trips).
     //
-    // Why this matters operationally: if a 3CP upgrade bundle swaps the eETH/weETH
-    // impls WITHOUT including the four createNewLimiter + updateConsumers calls in
-    // the same bundle, the failure mode is total — every LP deposit and every
-    // burnShares reverts. Wrap/unwrap on weETH continues to work (transient-storage
-    // flag bypasses the global on those paths), which can make the incident look
-    // partial and confusing. These tests pin down each signal so the diagnosis is
-    // unambiguous.
+    // Why this matters operationally: if a 3CP upgrade bundle swaps the eETH impl
+    // WITHOUT including the createNewLimiter + updateConsumers calls in the same
+    // bundle, the failure mode is total — every LP deposit and every burnShares
+    // reverts. weETH wrap/unwrap is unaffected (weETH is not rate-limited). These
+    // tests pin down each signal so the diagnosis is unambiguous.
 
     function test_bootstrap_state1_uncreated_bucket_reverts_UnknownLimit() public {
-        // The four real IDs are already created by TestSetup and there's no API
+        // The real IDs are already created by TestSetup and there's no API
         // to delete a global bucket. Prove the failure mode using a synthetic
         // ID that has never been created — same code path eETH would hit on an
         // unbootstrapped upgrade.
@@ -333,15 +241,10 @@ contract TokenRateLimitTest is TestSetup {
         eETHInstance.burnShares(alice, oneEthShare);
     }
 
-    function test_bootstrap_state2_weETH_wrap_STILL_succeeds_when_consumer_not_whitelisted() public {
-        // Subtle and important: wrap/unwrap survives consumer revocation because
-        // the transient-storage wrap-context flag short-circuits the global consume
-        // BEFORE we ever reach the rate limiter. This is by design — wrap/unwrap
-        // is value-neutral and must never be DOSable via global-bucket state.
-        bytes32 wMintId = weEthInstance.WEETH_MINT_LIMIT_ID();
-        vm.prank(admin);
-        rateLimiterInstance.updateConsumers(wMintId, address(weEthInstance), false);
-
+    function test_bootstrap_weETH_wrap_is_never_rate_limited() public {
+        // weETH has no mint/burn bucket, so wrap/unwrap can never be gated by
+        // rate-limiter state. Revoking eETH's consumer entry would only affect
+        // eETH mint/burn — weETH wrap stays available regardless.
         vm.startPrank(alice);
         eETHInstance.approve(address(weEthInstance), type(uint256).max);
         weEthInstance.wrap(1 ether);

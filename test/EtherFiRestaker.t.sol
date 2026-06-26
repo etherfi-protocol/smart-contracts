@@ -272,19 +272,15 @@ contract EtherFiRestakerTest is TestSetup {
         roleRegistryInstance.grantRole(roleRegistryInstance.EXECUTOR_OPERATIONS_ROLE(), owner);
         vm.stopPrank();
 
-        // Create rate-limiter buckets and register restaker as a consumer (idempotent)
+        // Create the stETH-withdrawal rate-limiter bucket and register the restaker as a
+        // consumer (idempotent). queue-withdrawals / deposit-into-strategy are no longer
+        // rate-limited, so they have no bucket.
         uint64 maxUint64 = type(uint64).max;
         address restakerAddr = address(etherFiRestakerInstance);
         vm.startPrank(owner);
         bytes32 stEthId = etherFiRestakerInstance.STETH_REQUEST_WITHDRAWAL_LIMIT_ID();
-        bytes32 queueId = etherFiRestakerInstance.QUEUE_WITHDRAWALS_LIMIT_ID();
-        bytes32 depositId = etherFiRestakerInstance.DEPOSIT_INTO_STRATEGY_LIMIT_ID();
         if (!rateLimiterInstance.limitExists(stEthId)) rateLimiterInstance.createNewLimiter(stEthId, maxUint64, maxUint64);
         rateLimiterInstance.updateConsumers(stEthId, restakerAddr, true);
-        if (!rateLimiterInstance.limitExists(queueId)) rateLimiterInstance.createNewLimiter(queueId, maxUint64, maxUint64);
-        rateLimiterInstance.updateConsumers(queueId, restakerAddr, true);
-        if (!rateLimiterInstance.limitExists(depositId)) rateLimiterInstance.createNewLimiter(depositId, maxUint64, maxUint64);
-        rateLimiterInstance.updateConsumers(depositId, restakerAddr, true);
         vm.stopPrank();
     }
 
