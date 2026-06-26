@@ -1,0 +1,11 @@
+{
+  "contractName": "RoleRegistry",
+  "deploymentParameters": {
+    "factory": "0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99",
+    "salt": "0x0f1e8d966c85bcd3b352d94da15fe2eae61f897c000000000000000000000000",
+    "constructorArgs": {
+      "_revokeAdmin": "0x4A84BA0b5e716b37C78D0F5094757205626C7C1e"
+    }
+  },
+  "deployedAddress": "0x3B44A093b9736af765f98F3245998f63bc757970"
+}

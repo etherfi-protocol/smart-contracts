@@ -1,0 +1,15 @@
+{
+  "contractName": "MembershipManager",
+  "deploymentParameters": {
+    "factory": "0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99",
+    "salt": "0x0f1e8d966c85bcd3b352d94da15fe2eae61f897c000000000000000000000000",
+    "constructorArgs": {
+      "_eETH": "0x35fA164735182de50811E8e2E824cFb9B6118ac2",
+      "_liquidityPool": "0x308861A430be4cce5502d0A12724771Fc6DaF216",
+      "_membershipNFT": "0xb49e4420eA6e35F98060Cd133842DbeA9c27e479",
+      "_roleRegistry": "0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9",
+      "_blacklister": "0x5585996E7cFE95f2D99e61168B8b35C66Ff99B18"
+    }
+  },
+  "deployedAddress": "0xa9DbE5C7C8172ef83a30c143892E0010420e6307"
+}
