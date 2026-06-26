@@ -2252,27 +2252,6 @@ contract EtherFiOracleTest is TestSetup {
         etherFiAdminInstance.finalizeWithdrawalsWhenStale();
     }
 
-    // Every pending request was invalidated by the oracle → loop walks through
-    // them all (advancing requestId past each) but accumulates 0 ETH → revert.
-    // lastFinalizedRequestId is unchanged because we never reach _finalizeWithdrawals.
-    function test_finalizeWithdrawalsWhenStale_revertsWhenAllRequestsInvalid() public {
-        _unpauseWithdrawNFT();
-        _seedLp(10 ether);
-
-        uint256 r1 = _makeWithdrawRequest(1 ether);
-        uint256 r2 = _makeWithdrawRequest(1 ether);
-        _invalidateRequest(r1);
-        _invalidateRequest(r2);
-
-        _advanceToStaleBoundary();
-
-        uint32 lastFinalizedBefore = withdrawRequestNFTInstance.lastFinalizedRequestId();
-        vm.expectRevert(EtherFiAdmin.NoWithdrawalsToFinalize.selector);
-        etherFiAdminInstance.finalizeWithdrawalsWhenStale();
-
-        assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), lastFinalizedBefore);
-    }
-
     // LP balance is below the first request's amount → break immediately on
     // iteration 1 → finalizedWithdrawalAmount stays at 0 → revert.
     function test_finalizeWithdrawalsWhenStale_revertsWhenInsufficientLiquidityForFirstRequest() public {
@@ -2383,6 +2362,36 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(address(liquidityPoolInstance).balance, lpBalanceBefore - 3 ether);
     }
 
+    // Every pending request is invalid (e.g. all guardian-invalidated): the loop
+    // walks past each one (advancing the cursor) and accumulates 0 ETH. The fix
+    // for audit L-01 means this no longer reverts — the cursor must advance so an
+    // invalid prefix cannot wall off valid requests queued behind it. No ETH is
+    // locked because nothing valid was finalized.
+    function test_finalizeWithdrawalsWhenStale_advancesPastAllInvalidWithoutRevert() public {
+        _unpauseWithdrawNFT();
+        _seedLp(10 ether);
+        uint256 r1 = _makeWithdrawRequest(1 ether);
+        uint256 r2 = _makeWithdrawRequest(1 ether);
+        _invalidateRequest(r1);
+        _invalidateRequest(r2);
+
+        _advanceToStaleBoundary();
+
+        uint128 lockedBefore = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
+        uint256 lpBalanceBefore = address(liquidityPoolInstance).balance;
+
+        // Pre-L-01-fix this reverted with NoWithdrawalsToFinalize; now it succeeds.
+        etherFiAdminInstance.finalizeWithdrawalsWhenStale();
+
+        // Cursor advanced past the whole invalid run...
+        assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), uint32(r2));
+        assertTrue(withdrawRequestNFTInstance.isFinalized(r1));
+        assertTrue(withdrawRequestNFTInstance.isFinalized(r2));
+        // ...but no ETH was locked or moved, since nothing valid was finalized.
+        assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), lockedBefore);
+        assertEq(address(liquidityPoolInstance).balance, lpBalanceBefore);
+    }
+
     // Liquidity runs out mid-way: finalize as many as fit, stop at the first
     // valid request the LP can't cover. The leftover request stays pending.
     function test_finalizeWithdrawalsWhenStale_stopsAtLiquidityLimit() public {
@@ -2407,31 +2416,6 @@ contract EtherFiOracleTest is TestSetup {
         assertTrue(withdrawRequestNFTInstance.isFinalized(r1));
         assertFalse(withdrawRequestNFTInstance.isFinalized(r3));
         assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), lockedBefore + 3 ether);
-    }
-
-    // Invalid + valid-but-too-big combo: loop skips the invalid (advancing
-    // past it) then hits the unfundable valid one and breaks. Since nothing
-    // accumulated, we revert — lastFinalizedRequestId stays put. This shows
-    // the function refuses to "lock in" the skipped invalid without also
-    // locking real ETH.
-    function test_finalizeWithdrawalsWhenStale_revertsWhenOnlyInvalidIsTraversable() public {
-        _unpauseWithdrawNFT();
-        _seedLp(20 ether);
-        uint256 r1 = _makeWithdrawRequest(3 ether);
-        _makeWithdrawRequest(5 ether);
-
-        _invalidateRequest(r1);
-        // totalValueInLp below the next (valid) request's amount.
-        _forceLpBalanceAndTVIL(1 ether);
-
-        _advanceToStaleBoundary();
-
-        uint32 lastFinalizedBefore = withdrawRequestNFTInstance.lastFinalizedRequestId();
-        vm.expectRevert(EtherFiAdmin.NoWithdrawalsToFinalize.selector);
-        etherFiAdminInstance.finalizeWithdrawalsWhenStale();
-
-        assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), lastFinalizedBefore);
-        assertFalse(withdrawRequestNFTInstance.isFinalized(r1));
     }
 
     // Invalid + valid-fundable combo: loop skips the invalid (advancing past

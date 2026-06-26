@@ -56,6 +56,12 @@ import {ContractCodeChecker} from "@scripts/ContractCodeChecker.sol";
 import {Utils} from "@scripts/utils/utils.sol";
 import {SecurityUpgradesConstants} from "./Constants.s.sol";
 
+// EtherfiL1SyncPoolETH (WeETH-cross-chain repo, PR #77) is not compiled in this repo, so we
+// reach its PausableUntil getter through a minimal interface rather than importing the contract.
+interface IL1SyncPoolPausable {
+    function pauseUntilDuration() external view returns (uint256);
+}
+
 /**
  * 26Q2 Security Upgrades - Timelocked Upgrade + Configuration
  *
@@ -64,20 +70,24 @@ import {SecurityUpgradesConstants} from "./Constants.s.sol";
  * `_preflight()` reverts otherwise.
  *
  * Everything is packed into FOUR batches → SIX Safe JSON files:
- *   • Batch 0 — OPERATION_MULTISIG (now): auction_sweep.json   (PRE-UPGRADE; must execute first)
+ *   • Batch 0 — OPERATION_MULTISIG (now): pre_upgrade_multisig.json (PRE-UPGRADE; execute first)
+ *                                         (AuctionManager sweep + eETH MINT/BURN buckets, one multiSend)
  *   • Batch 1 — UPGRADE_TIMELOCK (10d):   upgrade_schedule.json + upgrade_execute.json
  *   • Batch 2 — OPERATING_TIMELOCK (2d):  ops_schedule.json + ops_execute.json
  *   • Batch 3 — OPERATION_MULTISIG (now): lp_withdraw_bounds.json
- * Execute Batch 0 first (flushes AuctionManager revenue while the old impl still can).
+ * Execute Batch 0 first (flushes AuctionManager revenue while the old impl still can, and creates
+ * the eETH buckets before the upgrade makes EETH rate-limited).
  * Both timelock batches are SCHEDULED together; after the 10-day delay, execute
  * Batch 1, then Batch 2, then the instant Batch 3.
  *
  * `run()` builds + dry-runs them in execution order:
  *   1. verifyDeployedBytecode      — fresh deploys match the recorded impls
  *   2. takePreUpgradeSnapshots     — owners + paused, per upgraded proxy
- *   2.5 executeAuctionSweep        — Batch 0 (OPERATION_MULTISIG, instant, PRE-UPGRADE):
- *                                    flush AuctionManager.accumulatedRevenue to MembershipManager
- *                                    before the impl swap deletes that slot + its transfer fn.
+ *   2.5 executePreUpgradeMultisig  — Batch 0 (OPERATION_MULTISIG, instant, PRE-UPGRADE): one
+ *                                    multiSend that flushes AuctionManager.accumulatedRevenue to
+ *                                    the MembershipManager (before the impl swap deletes that slot)
+ *                                    AND creates the eETH MINT/BURN buckets + EETH consumer (before
+ *                                    the upgrade makes EETH rate-limited).
  *   3. executeUpgrade              — Batch 1 (UPGRADE_TIMELOCK, 10d). ONE batch, in order:
  *                                    (a) grant the 9 RolesLibrary roles (owner-gated; owner == UPGRADE_TIMELOCK),
  *                                    (b) upgrade RoleRegistry + every proxy + the EtherFiNode beacon,
@@ -94,7 +104,9 @@ import {SecurityUpgradesConstants} from "./Constants.s.sol";
  *  7b. verifyLiquifierWhitelistRemoved — assert cbETH + wBETH unwhitelisted on Liquifier (EARN-1421)
  *
  *   8. executeOperatingConfig      — Batch 2 (OPERATING_TIMELOCK, 2d): rate-limiter buckets,
- *                                    pause durations, EtherFiAdmin daily finalized-withdrawal cap
+ *                                    pause durations, EtherFiAdmin daily finalized-withdrawal cap,
+ *                                    and the ENM forwarded-call whitelist migration (grant the
+ *                                    legacy caller's set to the eigenpod-ops holder, revoke the legacy)
  *   9. executeLpWithdrawBounds     — Batch 3 (OPERATION_MULTISIG, instant): LP min/max withdraw bounds
  *  10. verifyOperatingConfig       — buckets + pause durations + role grants + LP bounds + finalized-withdrawal cap
  */
@@ -180,6 +192,29 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
 
     ContractCodeChecker internal codeChecker;
 
+    // Forwarded-call whitelist migration. ENM's whitelist is keyed per caller. Move the eigenpod-ops
+    // forwarder's live grants from the legacy pod-prover EOA to HOLDER_EIGENPOD_OPERATIONS_ROLE: grant
+    // each to the new holder and revoke each from the legacy caller. The holder must equal the
+    // EIGENPOD_OPERATIONS_ROLE holder, since forward* checks both the role and the per-caller whitelist.
+    // The set below is LEGACY_FORWARD_CALLER's effective whitelist verified live on mainnet (block
+    // 25383537); the OPERATING_TIMELOCK's separate delegation grants are intentionally left untouched.
+    address internal constant LEGACY_FORWARD_CALLER = 0x7835fB36A8143a014A2c381363cD1A4DeE586d2A;
+
+    // forwardEigenPodCall selectors (called on the validator's EigenPod).
+    bytes4 internal constant SEL_START_CHECKPOINT              = 0x88676cad; // startCheckpoint(bool)
+    bytes4 internal constant SEL_VERIFY_CHECKPOINT_PROOFS      = 0xf074ba62; // verifyCheckpointProofs((bytes32,bytes),(bytes32,bytes32,bytes)[])
+    bytes4 internal constant SEL_VERIFY_WITHDRAWAL_CREDENTIALS = 0x3f65cf19; // verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])
+
+    // forwardExternalCall selector — processClaim on the EigenLayer RewardsCoordinator.
+    bytes4 internal constant SEL_PROCESS_CLAIM = 0x3ccc861d; // processClaim((...),address)
+
+    // forwardExternalCall selectors on the EigenLayer DelegationManager, newly whitelisted in 3CP #580
+    // (batch queue/complete across backfilled nodes). GRANT-ONLY to the new holder here; the legacy
+    // caller's copies are revoked in a separate later 3CP.
+    bytes4 internal constant SEL_QUEUE_WITHDRAWALS           = 0x0dd8dd02; // queueWithdrawals((address[],uint256[],address)[])
+    bytes4 internal constant SEL_COMPLETE_QUEUED_WITHDRAWALS = 0x9435bb43; // completeQueuedWithdrawals((...)[],address[][],bool[]) (plural)
+    bytes4 internal constant SEL_COMPLETE_QUEUED_WITHDRAWAL  = 0xe4cc3f90; // completeQueuedWithdrawal((...),address[],bool) (singular; used by completeQueuedETHWithdrawals)
+
     function run() public {
         // Prefer FORK_RPC_URL when set (e.g. a Tenderly virtual testnet that already has the
         // deploy.s.sol broadcast applied) so verifyDeployedBytecode can read the new impls'
@@ -197,12 +232,15 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         verifyDeployedBytecode();
         takePreUpgradeSnapshots();
 
-        // ── Batch 0: the pre-upgrade AuctionManager sweep (instant) ────────────────
-        // Flush the OLD AuctionManager's pending accumulatedRevenue to the MembershipManager
-        // BEFORE the impl swap deletes that storage slot + its transfer function. Signed by
-        // ETHERFI_OPERATING_ADMIN (an `admins[]` entry on the old impl). Must execute before
-        // Batch 1 executes.
-        executeAuctionSweep();
+        // ── Batch 0: the pre-upgrade OPERATION_MULTISIG batch (instant) ────────────
+        // ONE multiSend signed by ETHERFI_OPERATING_ADMIN, executed BEFORE Batch 1:
+        //   • AuctionManager.transferAccumulatedRevenue() — flush pending revenue to the
+        //     MembershipManager before the impl swap deletes that slot + its transfer function.
+        //   • create the EETH_MINT/BURN buckets + wire EETH as consumer so eETH mint/burn never
+        //     reverts (UnknownLimit) in the gap between Batch 1 and the operating batch.
+        // Both are OPERATION_MULTISIG-gated instant calls (auction admins[]; rate-limiter
+        // ETHERFI_RATE_LIMITER_ADMIN_ROLE), so they share one signing ceremony.
+        executePreUpgradeMultisig();
 
         // ── Batch 1: the UPGRADE_TIMELOCK batch (10d) ──────────────────────────────
         // One schedule + one execute JSON. Internally ordered: role grants ->
@@ -217,8 +255,9 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
 
         // ── Batch 2: the OPERATING_TIMELOCK batch (2d) ─────────────────────────────
         // Scheduled at the same time as Batch 1; executed after it. One schedule +
-        // one execute JSON: rate-limiter buckets, pause durations, and the EtherFiAdmin
-        // daily finalized-withdrawal cap (all OPERATION_TIMELOCK_ROLE).
+        // one execute JSON: rate-limiter buckets, pause durations, the EtherFiAdmin
+        // daily finalized-withdrawal cap, and the ENM forwarded-call whitelist migration
+        // (all OPERATION_TIMELOCK_ROLE / onlyOperatingTimelock).
         executeOperatingConfig();
 
         // ── Batch 3: the OPERATION_MULTISIG batch (instant) ────────────────────────
@@ -304,6 +343,8 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(PAUSE_UNTIL_WEETH != 0,                  "preflight: PAUSE_UNTIL_WEETH unset");
         // deposits
         require(PAUSE_UNTIL_LIQUIFIER != 0,              "preflight: PAUSE_UNTIL_LIQUIFIER unset");
+        // restaking
+        require(PAUSE_UNTIL_ETHERFI_RESTAKER != 0,       "preflight: PAUSE_UNTIL_ETHERFI_RESTAKER unset");
         // rewards
         require(PAUSE_UNTIL_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR != 0, "preflight: PAUSE_UNTIL_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR unset");
         // staking
@@ -314,6 +355,8 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(PAUSE_UNTIL_PRIORITY_WITHDRAWAL_QUEUE != 0,             "preflight: PAUSE_UNTIL_PRIORITY_WITHDRAWAL_QUEUE unset");
         require(PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER != 0,                "preflight: PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER unset");
         require(PAUSE_UNTIL_WITHDRAW_REQUEST_NFT != 0,   "preflight: PAUSE_UNTIL_WITHDRAW_REQUEST_NFT unset");
+        // cross-chain
+        require(PAUSE_UNTIL_L1_SYNC_POOL_ETH != 0,       "preflight: PAUSE_UNTIL_L1_SYNC_POOL_ETH unset");
 
         require(ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT != 0, "preflight: ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT unset");
         require(ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT <= ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY, "preflight: ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT exceeds acceptable ceiling");
@@ -455,6 +498,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         console2.log("PAUSE_UNTIL_WEETH:                   ", PAUSE_UNTIL_WEETH);
         console2.log("PAUSE_UNTIL_LIQUIDITY_POOL:          ", PAUSE_UNTIL_LIQUIDITY_POOL);
         console2.log("PAUSE_UNTIL_LIQUIFIER:               ", PAUSE_UNTIL_LIQUIFIER);
+        console2.log("PAUSE_UNTIL_ETHERFI_RESTAKER:        ", PAUSE_UNTIL_ETHERFI_RESTAKER);
         console2.log("PAUSE_UNTIL_CMRD:                    ", PAUSE_UNTIL_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR);
         console2.log("PAUSE_UNTIL_AUCTION_MANAGER:         ", PAUSE_UNTIL_AUCTION_MANAGER);
         console2.log("PAUSE_UNTIL_ETHERFI_NODES_MANAGER:   ", PAUSE_UNTIL_ETHERFI_NODES_MANAGER);
@@ -462,6 +506,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         console2.log("PAUSE_UNTIL_PRIORITY_WITHDRAWAL_QUEUE", PAUSE_UNTIL_PRIORITY_WITHDRAWAL_QUEUE);
         console2.log("PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER:  ", PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER);
         console2.log("PAUSE_UNTIL_WITHDRAW_REQUEST_NFT:    ", PAUSE_UNTIL_WITHDRAW_REQUEST_NFT);
+        console2.log("PAUSE_UNTIL_L1_SYNC_POOL_ETH:        ", PAUSE_UNTIL_L1_SYNC_POOL_ETH);
         console2.log("");
         console2.log("--- Operational setpoints ---");
         console2.log("ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT (TBD):", ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT);
@@ -690,7 +735,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
     //--------------------------------------------------------------------------------------
     function takePreUpgradeSnapshots() public {
         console2.log("=== Step 2: Taking Pre-Upgrade Snapshots ===");
-        address[22] memory proxies = _upgradedProxies();
+        address[23] memory proxies = _upgradedProxies();
         for (uint256 k = 0; k < proxies.length; k++) {
             preSnap[proxies[k]] = Snap({ owner: _getOwner(proxies[k]), paused: _getPaused(proxies[k]) });
         }
@@ -730,6 +775,31 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
 
         console2.log("[OK] snapshotted owner + paused + immutable getters for", proxies.length, "proxies");
         console2.log("");
+    }
+
+    /// @dev Forwarded eigenpod-call selectors to migrate; shared by the batch builder and verifier.
+    function _forwardedEigenpodSelectors() internal pure returns (bytes4[] memory s) {
+        s = new bytes4[](3);
+        s[0] = SEL_START_CHECKPOINT;
+        s[1] = SEL_VERIFY_CHECKPOINT_PROOFS;
+        s[2] = SEL_VERIFY_WITHDRAWAL_CREDENTIALS;
+    }
+
+    /// @dev Forwarded external-call (selector,target) pairs to migrate.
+    function _forwardedExternalCalls() internal pure returns (bytes4[] memory s, address[] memory t) {
+        s = new bytes4[](1);
+        t = new address[](1);
+        (s[0], t[0]) = (SEL_PROCESS_CLAIM, EIGENLAYER_REWARDS_COORDINATOR);
+    }
+
+    /// @dev forwardExternalCall (selector,target) pairs newly whitelisted in 3CP #580. Grant-only to
+    ///      the new holder; the legacy caller's copies are revoked in a later 3CP.
+    function _grantOnlyExternalCalls() internal pure returns (bytes4[] memory s, address[] memory t) {
+        s = new bytes4[](3);
+        t = new address[](3);
+        (s[0], t[0]) = (SEL_QUEUE_WITHDRAWALS,           EIGENLAYER_DELEGATION_MANAGER);
+        (s[1], t[1]) = (SEL_COMPLETE_QUEUED_WITHDRAWALS, EIGENLAYER_DELEGATION_MANAGER);
+        (s[2], t[2]) = (SEL_COMPLETE_QUEUED_WITHDRAWAL,  EIGENLAYER_DELEGATION_MANAGER);
     }
 
     /// @dev Capture `staticcall` returns for every selector; silently skip the
@@ -983,7 +1053,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         s[3] = bytes4(keccak256("etherFiAdmin()"));
     }
 
-    function _upgradedProxies() internal pure returns (address[22] memory list) {
+    function _upgradedProxies() internal pure returns (address[23] memory list) {
         // core
         list[0]  = EETH;
         list[1]  = LIQUIDITY_POOL;
@@ -1015,10 +1085,17 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         list[19] = PRIORITY_WITHDRAWAL_QUEUE;
         list[20] = WEETH_WITHDRAW_ADAPTER;
         list[21] = WITHDRAW_REQUEST_NFT;
+        // governance — RoleRegistry impl is swapped in Phase B of the upgrade batch. Include it so
+        // its owner/paused are snapshotted (Step 2) + asserted preserved (Step 6) and
+        // verifyNotReinitializable runs on it. RoleRegistry keeps owner() (Ownable2Step, not
+        // DeprecatedOZOwnable) so it falls in the owner()==pre branch; it has no paused() so
+        // _getPaused() returns false pre/post. (audit I-08)
+        list[22] = ROLE_REGISTRY;
     }
 
     //--------------------------------------------------------------------------------------
-    // STEP 2.5: executeAuctionSweep — Batch 0, the OPERATION_MULTISIG pre-upgrade sweep (instant)
+    // STEP 2.5: executePreUpgradeMultisig — Batch 0, the OPERATION_MULTISIG pre-upgrade multiSend
+    // (instant): AuctionManager sweep + eETH-bucket creation in one signed Safe tx.
     //
     // MUST run BEFORE the upgrade batch executes. The currently-deployed AuctionManager
     // accrues consumed-bid fees in the `accumulatedRevenue` storage slot and only flushes
@@ -1037,26 +1114,52 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
     // The call is built via abi.encodeWithSignature because the NEW AuctionManager type
     // (imported here) no longer declares transferAccumulatedRevenue().
     //--------------------------------------------------------------------------------------
-    function executeAuctionSweep() public {
-        console2.log("=== Step 2.5: Executing AuctionManager Sweep (Batch 0, OPERATION_MULTISIG, instant, PRE-UPGRADE) ===");
+    function executePreUpgradeMultisig() public {
+        console2.log("=== Step 2.5: Pre-upgrade OPERATION_MULTISIG batch (AuctionManager sweep + eETH buckets, instant) ===");
 
+        // Both actions are ETHERFI_OPERATING_ADMIN calls that must land BEFORE the upgrade batch,
+        // and the order between them doesn't matter — so they ride ONE multiSend (one signing /
+        // one execution) rather than two separate Safe txs:
+        //   [0]   AuctionManager.transferAccumulatedRevenue() — flush residual bid revenue to the
+        //         MembershipManager while the OLD impl still has the function + slot. `onlyAdmin`
+        //         here = the legacy `admins[..]` mapping, true for 0x2aCA.
+        //   [1-4] rate-limiter createNewLimiter/updateConsumers for EETH MINT/BURN, so eETH
+        //         mint/burn never reverts (UnknownLimit) in the gap between the upgrade and the
+        //         operating batch. `onlyAdmin` here = ETHERFI_RATE_LIMITER_ADMIN_ROLE, held by
+        //         0x2aCA — direct/instant, no timelock or pre-grant. After the upgrade the gate
+        //         flips to onlyOperatingTimelock, but the buckets already exist + persist (storage).
+        // The sweep is built via abi.encodeWithSignature because the new AuctionManager type
+        // (imported here) no longer declares transferAccumulatedRevenue().
         bytes memory sweepData = abi.encodeWithSignature("transferAccumulatedRevenue()");
+        address[] memory targets   = new address[](5);
+        uint256[] memory values    = new uint256[](5);
+        bytes[]   memory calldatas = new bytes[](5);
+        targets[0] = AUCTION_MANAGER;      calldatas[0] = sweepData;
+        targets[1] = ETHERFI_RATE_LIMITER; calldatas[1] = _createLimiter(EETH_MINT_LIMIT_ID, EETH_MINT_CAPACITY, EETH_MINT_REFILL_RATE);
+        targets[2] = ETHERFI_RATE_LIMITER; calldatas[2] = _createLimiter(EETH_BURN_LIMIT_ID, EETH_BURN_CAPACITY, EETH_BURN_REFILL_RATE);
+        targets[3] = ETHERFI_RATE_LIMITER; calldatas[3] = _updateConsumer(EETH_MINT_LIMIT_ID, EETH);
+        targets[4] = ETHERFI_RATE_LIMITER; calldatas[4] = _updateConsumer(EETH_BURN_LIMIT_ID, EETH);
 
-        writeSafeJson(OUT_DIR, "auction_sweep.json", ETHERFI_OPERATING_ADMIN, AUCTION_MANAGER, 0, sweepData, 1);
+        writeSafeJson(OUT_DIR, "pre_upgrade_multisig.json", ETHERFI_OPERATING_ADMIN, targets, values, calldatas, 1);
 
-        console2.log("=== Dry-running AuctionManager sweep on fork (OLD impl, pre-upgrade) ===");
+        console2.log("=== Dry-running pre-upgrade multisig batch on fork (pre-upgrade impls) ===");
         uint256 pendingBefore = _auctionAccumulatedRevenue();
         uint256 mmBalBefore   = MEMBERSHIP_MANAGER.balance;
         console2.log("accumulatedRevenue (wei) to flush:   ", pendingBefore);
 
-        vm.prank(ETHERFI_OPERATING_ADMIN);
-        (bool ok, ) = AUCTION_MANAGER.call(sweepData);
-        require(ok, "auction sweep: transferAccumulatedRevenue reverted");
+        vm.startPrank(ETHERFI_OPERATING_ADMIN);
+        for (uint256 k = 0; k < targets.length; k++) {
+            (bool ok, ) = targets[k].call(calldatas[k]);
+            require(ok, "pre-upgrade multisig: call reverted");
+        }
+        vm.stopPrank();
 
         require(_auctionAccumulatedRevenue() == 0, "auction sweep: accumulatedRevenue not zeroed");
         require(MEMBERSHIP_MANAGER.balance == mmBalBefore + pendingBefore, "auction sweep: MembershipManager did not receive flushed revenue");
-
-        console2.log("[OK] AuctionManager accumulatedRevenue flushed to MembershipManager");
+        EtherFiRateLimiter rl = EtherFiRateLimiter(payable(ETHERFI_RATE_LIMITER));
+        require(rl.limitExists(EETH_MINT_LIMIT_ID) && rl.limitExists(EETH_BURN_LIMIT_ID), "eeth buckets: not created pre-upgrade");
+        require(rl.isConsumerAllowed(EETH_MINT_LIMIT_ID, EETH) && rl.isConsumerAllowed(EETH_BURN_LIMIT_ID, EETH), "eeth buckets: EETH consumer not whitelisted");
+        console2.log("[OK] AuctionManager revenue flushed + eETH MINT/BURN buckets created (single pre-upgrade multisig)");
         console2.log("");
     }
 
@@ -1568,7 +1671,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
 
     function verifyAccessControlPreservation() public view {
         console2.log("=== Step 6: Verifying Access Control Preservation ===");
-        address[22] memory proxies = _upgradedProxies();
+        address[23] memory proxies = _upgradedProxies();
         for (uint256 k = 0; k < proxies.length; k++) {
             address p = proxies[k];
             Snap memory pre = preSnap[p];
@@ -1598,6 +1701,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         verifyNotReinitializable(LIQUIFIER,                  "Liquifier");
         // governance
         verifyNotReinitializable(ETHERFI_RATE_LIMITER,       "EtherFiRateLimiter");
+        verifyNotReinitializable(ROLE_REGISTRY,              "RoleRegistry");
         // membership
         verifyNotReinitializable(MEMBERSHIP_MANAGER,         "MembershipManager");
         verifyNotReinitializable(MEMBERSHIP_NFT,             "MembershipNFT");
@@ -1816,12 +1920,9 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         uint256[] memory values  = new uint256[](60);
         uint256 i;
 
-        // ───────── core — Token-side global buckets (consumeToken on eETH mint/burn) ─────────
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(EETH_MINT_LIMIT_ID,  EETH_MINT_CAPACITY,  EETH_MINT_REFILL_RATE));  i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(EETH_BURN_LIMIT_ID,  EETH_BURN_CAPACITY,  EETH_BURN_REFILL_RATE));  i++;
-
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(EETH_MINT_LIMIT_ID,  EETH));  i++;
-        (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _updateConsumer(EETH_BURN_LIMIT_ID,  EETH));  i++;
+        // NOTE: the eETH MINT/BURN buckets are created PRE-UPGRADE in executePreUpgradeMultisig
+        // (Batch 0, instant operating-multisig) so eETH mint/burn never reverts in the gap between
+        // the upgrade and this operating batch. Only the restaker bucket lives here (post-upgrade).
 
         // ───────── restaking — EtherFiRestaker bucket (consume) ─────────
         (targets[i], data[i]) = (ETHERFI_RATE_LIMITER, _createLimiter(STETH_REQUEST_WITHDRAWAL_LIMIT_ID, STETH_REQUEST_WITHDRAWAL_CAPACITY, STETH_REQUEST_WITHDRAWAL_REFILL_RATE)); i++;
@@ -1841,6 +1942,8 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         (targets[i], data[i]) = (WEETH,                      _pauseDur(PAUSE_UNTIL_WEETH));                  i++;
         // deposits
         (targets[i], data[i]) = (LIQUIFIER,                  _pauseDur(PAUSE_UNTIL_LIQUIFIER));              i++;
+        // restaking
+        (targets[i], data[i]) = (ETHERFI_RESTAKER,          _pauseDur(PAUSE_UNTIL_ETHERFI_RESTAKER));        i++;
         // rewards
         (targets[i], data[i]) = (CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR, _pauseDur(PAUSE_UNTIL_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR)); i++;
         // staking
@@ -1851,6 +1954,8 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         (targets[i], data[i]) = (PRIORITY_WITHDRAWAL_QUEUE,             _pauseDur(PAUSE_UNTIL_PRIORITY_WITHDRAWAL_QUEUE));             i++;
         (targets[i], data[i]) = (WEETH_WITHDRAW_ADAPTER,                _pauseDur(PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER));                i++;
         (targets[i], data[i]) = (WITHDRAW_REQUEST_NFT,       _pauseDur(PAUSE_UNTIL_WITHDRAW_REQUEST_NFT));   i++;
+        // cross-chain
+        (targets[i], data[i]) = (ETHERFI_L1_SYNC_POOL_ETH, _pauseDur(PAUSE_UNTIL_L1_SYNC_POOL_ETH)); i++;
 
         // governance — grant the guardian Safe CANCELLER_ROLE on the OPERATING_TIMELOCK so it
         // can cancel a scheduled-but-pending op during the 2-day delay. Target is the timelock
@@ -1859,6 +1964,34 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         // batch (not the upgrade batch) because only the OPERATING_TIMELOCK can grant its own role.
         (targets[i], data[i]) = (OPERATING_TIMELOCK,
             abi.encodeWithSelector(operatingTimelock.grantRole.selector, TIMELOCK_CANCELLER_ROLE, HOLDER_CANCELLER_GUARDIAN)); i++;
+
+        // ───────── staking — migrate ENM forwarded-call whitelist (grant new holder, revoke legacy) ─────────
+        bytes4[] memory eigSelectors = _forwardedEigenpodSelectors();
+        for (uint256 j = 0; j < eigSelectors.length; j++) {
+            (targets[i], data[i]) = (ETHERFI_NODES_MANAGER, abi.encodeWithSelector(
+                EtherFiNodesManager.updateAllowedForwardedEigenpodCalls.selector,
+                HOLDER_EIGENPOD_OPERATIONS_ROLE, eigSelectors[j], true)); i++;
+            (targets[i], data[i]) = (ETHERFI_NODES_MANAGER, abi.encodeWithSelector(
+                EtherFiNodesManager.updateAllowedForwardedEigenpodCalls.selector,
+                LEGACY_FORWARD_CALLER, eigSelectors[j], false)); i++;
+        }
+        (bytes4[] memory extSelectors, address[] memory extTargets) = _forwardedExternalCalls();
+        for (uint256 j = 0; j < extSelectors.length; j++) {
+            (targets[i], data[i]) = (ETHERFI_NODES_MANAGER, abi.encodeWithSelector(
+                EtherFiNodesManager.updateAllowedForwardedExternalCalls.selector,
+                HOLDER_EIGENPOD_OPERATIONS_ROLE, extSelectors[j], extTargets[j], true)); i++;
+            (targets[i], data[i]) = (ETHERFI_NODES_MANAGER, abi.encodeWithSelector(
+                EtherFiNodesManager.updateAllowedForwardedExternalCalls.selector,
+                LEGACY_FORWARD_CALLER, extSelectors[j], extTargets[j], false)); i++;
+        }
+        // Grant-only (3CP #580): newly-whitelisted DelegationManager selectors granted to the new
+        // holder; the legacy caller's copies are revoked in a separate later 3CP, not here.
+        (bytes4[] memory goSelectors, address[] memory goTargets) = _grantOnlyExternalCalls();
+        for (uint256 j = 0; j < goSelectors.length; j++) {
+            (targets[i], data[i]) = (ETHERFI_NODES_MANAGER, abi.encodeWithSelector(
+                EtherFiNodesManager.updateAllowedForwardedExternalCalls.selector,
+                HOLDER_EIGENPOD_OPERATIONS_ROLE, goSelectors[j], goTargets[j], true)); i++;
+        }
 
         return _shrink(targets, values, data, i);
     }
@@ -1935,6 +2068,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(LiquidityPool(payable(LIQUIDITY_POOL)).pauseUntilDuration()           == PAUSE_UNTIL_LIQUIDITY_POOL,        "LP pause duration mismatch");
         require(WeETHToken(WEETH).pauseUntilDuration()                                == PAUSE_UNTIL_WEETH,                 "WeETH pause duration mismatch");
         require(Liquifier(payable(LIQUIFIER)).pauseUntilDuration()                    == PAUSE_UNTIL_LIQUIFIER,             "Liquifier pause duration mismatch");
+        require(EtherFiRestaker(payable(ETHERFI_RESTAKER)).pauseUntilDuration()      == PAUSE_UNTIL_ETHERFI_RESTAKER,      "EFRestaker pause duration mismatch");
         require(CumulativeMerkleRewardsDistributor(payable(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR)).pauseUntilDuration() == PAUSE_UNTIL_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR, "CMRD pause duration mismatch");
         require(AuctionManager(AUCTION_MANAGER).pauseUntilDuration()                                           == PAUSE_UNTIL_AUCTION_MANAGER,                      "Auction pause duration mismatch");
         require(EtherFiNodesManager(payable(ETHERFI_NODES_MANAGER)).pauseUntilDuration()                       == PAUSE_UNTIL_ETHERFI_NODES_MANAGER,                "EFNodesMgr pause duration mismatch");
@@ -1942,6 +2076,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(PriorityWithdrawalQueue(payable(PRIORITY_WITHDRAWAL_QUEUE)).pauseUntilDuration()               == PAUSE_UNTIL_PRIORITY_WITHDRAWAL_QUEUE,             "PWQ pause duration mismatch");
         require(WeETHWithdrawAdapter(payable(WEETH_WITHDRAW_ADAPTER)).pauseUntilDuration()                     == PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER,               "WeETHWA pause duration mismatch");
         require(WithdrawRequestNFT(payable(WITHDRAW_REQUEST_NFT)).pauseUntilDuration()== PAUSE_UNTIL_WITHDRAW_REQUEST_NFT,  "NFT pause duration mismatch");
+        require(IL1SyncPoolPausable(ETHERFI_L1_SYNC_POOL_ETH).pauseUntilDuration() == PAUSE_UNTIL_L1_SYNC_POOL_ETH, "L1SyncPoolETH pause duration mismatch");
 
         // Cross-check the hardcoded role IDs (used by _appendGrantCalls, before the
         // getters existed) against the now-upgraded registry. This is the only guard
@@ -1990,7 +2125,30 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
 
         require(EtherFiAdmin(ETHERFI_ADMIN).maxFinalizedWithdrawalAmountPerDay() == ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT, "EFAdmin.maxFinalizedWithdrawalAmountPerDay mismatch");
 
-        console2.log("[OK] rate-limiter buckets + pause durations + role grants + LP withdraw bounds + finalized-withdrawal cap verified");
+        // Forwarded-call whitelist migrated: granted to the new role holder, revoked from the legacy caller.
+        EtherFiNodesManager enm = EtherFiNodesManager(payable(ETHERFI_NODES_MANAGER));
+        bytes4[] memory eigSelectors = _forwardedEigenpodSelectors();
+        for (uint256 j = 0; j < eigSelectors.length; j++) {
+            require(enm.allowedForwardedEigenpodCalls(HOLDER_EIGENPOD_OPERATIONS_ROLE, eigSelectors[j]),
+                "forwarded eigenpod call not granted to role holder");
+            require(!enm.allowedForwardedEigenpodCalls(LEGACY_FORWARD_CALLER, eigSelectors[j]),
+                "forwarded eigenpod call not revoked from legacy caller");
+        }
+        (bytes4[] memory extSelectors, address[] memory extTargets) = _forwardedExternalCalls();
+        for (uint256 j = 0; j < extSelectors.length; j++) {
+            require(enm.allowedForwardedExternalCalls(HOLDER_EIGENPOD_OPERATIONS_ROLE, extSelectors[j], extTargets[j]),
+                "forwarded external call not granted to role holder");
+            require(!enm.allowedForwardedExternalCalls(LEGACY_FORWARD_CALLER, extSelectors[j], extTargets[j]),
+                "forwarded external call not revoked from legacy caller");
+        }
+        // Grant-only (3CP #580): the new holder must hold each; legacy is untouched here.
+        (bytes4[] memory goSelectors, address[] memory goTargets) = _grantOnlyExternalCalls();
+        for (uint256 j = 0; j < goSelectors.length; j++) {
+            require(enm.allowedForwardedExternalCalls(HOLDER_EIGENPOD_OPERATIONS_ROLE, goSelectors[j], goTargets[j]),
+                "grant-only external call not granted to role holder");
+        }
+
+        console2.log("[OK] rate-limiter buckets + pause durations + role grants + LP withdraw bounds + finalized-withdrawal cap + forwarded-call whitelist verified");
         console2.log("");
     }
 
