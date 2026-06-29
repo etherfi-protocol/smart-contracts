@@ -118,44 +118,44 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
     // entry is a fresh implementation address. Peripheral UUPS proxies touched by
     // PR #385 reuse their existing proxies — impls only. Ordered by src/ group.
     // core
-    address constant eEthImpl                     = address(0);
-    address constant liquidityPoolImpl            = address(0);
-    address constant weEthImpl                    = address(0);
+    address constant eEthImpl = 0xd1901dD36CBf4a81386d0162DF2707f7dDb60527;
+    address constant liquidityPoolImpl = 0x17A16747D03006c9754548AC0d0afF48783A4a45;
+    address constant weEthImpl = 0xA6Ca0607190d03CF16fe6F2865Cf40c3D160ccf3;
     // deposits
-    address constant depositAdapterImpl           = address(0);
-    address constant liquifierImpl                = address(0);
+    address constant depositAdapterImpl = 0xE774E19f087523EA316fCCb4B156169153f18b9d;
+    address constant liquifierImpl = 0x263A74E56EB07C2A2A84FD510615a17b66e10E70;
     // governance
-    address constant blacklisterProxy             = address(0);
-    address constant revokeAdminProxy             = address(0);
-    address constant roleRegistryImpl             = address(0);
-    address constant etherFiRateLimiterImpl       = address(0);
+    address constant blacklisterProxy = 0x5585996E7cFE95f2D99e61168B8b35C66Ff99B18;
+    address constant revokeAdminProxy = 0x4A84BA0b5e716b37C78D0F5094757205626C7C1e;
+    address constant roleRegistryImpl = 0x3B44A093b9736af765f98F3245998f63bc757970;
+    address constant etherFiRateLimiterImpl = 0x9Ea4D0Fd09B628E23B1998F2153e27E5261B1B67;
     // membership
-    address constant membershipManagerImpl        = address(0);
-    address constant membershipNFTImpl            = address(0);
+    address constant membershipManagerImpl = 0xa9DbE5C7C8172ef83a30c143892E0010420e6307;
+    address constant membershipNFTImpl = 0xD43D99Df3D42675ce126a7CfF8F7DfF037620851;
     // oracle
-    address constant etherFiAdminImpl             = address(0);
-    address constant etherFiOracleImpl            = address(0);
+    address constant etherFiAdminImpl = 0x5b083DDe26FBA0E43940b2e161FCd129903FC27d;
+    address constant etherFiOracleImpl = 0x0565c8Ea133fF27ba9D471330A52068a268A2b9e;
     // restaking
-    address constant etherFiRestakerImpl          = address(0);
-    address constant restakingRewardsRouterImpl   = address(0);
+    address constant etherFiRestakerImpl = 0x51357a700B309637F109A897a6479A563D5AFb8E;
+    address constant restakingRewardsRouterImpl = 0x6BF6AcD4b22795080c719D987BAa8F4FCb1Ab3F8;
     // rewards
-    address constant cumulativeMerkleRewardsDistributorImpl = address(0);
-    address constant etherFiRewardsRouterImpl     = address(0);
+    address constant cumulativeMerkleRewardsDistributorImpl = 0x9eb91bD087Ff6381E2497e54Fd796c6a166e6a8a;
+    address constant etherFiRewardsRouterImpl = 0xCB9614b005F11F7781e92fF2B4a9AEBfAEB33E76;
     // staking
-    address constant auctionManagerImpl           = address(0);
-    address constant etherFiNodeImpl              = address(0);
-    address constant etherFiNodesManagerImpl      = address(0);
-    address constant nodeOperatorManagerImpl      = address(0);
-    address constant stakingManagerImpl           = address(0);
+    address constant auctionManagerImpl = 0x3311c72A04D2779f4425c036dBC40d14fEc0162b;
+    address constant etherFiNodeImpl = 0x556Db8c611FE63e694413F718d795f976dcF5881;
+    address constant etherFiNodesManagerImpl = 0xcF5928EA7d7F164ec868cEdA7a69E08a102B5e05;
+    address constant nodeOperatorManagerImpl = 0x2474d68d6E9f7Be77C9A343ce21DBE16F0743BD3;
+    address constant stakingManagerImpl = 0x66e1C53e846eF3E9f3722591868AfcFfB7f39800;
     // withdrawals
-    address constant etherFiRedemptionManagerImpl = address(0);
-    address constant priorityWithdrawalQueueImpl  = address(0);
-    address constant weETHWithdrawAdapterImpl     = address(0);
-    address constant withdrawRequestNFTImpl       = address(0);
+    address constant etherFiRedemptionManagerImpl = 0x5D53B303D62a7861f88650045b8D5DeB59dfb3Dc;
+    address constant priorityWithdrawalQueueImpl = 0x77b929bEFe793367712C0c28Ca8E857bf23A2296;
+    address constant weETHWithdrawAdapterImpl = 0xbe386B1Fb51ffAcAE0522a5dA099371cd4a2AAeA;
+    address constant withdrawRequestNFTImpl = 0x41617D01362770ebAAC10311aB899FBc8a4E4A7E;
     // cross-chain — EtherfiL1SyncPoolETH new impl (deployed from the WeETH-cross-chain repo,
     // PR #77). Fill from that repo's deploy output. Its proxy (ETHERFI_L1_SYNC_POOL_ETH) is an
     // OZ5 TransparentUpgradeableProxy, upgraded through its ProxyAdmin (below), not via upgradeTo.
-    address constant l1SyncPoolImpl = address(0);
+    address constant l1SyncPoolImpl = 0x17301934A7151A8e8d203db8988cEC76D71aE2CE;
     // ProxyAdmin of the L1SyncPool transparent proxy (on-chain admin slot of 0xD789…). Owner is
     // currently ETHERFI_OPERATING_ADMIN; must be transferred to UPGRADE_TIMELOCK before this batch.
     address constant L1_SYNC_POOL_PROXY_ADMIN     = 0xDBf6bE120D4dc72f01534673a1223182D9F6261D;
