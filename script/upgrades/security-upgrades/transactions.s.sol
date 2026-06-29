@@ -152,10 +152,15 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
     address constant priorityWithdrawalQueueImpl = 0x77b929bEFe793367712C0c28Ca8E857bf23A2296;
     address constant weETHWithdrawAdapterImpl = 0xbe386B1Fb51ffAcAE0522a5dA099371cd4a2AAeA;
     address constant withdrawRequestNFTImpl = 0x41617D01362770ebAAC10311aB899FBc8a4E4A7E;
+    // avs — AvsOperatorManager new impl (avs-smart-contracts repo). Its proxy
+    // (ETHERFI_AVS_OPERATORS_MANAGER) is a UUPS proxy owned directly by UPGRADE_TIMELOCK and is
+    // upgraded via a self-call upgradeTo, gated by its own `_authorizeUpgrade onlyOwner`. Not
+    // compiled in this repo, so (like l1SyncPoolImpl) it is not bytecode-verified in Step 1.
+    address constant avsOperatorManagerImpl = 0xA4C83200e0c9a61296C63333F2Bd22559058852E;
     // cross-chain — EtherfiL1SyncPoolETH new impl (deployed from the WeETH-cross-chain repo,
     // PR #77). Fill from that repo's deploy output. Its proxy (ETHERFI_L1_SYNC_POOL_ETH) is an
     // OZ5 TransparentUpgradeableProxy, upgraded through its ProxyAdmin (below), not via upgradeTo.
-    address constant l1SyncPoolImpl = 0x17301934A7151A8e8d203db8988cEC76D71aE2CE;
+    address constant l1SyncPoolImpl = 0x5d310451276d28A90cC6910449052D29A41e3aBD;
     // ProxyAdmin of the L1SyncPool transparent proxy (on-chain admin slot of 0xD789…). Owner is
     // currently ETHERFI_OPERATING_ADMIN; must be transferred to UPGRADE_TIMELOCK before this batch.
     address constant L1_SYNC_POOL_PROXY_ADMIN     = 0xDBf6bE120D4dc72f01534673a1223182D9F6261D;
@@ -328,6 +333,8 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(withdrawRequestNFTImpl != address(0), "preflight: withdrawRequestNFTImpl unset");
         // cross-chain
         require(l1SyncPoolImpl != address(0), "preflight: l1SyncPoolImpl unset (deploy from WeETH-cross-chain repo)");
+        // avs
+        require(avsOperatorManagerImpl != address(0), "preflight: avsOperatorManagerImpl unset (deploy from avs-smart-contracts repo)");
 
         require(EETH_MINT_CAPACITY    != 0, "preflight: EETH_MINT_CAPACITY unset");
         require(EETH_MINT_REFILL_RATE != 0, "preflight: EETH_MINT_REFILL_RATE unset");
@@ -1196,9 +1203,9 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         uint256 revokeCount = _countLegacyRoleHolders();
 
         // 18 grants (9 HOLDER_* + 6 operating-multisig RevokeAdmin roles + 2 exec guardian safe
-        // + 1 UPGRADE_TIMELOCK CANCELLER_ROLE) + (21 UUPS upgrades + 1 transparent (L1SyncPool via
-        // ProxyAdmin) + 1 beacon + 1 RR swap + 2 initializers + 2 Liquifier token unwhitelists) = 46,
-        // <=50 headroom + N legacy revokes.
+        // + 1 UPGRADE_TIMELOCK CANCELLER_ROLE) + (22 UUPS upgrades incl. AvsOperatorManager + 1
+        // transparent (L1SyncPool via ProxyAdmin) + 1 beacon + 1 RR swap + 2 initializers + 2
+        // Liquifier token unwhitelists) = 47, <=50 headroom + N legacy revokes.
         address[] memory targets = new address[](50 + revokeCount);
         bytes[]   memory data    = new bytes[](50 + revokeCount);
         uint256[] memory values  = new uint256[](50 + revokeCount);
@@ -1303,6 +1310,12 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         (targets[i], data[i]) = (L1_SYNC_POOL_PROXY_ADMIN,
             _upgradeTransparent(ETHERFI_L1_SYNC_POOL_ETH, l1SyncPoolImpl));                            i++;
 
+        // avs — AvsOperatorManager is a UUPS proxy (OZ v4.9 upgradeTo) owned directly by
+        // UPGRADE_TIMELOCK, so the upgrade is a self-call upgradeTo gated by its own
+        // `_authorizeUpgrade onlyOwner`. NOT roleRegistry-gated, so it's independent of the
+        // RR-swap ordering (works in Phase A or B); placed here alongside the other externals.
+        (targets[i], data[i]) = (ETHERFI_AVS_OPERATORS_MANAGER, _upgradeTo(avsOperatorManagerImpl)); i++;
+
         // ─── Phase B: RoleRegistry impl swap ─────────────────────────────────────────────
         // Run AFTER every other upgradeTo so those upgrades resolve against the OLD RR's
         // `onlyProtocolUpgrader` (owner-check). The OLD RR's own `_authorizeUpgrade` is
@@ -1376,6 +1389,8 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         _assertImpl(WITHDRAW_REQUEST_NFT,       withdrawRequestNFTImpl,       "WithdrawRequestNFT");
         // cross-chain — same ERC1967 impl slot read works for the transparent proxy too.
         _assertImpl(ETHERFI_L1_SYNC_POOL_ETH,   l1SyncPoolImpl,               "EtherfiL1SyncPoolETH");
+        // avs — UUPS proxy, same ERC1967 impl slot read.
+        _assertImpl(ETHERFI_AVS_OPERATORS_MANAGER, avsOperatorManagerImpl,    "AvsOperatorManager");
         console2.log("");
     }
 
