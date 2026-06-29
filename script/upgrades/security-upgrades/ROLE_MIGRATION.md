@@ -282,7 +282,7 @@ No action needed on these three — verify the values still match `Deployed.s.so
 
 | Role | Holder constant in script | Value to set | Notes |
 |---|---|---|---|
-| `SUPER_GUARDIAN_ROLE` | `HOLDER_SUPER_GUARDIAN_ROLE` | _fill in_ | Can `pauseContractUntil` EETH/WeETH (token transfers). Spec recommends an internal 2-of-3 sub-safe. |
+| `SUPER_GUARDIAN_ROLE` | operating multisig + exec guardian safe (no dedicated extra-key holder) | — | Can `pauseContractUntil` EETH/WeETH (token transfers). Granted only to the operating multisig and the exec guardian safe. |
 | `GUARDIAN_ROLE` | `HOLDER_GUARDIAN_ROLE` | _fill in_ | Emergency `pauseContractUntil` across LP, WithdrawRequestNFT, Liquifier, EtherFiNodesManager, EtherFiRedemptionManager, AuctionManager, PriorityWithdrawalQueue, CumulativeMerkleRewardsDistributor, WeETHWithdrawAdapter; `WithdrawRequestNFT.invalidateRequest`; `EETH/WeETH.tightenAddressRateLimits`; `Blacklister.blacklistUserUntil` (1-day). Hypernative or guardian EOA. |
 
 ### 2.3 Operations roles (fill in)

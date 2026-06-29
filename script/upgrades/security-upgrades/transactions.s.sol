@@ -368,7 +368,6 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT != 0, "preflight: ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT unset");
         require(ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT <= ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY, "preflight: ADMIN_DAILY_FINALIZED_WITHDRAWAL_LIMIT exceeds acceptable ceiling");
 
-        require(HOLDER_SUPER_GUARDIAN_ROLE          != address(0), "preflight: HOLDER_SUPER_GUARDIAN_ROLE unset");
         require(HOLDER_GUARDIAN_ROLE                != address(0), "preflight: HOLDER_GUARDIAN_ROLE unset");
         require(HOLDER_ORACLE_OPERATIONS_ROLE       != address(0), "preflight: HOLDER_ORACLE_OPERATIONS_ROLE unset");
         require(HOLDER_HOUSEKEEPING_OPERATIONS_ROLE != address(0), "preflight: HOLDER_HOUSEKEEPING_OPERATIONS_ROLE unset");
@@ -484,11 +483,10 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         console2.log("weETHWithdrawAdapterImpl:            ", weETHWithdrawAdapterImpl);
         console2.log("withdrawRequestNFTImpl:              ", withdrawRequestNFTImpl);
         console2.log("");
-        console2.log("--- 9 RoleRegistry role holders ---");
+        console2.log("--- 8 RoleRegistry role holders ---");
         console2.log("UPGRADE_TIMELOCK    (prefilled):     ", HOLDER_UPGRADE_TIMELOCK_ROLE);
         console2.log("OPERATION_TIMELOCK  (prefilled):     ", HOLDER_OPERATION_TIMELOCK_ROLE);
         console2.log("OPERATION_MULTISIG  (prefilled):     ", HOLDER_OPERATION_MULTISIG_ROLE);
-        console2.log("SUPER_GUARDIAN_ROLE (TBD):           ", HOLDER_SUPER_GUARDIAN_ROLE);
         console2.log("GUARDIAN_ROLE (TBD):                 ", HOLDER_GUARDIAN_ROLE);
         console2.log("ORACLE_OPERATIONS_ROLE (TBD):        ", HOLDER_ORACLE_OPERATIONS_ROLE);
         console2.log("HOUSEKEEPING_OPERATIONS_ROLE (TBD):  ", HOLDER_HOUSEKEEPING_OPERATIONS_ROLE);
@@ -1182,8 +1180,8 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
     // STEP 3: executeUpgrade — the single UPGRADE_TIMELOCK batch (10d)
     //
     // ONE atomic batch, executed by the UPGRADE_TIMELOCK, in this exact order:
-    //   1. grant the 9 RolesLibrary roles + 6 extra (operating multisig gets all RevokeAdmin
-    //      roles) + 2 (exec guardian safe gets GUARDIAN + SUPER_GUARDIAN) = 17 grants
+    //   1. grant 8 dedicated RolesLibrary holders (SUPER_GUARDIAN has no extra-key holder) + 6 extra
+    //      (operating multisig gets all RevokeAdmin roles) + 2 (exec guardian safe gets GUARDIAN + SUPER_GUARDIAN) = 16 grants
     //      (grantRole is owner-gated; owner == UPGRADE_TIMELOCK)
     //   2. upgrade every proxy + the EtherFiNode beacon (gated by OLD RR.onlyProtocolUpgrader = owner check)
     //   3. swap RoleRegistry impl                       (gated by OLD RR._authorizeUpgrade = onlyOwner)
@@ -1202,7 +1200,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
 
         uint256 revokeCount = _countLegacyRoleHolders();
 
-        // 18 grants (9 HOLDER_* + 6 operating-multisig RevokeAdmin roles + 2 exec guardian safe
+        // 17 grants (8 HOLDER_* + 6 operating-multisig RevokeAdmin roles + 2 exec guardian safe
         // + 1 UPGRADE_TIMELOCK CANCELLER_ROLE) + (22 UUPS upgrades incl. AvsOperatorManager + 1
         // transparent (L1SyncPool via ProxyAdmin) + 1 beacon + 1 RR swap + 2 initializers + 2
         // Liquifier token unwhitelists) = 47, <=50 headroom + N legacy revokes.
@@ -1771,22 +1769,22 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         view
         returns (uint256)
     {
-        bytes32[9] memory roles = [
+        // SUPER_GUARDIAN_ROLE is intentionally NOT in this dedicated-holder list — it is granted
+        // only to the operating multisig (RevokeAdmin-roles grant below) and the exec guardian safe.
+        bytes32[8] memory roles = [
             UPGRADE_TIMELOCK_ROLE,
             OPERATION_TIMELOCK_ROLE,
             OPERATION_MULTISIG_ROLE,
-            SUPER_GUARDIAN_ROLE,
             GUARDIAN_ROLE,
             ORACLE_OPERATIONS_ROLE,
             HOUSEKEEPING_OPERATIONS_ROLE,
             EXECUTOR_OPERATIONS_ROLE,
             EIGENPOD_OPERATIONS_ROLE
         ];
-        address[9] memory holders = [
+        address[8] memory holders = [
             HOLDER_UPGRADE_TIMELOCK_ROLE,
             HOLDER_OPERATION_TIMELOCK_ROLE,
             HOLDER_OPERATION_MULTISIG_ROLE,
-            HOLDER_SUPER_GUARDIAN_ROLE,
             HOLDER_GUARDIAN_ROLE,
             HOLDER_ORACLE_OPERATIONS_ROLE,
             HOLDER_HOUSEKEEPING_OPERATIONS_ROLE,
@@ -1794,14 +1792,14 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
             HOLDER_EIGENPOD_OPERATIONS_ROLE
         ];
 
-        for (uint256 k = 0; k < 9; k++) {
+        for (uint256 k = 0; k < 8; k++) {
             require(
                 roleRegistry.roleHolders(roles[k]).length == 0,
                 "executeUpgrade: new role already has holder(s) before grant"
             );
         }
 
-        for (uint256 k = 0; k < 9; k++) {
+        for (uint256 k = 0; k < 8; k++) {
             targets[i] = ROLE_REGISTRY;
             data[i]    = abi.encodeWithSelector(RoleRegistry.grantRole.selector, roles[k], holders[k]);
             i++;
@@ -2110,7 +2108,6 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(roleRegistry.hasRole(UPGRADE_TIMELOCK_ROLE,        HOLDER_UPGRADE_TIMELOCK_ROLE),       "UPGRADE_TIMELOCK_ROLE not granted");
         require(roleRegistry.hasRole(OPERATION_TIMELOCK_ROLE,      HOLDER_OPERATION_TIMELOCK_ROLE),     "OPERATION_TIMELOCK_ROLE not granted");
         require(roleRegistry.hasRole(OPERATION_MULTISIG_ROLE,      HOLDER_OPERATION_MULTISIG_ROLE),     "OPERATION_MULTISIG_ROLE not granted");
-        require(roleRegistry.hasRole(SUPER_GUARDIAN_ROLE,          HOLDER_SUPER_GUARDIAN_ROLE),          "SUPER_GUARDIAN_ROLE not granted");
         require(roleRegistry.hasRole(GUARDIAN_ROLE,                HOLDER_GUARDIAN_ROLE),                "GUARDIAN_ROLE not granted");
         require(roleRegistry.hasRole(ORACLE_OPERATIONS_ROLE,       HOLDER_ORACLE_OPERATIONS_ROLE),       "ORACLE_OPERATIONS_ROLE not granted");
         require(roleRegistry.hasRole(HOUSEKEEPING_OPERATIONS_ROLE, HOLDER_HOUSEKEEPING_OPERATIONS_ROLE), "HOUSEKEEPING_OPERATIONS_ROLE not granted");

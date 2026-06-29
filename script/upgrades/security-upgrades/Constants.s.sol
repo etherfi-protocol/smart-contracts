@@ -132,7 +132,8 @@ abstract contract SecurityUpgradesConstants is Deployed {
     address internal constant HOLDER_OPERATION_MULTISIG_ROLE = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC; // ETHERFI_OPERATING_ADMIN
 
     address internal constant HOLDER_EXEC_GUARDIAN_SAFE           = 0x427989Bb12f4A390D11e7647d467DeA02b9d2eE3; // EXEC_1_OF_N-GUARDIAN_SAFE
-    address internal constant HOLDER_SUPER_GUARDIAN_ROLE          = 0x9E26e096C1643ba9133e5562B4E1897031Ad3F66; // SUPER_GUARDIAN_HYPERNATIVE_KEY
+    // SUPER_GUARDIAN_ROLE has no dedicated extra-key holder — granted only to the operating multisig and exec guardian safe
+    // (via the RevokeAdmin-roles grant) and the exec guardian safe (explicit grant) in the batch.
     address internal constant HOLDER_GUARDIAN_ROLE                = 0x9AF1298993DC1f397973C62A5D47a284CF76844D; // GUARDIAN_HYPERNATIVE_KEY
 
     address internal constant HOLDER_ORACLE_OPERATIONS_ROLE       = 0x62A44D2493AfC2B25B51b01706Ed7Ea10cF80e34;
