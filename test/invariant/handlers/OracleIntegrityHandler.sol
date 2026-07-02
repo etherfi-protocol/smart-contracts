@@ -352,15 +352,24 @@ contract OracleIntegrityHandler is Test {
     }
 
     /// @dev Largest rebase reward that keeps |APR| strictly under the cap for the
-    ///      given report range, i.e. the boundary reward at which apr == cap.
-    ///      A valid "apply" must stay BELOW this; we use half of it for safe margin.
+    ///      given report range (the boundary reward at which apr == cap), CLAMPED
+    ///      to LiquidityPool's absolute positive-rebase cap
+    ///      (MAX_POSITIVE_REBASE_BPS of TVL). The APR gate scales with the range's
+    ///      elapsed time, so over a long range the APR-derived bound alone can
+    ///      exceed the LP's per-rebase cap; a reward in that gap passes
+    ///      EtherFiAdmin validation but reverts inside LiquidityPool.rebase
+    ///      (RebaseExceedsPositiveCap), leaving the report published-but-unhandled
+    ///      and wedging the oracle. A valid "apply" must stay BELOW both caps;
+    ///      callers use half of this for safe margin.
     function _maxSafeReward(IEtherFiOracle.OracleReport memory r) internal view returns (int256) {
         int256 tvl = int128(uint128(lp.getTotalPooledEther()));
         uint256 elapsedTime = (uint256(r.refSlotTo) - uint256(admin.lastHandledReportRefSlot())) * SECONDS_PER_SLOT;
         if (tvl <= 0 || elapsedTime == 0) return 0;
         int256 cap = admin.acceptableRebaseAprInBps();
         // reward at apr==cap boundary: cap = 10000 * (reward*365d)/(tvl*elapsedTime)
-        return cap * tvl * int256(elapsedTime) / (int256(BASIS_POINTS_DENOMINATOR) * int256(365 days));
+        int256 aprMax = cap * tvl * int256(elapsedTime) / (int256(BASIS_POINTS_DENOMINATOR) * int256(365 days));
+        int256 lpMax = _lpPositiveCap();
+        return aprMax < lpMax ? aprMax : lpMax;
     }
 
     /// @dev EXACT largest reward R (in wei) whose annualized |APR| still satisfies
