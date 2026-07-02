@@ -1,0 +1,13 @@
+{
+  "contractName": "EtherFiRateLimiter",
+  "deploymentParameters": {
+    "factory": "0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99",
+    "salt": "0x0f1e8d966c85bcd3b352d94da15fe2eae61f897c000000000000000000000000",
+    "constructorArgs": {
+      "_roleRegistry": "0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9",
+      "_eETH": "0x35fA164735182de50811E8e2E824cFb9B6118ac2",
+      "_weETH": "0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee"
+    }
+  },
+  "deployedAddress": "0x9Ea4D0Fd09B628E23B1998F2153e27E5261B1B67"
+}

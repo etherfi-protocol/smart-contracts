@@ -308,8 +308,13 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
      *      blocks past the last handled report, anyone can call this to finalize as many pending
      *      withdraw requests as the LP's current ETH balance can cover, in request-id order.
      *      Permissionless on purpose: a frozen oracle should not be able to freeze user redemptions.
+     *      Invalid (e.g. guardian-invalidated) requests are skipped but still advance the cursor, so a
+     *      run of invalid requests in front of the queue cannot wall off the valid ones behind them —
+     *      the cursor moves past them even when no ETH is locked this pass (a long invalid prefix is
+     *      cleared across calls, bounded by maxNumberOfRequestsToFinalizePerReport per call).
      *      Reverts with OracleReportNotStale if the window has not elapsed, or NoWithdrawalsToFinalize
-     *      if no valid pending requests can be covered.
+     *      only when the cursor cannot advance at all (no pending requests, or the first pending
+     *      request is valid but unfundable by current liquidity).
      */
     function finalizeWithdrawalsWhenStale() external {
         if (block.number < etherFiOracle.lastPublishedReportRefBlock() + staleOracleReportBlockWindow) revert OracleReportNotStale();
@@ -335,7 +340,7 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
             finalizedWithdrawalAmount += request.amountOfEEth;
             requestId++;
         }
-        if (finalizedWithdrawalAmount == 0) revert NoWithdrawalsToFinalize();
+        if (requestId == lastFinalizedRequestId) revert NoWithdrawalsToFinalize();
         _finalizeWithdrawals(requestId, finalizedWithdrawalAmount);
         lastStaleReportFinalizationBlock = block.number;
     }

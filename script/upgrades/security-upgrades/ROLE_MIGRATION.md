@@ -156,7 +156,7 @@ functions run inside the upgrade-timelock batch (Batch 1, see `transactions.s.so
 > `treasury` inside `updateSelectedBidInformation` (the `onlyStakingManagerContract`
 > bid hook), so there is no housekeeping revenue function to gate. Any residual
 > pre-upgrade `accumulatedRevenue` is flushed by the pre-upgrade Batch 0 sweep
-> (`auction_sweep.json`) — see `transactions.s.sol::executeAuctionSweep`.
+> (`pre_upgrade_multisig.json`) — see `transactions.s.sol::executePreUpgradeMultisig`.
 
 ### `EXECUTOR_OPERATIONS_ROLE` (`onlyExecutorOperations`)
 
@@ -282,7 +282,7 @@ No action needed on these three — verify the values still match `Deployed.s.so
 
 | Role | Holder constant in script | Value to set | Notes |
 |---|---|---|---|
-| `SUPER_GUARDIAN_ROLE` | `HOLDER_SUPER_GUARDIAN_ROLE` | _fill in_ | Can `pauseContractUntil` EETH/WeETH (token transfers). Spec recommends an internal 2-of-3 sub-safe. |
+| `SUPER_GUARDIAN_ROLE` | operating multisig + exec guardian safe (no dedicated extra-key holder) | — | Can `pauseContractUntil` EETH/WeETH (token transfers). Granted only to the operating multisig and the exec guardian safe. |
 | `GUARDIAN_ROLE` | `HOLDER_GUARDIAN_ROLE` | _fill in_ | Emergency `pauseContractUntil` across LP, WithdrawRequestNFT, Liquifier, EtherFiNodesManager, EtherFiRedemptionManager, AuctionManager, PriorityWithdrawalQueue, CumulativeMerkleRewardsDistributor, WeETHWithdrawAdapter; `WithdrawRequestNFT.invalidateRequest`; `EETH/WeETH.tightenAddressRateLimits`; `Blacklister.blacklistUserUntil` (1-day). Hypernative or guardian EOA. |
 
 ### 2.3 Operations roles (fill in)
@@ -419,12 +419,12 @@ the upgrade timelock can't satisfy `onlyAdmin`).
 
    | # | File(s) | Batch | Signer | Contents |
    |---|---|---|---|---|
-   | 0 | `auction_sweep.json` | OPERATION_MULTISIG (instant) | `ETHERFI_OPERATING_ADMIN` | flush AuctionManager.accumulatedRevenue → MembershipManager (PRE-UPGRADE) |
+   | 0 | `pre_upgrade_multisig.json` | OPERATION_MULTISIG (instant) | `ETHERFI_OPERATING_ADMIN` | flush AuctionManager.accumulatedRevenue → MembershipManager + create eETH MINT/BURN buckets (PRE-UPGRADE, one multiSend) |
    | 1 | `upgrade_schedule.json` / `upgrade_execute.json` | UPGRADE_TIMELOCK (10d) | `ETHERFI_UPGRADE_ADMIN` | grants → proxy/beacon upgrades → onlyUpgradeTimelock initializers → legacy role revocations |
    | 2 | `ops_schedule.json` / `ops_execute.json` | OPERATING_TIMELOCK (2d) | `ETHERFI_OPERATING_ADMIN` | rate-limiter buckets, pause durations, EtherFiAdmin daily finalized-withdrawal cap |
    | 3 | `lp_withdraw_bounds.json` | OPERATION_MULTISIG (instant) | `ETHERFI_OPERATING_ADMIN` | LP min/max withdraw bounds |
 
-   **Execution sequence:** execute the instant `auction_sweep.json` FIRST (it must land
+   **Execution sequence:** execute the instant `pre_upgrade_multisig.json` FIRST (it must land
    before the upgrade deletes the old AuctionManager's `transferAccumulatedRevenue`).
    Then schedule both timelock batches up front (Batch 1 and Batch 2 at the same time);
    after the 10-day delay, execute `upgrade_execute.json`, then `ops_execute.json`, then

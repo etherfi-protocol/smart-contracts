@@ -1,0 +1,18 @@
+{
+  "contractName": "EtherFiRestaker",
+  "deploymentParameters": {
+    "factory": "0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99",
+    "salt": "0x0f1e8d966c85bcd3b352d94da15fe2eae61f897c000000000000000000000000",
+    "constructorArgs": {
+      "_liquidityPool": "0x308861A430be4cce5502d0A12724771Fc6DaF216",
+      "_liquifier": "0x9FFDF407cDe9a93c47611799DA23924Af3EF764F",
+      "_rewardsCoordinator": "0x7750d328b314EfFa365A0402CcfD489B80B0adda",
+      "_etherFiRedemptionManager": "0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0",
+      "_roleRegistry": "0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9",
+      "_rateLimiter": "0x6C7c54cfC2225fA985cD25F04d923B93c60a02F8",
+      "_eigenLayerStrategyManager": "0x858646372CC42E1A627fcE94aa7A7033e7CF075A",
+      "_eigenLayerDelegationManager": "0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A"
+    }
+  },
+  "deployedAddress": "0x51357a700B309637F109A897a6479A563D5AFb8E"
+}

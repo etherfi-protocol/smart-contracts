@@ -35,7 +35,7 @@ abstract contract SecurityUpgradesConstants is Deployed {
     // (transactions / revert), so every script must agree on it. Each script's
     // _preflight() rejects bytes20(0).
     // ─────────────────────────────────────────────────────────────────────
-    bytes20 internal constant GIT_COMMIT_SHA = bytes20(hex"87bc3d6783bf9b0278e3ffb98b6eba7f8f0e1769");
+    bytes20 internal constant GIT_COMMIT_SHA = bytes20(hex"0f1e8d966c85bcd3b352d94da15fe2eae61f897c");
     bytes32 internal constant commitHashSalt = bytes32(GIT_COMMIT_SHA);
 
     // ─────────────────────────────────────────────────────────────────────
@@ -55,7 +55,7 @@ abstract contract SecurityUpgradesConstants is Deployed {
     address internal constant CBETH = 0xBe9895146f7AF43049ca1c1AE358B0541Ea49704; // Coinbase cbETH
     address internal constant WBETH = 0xa2E3356610840701BDf5611a53974510Ae27E2e1; // Binance wBETH (bETH)
     uint256 internal constant LIQUIFIER_MIN_DISCOUNT_BPS = 0; // we want the baility to have 0 discount rate on l2 dummy tokens
-    uint256 internal constant LIQUIFIER_STALE_PRICE_WINDOW = 2 days; // 2 days (heartbeat to updated stETH price feed is 1 days)
+    uint256 internal constant LIQUIFIER_STALE_PRICE_WINDOW = 25 hours; // 25 hours (heartbeat to updated stETH price feed is 1 days)
     uint256 internal constant LIQUIFIER_MAX_PRICE_DEVIATION_BPS = 200;   // 2%
     // price floor: reverts if stETH/ETH feed answer + threshold < SHARE_UNIT (1e18), i.e. stETH may
     // price at most 1% below the 1.0 peg.
@@ -67,9 +67,9 @@ abstract contract SecurityUpgradesConstants is Deployed {
     uint256 internal constant ADMIN_STALE_ORACLE_REPORT_BLOCK_WINDOW = 7200 * 14; // ~14 days @ 12s blocks
     uint256 internal constant ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY = 150_000 ether; // greater than the highest single day finalization we have seen of 130k ETH
     uint256 internal constant ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY = 100;
-    // rationale: 5000 requests x 2000 sload cost ~ 10M gas which we consider is max acceptable limit for grefining, 
+    // rationale: 3500 requests x 4000 gas cost ~ 14M gas which we consider is max acceptable limit for grefining, 
     // anyone making that many requests will be flagged for grefining and their requests can be invalidated
-    uint256 internal constant ADMIN_MAX_REQUESTS_TO_FINALIZE_PER_REPORT = 5_000;
+    uint256 internal constant ADMIN_MAX_REQUESTS_TO_FINALIZE_PER_REPORT = 3500;
     // oracle — EtherFiOracle immutable params
     /**
       * @dev for current setup, we have 2 of 3 set on oracle out of which 2 are internal and 1 is external.
@@ -94,9 +94,9 @@ abstract contract SecurityUpgradesConstants is Deployed {
     uint256 internal constant RM_MAX_EXIT_FEE_BPS = 500;                  // 5% hardcoded ceiling
     uint256 internal constant RM_MAX_LOW_WATERMARK_BPS_OF_TVL = 500;    // 5% hardcoded ceiling
     // stETH/ETH price-feed guards: reads the same STETH_PRICE_FEED as Liquifier (1-day heartbeat),
-    // so the stale window matches LIQUIFIER_STALE_PRICE_WINDOW (2 days). maxPriceThreshold caps the
+    // so the stale window matches LIQUIFIER_STALE_PRICE_WINDOW (25 hours). maxPriceThreshold caps the
     // feed answer at SHARE_UNIT (1e18) + threshold, i.e. stETH may price at most 1% above the 1.0 peg.
-    uint256 internal constant RM_STALE_PRICE_WINDOW = 2 days;
+    uint256 internal constant RM_STALE_PRICE_WINDOW = 25 hours;
     uint256 internal constant RM_MAX_PRICE_THRESHOLD = 1e16;            // 1% above 1e18 peg
 
     // withdrawals — PriorityWithdrawalQueue — must match the constructor arg used at proxy genesis;
@@ -132,18 +132,19 @@ abstract contract SecurityUpgradesConstants is Deployed {
     address internal constant HOLDER_OPERATION_MULTISIG_ROLE = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC; // ETHERFI_OPERATING_ADMIN
 
     address internal constant HOLDER_EXEC_GUARDIAN_SAFE           = 0x427989Bb12f4A390D11e7647d467DeA02b9d2eE3; // EXEC_1_OF_N-GUARDIAN_SAFE
-    address internal constant HOLDER_SUPER_GUARDIAN_ROLE          = 0x9E26e096C1643ba9133e5562B4E1897031Ad3F66; // SUPER_GUARDIAN_HYPERNATIVE_KEY
+    // SUPER_GUARDIAN_ROLE has no dedicated extra-key holder — granted only to the operating multisig and exec guardian safe
+    // (via the RevokeAdmin-roles grant) and the exec guardian safe (explicit grant) in the batch.
     address internal constant HOLDER_GUARDIAN_ROLE                = 0x9AF1298993DC1f397973C62A5D47a284CF76844D; // GUARDIAN_HYPERNATIVE_KEY
 
-    address internal constant HOLDER_ORACLE_OPERATIONS_ROLE       = address(0);
-    address internal constant HOLDER_HOUSEKEEPING_OPERATIONS_ROLE = address(0);
-    address internal constant HOLDER_EXECUTOR_OPERATIONS_ROLE     = address(0);
-    address internal constant HOLDER_EIGENPOD_OPERATIONS_ROLE     = address(0);
+    address internal constant HOLDER_ORACLE_OPERATIONS_ROLE       = 0x62A44D2493AfC2B25B51b01706Ed7Ea10cF80e34;
+    address internal constant HOLDER_HOUSEKEEPING_OPERATIONS_ROLE = 0x67E10B7764A99165665557B3E6cF24555bfC88c3;
+    address internal constant HOLDER_EXECUTOR_OPERATIONS_ROLE     = 0xe09D681299230404b509597206535cb3398f8Dd7;
+    address internal constant HOLDER_EIGENPOD_OPERATIONS_ROLE     = 0xd55df81BE2Db8d2424ffE90a5E2b8Ecb0C71886a;
 
     // Guardian Safe granted TimelockController CANCELLER_ROLE on BOTH timelocks, so it can
     // veto a scheduled-but-not-yet-executed op during its delay window. Set to the chosen
     // guardian Safe before broadcast; _preflight reverts while it is address(0).
-    address internal constant HOLDER_CANCELLER_GUARDIAN           = address(0);
+    address internal constant HOLDER_CANCELLER_GUARDIAN           = 0x055a8B2B65d0aB4E0C17a0168d032464B7E97bdF;
 
     // ─────────────────────────────────────────────────────────────────────
     // ROLE IDs — hardcoded keccak256 of the role name. Mirror the constants in
@@ -228,6 +229,8 @@ abstract contract SecurityUpgradesConstants is Deployed {
     uint256 internal constant PAUSE_UNTIL_WEETH                                 = 8 hours;
     // deposits
     uint256 internal constant PAUSE_UNTIL_LIQUIFIER                             = 1 days;
+    // restaking
+    uint256 internal constant PAUSE_UNTIL_ETHERFI_RESTAKER                      = 2 days;
     // rewards
     uint256 internal constant PAUSE_UNTIL_CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR = 2 days;
     // staking
@@ -238,6 +241,8 @@ abstract contract SecurityUpgradesConstants is Deployed {
     uint256 internal constant PAUSE_UNTIL_PRIORITY_WITHDRAWAL_QUEUE             = 1 days;
     uint256 internal constant PAUSE_UNTIL_WEETH_WITHDRAW_ADAPTER                = 1 days;
     uint256 internal constant PAUSE_UNTIL_WITHDRAW_REQUEST_NFT                  = 1 days;
+    // cross-chain
+    uint256 internal constant PAUSE_UNTIL_L1_SYNC_POOL_ETH                      = 1 days;
 
     // ─────────────────────────────────────────────────────────────────────
     // Bucket IDs — must match the constants declared in the source contracts.
