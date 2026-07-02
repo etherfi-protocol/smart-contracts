@@ -67,6 +67,16 @@ contract OracleIntegrityInvariantTest is TestSetup {
         vm.prank(alice);
         etherFiAdminInstance.updatePostReportWaitTimeInSlots(16);
 
+        // SOUNDNESS: pin the negative-rebase cap to the production default (3 bps).
+        // In this deployment the effective cap is otherwise 100% of TVL, which makes
+        // the negative-rebase gate unreachable while staying under the (annualized)
+        // APR cap — so no report could ever exercise it. 3 bps is the realistic
+        // on-chain value (DEFAULT_MAX_NEGATIVE_REBASE_BPS) and leaves a drop window
+        // that exceeds the negative cap yet stays under the APR cap for a report
+        // spanning one report period.
+        vm.prank(alice);
+        etherFiAdminInstance.setMaxNegativeRebaseBps(3);
+
         handler = new OracleIntegrityHandler(
             etherFiOracleInstance,
             etherFiAdminInstance,
@@ -90,6 +100,11 @@ contract OracleIntegrityInvariantTest is TestSetup {
     // =====================================================================
 
     /// (a) No report may advance lastHandledReportRefSlot without quorum consensus.
+    /// NOTE: the load-bearing detection for the quorum gate is afterInvariant's
+    /// numRejQuorum counter (its mirror leg reads the contract's own
+    /// isConsensusReached), which proves the gate was actually exercised. Do not
+    /// relax that counter's assertGt when editing — this ghost alone is vacuously
+    /// satisfiable if no sub-quorum report is ever driven.
     function invariant_i5_quorum_required() public view {
         assertFalse(
             handler.ghost_appliedWithoutQuorum(),
@@ -113,10 +128,51 @@ contract OracleIntegrityInvariantTest is TestSetup {
         );
     }
 
+    /// (d) No report may advance state while its negative rebase exceeds the cap.
+    function invariant_i5_neg_rebase_capped() public view {
+        assertFalse(
+            handler.ghost_appliedNegRebaseViolation(),
+            "I5(d): a report advanced state with a negative rebase above the cap"
+        );
+    }
+
     /// Mirror fidelity: every categorised ReportValidationFailed reason agrees
     /// with our independent gate mirror, keeping the safety ghosts non-vacuous.
     function invariant_i5_mirror_consistent() public view {
         assertFalse(handler.ghost_mirrorMismatch(), handler.mismatchReason());
+    }
+
+    // =====================================================================
+    // Submission-layer safety: duplicate and conflicting reports never let a
+    // sub-quorum report through, and the exact gate boundaries behave as the
+    // production comparisons specify.
+    // =====================================================================
+
+    /// A member's duplicate submission must revert (ReportNotNeeded) — never
+    /// succeed and never revert with a different, unexpected error.
+    function invariant_i5_duplicate_rejected() public view {
+        assertFalse(handler.ghost_duplicateSubmitSucceeded(), "duplicate submit was accepted");
+        assertFalse(handler.ghost_duplicateWrongError(), handler.duplicateWrongErrorReason());
+    }
+
+    /// A single member's submissions (or two conflicting one-vote reports) must
+    /// never reach quorum consensus.
+    function invariant_i5_no_consensus_below_quorum() public view {
+        assertFalse(handler.ghost_consensusFromSingle(), "consensus reached from a single member");
+        assertFalse(handler.ghost_conflictReachedConsensus(), "conflicting one-vote reports reached consensus");
+    }
+
+    /// The exact freshness / APR / negative boundaries that MUST apply actually did.
+    function invariant_i5_boundaries_apply() public view {
+        assertFalse(handler.ghost_freshBoundaryRejected(), "report at consensusSlot+wait failed to apply");
+        assertFalse(handler.ghost_aprBoundaryRejected(), "report at the exact APR cap failed to apply");
+        assertFalse(handler.ghost_negValidRejected(), "a valid small negative drop failed to apply");
+    }
+
+    /// The oracle must never stay permanently wedged (published != handled) across
+    /// a long tail of steps; each scenario is designed to leave it un-stuck.
+    function invariant_i5_never_permanently_stuck() public view {
+        assertFalse(handler.ghost_everStuck(), "oracle stayed wedged across too many consecutive steps");
     }
 
     // =====================================================================
@@ -128,11 +184,23 @@ contract OracleIntegrityInvariantTest is TestSetup {
         emit log_named_uint("I5 quorum-gate rejections", handler.numRejQuorum());
         emit log_named_uint("I5 apr-gate rejections", handler.numRejApr());
         emit log_named_uint("I5 freshness-gate rejections", handler.numRejFresh());
+        emit log_named_uint("I5 neg-rebase-gate rejections", handler.numRejNegRebase());
+        emit log_named_uint("I5 duplicate submits rejected", handler.numDupRejected());
+        emit log_named_uint("I5 conflicting scenarios run", handler.numConflictExercised());
+        emit log_named_uint("I5 freshness-boundary applies", handler.numFreshBoundaryApplied());
+        emit log_named_uint("I5 apr-boundary applies", handler.numAprBoundaryApplied());
+        emit log_named_uint("I5 valid negative applies", handler.numNegAccepted());
         assertGt(handler.numApplied(), 0, "non-vacuity: no report was ever APPLIED");
         assertGt(handler.numRejected(), 0, "non-vacuity: no report was ever REJECTED");
         assertGt(handler.numRejQuorum(), 0, "non-vacuity: quorum gate never exercised");
         assertGt(handler.numRejApr(), 0, "non-vacuity: APR gate never exercised");
         assertGt(handler.numRejFresh(), 0, "non-vacuity: freshness gate never exercised");
+        assertGt(handler.numRejNegRebase(), 0, "non-vacuity: negative-rebase gate never exercised");
+        assertGt(handler.numDupRejected(), 0, "non-vacuity: duplicate submit never exercised");
+        assertGt(handler.numConflictExercised(), 0, "non-vacuity: conflicting-report scenario never ran");
+        assertGt(handler.numFreshBoundaryApplied(), 0, "non-vacuity: freshness boundary never applied");
+        assertGt(handler.numAprBoundaryApplied(), 0, "non-vacuity: APR boundary never applied");
+        assertGt(handler.numNegAccepted(), 0, "non-vacuity: valid negative rebase never applied");
         assertEq(handler.numRejOther(), 0, "an executeTasks revert was uncategorised");
     }
 }

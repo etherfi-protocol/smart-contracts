@@ -27,7 +27,8 @@ contract ValidatorStateMachineInvariantTest is TestSetup, Deployed {
     ValidatorStateMachineHandler internal handler;
     uint256 internal constant POOL = 4;
     function setUp() public {
-        initializeRealisticFork(MAINNET_FORK);
+        // Pin the fork so the state-machine run is reproducible across CI and reruns.
+        initializeRealisticForkWithBlock(MAINNET_FORK, 25447657);
 
         // Mainnet NodeOperatorManager hasn't been upgraded to the role-based ACL yet,
         // so its NODE_OPERATOR_MANAGER_ADMIN_ROLE() getter doesn't exist on-chain.
@@ -233,12 +234,22 @@ contract ValidatorStateMachineInvariantTest is TestSetup, Deployed {
         assertFalse(handler.sawIllegalTransition(), handler.illegalReason());
     }
 
+    /// I10, end-state half: a call that reported success must land in the exact
+    /// expected status (register -> REGISTERED, create -> CONFIRMED,
+    /// invalidate -> INVALIDATED), not merely on some legal edge.
+    function invariant_I10_success_reaches_expected_state() public view {
+        assertFalse(handler.sawWrongEndState(), handler.wrongEndStateReason());
+    }
+
     /// Non-vacuity: the fuzzer must actually have driven real transitions, not just
     /// bounced off reverts — otherwise "no illegal transition" would be trivially true.
-    /// Checked once at the END of the run (afterInvariant), not per-step.
+    /// Checked once at the END of the run (afterInvariant), not per-step. Both terminal
+    /// edges are gated SEPARATELY so a run that only ever created (or only ever
+    /// invalidated) still fails the vacuity check.
     function afterInvariant() public view {
         assertGt(handler.register_ok(), 0, "no REGISTERED transition ever fired");
-        assertGt(handler.create_ok() + handler.invalidate_ok(), 0, "no terminal transition ever fired");
+        assertGt(handler.create_ok(), 0, "no CONFIRMED (create) transition ever fired");
+        assertGt(handler.invalidate_ok(), 0, "no INVALIDATED (invalidate) transition ever fired");
     }
 
     function invariant_call_coverage_summary() public view {

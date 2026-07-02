@@ -61,10 +61,19 @@ contract WithdrawalSolvencyHandler is StdUtils {
     bytes4 internal constant SEL_INSUFFICIENT_LIQUIDITY = bytes4(keccak256("InsufficientLiquidity()"));
     bytes4 internal constant SEL_MIGRATION_NOT_COMPLETE = bytes4(keccak256("MigrationNotComplete()"));
 
+    // Selectors used by the S3 invalidate/validate probe to classify reverts.
+    bytes4 internal constant SEL_REQUEST_NOT_VALID = bytes4(keccak256("RequestNotValid()"));
+    bytes4 internal constant SEL_REQUEST_NOT_FINALIZED = bytes4(keccak256("RequestNotFinalized()"));
+    bytes4 internal constant SEL_CANNOT_INVALIDATE_FINALIZED = bytes4(keccak256("CannotInvalidateFinalizedRequest()"));
+
     LiquidityPool      public immutable lp;
     EETH               public immutable eETH;
     WithdrawRequestNFT public immutable wrn;
     address            public immutable etherFiAdminAddr;
+    /// @dev holder of GUARDIAN_ROLE (invalidateRequest) — granted in the test setUp.
+    address            public immutable guardian;
+    /// @dev holder of OPERATION_TIMELOCK_ROLE (validateRequest).
+    address            public immutable operatingTimelock;
 
     address[N_EOAS] public actors;
 
@@ -100,11 +109,29 @@ contract WithdrawalSolvencyHandler is StdUtils {
     ///         escrow sufficient) reverted on `claimWithdraw`. Must stay false.
     bool public ghost_finalizedClaimFailed;
 
+    /// @notice (M3) Set true if a successful claimWithdraw did not move the three
+    ///         balances by their exact contract-correct deltas: recipient +=
+    ///         amountToWithdraw, lock -= request.amountOfEEth, totalValueOutOfLp
+    ///         -= (amountToWithdraw + strandedSweep). Must stay false.
+    bool public ghost_claimDeltaViolated;
+
+    /// @notice (S3) Set true if the invalidate/validate round-trip on a
+    ///         non-finalized request produced an unexpected outcome (invalidate
+    ///         did not block the claim, or validate did not restore validity).
+    bool public ghost_invalidateProbeFailed;
+    /// @notice (S3) Set true if invalidateRequest on a FINALIZED request was NOT
+    ///         rejected with CannotInvalidateFinalizedRequest. Must stay false.
+    bool public ghost_finalizedInvalidateAllowed;
+
     /// @notice forensic crumbs for the first observed failure of either kind.
     uint256 public ghost_failTokenId;
     bytes4  public ghost_failSelector;
     uint256 public ghost_failLockAmount;
     uint256 public ghost_failInLp;
+    /// @notice (M3) forensic crumbs for the first claim-delta mismatch.
+    uint256 public ghost_deltaFailTokenId;
+    uint256 public ghost_deltaFailExpected;
+    uint256 public ghost_deltaFailActual;
 
     // ----- non-vacuity counters ------------------------------------------
 
@@ -119,6 +146,14 @@ contract WithdrawalSolvencyHandler is StdUtils {
     ///         a genuinely over-backed lock (lockAmount > inLp) — proves the I3
     ///         enforcement path is actually driven, not merely regression-guarded.
     uint256 public ghost_lockBoundEnforced;
+    /// @notice (M3) number of successful claims whose exact three-way deltas
+    ///         were verified — proves the delta assertion is actually driven.
+    uint256 public ghost_claimDeltaChecks;
+    /// @notice (S3) number of completed invalidate/validate round-trips.
+    uint256 public ghost_invalidateValidateProbes;
+    /// @notice (S3) number of times invalidateRequest on a finalized request was
+    ///         correctly rejected with CannotInvalidateFinalizedRequest.
+    uint256 public ghost_finalizedInvalidateRejected;
 
     // ----- coverage / forensics ------------------------------------------
 
@@ -129,12 +164,16 @@ contract WithdrawalSolvencyHandler is StdUtils {
         EETH _eETH,
         WithdrawRequestNFT _wrn,
         address _etherFiAdmin,
-        address[N_EOAS] memory _actors
+        address[N_EOAS] memory _actors,
+        address _guardian,
+        address _operatingTimelock
     ) {
         lp = _lp;
         eETH = _eETH;
         wrn = _wrn;
         etherFiAdminAddr = _etherFiAdmin;
+        guardian = _guardian;
+        operatingTimelock = _operatingTimelock;
         for (uint256 i = 0; i < N_EOAS; i++) {
             actors[i] = _actors[i];
         }
@@ -371,11 +410,35 @@ contract WithdrawalSolvencyHandler is StdUtils {
         // defensively so an unrelated underflow isn't misread as a P3 failure.
         if (uint256(lp.totalValueOutOfLp()) < amountToWithdraw) { callCounts["claim_skipped_outlp"]++; return; }
 
+        // ---- (M3) snapshot the three balances the claim moves ----
+        // Deltas confirmed from WithdrawRequestNFT._claimWithdraw (L327-360) and
+        // LiquidityPool.withdraw (L297-305) + receive (L185-190):
+        //   recipient           += amountToWithdraw           (L345 payout)
+        //   ethAmountLocked...   -= request.amountOfEEth       (L341, the FULL escrowed
+        //                                                       amount, not the payout)
+        //   totalValueOutOfLp    -= amountToWithdraw           (LP.withdraw L303)
+        //                        -= strandedSweep              (WRN L351-354 sweeps
+        //                          balance-above-lock back to LP; LP.receive then
+        //                          moves it outOfLp->inLp, L187-188)
+        // where strandedSweep = (wrnBal - amountToWithdraw) - (lock - amountOfEEth),
+        // which is provably >= 0 (escrow invariant wrnBal >= lock and
+        // amountToWithdraw <= amountOfEEth), so the sweep fires whenever it is > 0.
+        // Pack the pre-claim snapshot (in its own array to keep the claimWithdraw
+        // stack frame shallow — the delta recompute lives in _checkClaimDeltas).
+        // [0]=recipient bal, [1]=lock, [2]=totalValueOutOfLp, [3]=WRN bal.
+        uint256[4] memory pre = [
+            ownerAddr.balance,
+            uint256(wrn.ethAmountLockedForWithdrawal()),
+            uint256(lp.totalValueOutOfLp()),
+            address(wrn).balance
+        ];
+
         vm.prank(ownerAddr);
         try wrn.claimWithdraw(tokenId) {
             claimed[tokenId] = true;
             ghost_requestsClaimed++;
             callCounts["claim"]++;
+            _checkClaimDeltas(tokenId, ownerAddr, amountToWithdraw, uint256(req.amountOfEEth), pre);
         } catch (bytes memory err) {
             // A finalized, valid, owned, in-escrow request that reverts is a
             // genuine I3 (P3) violation.
@@ -387,6 +450,175 @@ contract WithdrawalSolvencyHandler is StdUtils {
                 ghost_failSelector = sel;
             }
             callCounts["claim_revert"]++;
+        }
+    }
+
+    /// @notice (M3) Verify a successful claim moved the three balances by their
+    ///         exact contract-correct deltas. Split out of claimWithdraw to keep
+    ///         that function's stack frame shallow (avoids stack-too-deep).
+    /// @param pre packed pre-claim snapshot: [0]=recipient bal, [1]=lock,
+    ///        [2]=totalValueOutOfLp, [3]=WRN bal.
+    /// @dev Deltas (see WithdrawRequestNFT._claimWithdraw L327-360, LiquidityPool
+    ///      .withdraw L297-305 + receive L185-190):
+    ///        recipient        += amountToWithdraw
+    ///        lock             -= amountOfEEth (the FULL escrowed amount)
+    ///        totalValueOutOfLp-= amountToWithdraw + strandedSweep
+    ///      strandedSweep = (wrnBal - amountToWithdraw) - (lock - amountOfEEth),
+    ///      provably >= 0 (escrow invariant wrnBal >= lock, amountToWithdraw
+    ///      <= amountOfEEth), so the L351 sweep fires whenever it is > 0.
+    function _checkClaimDeltas(
+        uint256 tokenId,
+        address ownerAddr,
+        uint256 amountToWithdraw,
+        uint256 amountOfEEth,
+        uint256[4] memory pre
+    ) internal {
+        uint256 lockAfter = pre[1] - amountOfEEth;
+        uint256 wrnBalAfterPay = pre[3] - amountToWithdraw;
+        uint256 strandedSweep = wrnBalAfterPay > lockAfter ? wrnBalAfterPay - lockAfter : 0;
+
+        uint256 expRecipient = pre[0] + amountToWithdraw;
+        uint256 expOutOfLp = pre[2] - amountToWithdraw - strandedSweep;
+
+        if (ownerAddr.balance != expRecipient) {
+            ghost_claimDeltaViolated = true;
+            ghost_deltaFailTokenId = tokenId;
+            ghost_deltaFailExpected = expRecipient;
+            ghost_deltaFailActual = ownerAddr.balance;
+        } else if (uint256(wrn.ethAmountLockedForWithdrawal()) != lockAfter) {
+            ghost_claimDeltaViolated = true;
+            ghost_deltaFailTokenId = tokenId;
+            ghost_deltaFailExpected = lockAfter;
+            ghost_deltaFailActual = uint256(wrn.ethAmountLockedForWithdrawal());
+        } else if (uint256(lp.totalValueOutOfLp()) != expOutOfLp) {
+            ghost_claimDeltaViolated = true;
+            ghost_deltaFailTokenId = tokenId;
+            ghost_deltaFailExpected = expOutOfLp;
+            ghost_deltaFailActual = uint256(lp.totalValueOutOfLp());
+        } else {
+            ghost_claimDeltaChecks++;
+        }
+    }
+
+    /// @notice (S3) Deterministic invalidate/validate probe. Two parts, both
+    ///         self-contained so they fire reliably every run:
+    ///           A. Create a FRESH (not-yet-finalized) request, have the guardian
+    ///              invalidateRequest it, and assert the owner can no longer claim
+    ///              (claim reverts RequestNotValid). Then have the operating
+    ///              timelock validateRequest it back and assert validity is
+    ///              restored (the claim's RequestNotValid block is gone — only the
+    ///              RequestNotFinalized block remains, since it is unfinalized).
+    ///           B. Attempt invalidateRequest on a FINALIZED request
+    ///              (lastFinalizedRequestId) and assert it reverts
+    ///              CannotInvalidateFinalizedRequest.
+    ///         Roles: invalidateRequest is onlyGuardian, validateRequest is
+    ///         onlyOperatingTimelock (WithdrawRequestNFT L258/L270).
+    function doInvalidateValidateProbe(uint256 actorSeed, uint128 amountSeed) external {
+        // ---- Part A: round-trip on a fresh, non-finalized request ----
+        address actor = _eoa(actorSeed);
+        uint256 actorEEth = eETH.balanceOf(actor);
+        uint256 lo = lp.minWithdrawAmount();
+        uint256 hiCap = lp.maxWithdrawAmount();
+        if (actorEEth >= lo) {
+            uint256 hi = actorEEth < hiCap ? actorEEth : hiCap;
+            if (hi > 30 ether) hi = 30 ether;
+            if (hi >= lo) {
+                uint256 amt = bound(uint256(amountSeed), lo, hi);
+                vm.prank(actor);
+                try lp.requestWithdraw(actor, amt) returns (uint256 tokenId) {
+                    ourTokenIds.push(tokenId);
+                    tokenAmount[tokenId] = uint96(amt);
+                    ghost_requestsCreated++;
+                    callCounts["req"]++;
+
+                    // Guardian invalidates the not-yet-finalized request.
+                    vm.prank(guardian);
+                    try wrn.invalidateRequest(tokenId) {
+                        callCounts["invalidate_ok"]++;
+                        // MUST now be invalid.
+                        if (wrn.getRequest(tokenId).isValid) ghost_invalidateProbeFailed = true;
+                        // MUST no longer be claimable: claim reverts RequestNotValid.
+                        vm.prank(actor);
+                        try wrn.claimWithdraw(tokenId) {
+                            ghost_invalidateProbeFailed = true; // invalidated request settled
+                            callCounts["invalidated_claim_ok"]++;
+                        } catch (bytes memory cerr) {
+                            bytes4 csel = cerr.length >= 4 ? bytes4(cerr) : bytes4(0);
+                            if (csel == SEL_REQUEST_NOT_VALID) {
+                                callCounts["invalidated_claim_rejected"]++;
+                            } else {
+                                // Some other revert also blocks the claim, but the
+                                // invalid flag should be the FIRST gate to trip.
+                                ghost_invalidateProbeFailed = true;
+                                callCounts["invalidated_claim_other_revert"]++;
+                            }
+                        }
+
+                        // Operating timelock validates it back.
+                        vm.prank(operatingTimelock);
+                        try wrn.validateRequest(tokenId) {
+                            callCounts["validate_ok"]++;
+                            // MUST be valid again.
+                            if (!wrn.getRequest(tokenId).isValid) ghost_invalidateProbeFailed = true;
+                            // The RequestNotValid block MUST be gone. Claiming an
+                            // unfinalized-but-valid request now reverts
+                            // RequestNotFinalized (proving validity was restored).
+                            vm.prank(actor);
+                            try wrn.claimWithdraw(tokenId) {
+                                // Unfinalized request should not settle.
+                                ghost_invalidateProbeFailed = true;
+                                callCounts["revalidated_claim_ok"]++;
+                            } catch (bytes memory rerr) {
+                                bytes4 rsel = rerr.length >= 4 ? bytes4(rerr) : bytes4(0);
+                                if (rsel == SEL_REQUEST_NOT_VALID) {
+                                    // Still blocked as invalid -> validate did not restore it.
+                                    ghost_invalidateProbeFailed = true;
+                                    callCounts["revalidated_still_invalid"]++;
+                                } else {
+                                    // RequestNotFinalized (or any non-validity revert): the
+                                    // validity block is gone, as required.
+                                    callCounts["revalidated_claim_rejected"]++;
+                                }
+                            }
+                            ghost_invalidateValidateProbes++;
+                        } catch {
+                            // validateRequest of an existing invalid, non-finalized
+                            // request should always succeed.
+                            ghost_invalidateProbeFailed = true;
+                            callCounts["validate_revert"]++;
+                        }
+                    } catch {
+                        // invalidateRequest of a valid, non-finalized request should
+                        // always succeed for the guardian.
+                        ghost_invalidateProbeFailed = true;
+                        callCounts["invalidate_revert"]++;
+                    }
+                } catch {
+                    callCounts["req_revert"]++;
+                }
+            }
+        }
+
+        // ---- Part B: invalidate on a FINALIZED request MUST revert ----
+        // invalidateRequest checks `requestId <= lastFinalizedRequestId` FIRST
+        // (WithdrawRequestNFT L259), so lastFinalizedRequestId itself trips the
+        // guard regardless of that request's validity/existence.
+        uint32 lastFin = wrn.lastFinalizedRequestId();
+        if (lastFin >= 1) {
+            vm.prank(guardian);
+            try wrn.invalidateRequest(uint256(lastFin)) {
+                ghost_finalizedInvalidateAllowed = true;
+                callCounts["invalidate_finalized_ok"]++;
+            } catch (bytes memory err) {
+                bytes4 sel = err.length >= 4 ? bytes4(err) : bytes4(0);
+                if (sel == SEL_CANNOT_INVALIDATE_FINALIZED) {
+                    ghost_finalizedInvalidateRejected++;
+                    callCounts["invalidate_finalized_rejected"]++;
+                } else {
+                    ghost_finalizedInvalidateAllowed = true; // wrong revert reason
+                    callCounts["invalidate_finalized_other"]++;
+                }
+            }
         }
     }
 

@@ -10,7 +10,9 @@ import "@etherfi/staking/EtherFiNodesManager.sol";
 
 interface ILPValidator {
     function batchRegister(IStakingManager.DepositData[] calldata, uint256[] calldata, address) external;
-    function batchCreateBeaconValidators(IStakingManager.DepositData[] calldata, uint256[] calldata, address) external payable;
+    // NOT payable: the pool funds the 1 ETH per validator from its own balance
+    // (LiquidityPool.batchCreateBeaconValidators -> createBeaconValidators{value: ...}).
+    function batchCreateBeaconValidators(IStakingManager.DepositData[] calldata, uint256[] calldata, address) external;
 }
 
 /// @notice Stateful-fuzz handler for the validator-creation state machine (I10).
@@ -46,6 +48,15 @@ contract ValidatorStateMachineHandler is Test {
     // failure ghost — any true => I10 broken
     bool public sawIllegalTransition;
     string public illegalReason;
+    // records the actual (before, after) status codes of the illegal edge observed
+    uint8 public illegalBefore;
+    uint8 public illegalAfter;
+
+    // failure ghost — a successful call landed in the WRONG end-state
+    // (register that didn't reach REGISTERED, create that didn't reach CONFIRMED,
+    //  invalidate that didn't reach INVALIDATED). Any true => I10 broken.
+    bool public sawWrongEndState;
+    string public wrongEndStateReason;
 
     // coverage
     uint256 public register_ok;
@@ -92,7 +103,29 @@ contract ValidatorStateMachineHandler is Test {
             (before == S.REGISTERED && afterS == S.INVALIDATED);
         if (!legal) {
             sawIllegalTransition = true;
-            illegalReason = "illegal status edge observed";
+            illegalBefore = uint8(before);
+            illegalAfter = uint8(afterS);
+            illegalReason = string.concat(
+                "illegal status edge ",
+                vm.toString(uint256(uint8(before))),
+                "->",
+                vm.toString(uint256(uint8(afterS)))
+            );
+        }
+    }
+
+    /// After a call that reported success, the hash MUST sit in the expected
+    /// end-state. Records a ghost violation (total-function style) rather than
+    /// reverting inside the handler.
+    function _expectEndState(S expected, S actual) internal {
+        if (actual != expected) {
+            sawWrongEndState = true;
+            wrongEndStateReason = string.concat(
+                "success landed in ",
+                vm.toString(uint256(uint8(actual))),
+                " expected ",
+                vm.toString(uint256(uint8(expected)))
+            );
         }
     }
 
@@ -105,43 +138,79 @@ contract ValidatorStateMachineHandler is Test {
         a[0] = x;
     }
 
-    function doRegister(uint256 idx) external {
-        if (pool.length == 0) return;
-        Val storage v = pool[bound(idx, 0, pool.length - 1)];
+    // ---- single-step transition primitives (shared by the fuzzed actions and
+    //      the coverage bootstrap) ----
+
+    function _register(Val storage v) internal {
         S before = _status(v.hash);
         vm.prank(v.spawner);
         try ILPValidator(lp).batchRegister(_arrD(v.depositData), _arrU(v.bidId), v.node) {
             register_ok++;
+            _expectEndState(S.REGISTERED, _status(v.hash));
         } catch {
             register_revert++;
         }
         _check(before, _status(v.hash));
     }
 
-    function doCreate(uint256 idx) external {
-        if (pool.length == 0) return;
-        Val storage v = pool[bound(idx, 0, pool.length - 1)];
+    function _create(Val storage v) internal {
         S before = _status(v.hash);
-        vm.deal(opAdmin, 100 ether);
+        // batchCreateBeaconValidators is NOT payable — the pool funds the 1 ETH
+        // per validator from its own balance (topped up in the suite's setUp).
         vm.prank(opAdmin);
-        try ILPValidator(lp).batchCreateBeaconValidators{value: 1 ether}(_arrD(v.depositData), _arrU(v.bidId), v.node) {
+        try ILPValidator(lp).batchCreateBeaconValidators(_arrD(v.depositData), _arrU(v.bidId), v.node) {
             create_ok++;
+            _expectEndState(S.CONFIRMED, _status(v.hash));
         } catch {
             create_revert++;
         }
         _check(before, _status(v.hash));
     }
 
-    function doInvalidate(uint256 idx) external {
-        if (pool.length == 0) return;
-        Val storage v = pool[bound(idx, 0, pool.length - 1)];
+    function _invalidate(Val storage v) internal {
         S before = _status(v.hash);
         vm.prank(oracleOps);
         try sm.invalidateRegisteredBeaconValidator(v.depositData, v.bidId, v.node) {
             invalidate_ok++;
+            _expectEndState(S.INVALIDATED, _status(v.hash));
         } catch {
             invalidate_revert++;
         }
         _check(before, _status(v.hash));
+    }
+
+    /// Coverage floor: create/invalidate both consume a REGISTERED validator and
+    /// compete for the few that exist, so a purely random action order starves one
+    /// or the other on some runs (a single doCreate on a random idx usually misses
+    /// the registered validator). To make coverage deterministic without weakening
+    /// the vacuity gate, the first fuzzed call of every run drives one full legal
+    /// register->create on pool[0] and one full register->invalidate on pool[1].
+    /// The two now-terminal validators then double as illegal-edge targets that the
+    /// fuzzer keeps hammering (create/invalidate/register on a terminal status must
+    /// all revert with no status change). Runs revert to the setUp snapshot, so this
+    /// re-arms each run.
+    bool internal bootstrapped;
+    modifier coverageFloor() {
+        if (!bootstrapped) {
+            bootstrapped = true;
+            if (pool.length >= 1) { _register(pool[0]); _create(pool[0]); }
+            if (pool.length >= 2) { _register(pool[1]); _invalidate(pool[1]); }
+        }
+        _;
+    }
+
+    function doRegister(uint256 idx) external coverageFloor {
+        if (pool.length == 0) return;
+        _register(pool[bound(idx, 0, pool.length - 1)]);
+    }
+
+    function doCreate(uint256 idx) external coverageFloor {
+        if (pool.length == 0) return;
+        _create(pool[bound(idx, 0, pool.length - 1)]);
+    }
+
+    function doInvalidate(uint256 idx) external coverageFloor {
+        if (pool.length == 0) return;
+        _invalidate(pool[bound(idx, 0, pool.length - 1)]);
     }
 }

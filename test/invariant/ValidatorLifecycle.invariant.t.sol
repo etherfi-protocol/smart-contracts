@@ -32,17 +32,29 @@ import "./handlers/ValidatorLifecycleHandler.sol";
 contract ValidatorLifecycleInvariantTest is TestSetup {
     ValidatorLifecycleHandler internal handler;
 
+    address internal executorOps = address(0xE0E0);
+
     function setUp() public {
         setUpTests();
-        handler = new ValidatorLifecycleHandler(managerInstance, address(stakingManagerInstance));
+
+        // linkLegacyValidatorIds is onlyExecutorOperations; grant the role to a
+        // dedicated address the handler pranks for the legacy-path re-link attack.
+        // startPrank (not prank) so the nested EXECUTOR_OPERATIONS_ROLE() read doesn't
+        // consume the prank before grantRole runs.
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(roleRegistryInstance.EXECUTOR_OPERATIONS_ROLE(), executorOps);
+        vm.stopPrank();
+
+        handler = new ValidatorLifecycleHandler(managerInstance, address(stakingManagerInstance), executorOps);
         targetContract(address(handler));
 
-        // Restrict fuzzing to the two action functions. Without this, the engine
+        // Restrict fuzzing to the three action functions. Without this, the engine
         // also targets the handler's view getters (linkedCount, ghostLinkedNode,
         // the counters), wasting call budget on no-ops.
-        bytes4[] memory sel = new bytes4[](2);
+        bytes4[] memory sel = new bytes4[](3);
         sel[0] = handler.doLink.selector;
         sel[1] = handler.doRelinkAttack.selector;
+        sel[2] = handler.doLegacyLinkAttack.selector;
         targetSelector(FuzzSelector({addr: address(handler), selectors: sel}));
     }
 
@@ -56,12 +68,29 @@ contract ValidatorLifecycleInvariantTest is TestSetup {
         assertFalse(handler.sawRelinkSucceed(), "I11: re-link of an already-linked pubkey succeeded");
     }
 
+    /// I11 (global sweep): every pubkey hash the handler ever linked still points at
+    /// the exact node it was FIRST set to. The per-step sawOverwrite ghost only checks
+    /// the hash touched by the current call; this walks the whole recorded set each
+    /// invariant round so a stray repoint of any other hash is caught too.
+    function invariant_I11_all_links_match_first_node() public view {
+        uint256 n = handler.linkedCount();
+        for (uint256 i = 0; i < n; i++) {
+            bytes32 h = handler.linkedHashes(i);
+            assertEq(
+                address(managerInstance.etherFiNodeFromPubkeyHash(h)),
+                handler.ghostLinkedNode(h),
+                "I11: a linked pubkey hash diverged from its first-set node"
+            );
+        }
+    }
+
     /// Soft coverage observability (mirrors existing suites' convention).
     function invariant_call_coverage_summary() public view {
         // no assertion; surfaced under -vv
         handler.link_ok();
         handler.link_already_revert();
         handler.relink_attempt();
+        handler.legacy_link_attempt();
     }
 
     /// Non-vacuity gate: prove the fuzzer actually drove the I11 lifecycle —
@@ -73,10 +102,11 @@ contract ValidatorLifecycleInvariantTest is TestSetup {
         emit log_named_uint("link_ok            ", handler.link_ok());
         emit log_named_uint("link_already_revert", handler.link_already_revert());
         emit log_named_uint("relink_attempt     ", handler.relink_attempt());
+        emit log_named_uint("legacy_link_attempt", handler.legacy_link_attempt());
 
         assertGt(handler.link_ok(), 0, "non-vacuity: no pubkey->node link ever succeeded");
         assertGt(
-            handler.link_already_revert() + handler.relink_attempt(),
+            handler.link_already_revert() + handler.relink_attempt() + handler.legacy_link_attempt(),
             0,
             "non-vacuity: no re-link / already-linked path was ever exercised"
         );

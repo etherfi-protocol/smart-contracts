@@ -45,7 +45,7 @@ contract RewardsDistributorInvariantTest is TestSetup {
         // on no-ops so the lifecycle (setPending -> finalize -> claim) is never
         // driven and the run is vacuous (all counters 0). Curate the selectors so
         // every call advances the state machine.
-        bytes4[] memory selectors = new bytes4[](8);
+        bytes4[] memory selectors = new bytes4[](10);
         selectors[0] = handler.doSetPendingRoot.selector;
         selectors[1] = handler.doFinalize.selector;
         selectors[2] = handler.doClaim.selector;
@@ -54,6 +54,8 @@ contract RewardsDistributorInvariantTest is TestSetup {
         selectors[5] = handler.doWarp.selector;
         selectors[6] = handler.doRoll.selector;
         selectors[7] = handler.doLowerCumulativeClaim.selector;
+        selectors[8] = handler.doDelayBoundaryProbe.selector;
+        selectors[9] = handler.doMerkleTreeClaim.selector;
         targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
         targetContract(address(handler));
 
@@ -75,6 +77,11 @@ contract RewardsDistributorInvariantTest is TestSetup {
         // only establishes the floor.
         handler.doClaim(0, 1 ether);
         handler.doLowerCumulativeClaim(1, 0);
+        // Seed the delay-boundary probe (S1) and the real-Merkle-tree claim (S2)
+        // once so both edges of the finalization delay and the _verifyAsm proof
+        // loop are exercised on EVERY run regardless of the fuzzed sequence.
+        handler.doDelayBoundaryProbe(1);
+        handler.doMerkleTreeClaim(1);
     }
 
     // =====================================================================
@@ -111,6 +118,25 @@ contract RewardsDistributorInvariantTest is TestSetup {
         assertFalse(
             handler.ghost_finalizeRootMismatch(),
             "I13: claimable root != root that was pending for >= claimDelay"
+        );
+        assertFalse(
+            handler.ghost_boundaryRejectedAtDelay(),
+            "I13: finalize rejected AT setAt + claimDelay (delay guard too strict)"
+        );
+    }
+
+    // =====================================================================
+    // Merkle-proof integrity (S2) — the claim path verifies real proofs.
+    // =====================================================================
+
+    function invariant_merkle_proof_integrity() public view {
+        assertFalse(
+            handler.ghost_validProofRejected(),
+            "merkle: a claim with a genuine in-tree 2-element proof reverted"
+        );
+        assertFalse(
+            handler.ghost_badProofAccepted(),
+            "merkle: a claim with a proof for the wrong leaf/amount succeeded"
         );
     }
 
@@ -157,8 +183,17 @@ contract RewardsDistributorInvariantTest is TestSetup {
         emit log_named_uint("replay_revert          ", handler.callCounts("replay_revert"));
         emit log_named_uint("lower_rejected         ", handler.callCounts("lower_rejected"));
         emit log_named_uint("lower_unexpected_ok    ", handler.callCounts("lower_unexpected_ok"));
+        emit log_named_uint("lower_boot_failed      ", handler.callCounts("lower_boot_failed"));
         emit log_named_uint("replay_unexpected_ok   ", handler.callCounts("replay_unexpected_ok"));
         emit log_named_uint("replay_skipped         ", handler.callCounts("replay_skipped"));
+        emit log_named_uint("boundary_early_rejected", handler.callCounts("boundary_early_rejected"));
+        emit log_named_uint("boundary_early_ok      ", handler.callCounts("boundary_early_ok"));
+        emit log_named_uint("boundary_at_ok         ", handler.callCounts("boundary_at_ok"));
+        emit log_named_uint("boundary_at_rejected   ", handler.callCounts("boundary_at_rejected"));
+        emit log_named_uint("tree_claim_ok          ", handler.callCounts("tree_claim_ok"));
+        emit log_named_uint("tree_claim_revert      ", handler.callCounts("tree_claim_revert"));
+        emit log_named_uint("tree_proof_rejected    ", handler.callCounts("tree_proof_rejected"));
+        emit log_named_uint("tree_proof_unexpected_ok", handler.callCounts("tree_proof_unexpected_ok"));
         emit log_named_uint("setClaimDelay          ", handler.callCounts("setClaimDelay"));
         emit log_named_uint("warp                   ", handler.callCounts("warp"));
         emit log_named_uint("roll                   ", handler.callCounts("roll"));
