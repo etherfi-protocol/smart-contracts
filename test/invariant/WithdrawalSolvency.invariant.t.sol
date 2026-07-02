@@ -61,10 +61,11 @@ import "./handlers/WithdrawalSolvencyHandler.sol";
 /// ─────────────────────────────────────────────────────────────────────────
 /// SOUNDNESS ASSUMPTIONS (documented, not weakening)
 /// ─────────────────────────────────────────────────────────────────────────
-///  - We mirror production's finalize flow EXACTLY: lock the summed eETH of
-///    the newly-finalized range via LP.addEthAmountLockedForWithdrawal (pranked
-///    as the real EtherFiAdmin immutable), then WithdrawRequestNFT.finalizeRequests
-///    (also EtherFiAdmin-gated). We do NOT call any path src/ doesn't expose.
+///  - We mirror production's finalize flow EXACTLY: WithdrawRequestNFT.finalizeRequests
+///    the newly-finalized range, then lock its summed eETH via
+///    LP.addEthAmountLockedForWithdrawal — the same finalize-then-lock order as
+///    EtherFiAdmin._finalizeWithdrawals (both pranked as the real EtherFiAdmin
+///    immutable that gates them). We do NOT call any path src/ doesn't expose.
 ///  - Negative rebases are bounded to <= 0.5% of TVL and kept above the WRN
 ///    lock. An extreme slash that drives amountForShare(1e18) below
 ///    LiquidityPool.minAmountForShare would legitimately block claims via
@@ -110,8 +111,8 @@ contract WithdrawalSolvencyInvariantTest is TestSetup {
         }
 
         // Finalize the PRE-EXISTING mainnet pending range once, mirroring what
-        // EtherFiAdmin does in production (lock the summed eETH of the range via
-        // addEthAmountLockedForWithdrawal, then finalizeRequests). This clears
+        // EtherFiAdmin does in production (finalizeRequests the range, then lock
+        // its summed eETH via addEthAmountLockedForWithdrawal). This clears
         // the ~69 legacy pending requests that would otherwise sit ahead of our
         // fresh tokenIds in id-order and make finalizing+claiming OUR requests
         // unreachable within a single fuzz sequence. The lock amount (~6.4k ETH)
@@ -168,9 +169,13 @@ contract WithdrawalSolvencyInvariantTest is TestSetup {
     }
 
     /// @dev Finalize the pre-existing mainnet pending range in bounded batches,
-    ///      locking each batch's summed eETH first (production order). Skips a
-    ///      batch only if in-LP liquidity cannot back it (cannot finalize what
-    ///      we cannot back) — given the setUp deposits this never triggers.
+    ///      mirroring EtherFiAdmin._finalizeWithdrawals order EXACTLY:
+    ///      `finalizeRequests` first, then `addEthAmountLockedForWithdrawal` for
+    ///      the batch's summed eETH. Skips a batch only if in-LP liquidity cannot
+    ///      back it (cannot finalize what we cannot back) — given the setUp
+    ///      deposits this never triggers. (Order is inert here since neither call
+    ///      reads the other's state, but we keep it identical to production and
+    ///      to the handler's _finalizeThenLock so all paths agree on the flow.)
     function _finalizePreExistingPending() internal {
         uint32 lastFin = withdrawRequestNFTInstance.lastFinalizedRequestId();
         uint32 nextId = withdrawRequestNFTInstance.nextRequestId();
@@ -185,12 +190,12 @@ contract WithdrawalSolvencyInvariantTest is TestSetup {
             }
             if (lockAmount > uint256(liquidityPoolInstance.totalValueInLp())) break;
 
+            vm.prank(address(etherFiAdminInstance));
+            withdrawRequestNFTInstance.finalizeRequests(uint256(target));
             if (lockAmount > 0) {
                 vm.prank(address(etherFiAdminInstance));
                 liquidityPoolInstance.addEthAmountLockedForWithdrawal(uint128(lockAmount));
             }
-            vm.prank(address(etherFiAdminInstance));
-            withdrawRequestNFTInstance.finalizeRequests(uint256(target));
             lastFin = target;
         }
     }

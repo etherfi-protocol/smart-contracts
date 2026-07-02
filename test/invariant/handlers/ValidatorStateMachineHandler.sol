@@ -10,7 +10,7 @@ import "@etherfi/staking/EtherFiNodesManager.sol";
 
 interface ILPValidator {
     function batchRegister(IStakingManager.DepositData[] calldata, uint256[] calldata, address) external;
-    function batchCreateBeaconValidators(IStakingManager.DepositData[] calldata, uint256[] calldata, address) external payable;
+    function batchCreateBeaconValidators(IStakingManager.DepositData[] calldata, uint256[] calldata, address) external;
 }
 
 /// @notice Stateful-fuzz handler for the validator-creation state machine (I10).
@@ -122,9 +122,12 @@ contract ValidatorStateMachineHandler is Test {
         if (pool.length == 0) return;
         Val storage v = pool[bound(idx, 0, pool.length - 1)];
         S before = _status(v.hash);
-        vm.deal(opAdmin, 100 ether);
+        // batchCreateBeaconValidators is NOT payable: the LiquidityPool funds the
+        // 1 ETH-per-validator initial deposit from its OWN balance (setUp deals it
+        // the ETH). Forwarding value here would revert on the non-payable fallback
+        // before any state transition, so no create could ever fire.
         vm.prank(opAdmin);
-        try ILPValidator(lp).batchCreateBeaconValidators{value: 1 ether}(_arrD(v.depositData), _arrU(v.bidId), v.node) {
+        try ILPValidator(lp).batchCreateBeaconValidators(_arrD(v.depositData), _arrU(v.bidId), v.node) {
             create_ok++;
         } catch {
             create_revert++;
