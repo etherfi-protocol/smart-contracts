@@ -5,6 +5,9 @@ on:
     branches:
       - staging-2.5
       - master
+      # 26Q2 Security Upgrades release branch: run the full suite (including the
+      # invariant layer) on PRs targeting it, not only when it lands on master.
+      - pankaj/feat/security-upgrades*
   workflow_dispatch:
   
 
