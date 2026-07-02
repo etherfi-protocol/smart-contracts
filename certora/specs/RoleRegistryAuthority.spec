@@ -13,33 +13,44 @@
  *     can ONLY clear a bit, and reverts on the 3 protected roles.
  *
  * ===========================================================================
- * MODELLING NOTE — why I6.1 is split by method rather than summarized.
- * solady's `_enumerableRolesSenderIsContractOwner` decides authorization by
- * STATICCALLing owner() on address(this) from HAND-ROLLED ASSEMBLY
- * (EnumerableRoles.sol:295-305). The Prover cannot recover the 4-byte selector
- * from that assembly calldata, reports "callee sighash unresolved", and
- * AUTO-havocs the return value — producing spurious "non-owner changed a role"
- * counterexamples on grantRole/revokeRole/setRole. Attempts to model
- * _authorizeSetRole with an internal-function CVL summary crashed the Prover
- * backend (the summary interacts badly with solady's assembly storage writes).
+ * MODELLING NOTE — resolving solady's assembly self-staticcalls.
+ * solady's `_enumerableRolesSenderIsContractOwner` decides grant-path
+ * authorization by STATICCALLing owner() on address(this) from HAND-ROLLED
+ * ASSEMBLY (EnumerableRoles.sol:295-305), and `_validateRole` likewise
+ * STATICCALLs MAX_ROLE() (EnumerableRoles.sol:193-205). The Prover cannot
+ * recover the 4-byte selectors from that assembly calldata, reports "callee
+ * sighash unresolved", and AUTO-havocs the return values — which previously
+ * produced spurious "non-owner changed a role" counterexamples on
+ * grantRole/revokeRole/setRole. Modelling _authorizeSetRole with an
+ * INTERNAL-function CVL summary crashed the Prover backend (it interacts badly
+ * with solady's assembly storage writes).
  *
- * So we prove I6 from the angles the Prover CAN see soundly, with NO summaries:
- *   I6.1  revokeFast is the ONLY non-owner write path, and it can only CLEAR a
- *         bit — proven directly (revokeAdmin gate + active=false are plain
- *         Solidity the Prover models natively).  [VERIFIED]
+ * The sound fix is a DISPATCH list on the UNRESOLVED EXTERNAL calls (methods
+ * block). Both STATICCALLs target literally address(this), and the only
+ * external calls reachable inside setRole/grantRole/revokeRole are these two
+ * self-calls, so resolving them to currentContract.owner()/MAX_ROLE() is EXACT,
+ * not an over-approximation. `optimistic=true` drops the "no match" havoc
+ * branch that would otherwise re-introduce the spurious counterexample; the
+ * entry is scoped to the three grant-path methods ONLY, so upgradeToAndCall's
+ * delegatecall is left to the Prover's default handling.
+ *
+ *   I6.1  revokeFast AUTHORITY: a successful revokeFast requires the immutable
+ *         revokeAdmin — plain Solidity the Prover models natively.       [VERIFIED]
  *   I6.2  revokeFast reverts on the 3 protected roles (InvalidRoleToRevoke is an
  *         explicit guard the Prover sees).                                [VERIFIED]
  *   I6.3  revokeFast never grants (false->true).                          [VERIFIED]
- *   I6.4  the owner-gated paths (grantRole/revokeRole/setRole) are the ONLY
- *         methods OTHER than revokeFast that can change a role bit — i.e. no
- *         OTHER method (transfers, upgrades-aside, views) mutates membership.
- *         Proven by filtering to all-other-methods and asserting no change.
- *         (upgradeToAndCall excluded: UUPS delegatecall havocs all storage, a
- *         modelling artifact, gated separately by onlyUpgradeTimelock.)
- * The owner-only authorization of grantRole/revokeRole/setRole themselves rests
- * on solady's audited _authorizeSetRole (owner-or-revert); we assert it cannot
- * be bypassed by any OTHER entry point, which is the registry-integrity half of
- * I6 that is provable without the un-modellable assembly self-call.
+ *   I6.4  the owner-gated paths (grantRole/revokeRole/setRole) and revokeFast
+ *         are the ONLY methods that can change a role bit — no OTHER method
+ *         (transfers, views) mutates membership. Proven by filtering to
+ *         all-other-methods and asserting no change. (upgradeToAndCall excluded:
+ *         UUPS delegatecall havocs all storage, a modelling artifact, gated
+ *         separately by onlyUpgradeTimelock — see I6.6.)                  [VERIFIED]
+ *   I6.5  the owner-gated paths succeed ONLY for msg.sender == owner() — the
+ *         grant-path authorization itself, provable directly thanks to the
+ *         self-call dispatch above (no longer resting on solady's audit alone).
+ *   I6.6  upgradeToAndCall succeeds ONLY for a caller holding
+ *         UPGRADE_TIMELOCK_ROLE (_authorizeUpgrade/onlyUpgradeTimelock,
+ *         RoleRegistry.sol:252-254); closes the one path I6.4 must exclude.
  * ===========================================================================
  */
 
@@ -51,6 +62,20 @@ methods {
     function UPGRADE_TIMELOCK_ROLE()  external returns (bytes32) envfree;
     function OPERATION_TIMELOCK_ROLE() external returns (bytes32) envfree;
     function OPERATION_MULTISIG_ROLE() external returns (bytes32) envfree;
+
+    // Resolve solady's two assembly self-STATICCALLs (see MODELLING NOTE):
+    // owner() in _authorizeSetRole and MAX_ROLE() in _validateRole. Both target
+    // address(this), and they are the ONLY external calls reachable inside the
+    // grant-path methods, so dispatching to currentContract.owner()/MAX_ROLE()
+    // is exact. optimistic=true removes the "no match" havoc branch that would
+    // otherwise re-create the spurious non-owner counterexample. Scoped to the
+    // three grant-path methods so upgradeToAndCall is left untouched.
+    unresolved external in currentContract.setRole(address,uint256,bool) =>
+        DISPATCH(optimistic=true) [ currentContract.owner(), currentContract.MAX_ROLE() ];
+    unresolved external in currentContract.grantRole(bytes32,address) =>
+        DISPATCH(optimistic=true) [ currentContract.owner(), currentContract.MAX_ROLE() ];
+    unresolved external in currentContract.revokeRole(bytes32,address) =>
+        DISPATCH(optimistic=true) [ currentContract.owner(), currentContract.MAX_ROLE() ];
 }
 
 // ----------------------------------------------------------------------------
@@ -81,6 +106,46 @@ rule I6_only_role_mgmt_methods_change_membership(method f, env e, calldataarg ar
 
     assert before == afterCall,
         "I6.4: a non-role-management method changed role membership";
+}
+
+// ----------------------------------------------------------------------------
+// I6.5 OWNER-GATED WRITE PATHS: a successful grantRole / revokeRole / setRole
+//      requires msg.sender == owner(). This is the grant-path authorization
+//      solady enforces via _authorizeSetRole (owner-or-revert). It is provable
+//      here ONLY because the methods block resolves solady's owner()/MAX_ROLE()
+//      self-staticcalls (see MODELLING NOTE); without that resolution the Prover
+//      havocs the owner() return and reports spurious non-owner counterexamples.
+// ----------------------------------------------------------------------------
+rule I6_owner_gated_paths_require_owner(method f, env e, calldataarg args)
+    filtered {
+        f -> f.selector == sig:grantRole(bytes32,address).selector
+          || f.selector == sig:revokeRole(bytes32,address).selector
+          || f.selector == sig:setRole(address,uint256,bool).selector
+    }
+{
+    f@withrevert(e, args);
+
+    assert !lastReverted => e.msg.sender == owner(),
+        "I6.5: an owner-gated role change succeeded for a non-owner caller";
+}
+
+// ----------------------------------------------------------------------------
+// I6.6 UPGRADE AUTHORITY: a successful upgradeToAndCall requires msg.sender to
+//      hold UPGRADE_TIMELOCK_ROLE. upgradeToAndCall is excluded from I6.4
+//      because the UUPS delegatecall havocs all storage (a modelling artifact),
+//      leaving its authorization otherwise unproven. _authorizeUpgrade calls
+//      onlyUpgradeTimelock(msg.sender) (RoleRegistry.sol:252-254), which reverts
+//      unless hasRole(UPGRADE_TIMELOCK_ROLE, msg.sender) — it does NOT allow the
+//      owner. We capture that membership BEFORE the call (the delegatecall may
+//      havoc it) and assert a successful upgrade implies the caller held it.
+// ----------------------------------------------------------------------------
+rule I6_upgrade_requires_timelock_role(env e, calldataarg args) {
+    bool hadRole = hasRole(UPGRADE_TIMELOCK_ROLE(), e.msg.sender);
+
+    upgradeToAndCall@withrevert(e, args);
+
+    assert !lastReverted => hadRole,
+        "I6.6: upgradeToAndCall succeeded for a caller without UPGRADE_TIMELOCK_ROLE";
 }
 
 // ----------------------------------------------------------------------------
