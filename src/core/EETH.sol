@@ -6,17 +6,18 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/utils/CountersUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/draft-IERC20PermitUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/utils/cryptography/ECDSAUpgradeable.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 
 import "@etherfi/core/interfaces/IeETH.sol";
 import "@etherfi/core/interfaces/ILiquidityPool.sol";
 import "@etherfi/utils/AssetRecovery.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
 import "@etherfi/governance/interfaces/IBlacklister.sol";
-import "@etherfi/governance/rate-limiting/RateLimitedToken.sol";
+import "@etherfi/governance/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 import "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
 
-contract EETH is IERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, PausableUntil, IERC20PermitUpgradeable, IeETH, AssetRecovery, RateLimitedToken {
+contract EETH is IERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, PausableUntil, IERC20PermitUpgradeable, IeETH, AssetRecovery {
     using CountersUpgradeable for CountersUpgradeable.Counter;
 
     //--------------------------------------------------------------------------------------
@@ -45,6 +46,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
 
     ILiquidityPool public immutable liquidityPool;
     IBlacklister public immutable blacklister;
+    IEtherFiRateLimiter public immutable rateLimiter;
     // `roleRegistry` is inherited from RolesLibrary; `rateLimiter` from RateLimitedToken.
 
     //--------------------------------------------------------------------------------------
@@ -89,7 +91,6 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
      */
     constructor(address _liquidityPool, address _roleRegistry, address _blacklister, address _rateLimiter)
         RolesLibrary(_roleRegistry)
-        RateLimitedToken(_rateLimiter)
     {
         bytes32 hashedName = keccak256("EETH");
         bytes32 hashedVersion = keccak256("1");
@@ -104,6 +105,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
         if (_liquidityPool == address(0) || _blacklister == address(0)) revert AddressZero();
         liquidityPool = ILiquidityPool(_liquidityPool);
         blacklister = IBlacklister(_blacklister);
+        rateLimiter = IEtherFiRateLimiter(_rateLimiter);
 
         _disableInitializers();
     }
@@ -136,7 +138,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
         totalShares += _share;
 
         uint256 amount = liquidityPool.amountForShare(_share);
-        rateLimiter.consumeToken(EETH_MINT_LIMIT_ID, toBucketUnit(amount));
+        rateLimiter.consumeToken(EETH_MINT_LIMIT_ID, _toBucketUnit(amount));
 
         emit Transfer(address(0), _user, amount);
         emit TransferShares(address(0), _user, _share);
@@ -159,7 +161,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
         totalShares -= _share;
 
         uint256 amount = liquidityPool.amountForShare(_share);
-        rateLimiter.consumeToken(EETH_BURN_LIMIT_ID, toBucketUnit(amount));
+        rateLimiter.consumeToken(EETH_BURN_LIMIT_ID, _toBucketUnit(amount));
 
         emit Transfer(_user, address(0), amount);
         emit TransferShares(_user, address(0), _share);
@@ -422,6 +424,16 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
         } else {
             return _buildDomainSeparator(_TYPE_HASH, _HASHED_NAME, _HASHED_VERSION);
         }
+    }
+
+    /**
+     * @notice Converts a wei amount to gwei (rounding up), saturating at type(uint64).max.
+     * @param amount The amount to convert to a bucket unit.
+     * @return uint64 The bucket unit.
+     */
+    function _toBucketUnit(uint256 amount) internal pure returns (uint64) {
+        uint256 gweiAmount = Math.ceilDiv(amount, 1 gwei);
+        return gweiAmount > type(uint64).max ? type(uint64).max : uint64(gweiAmount);
     }
 
     /**

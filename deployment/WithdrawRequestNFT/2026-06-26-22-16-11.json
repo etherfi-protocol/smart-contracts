@@ -1,0 +1,14 @@
+{
+  "contractName": "WithdrawRequestNFT",
+  "deploymentParameters": {
+    "factory": "0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99",
+    "salt": "0x0f1e8d966c85bcd3b352d94da15fe2eae61f897c000000000000000000000000",
+    "constructorArgs": {
+      "_liquidityPool": "0x308861A430be4cce5502d0A12724771Fc6DaF216",
+      "_roleRegistry": "0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9",
+      "_blacklister": "0x5585996E7cFE95f2D99e61168B8b35C66Ff99B18",
+      "_etherFiAdmin": "0x0EF8fa4760Db8f5Cd4d993f3e3416f30f942D705"
+    }
+  },
+  "deployedAddress": "0x41617D01362770ebAAC10311aB899FBc8a4E4A7E"
+}

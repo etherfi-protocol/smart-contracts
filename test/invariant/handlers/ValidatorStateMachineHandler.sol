@@ -155,8 +155,10 @@ contract ValidatorStateMachineHandler is Test {
 
     function _create(Val storage v) internal {
         S before = _status(v.hash);
-        // batchCreateBeaconValidators is NOT payable — the pool funds the 1 ETH
-        // per validator from its own balance (topped up in the suite's setUp).
+        // batchCreateBeaconValidators is NOT payable: the LiquidityPool funds the
+        // 1 ETH-per-validator initial deposit from its OWN balance (setUp deals it
+        // the ETH). Forwarding value here would revert on the non-payable fallback
+        // before any state transition, so no create could ever fire.
         vm.prank(opAdmin);
         try ILPValidator(lp).batchCreateBeaconValidators(_arrD(v.depositData), _arrU(v.bidId), v.node) {
             create_ok++;

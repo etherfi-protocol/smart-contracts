@@ -1,0 +1,15 @@
+{
+  "contractName": "AuctionManager",
+  "deploymentParameters": {
+    "factory": "0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99",
+    "salt": "0x0f1e8d966c85bcd3b352d94da15fe2eae61f897c000000000000000000000000",
+    "constructorArgs": {
+      "_roleRegistry": "0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9",
+      "_blacklister": "0x5585996E7cFE95f2D99e61168B8b35C66Ff99B18",
+      "_nodeOperatorManagerContract": "0xd5edf7730ABAd812247F6F54D7bd31a52554e35E",
+      "_stakingManagerContractAddress": "0x25e821b7197B146F7713C3b89B6A4D83516B912d",
+      "_treasury": "0x0c83EAe1FE72c390A02E426572854931EefF93BA"
+    }
+  },
+  "deployedAddress": "0x3311c72A04D2779f4425c036dBC40d14fEc0162b"
+}

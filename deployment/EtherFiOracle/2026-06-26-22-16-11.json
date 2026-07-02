@@ -1,0 +1,13 @@
+{
+  "contractName": "EtherFiOracle",
+  "deploymentParameters": {
+    "factory": "0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99",
+    "salt": "0x0f1e8d966c85bcd3b352d94da15fe2eae61f897c000000000000000000000000",
+    "constructorArgs": {
+      "_minQuorumSize": "3",
+      "_etherFiAdmin": "0x0EF8fa4760Db8f5Cd4d993f3e3416f30f942D705",
+      "_roleRegistry": "0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9"
+    }
+  },
+  "deployedAddress": "0x0565c8Ea133fF27ba9D471330A52068a268A2b9e"
+}
