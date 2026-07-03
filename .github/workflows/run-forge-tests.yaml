@@ -27,7 +27,12 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: nightly
+          # Pinned stable release (matches local dev). `nightly` is a moving
+          # target and started enforcing the EIP-3860 initcode-size limit in
+          # tests, which reverts any `new` of a harness inheriting the large
+          # SecurityUpgradesScript (e.g. ForwardedCallWhitelistRegrant.t.sol)
+          # with a bare setUp EvmError while the same tests pass on stable.
+          version: v1.5.1
 
       - name: Run tests
         run: forge test -vvv
