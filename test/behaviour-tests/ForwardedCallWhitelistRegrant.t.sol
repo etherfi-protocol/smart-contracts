@@ -54,7 +54,12 @@ contract ForwardedCallWhitelistRegrantTest is Test {
     address holder = makeAddr("eigenpodOperationsRoleHolder");
 
     function setUp() public {
-        vm.createSelectFork(vm.envString("MAINNET_RPC_URL"), 25383537);
+        // Pinned to the same recent block as the invariant fork suites. CI's
+        // MAINNET_RPC_URL provider could not serve state for the older pin
+        // 25383537 (setUp reverted at fork creation in CI while passing locally
+        // against an archive node); the pre-state below is self-seeded, so the
+        // exact block only needs to predate the on-chain security upgrade.
+        vm.createSelectFork(vm.envString("MAINNET_RPC_URL"), 25447657);
         harness = new WhitelistHarness();
 
         // Deploy + upgrade to the new EtherFiNodesManager impl (per-caller whitelist layout).
