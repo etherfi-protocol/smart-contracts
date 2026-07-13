@@ -123,6 +123,9 @@ def main():
                 "block": block,
                 "lastFinalizedRequestId": last_finalized,
                 "totalClaimableEth": f"{sum(a for _, _, a in claimable) / 1e18:.6f}",
+                # exact wei sum over the claimable set; ExecuteClaims.s.sol requires this to
+                # equal the on-chain escrow accounting at execution time (drift detector)
+                "totalClaimableWei": str(sum(a for _, _, a in claimable)),
                 "batchClaimWithdraw_chunks_eoa_owners": [
                     eoa_ids[k : k + args.chunk_size] for k in range(0, len(eoa_ids), args.chunk_size)
                 ],

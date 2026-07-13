@@ -54,6 +54,17 @@ contract ExecuteClaims is Script {
             jsonLastFinalized == chainLastFinalized,
             "stale claim_batches.json - re-run fetch_unclaimed_finalized_requests.py"
         );
+        // lastFinalizedRequestId alone cannot detect every drift: the claimable set also
+        // changes when a request is claimed, invalidated, or validateRequest'd after the
+        // fetch. The contract's escrow accounting is exactly the wei sum over valid,
+        // finalized, unclaimed requests, so requiring it to equal the fetch-time sum
+        // catches any such change.
+        uint256 jsonTotalClaimableWei = vm.parseJsonUint(json, ".totalClaimableWei");
+        uint256 escrowAccounting = IWithdrawNFT(WITHDRAW_REQUEST_NFT).ethAmountLockedForWithdrawal();
+        require(
+            jsonTotalClaimableWei == escrowAccounting,
+            "claimable set drifted since fetch - re-run fetch_unclaimed_finalized_requests.py"
+        );
 
         uint256[][] memory eoaChunks =
             abi.decode(vm.parseJson(json, ".batchClaimWithdraw_chunks_eoa_owners"), (uint256[][]));
