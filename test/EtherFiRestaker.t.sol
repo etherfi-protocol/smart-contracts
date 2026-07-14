@@ -33,6 +33,16 @@ contract EtherFiRestakerTest is TestSetup {
         liquifierInstance.updateQuoteStEthWithCurve(false);
     }
 
+    /// Pin the Liquifier's stETH/ETH feed to a fresh ~1:1 answer so deposits
+    /// don't revert StalePriceFeed after vm.warp on a realistic fork.
+    function _mockFreshStEthFeed() internal {
+        vm.mockCall(
+            address(liquifierInstance.stEthPriceFeed()),
+            abi.encodeWithSignature("latestRoundData()"),
+            abi.encode(uint80(0), int256(1 ether), uint256(0), block.timestamp, uint80(0))
+        );
+    }
+
     function _deposit_stEth(uint256 _amount) internal {
         uint256 restakerTvl = etherFiRestakerInstance.getTotalPooledEther();
         uint256 lpTvl = liquidityPoolInstance.getTotalPooledEther();
@@ -187,6 +197,12 @@ contract EtherFiRestakerTest is TestSetup {
 
         uint32 timeBoundCapRefreshInterval = liquifierInstance.timeBoundCapRefreshInterval();
         vm.warp(block.timestamp + timeBoundCapRefreshInterval + 1);
+
+        // The realistic fork wires the Liquifier to the live stETH/ETH Chainlink
+        // aggregator (~24h heartbeat). Warping past timeBoundCapRefreshInterval
+        // pushes block.timestamp beyond updatedAt + stalePriceWindow, so the
+        // deposit below would revert StalePriceFeed. Pin a fresh ~1:1 round.
+        _mockFreshStEthFeed();
 
         _deposit_stEth(10 ether);
 
