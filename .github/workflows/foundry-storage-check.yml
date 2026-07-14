@@ -31,142 +31,142 @@ jobs:
       - name: Check storage layout for EETH
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/EETH.sol:EETH
+          contract: src/core/EETH.sol:EETH
 
       - name: Check storage layout for WeETH
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/WeETH.sol:WeETH
+          contract: src/core/WeETH.sol:WeETH
 
       - name: Check storage layout for LiquidityPool
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/LiquidityPool.sol:LiquidityPool
+          contract: src/core/LiquidityPool.sol:LiquidityPool
 
       - name: Check storage layout for StakingManager
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/StakingManager.sol:StakingManager
+          contract: src/staking/StakingManager.sol:StakingManager
 
       - name: Check storage layout for EtherFiNodesManager
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/EtherFiNodesManager.sol:EtherFiNodesManager
+          contract: src/staking/EtherFiNodesManager.sol:EtherFiNodesManager
 
       - name: Check storage layout for EtherFiNode
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/EtherFiNode.sol:EtherFiNode
+          contract: src/staking/EtherFiNode.sol:EtherFiNode
 
       # Management & Admin Contracts
       - name: Check storage layout for EtherFiAdmin
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/EtherFiAdmin.sol:EtherFiAdmin
+          contract: src/oracle/EtherFiAdmin.sol:EtherFiAdmin
 
       - name: Check storage layout for NodeOperatorManager
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/NodeOperatorManager.sol:NodeOperatorManager
+          contract: src/staking/NodeOperatorManager.sol:NodeOperatorManager
 
       - name: Check storage layout for AuctionManager
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/AuctionManager.sol:AuctionManager
+          contract: src/staking/AuctionManager.sol:AuctionManager
 
       - name: Check storage layout for MembershipManager
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/MembershipManager.sol:MembershipManager
+          contract: src/archive/membership/MembershipManager.sol:MembershipManager
 
       - name: Check storage layout for MembershipNFT
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/MembershipNFT.sol:MembershipNFT
+          contract: src/archive/membership/MembershipNFT.sol:MembershipNFT
 
       - name: Check storage layout for RoleRegistry
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/RoleRegistry.sol:RoleRegistry
+          contract: src/governance/RoleRegistry.sol:RoleRegistry
 
       # Oracle & Rewards
       - name: Check storage layout for EtherFiOracle
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/EtherFiOracle.sol:EtherFiOracle
+          contract: src/oracle/EtherFiOracle.sol:EtherFiOracle
 
       - name: Check storage layout for CumulativeMerkleRewardsDistributor
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/CumulativeMerkleRewardsDistributor.sol:CumulativeMerkleRewardsDistributor
+          contract: src/rewards/CumulativeMerkleRewardsDistributor.sol:CumulativeMerkleRewardsDistributor
 
       - name: Check storage layout for EtherFiRewardsRouter
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/EtherFiRewardsRouter.sol:EtherFiRewardsRouter
+          contract: src/rewards/EtherFiRewardsRouter.sol:EtherFiRewardsRouter
 
       # NFT Contracts
       - name: Check storage layout for BNFT
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/BNFT.sol:BNFT
+          contract: src/archive/BNFT.sol:BNFT
 
       - name: Check storage layout for TNFT
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/TNFT.sol:TNFT
+          contract: src/archive/TNFT.sol:TNFT
 
       - name: Check storage layout for WithdrawRequestNFT
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/WithdrawRequestNFT.sol:WithdrawRequestNFT
+          contract: src/withdrawals/WithdrawRequestNFT.sol:WithdrawRequestNFT
 
       # Liquidity & Trading
       - name: Check storage layout for Liquifier
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/Liquifier.sol:Liquifier
+          contract: src/deposits/Liquifier.sol:Liquifier
 
       - name: Check storage layout for EtherFiRestaker
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/EtherFiRestaker.sol:EtherFiRestaker
+          contract: src/restaking/EtherFiRestaker.sol:EtherFiRestaker
 
       - name: Check storage layout for EtherFiRedemptionManager
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/EtherFiRedemptionManager.sol:EtherFiRedemptionManager
+          contract: src/withdrawals/EtherFiRedemptionManager.sol:EtherFiRedemptionManager
 
       - name: Check storage layout for DepositAdapter
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/DepositAdapter.sol:DepositAdapter
+          contract: src/deposits/DepositAdapter.sol:DepositAdapter
 
       # Rate Limiting & Utilities
       - name: Check storage layout for BucketRateLimiter
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/BucketRateLimiter.sol:BucketRateLimiter
+          contract: src/archive/BucketRateLimiter.sol:BucketRateLimiter
 
       - name: Check storage layout for TVLOracle
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/TVLOracle.sol:TVLOracle
+          contract: src/archive/TVLOracle.sol:TVLOracle
 
       - name: Check storage layout for EarlyAdopterPool
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/EarlyAdopterPool.sol:EarlyAdopterPool
+          contract: src/archive/EarlyAdopterPool.sol:EarlyAdopterPool
 
       - name: Check storage layout for UUPSProxy
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/UUPSProxy.sol:UUPSProxy
+          contract: src/utils/UUPSProxy.sol:UUPSProxy
 
       - name: Check storage layout for EtherFiTimelock
         uses: Rubilmax/foundry-storage-check@main
         with:
-          contract: src/EtherFiTimelock.sol:EtherFiTimelock
+          contract: src/governance/EtherFiTimelock.sol:EtherFiTimelock
 
       # Helper Contracts
       - name: Check storage layout for AddressProvider
