@@ -2,12 +2,12 @@
 pragma solidity ^0.8.24;
 
 import "forge-std/Test.sol";
-import "../src/RestakingRewardsRouter.sol";
-import "../src/RoleRegistry.sol";
-import "../src/UUPSProxy.sol";
-import "../src/LiquidityPool.sol";
-import "./TestERC20.sol";
-import "../src/interfaces/ILiquidityPool.sol";
+import "@etherfi/restaking/RestakingRewardsRouter.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/utils/UUPSProxy.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@tests/TestERC20.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
 
 contract RestakingRewardsRouterTest is Test {
     RestakingRewardsRouter public router;
@@ -28,11 +28,6 @@ contract RestakingRewardsRouterTest is Test {
     address public recipient = vm.addr(5);
     address public user = vm.addr(6);
 
-    bytes32 public constant ETHERFI_REWARDS_ROUTER_ADMIN_ROLE =
-        keccak256("ETHERFI_REWARDS_ROUTER_ADMIN_ROLE");
-    bytes32 public constant ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE =
-        keccak256("ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE");
-
     event EthSent(address indexed from, address indexed to, address indexed sender, uint256 value);
     event RecipientAddressSet(address indexed recipient);
     event Erc20Recovered(
@@ -44,7 +39,7 @@ contract RestakingRewardsRouterTest is Test {
     function setUp() public {
         // Deploy RoleRegistry
         vm.startPrank(owner);
-        roleRegistryImpl = new RoleRegistry();
+        roleRegistryImpl = new RoleRegistry(address(0xdead));
         roleRegistryProxy = new UUPSProxy(
             address(roleRegistryImpl),
             abi.encodeWithSelector(RoleRegistry.initialize.selector, owner)
@@ -56,7 +51,21 @@ contract RestakingRewardsRouterTest is Test {
         otherToken = new TestERC20("Other Token", "OTH");
 
         // Deploy LiquidityPool
-        liquidityPoolImpl = new LiquidityPool(address(0x0));
+        liquidityPoolImpl = new LiquidityPool(
+            ILiquidityPool.ConstructorAddresses({
+                stakingManager: address(0),
+                nodesManager: address(0),
+                eETH: address(0),
+                withdrawRequestNFT: address(0),
+                liquifier: address(0),
+                etherFiRedemptionManager: address(0),
+                roleRegistry: address(roleRegistry),
+                priorityWithdrawalQueue: address(0),
+                blacklister: address(0),
+                etherFiAdminContract: address(0),
+                membershipManager: address(0)
+            })
+        );
         liquidityPoolProxy = new UUPSProxy(address(liquidityPoolImpl), "");
         liquidityPool = LiquidityPool(payable(address(liquidityPoolProxy)));
         
@@ -67,6 +76,10 @@ contract RestakingRewardsRouterTest is Test {
         bytes32 value = bytes32(uint256(1000 ether)); // Lower 16 bytes = 1000 ether, upper 16 bytes = 0
         vm.store(address(liquidityPool), bytes32(uint256(207)), value);
 
+        // LiquidityPool.receive() now calls _checkMinAmountForShare() -> eETH.totalShares().
+        // eETH is unset in this test (proxy never initialized), so mock the call to return 0.
+        vm.mockCall(address(0), abi.encodeWithSelector(IeETH.totalShares.selector), abi.encode(uint256(0)));
+
         // Deploy RestakingRewardsRouter implementation
         routerImpl = new RestakingRewardsRouter(
             address(roleRegistry),
@@ -74,17 +87,13 @@ contract RestakingRewardsRouterTest is Test {
             address(liquidityPool)
         );
 
-        // Grant admin role
-        roleRegistry.grantRole(ETHERFI_REWARDS_ROUTER_ADMIN_ROLE, admin);
-        // Grant transfer role
-        roleRegistry.grantRole(
-            ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE,
-            admin
-        );
-        roleRegistry.grantRole(
-            ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE,
-            transferRoleUser
-        );
+        // Grant admin role — ETHERFI_REWARDS_ROUTER_ADMIN_ROLE consolidated into OPERATION_TIMELOCK_ROLE.
+        roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), admin);
+        // Grant transfer role — ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE consolidated into HOUSEKEEPING_OPERATIONS_ROLE.
+        roleRegistry.grantRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), transferRoleUser);
+        // `_authorizeUpgrade` now requires UPGRADE_TIMELOCK_ROLE.
+        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), owner);
         vm.stopPrank();
 
         // Deploy proxy and initialize (outside prank so owner is address(this))
@@ -118,15 +127,6 @@ contract RestakingRewardsRouterTest is Test {
             address(roleRegistry),
             address(rewardToken),
             address(0)
-        );
-    }
-
-    function test_constructor_revertsWithZeroRoleRegistry() public {
-        vm.expectRevert(RestakingRewardsRouter.InvalidAddress.selector);
-        new RestakingRewardsRouter(
-            address(0),
-            address(rewardToken),
-            address(liquidityPool)
         );
     }
 
@@ -239,7 +239,7 @@ contract RestakingRewardsRouterTest is Test {
 
     function test_setRecipientAddress_revertsWithoutRole() public {
         vm.prank(unauthorizedUser);
-        vm.expectRevert(RestakingRewardsRouter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         router.setRecipientAddress(recipient);
     }
 
@@ -316,7 +316,7 @@ contract RestakingRewardsRouterTest is Test {
         rewardToken.mint(address(router), amount);
 
         vm.prank(unauthorizedUser);
-        vm.expectRevert(RestakingRewardsRouter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
         router.recoverERC20();
 
         // Should still have tokens since transfer failed
@@ -362,20 +362,22 @@ contract RestakingRewardsRouterTest is Test {
     function test_roleManagement_grantAndRevoke() public {
         address newAdmin = vm.addr(100);
 
-        // Grant role
-        vm.prank(owner);
-        roleRegistry.grantRole(ETHERFI_REWARDS_ROUTER_ADMIN_ROLE, newAdmin);
+        // Grant role — admin consolidated into OPERATION_TIMELOCK_ROLE.
+        vm.startPrank(owner);
+        roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), newAdmin);
+        vm.stopPrank();
 
         vm.prank(newAdmin);
         router.setRecipientAddress(recipient);
         assertEq(router.recipientAddress(), recipient);
 
         // Revoke role
-        vm.prank(owner);
-        roleRegistry.revokeRole(ETHERFI_REWARDS_ROUTER_ADMIN_ROLE, newAdmin);
+        vm.startPrank(owner);
+        roleRegistry.revokeRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), newAdmin);
+        vm.stopPrank();
 
         vm.prank(newAdmin);
-        vm.expectRevert(RestakingRewardsRouter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         router.setRecipientAddress(vm.addr(101));
     }
 

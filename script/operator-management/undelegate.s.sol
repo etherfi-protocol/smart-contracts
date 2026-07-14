@@ -5,12 +5,12 @@ import "forge-std/console2.sol";
 import "forge-std/StdJson.sol";
 import "forge-std/Script.sol";
 
-import "../utils/utils.sol";
+import "@scripts/utils/utils.sol";
 
-import {EtherFiTimelock} from "../../src/EtherFiTimelock.sol";
-import {EtherFiNodesManager} from "../../src/EtherFiNodesManager.sol";
-import {RoleRegistry} from "../../src/RoleRegistry.sol";
-import {IDelegationManager} from "../../src/eigenlayer-interfaces/IDelegationManager.sol";
+import {EtherFiTimelock} from "@etherfi/governance/EtherFiTimelock.sol";
+import {EtherFiNodesManager} from "@etherfi/staking/EtherFiNodesManager.sol";
+import {RoleRegistry} from "@etherfi/governance/RoleRegistry.sol";
+import {IDelegationManager} from "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
 
 /**
  * @title UndelegateAllStakers
@@ -136,7 +136,7 @@ contract UndelegateAllStakers is Script, Utils {
             payloads,
             predecessor,
             timelockSalt,
-            MIN_DELAY_OPERATING_TIMELOCK
+            minDelay_OPERATING_TIMELOCK
         );
 
         bytes memory executeCalldata = abi.encodeWithSelector(
@@ -160,9 +160,9 @@ contract UndelegateAllStakers is Script, Utils {
         console2.logBytes(executeCalldata);
         console2.log("===================================================");
 
-        _operatingTimelock.scheduleBatch(targets, values, payloads, predecessor, timelockSalt, MIN_DELAY_OPERATING_TIMELOCK);
+        _operatingTimelock.scheduleBatch(targets, values, payloads, predecessor, timelockSalt, minDelay_OPERATING_TIMELOCK);
 
-        vm.warp(block.timestamp + MIN_DELAY_OPERATING_TIMELOCK + 1);
+        vm.warp(block.timestamp + minDelay_OPERATING_TIMELOCK + 1);
 
         _operatingTimelock.executeBatch(targets, values, payloads, predecessor, timelockSalt);
 

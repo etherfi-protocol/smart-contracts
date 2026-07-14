@@ -4,12 +4,12 @@ pragma solidity ^0.8.27;
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 
-import "../../src/EtherFiNodesManager.sol";
-import "../../src/EtherFiRateLimiter.sol";
-import "../../src/StakingManager.sol";
-import "../../src/RoleRegistry.sol";
-import "../../src/EtherFiNode.sol";
-import "../../src/UUPSProxy.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
+import "@etherfi/staking/StakingManager.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/staking/EtherFiNode.sol";
+import "@etherfi/utils/UUPSProxy.sol";
 
 interface ICreate2Factory {
     function computeAddress(bytes32 salt, bytes memory code) external view returns (address);
@@ -204,9 +204,10 @@ contract VerifyPectraUpgradeDeployment is Script {
 
         EtherFiNodesManager nodesManager = EtherFiNodesManager(payable(ETHERFI_NODES_MANAGER_PROXY));
         StakingManager stakingManager = StakingManager(STAKING_MANAGER_PROXY);
+        RoleRegistry roleRegistry_ = RoleRegistry(ROLE_REGISTRY);
 
         // Check if new functions exist (will revert if not upgraded)
-        try nodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE() returns (bytes32 role) {
+        try roleRegistry_.EXECUTOR_OPERATIONS_ROLE() returns (bytes32 role) {
             console2.log("[OK] EtherFiNodesManager upgraded - EL exit role exists:", vm.toString(role));
         } catch {
             console2.log("[FAIL] EtherFiNodesManager not upgraded - EL exit role missing");
@@ -247,7 +248,7 @@ contract VerifyPectraUpgradeDeployment is Script {
         EtherFiNodesManager nodesManager = EtherFiNodesManager(payable(ETHERFI_NODES_MANAGER_PROXY));
 
         // Check EL Trigger Exit Role
-        try nodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE() returns (bytes32 elTriggerExitRole) {
+        try roleRegistry.EXECUTOR_OPERATIONS_ROLE() returns (bytes32 elTriggerExitRole) {
             bool hasRole = roleRegistry.hasRole(elTriggerExitRole, EL_TRIGGER_EXITER);
             if (hasRole) {
                 console2.log("[OK] EL Trigger Exit role assigned to:", EL_TRIGGER_EXITER);
@@ -261,7 +262,7 @@ contract VerifyPectraUpgradeDeployment is Script {
         // Check Rate Limiter Admin Role
         if (RATE_LIMITER_PROXY != address(0)) {
             EtherFiRateLimiter rateLimiter = EtherFiRateLimiter(RATE_LIMITER_PROXY);
-            try rateLimiter.ETHERFI_RATE_LIMITER_ADMIN_ROLE() returns (bytes32 rateLimiterAdminRole) {
+            try roleRegistry.OPERATION_MULTISIG_ROLE() returns (bytes32 rateLimiterAdminRole) {
                 bool hasRole = roleRegistry.hasRole(rateLimiterAdminRole, ETHERFI_OPERATING_ADMIN);
                 if (hasRole) {
                     console2.log("[OK] Rate Limiter Admin role assigned to:", ETHERFI_OPERATING_ADMIN);
@@ -274,7 +275,7 @@ contract VerifyPectraUpgradeDeployment is Script {
         }
 
         // Check standard admin roles
-        bytes32 nodesManagerAdminRole = nodesManager.ETHERFI_NODES_MANAGER_ADMIN_ROLE();
+        bytes32 nodesManagerAdminRole = roleRegistry.OPERATION_TIMELOCK_ROLE();
         bool hasAdminRole = roleRegistry.hasRole(nodesManagerAdminRole, ETHERFI_ADMIN);
         if (hasAdminRole) {
             console2.log("[OK] Nodes Manager Admin role assigned to:", ETHERFI_ADMIN);

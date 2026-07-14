@@ -5,13 +5,13 @@ import "forge-std/console2.sol";
 import "forge-std/StdJson.sol";
 import "forge-std/Script.sol";
 
-import "../../utils/utils.sol";
+import "@scripts/utils/utils.sol";
 
-import {EtherFiTimelock} from "../../../src/EtherFiTimelock.sol";
-import {EtherFiNodesManager} from "../../../src/EtherFiNodesManager.sol";
-import {RoleRegistry} from "../../../src/RoleRegistry.sol";
-import {IDelegationManager} from "../../../src/eigenlayer-interfaces/IDelegationManager.sol";
-import {EtherFiRateLimiter} from "../../../src/EtherFiRateLimiter.sol";
+import {EtherFiTimelock} from "@etherfi/governance/EtherFiTimelock.sol";
+import {EtherFiNodesManager} from "@etherfi/staking/EtherFiNodesManager.sol";
+import {RoleRegistry} from "@etherfi/governance/RoleRegistry.sol";
+import {IDelegationManager} from "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
+import {EtherFiRateLimiter} from "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
 
 contract Configurations is Script, Utils {
     using stdJson for string;
@@ -142,7 +142,7 @@ contract Configurations is Script, Utils {
             payloads,
             predecessor,
             timelockSalt,
-            MIN_DELAY_OPERATING_TIMELOCK
+            minDelay_OPERATING_TIMELOCK
         );
 
         console2.log("Scheduled Calldata Tx");
@@ -166,8 +166,8 @@ contract Configurations is Script, Utils {
         console2.log("");
 
         vm.startPrank(ETHERFI_OPERATING_ADMIN);
-        _operatingTimelock.scheduleBatch(targets, values, payloads, predecessor, timelockSalt, MIN_DELAY_OPERATING_TIMELOCK);
-        vm.warp(block.timestamp + MIN_DELAY_OPERATING_TIMELOCK + 1);
+        _operatingTimelock.scheduleBatch(targets, values, payloads, predecessor, timelockSalt, minDelay_OPERATING_TIMELOCK);
+        vm.warp(block.timestamp + minDelay_OPERATING_TIMELOCK + 1);
         _operatingTimelock.executeBatch(targets, values, payloads, predecessor, timelockSalt);
 
         console2.log("Tx executed successfully");
@@ -202,7 +202,7 @@ contract Configurations is Script, Utils {
             payloads,
             predecessor,
             timelockSalt,
-            MIN_DELAY_OPERATING_TIMELOCK
+            minDelay_OPERATING_TIMELOCK
         );
         console2.log("Scheduled Calldata Tx (redelegate-only / part2)");
         console2.log("================================================");
@@ -225,8 +225,8 @@ contract Configurations is Script, Utils {
         console2.log("");
 
         vm.startPrank(ETHERFI_OPERATING_ADMIN);
-        _operatingTimelock.scheduleBatch(targets, values, payloads, predecessor, timelockSalt, MIN_DELAY_OPERATING_TIMELOCK);
-        vm.warp(block.timestamp + MIN_DELAY_OPERATING_TIMELOCK + 1);
+        _operatingTimelock.scheduleBatch(targets, values, payloads, predecessor, timelockSalt, minDelay_OPERATING_TIMELOCK);
+        vm.warp(block.timestamp + minDelay_OPERATING_TIMELOCK + 1);
         _operatingTimelock.executeBatch(targets, values, payloads, predecessor, timelockSalt);
 
         console2.log("Tx executed successfully (redelegate-only / part2)");

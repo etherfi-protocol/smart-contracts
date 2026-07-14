@@ -1,0 +1,148 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.27;
+
+import "forge-std/Test.sol";
+import "forge-std/console2.sol";
+import {EtherFiNodesManager} from "@etherfi/staking/EtherFiNodesManager.sol";
+import {RoleRegistry} from "@etherfi/governance/RoleRegistry.sol";
+import {SecurityUpgradesScript} from "@scripts/upgrades/security-upgrades/transactions.s.sol";
+
+/// @dev Exposes the script's pinned forwarded-call selector/target lists so the test exercises the
+///      exact set the OPERATING_TIMELOCK batch (_buildOperatingConfigBatch) re-grants — no drift.
+contract WhitelistHarness is SecurityUpgradesScript {
+    function eigenpodSelectors() external pure returns (bytes4[] memory) {
+        return _forwardedEigenpodSelectors();
+    }
+    function externalCalls() external pure returns (bytes4[] memory, address[] memory) {
+        return _forwardedExternalCalls();
+    }
+    function grantOnlyExternalCalls() external pure returns (bytes4[] memory, address[] memory) {
+        return _grantOnlyExternalCalls();
+    }
+}
+
+/**
+ * @title ForwardedCallWhitelistRegrant
+ * @notice Mainnet-fork simulation of the Batch 2 forwarded-call whitelist re-grant.
+ *
+ * Flow (mirrors the real upgrade):
+ *   1. fork mainnet, deploy the new EtherFiNodesManager impl, upgrade the proxy via its timelock owner
+ *   2. seed the migrated set on the legacy caller, so the test establishes its own deterministic
+ *      pre-state instead of depending on mainnet's live per-user mapping or any storage-layout
+ *      assumption about what the upgrade preserves
+ *   3. as the OPERATING_TIMELOCK, apply the Batch 2 migration (grant the new holder, revoke the legacy)
+ *   4. assert the holder has every entry and the legacy caller has none (verifyOperatingConfig parity)
+ *   5. apply + assert the grant-only set (3CP #580 selectors): granted to the holder, legacy untouched
+ *
+ * Run: forge test --match-contract ForwardedCallWhitelistRegrant -vv
+ */
+contract ForwardedCallWhitelistRegrantTest is Test {
+    EtherFiNodesManager constant enm = EtherFiNodesManager(payable(0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F));
+    RoleRegistry constant roleRegistry = RoleRegistry(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9);
+
+    address constant STAKING_MANAGER     = 0x25e821b7197B146F7713C3b89B6A4D83516B912d;
+    address constant ETHERFI_RATE_LIMITER = 0x6C7c54cfC2225fA985cD25F04d923B93c60a02F8;
+
+    // Upgrade-timelock: owner of the ENM proxy and admin of the RoleRegistry on mainnet.
+    address constant TIMELOCK_OWNER    = 0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761;
+    // The operating-timelock that executes Batch 2 (holds OPERATION_TIMELOCK_ROLE on mainnet).
+    address constant OPERATING_TIMELOCK = 0xcD425f44758a08BaAB3C4908f3e3dE5776e45d7a;
+    // Legacy pod-prover / call forwarder that must NOT be re-granted.
+    address constant LEGACY_POD_PROVER = 0x7835fB36A8143a014A2c381363cD1A4DeE586d2A;
+
+    WhitelistHarness harness;
+    address holder = makeAddr("eigenpodOperationsRoleHolder");
+
+    function setUp() public {
+        vm.createSelectFork(vm.envString("MAINNET_RPC_URL"), 25383537);
+        harness = new WhitelistHarness();
+
+        // Deploy + upgrade to the new EtherFiNodesManager impl (per-caller whitelist layout).
+        EtherFiNodesManager newImpl = new EtherFiNodesManager(STAKING_MANAGER, address(roleRegistry), ETHERFI_RATE_LIMITER);
+        vm.prank(TIMELOCK_OWNER);
+        enm.upgradeTo(address(newImpl));
+
+        // The live RoleRegistry predates the new role API, so onlyOperatingTimelock would revert. In
+        // production Batch 1 upgrades the RoleRegistry and grants OPERATION_TIMELOCK_ROLE to the
+        // operating timelock; here we mock just that auth gate to a pass for the timelock, leaving the
+        // rest (real new ENM impl, real per-user whitelist storage, getters) live on the fork.
+        vm.mockCall(
+            address(roleRegistry),
+            abi.encodeWithSelector(bytes4(keccak256("onlyOperatingTimelock(address)")), OPERATING_TIMELOCK),
+            bytes("")
+        );
+    }
+
+    function test_migrateForwardedCallWhitelistToRoleHolder() public {
+        (bytes4[] memory eig) = harness.eigenpodSelectors();
+        (bytes4[] memory extSel, address[] memory extTgt) = harness.externalCalls();
+
+        // Seed a deterministic pre-state on the legacy caller (independent of mainnet's live per-user
+        // mapping and of any layout assumption about what the upgrade preserves), then confirm it.
+        vm.startPrank(OPERATING_TIMELOCK);
+        for (uint256 i = 0; i < eig.length; i++) {
+            enm.updateAllowedForwardedEigenpodCalls(LEGACY_POD_PROVER, eig[i], true);
+        }
+        for (uint256 i = 0; i < extSel.length; i++) {
+            enm.updateAllowedForwardedExternalCalls(LEGACY_POD_PROVER, extSel[i], extTgt[i], true);
+        }
+        vm.stopPrank();
+        for (uint256 i = 0; i < eig.length; i++) {
+            assertTrue(enm.allowedForwardedEigenpodCalls(LEGACY_POD_PROVER, eig[i]), "seed: legacy eigenpod entry not set");
+        }
+        for (uint256 i = 0; i < extSel.length; i++) {
+            assertTrue(enm.allowedForwardedExternalCalls(LEGACY_POD_PROVER, extSel[i], extTgt[i]), "seed: legacy external entry not set");
+        }
+
+        // Apply the Batch 2 migration as the operating timelock: grant new holder + revoke legacy.
+        vm.startPrank(OPERATING_TIMELOCK);
+        for (uint256 i = 0; i < eig.length; i++) {
+            enm.updateAllowedForwardedEigenpodCalls(holder, eig[i], true);
+            enm.updateAllowedForwardedEigenpodCalls(LEGACY_POD_PROVER, eig[i], false);
+        }
+        for (uint256 i = 0; i < extSel.length; i++) {
+            enm.updateAllowedForwardedExternalCalls(holder, extSel[i], extTgt[i], true);
+            enm.updateAllowedForwardedExternalCalls(LEGACY_POD_PROVER, extSel[i], extTgt[i], false);
+        }
+        vm.stopPrank();
+
+        // Post-state: holder has every entry, legacy caller has none (verifyOperatingConfig parity).
+        for (uint256 i = 0; i < eig.length; i++) {
+            assertTrue(enm.allowedForwardedEigenpodCalls(holder, eig[i]), "eigenpod selector not granted to holder");
+            assertFalse(enm.allowedForwardedEigenpodCalls(LEGACY_POD_PROVER, eig[i]), "eigenpod selector not revoked from legacy caller");
+        }
+        for (uint256 i = 0; i < extSel.length; i++) {
+            assertTrue(enm.allowedForwardedExternalCalls(holder, extSel[i], extTgt[i]), "external call not granted to holder");
+            assertFalse(enm.allowedForwardedExternalCalls(LEGACY_POD_PROVER, extSel[i], extTgt[i]), "external call not revoked from legacy caller");
+        }
+
+        // A selector outside the set stays false (the grant is specific, not blanket).
+        assertFalse(enm.allowedForwardedEigenpodCalls(holder, bytes4(0xdeadbeef)), "unexpected selector granted");
+
+        // Grant-only set (3CP #580): granted to the holder, legacy caller deliberately untouched.
+        (bytes4[] memory goSel, address[] memory goTgt) = harness.grantOnlyExternalCalls();
+        vm.startPrank(OPERATING_TIMELOCK);
+        for (uint256 i = 0; i < goSel.length; i++) {
+            enm.updateAllowedForwardedExternalCalls(holder, goSel[i], goTgt[i], true);
+        }
+        vm.stopPrank();
+        for (uint256 i = 0; i < goSel.length; i++) {
+            assertTrue(enm.allowedForwardedExternalCalls(holder, goSel[i], goTgt[i]), "grant-only call not granted to holder");
+        }
+
+        console2.log("[OK] migrated eigenpod selectors:", eig.length);
+        console2.log("[OK] migrated external (selector,target) pairs:", extSel.length);
+        console2.log("[OK] grant-only external (selector,target) pairs:", goSel.length);
+    }
+
+    /// @dev Sanity-check the harness exposes the verified sets (3 eigenpod + 1 external migrated,
+    ///      3 grant-only external).
+    function test_whitelistSetCounts() public view {
+        (bytes4[] memory eig) = harness.eigenpodSelectors();
+        (bytes4[] memory extSel,) = harness.externalCalls();
+        (bytes4[] memory goSel,) = harness.grantOnlyExternalCalls();
+        assertEq(eig.length, 3, "eigenpod selector count");
+        assertEq(extSel.length, 1, "external call count");
+        assertEq(goSel.length, 3, "grant-only external call count");
+    }
+}

@@ -3,16 +3,16 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
 import "forge-std/console.sol";
-import "../../src/interfaces/ILiquidityPool.sol";
-import {LiquidityPool} from "../../src/LiquidityPool.sol";
-import "../../src/interfaces/IStakingManager.sol";
-import "../../src/interfaces/IEtherFiNodesManager.sol";
-import "../../src/interfaces/IAuctionManager.sol";
-import "../../src/interfaces/INodeOperatorManager.sol";
-import {NodeOperatorManager} from "../../src/NodeOperatorManager.sol";
-import "../../src/interfaces/IEtherFiNode.sol";
-import "../../src/interfaces/IRoleRegistry.sol";
-import {StakingManager} from "../../src/StakingManager.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import {LiquidityPool} from "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/staking/interfaces/IStakingManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
+import "@etherfi/staking/interfaces/IAuctionManager.sol";
+import "@etherfi/staking/interfaces/INodeOperatorManager.sol";
+import {NodeOperatorManager} from "@etherfi/staking/NodeOperatorManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNode.sol";
+import "@etherfi/governance/interfaces/IRoleRegistry.sol";
+import {StakingManager} from "@etherfi/staking/StakingManager.sol";
 
 /**
  * @title Staking Part 1: Setup & Get EigenPod Address
@@ -42,7 +42,8 @@ contract StakingPart1 is Script {
     address constant ROLE_REGISTRY = 0x7279853cA1804d4F705d885FeA7f1662323B5Aab;
     
     // Role definition
-    bytes32 constant STAKING_MANAGER_NODE_CREATOR_ROLE = keccak256("STAKING_MANAGER_NODE_CREATOR_ROLE");
+    // STAKING_MANAGER_NODE_CREATOR_ROLE consolidated into EXECUTOR_OPERATIONS_ROLE.
+    bytes32 constant STAKING_MANAGER_NODE_CREATOR_ROLE = keccak256("EXECUTOR_OPERATIONS_ROLE");
     
     // Contract interfaces
     LiquidityPool liquidityPool;
@@ -98,10 +99,6 @@ contract StakingPart1 is Script {
             console.log("Whitelisting node operator...");
             
             vm.startBroadcast(vm.envUint("PRIVATE_KEY"));
-            // Add admin rights if needed
-            if (!nodeOperatorManager.admins(depositor)) {
-                nodeOperatorManager.updateAdmin(depositor, true);
-            }
             nodeOperatorManager.addToWhitelist(nodeOp);
             vm.stopBroadcast();
         }
@@ -163,7 +160,7 @@ contract StakingPart1 is Script {
             console.log("Depositor already has STAKING_MANAGER_NODE_CREATOR_ROLE");
         }
 
-        console.log("Has role?",roleRegistry.hasRole(stakingManager.STAKING_MANAGER_NODE_CREATOR_ROLE(), vm.addr(vm.envUint("PRIVATE_KEY"))));
+        console.log("Has role?",roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), vm.addr(vm.envUint("PRIVATE_KEY"))));
         vm.startBroadcast(vm.envUint("PRIVATE_KEY"));
         console.log("Role reg: %s",address(stakingManager.roleRegistry()));
         console.log("Role Reg: %s",address(roleRegistry));

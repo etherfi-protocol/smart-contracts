@@ -2,16 +2,16 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
 import "forge-std/Test.sol";
-import {ContractCodeChecker} from "../ContractCodeChecker.sol";
-import {LiquidityPool} from "../../src/LiquidityPool.sol";
-import {StakingManager} from "../../src/StakingManager.sol";
-import {EtherFiNodesManager} from "../../src/EtherFiNodesManager.sol";
-import {RoleRegistry} from "../../src/RoleRegistry.sol";
-import {EtherFiRestaker} from "../../src/EtherFiRestaker.sol";
+import {ContractCodeChecker} from "@scripts/ContractCodeChecker.sol";
+import {LiquidityPool} from "@etherfi/core/LiquidityPool.sol";
+import {StakingManager} from "@etherfi/staking/StakingManager.sol";
+import {EtherFiNodesManager} from "@etherfi/staking/EtherFiNodesManager.sol";
+import {RoleRegistry} from "@etherfi/governance/RoleRegistry.sol";
+import {EtherFiRestaker} from "@etherfi/restaking/EtherFiRestaker.sol";
 
-import {IEtherFiNodesManager} from "../../src/interfaces/IEtherFiNodesManager.sol";
-import {IStakingManager} from "../../src/interfaces/IStakingManager.sol";
-import {IEigenPodTypes} from "../../src/eigenlayer-interfaces/IEigenPod.sol";
+import {IEtherFiNodesManager} from "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
+import {IStakingManager} from "@etherfi/staking/interfaces/IStakingManager.sol";
+import {IEigenPodTypes} from "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 
 interface ICreate2Factory {
     function deploy(bytes memory code, bytes32 salt) external payable returns (address);
@@ -40,6 +40,7 @@ contract VerifyValidatorKeyGen is Script {
     address constant RATE_LIMITER_PROXY = 0x6C7c54cfC2225fA985cD25F04d923B93c60a02F8;
     address constant REWARDS_COORDINATOR = 0x7750d328b314EfFa365A0402CcfD489B80B0adda;
     address constant ETHERFI_REDEMPTION_MANAGER = 0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0;
+    address constant LIQUIFIER = 0x9FFDF407cDe9a93c47611799DA23924Af3EF764F;
     
     address constant ETHERFI_OPERATING_ADMIN = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
     address constant realElExiter = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
@@ -78,7 +79,7 @@ contract VerifyValidatorKeyGen is Script {
         // LiquidityPool newLiquidityPoolImplementation = new LiquidityPool(address(0x0));
         StakingManager newStakingManagerImplementation = new StakingManager(address(LIQUIDITY_POOL_PROXY), address(ETHERFI_NODES_MANAGER_PROXY), address(ETH_DEPOSIT_CONTRACT), address(AUCTION_MANAGER), address(ETHERFI_NODE_BEACON), address(ROLE_REGISTRY));
         EtherFiNodesManager newEtherFiNodesManagerImplementation = new EtherFiNodesManager(address(STAKING_MANAGER_PROXY), address(ROLE_REGISTRY), address(RATE_LIMITER_PROXY));
-        EtherFiRestaker newEtherFiRestakerImplementation = new EtherFiRestaker(address(REWARDS_COORDINATOR), address(ETHERFI_REDEMPTION_MANAGER));
+        EtherFiRestaker newEtherFiRestakerImplementation = new EtherFiRestaker(address(LIQUIDITY_POOL_PROXY), address(LIQUIFIER), address(REWARDS_COORDINATOR), address(ETHERFI_REDEMPTION_MANAGER), address(ROLE_REGISTRY), address(RATE_LIMITER_PROXY), 0x858646372CC42E1A627fcE94aa7A7033e7CF075A, 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
 
         // contractCodeChecker.verifyContractByteCodeMatch(LIQUIDITY_POOL_IMPL, address(newLiquidityPoolImplementation));
         contractCodeChecker.verifyContractByteCodeMatch(STAKING_MANAGER_IMPL, address(newStakingManagerImplementation));
@@ -124,7 +125,7 @@ contract VerifyValidatorKeyGen is Script {
 
         // EtherFiRestaker
         {
-            bytes memory constructorArgs = abi.encode(REWARDS_COORDINATOR, ETHERFI_REDEMPTION_MANAGER);
+            bytes memory constructorArgs = abi.encode(REWARDS_COORDINATOR, ETHERFI_REDEMPTION_MANAGER, ROLE_REGISTRY, RATE_LIMITER_PROXY);
             bytes memory bytecode = abi.encodePacked(
                 type(EtherFiRestaker).creationCode,
                 constructorArgs
@@ -147,21 +148,21 @@ contract VerifyValidatorKeyGen is Script {
         address etherFiNode = address(0x1234);
 
         {
-            require(roleRegistry.hasRole(liquidityPoolImplementation.LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE(), ETHERFI_OPERATING_ADMIN), "ETHERFI_OPERATING_ADMIN does not have LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE");
-            require(roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManager)), "StakingManager does not have ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE");
-            require(roleRegistry.hasRole(stakingManagerImplementation.STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE(), realElExiter), "realElExiter does not have STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE");
-            require(roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE(), ETHERFI_OPERATING_ADMIN), "ETHERFI_OPERATING_ADMIN does not have ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE");
+            require(roleRegistry.hasRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), ETHERFI_OPERATING_ADMIN), "ETHERFI_OPERATING_ADMIN does not have LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE");
+            require(roleRegistry.hasRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), address(stakingManager)), "StakingManager does not have ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE");
+            require(roleRegistry.hasRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), realElExiter), "realElExiter does not have STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE");
+            require(roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), ETHERFI_OPERATING_ADMIN), "ETHERFI_OPERATING_ADMIN does not have ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE");
             require(EtherFiRestaker(payable(ETHERFI_RESTAKER_PROXY)).isDelegated(), "Can't find EigenLayer Delegation Manager");
         }
 
         // Verify that the new functionality is exists and is role restricted
         {
-            vm.expectRevert(IStakingManager.IncorrectRole.selector);
+            vm.expectRevert(RoleRegistry.OnlyOracleOperations.selector);
             liquidityPool.batchCreateBeaconValidators(depositDataArray, new uint256[](1), etherFiNode);
         }
 
         {
-            vm.expectRevert(IStakingManager.IncorrectRole.selector);
+            vm.expectRevert(RoleRegistry.OnlyOracleOperations.selector);
             stakingManager.invalidateRegisteredBeaconValidator(depositDataArray[0], 1, etherFiNode);
 
             vm.expectRevert(IStakingManager.InvalidCaller.selector);

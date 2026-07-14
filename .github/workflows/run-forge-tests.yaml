@@ -5,6 +5,9 @@ on:
     branches:
       - staging-2.5
       - master
+      # 26Q2 Security Upgrades release branch: run the full suite (including the
+      # invariant layer) on PRs targeting it, not only when it lands on master.
+      - pankaj/feat/security-upgrades*
   workflow_dispatch:
   
 
@@ -24,12 +27,18 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: nightly
+          # Pinned stable release (matches local dev). `nightly` is a moving
+          # target and started enforcing the EIP-3860 initcode-size limit in
+          # tests, which reverts any `new` of a harness inheriting the large
+          # SecurityUpgradesScript (e.g. ForwardedCallWhitelistRegrant.t.sol)
+          # with a bare setUp EvmError while the same tests pass on stable.
+          version: v1.5.1
 
       - name: Run tests
         run: forge test -vvv
         env:
           MAINNET_RPC_URL: ${{ secrets.MAINNET_RPC_URL }}
+          OP_RPC_URL: ${{ secrets.OP_RPC_URL }}
           SCROLL_RPC_URL: ${{ secrets.SCROLL_RPC_URL }}
           HISTORICAL_PROOF_812_WITHDRAWAL_RPC_URL: ${{ secrets.HISTORICAL_PROOF_812_WITHDRAWAL_RPC_URL }}
           HISTORICAL_PROOF_RPC_URL: ${{ secrets.HISTORICAL_PROOF_RPC_URL }}

@@ -3,14 +3,16 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Test.sol";
 import "forge-std/console2.sol";
-import "../../../src/EtherFiNodesManager.sol";
-import "../../../src/EtherFiNode.sol";
-import "../../../src/EtherFiTimelock.sol";
-import "../../../src/RoleRegistry.sol";
-import "../../../src/interfaces/IRoleRegistry.sol";
-import "../../../src/interfaces/IStakingManager.sol";
-import "../../../src/interfaces/IEtherFiRateLimiter.sol";
-import {IEigenPod, IEigenPodTypes } from "../../../src/eigenlayer-interfaces/IEigenPod.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/staking/EtherFiNode.sol";
+import "@etherfi/governance/EtherFiTimelock.sol";
+import "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/governance/interfaces/IRoleRegistry.sol";
+import "@etherfi/staking/interfaces/IStakingManager.sol";
+import "@etherfi/governance/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
+import {IEigenPod, IEigenPodTypes } from "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
+import {EigenPodTestHelpers} from "@tests/utils/EigenPodTestHelpers.sol";
 
 /**
  * @title ConsolidationThroughEOATest
@@ -42,16 +44,34 @@ contract ConsolidationThroughEOATest is Test {
         console2.log("=== SETUP ===");
         vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
 
-        //upgrade the etherfi nodes manager contract
-        newEtherFiNodesManagerImpl = new EtherFiNodesManager(address(stakingManager), address(roleRegistry), address(rateLimiter)); 
-        vm.startPrank(roleRegistry.owner());
+        // Upgrade EtherFiNodesManager and EtherFiRateLimiter FIRST, while the
+        // deployed RoleRegistry still exposes the legacy `onlyProtocolUpgrader`
+        // selector their `_authorizeUpgrade` calls into. Once we swap
+        // RoleRegistry below, that selector is gone.
+        newEtherFiNodesManagerImpl = new EtherFiNodesManager(address(stakingManager), address(roleRegistry), address(rateLimiter));
+        vm.prank(roleRegistry.owner());
         etherFiNodesManager.upgradeTo(address(newEtherFiNodesManagerImpl));
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE(), realElExiter);
+
+        // Upgrade the on-chain rate limiter so it uses the consolidated role model
+        // and the new per-address bucket API (3-arg constructor takes eETH/weETH).
+        address newRateLimiterImpl = address(new EtherFiRateLimiter(address(roleRegistry), 0x35fA164735182de50811E8e2E824cFb9B6118ac2, 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee));
+        vm.prank(roleRegistry.owner());
+        EtherFiRateLimiter(address(rateLimiter)).upgradeTo(newRateLimiterImpl);
+
+        // Now swap RoleRegistry so newly-added role getters defined in
+        // RolesLibrary are reachable on the deployed proxy.
+        address newRoleRegistryImpl = address(new RoleRegistry(address(0xdead)));
+        vm.prank(roleRegistry.owner());
+        roleRegistry.upgradeTo(newRoleRegistryImpl);
+
+        vm.startPrank(roleRegistry.owner());
+        roleRegistry.grantRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), realElExiter);
 
         // Setup consolidation rate limiter bucket (required for new rate limiting)
-        bytes32 rateLimiterAdminRole = keccak256("ETHERFI_RATE_LIMITER_ADMIN_ROLE");
-        roleRegistry.grantRole(rateLimiterAdminRole, roleRegistry.owner());
-        
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), roleRegistry.owner());
+        // RateLimiter mutators (createNewLimiter, updateConsumers) are now onlyAdmin → OPERATION_TIMELOCK_ROLE.
+        roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), roleRegistry.owner());
+
         vm.stopPrank();
 
         vm.startPrank(roleRegistry.owner());
@@ -123,10 +143,10 @@ contract ConsolidationThroughEOATest is Test {
         // and checks if msg.sender equals the result. In a proxy context, this can fail.
         // We need to ensure the prank is set up correctly before the grantRole call.
         vm.startPrank(roleRegistryOwner);
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE(), realElExiter);
+        roleRegistry.grantRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), realElExiter);
         vm.stopPrank();
         // Verify the role was granted
-        bool hasRole = roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE(), realElExiter);
+        bool hasRole = roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), realElExiter);
         require(hasRole, "test: EOA does not have the EL Consolidation Role");
         console2.log("Granted ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE to EOA:", realElExiter);
         bytes[] memory pubkeys = new bytes[](3);
@@ -146,6 +166,12 @@ contract ConsolidationThroughEOATest is Test {
         console2.log("Linking legacy validator ids complete");
 
         ( , IEigenPod pod0) = _resolvePod(pubkeys[0]);
+
+        // Switch-to-compounding has src == target, so each request's pubkey
+        // must be ACTIVE in pod0.
+        for (uint256 i = 0; i < pubkeys.length; ++i) {
+            EigenPodTestHelpers.forceValidatorActive(pod0, pubkeys[i]);
+        }
 
         IEigenPodTypes.ConsolidationRequest[] memory reqs = _switchToCompoundingRequestsFromPubkeys(pubkeys);
 
@@ -177,7 +203,7 @@ contract ConsolidationThroughEOATest is Test {
         address eoaWithoutRole = makeAddr("eoaWithoutRole");
                 
         // Verify the EOA does not have the role
-        bool hasRole = roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE(), eoaWithoutRole);
+        bool hasRole = roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), eoaWithoutRole);
         require(!hasRole, "test: EOA should not have the EL Consolidation Role");
 
         bytes[] memory pubkeys = new bytes[](3);

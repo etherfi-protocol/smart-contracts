@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import "../../utils/utils.sol";
-import "../../../src/EtherFiTimelock.sol";
-import "../../../src/EtherFiRedemptionManager.sol";
-import "../../../src/LiquidityPool.sol";
-import "../../../src/PriorityWithdrawalQueue.sol";
-import "../../../src/RoleRegistry.sol";
-import "../../../src/UUPSProxy.sol";
+import "@scripts/utils/utils.sol";
+import "@etherfi/governance/EtherFiTimelock.sol";
+import "@etherfi/withdrawals/EtherFiRedemptionManager.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/withdrawals/PriorityWithdrawalQueue.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/utils/UUPSProxy.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
-import {ContractCodeChecker} from "../../../script/ContractCodeChecker.sol";
+import {ContractCodeChecker} from "@scripts/ContractCodeChecker.sol";
 
 /// @title PriorityQueueTransactions
 /// @notice Generates timelock transactions for upgrading LiquidityPool, EtherFiRedemptionManager, and granting roles for PriorityWithdrawalQueue
@@ -35,8 +35,8 @@ contract PriorityQueueTransactions is Script, Utils {
     address constant etherFiRedemptionManagerImpl = 0x6BD191582F40012b2f2cdf66bD3D32bDe41191F7;
     ContractCodeChecker contractCodeChecker;
 
-    // MIN_DELAY used when deploying PriorityWithdrawalQueue implementation (must match deploy script)
-    uint32 constant PWQ_MIN_DELAY = 1 hours;
+    // minDelay used when deploying PriorityWithdrawalQueue implementation (must match deploy script)
+    uint32 constant PWQ_minDelay = 1 hours;
 
     //--------------------------------------------------------------------------------------
     //------------------------------- IMMUTABLE SNAPSHOTS (PRE-UPGRADE) -------------------
@@ -68,10 +68,10 @@ contract PriorityQueueTransactions is Script, Utils {
 
         contractCodeChecker = new ContractCodeChecker();
 
-        // Get role hashes from the implementation
-        PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE = PriorityWithdrawalQueue(payable(priorityWithdrawalQueueImpl)).PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE();
-        PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE = PriorityWithdrawalQueue(payable(priorityWithdrawalQueueImpl)).PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE();
-        PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE = PriorityWithdrawalQueue(payable(priorityWithdrawalQueueImpl)).PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE();
+        // Get role hashes from the role registry
+        PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE = roleRegistryContract.OPERATION_TIMELOCK_ROLE();
+        PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE = roleRegistryContract.HOUSEKEEPING_OPERATIONS_ROLE();
+        PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE = roleRegistryContract.ORACLE_OPERATIONS_ROLE();
 
         // Step 1: Verify deployed bytecode matches expected
         verifyDeployedBytecode();
@@ -153,7 +153,7 @@ contract PriorityQueueTransactions is Script, Utils {
             data,
             bytes32(0), // predecessor
             timelockSalt,
-            MIN_DELAY_TIMELOCK // 72 hours
+            minDelay_TIMELOCK // 72 hours
         );
 
         console2.log("================================================");
@@ -194,9 +194,9 @@ contract PriorityQueueTransactions is Script, Utils {
         // Execute on fork for testing
         console2.log("=== SCHEDULING BATCH ON FORK ===");
         vm.startPrank(ETHERFI_UPGRADE_ADMIN);
-        etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, MIN_DELAY_TIMELOCK);
+        etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, minDelay_TIMELOCK);
 
-        vm.warp(block.timestamp + MIN_DELAY_TIMELOCK + 1);
+        vm.warp(block.timestamp + minDelay_TIMELOCK + 1);
         etherFiTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
         vm.stopPrank();
 
@@ -214,7 +214,7 @@ contract PriorityQueueTransactions is Script, Utils {
         console2.log("LiquidityPool implementation verified:", impl);
 
         // Verify priorityWithdrawalQueue is set correctly in LiquidityPool
-        address pwq = liquidityPool.priorityWithdrawalQueue();
+        address pwq = address(liquidityPool.priorityWithdrawalQueue());
         require(pwq == priorityWithdrawalQueueProxy, "PriorityWithdrawalQueue address mismatch");
         console2.log("PriorityWithdrawalQueue in LiquidityPool:", pwq);
 
@@ -254,12 +254,39 @@ contract PriorityQueueTransactions is Script, Utils {
         console2.log("=== Verifying Deployed Bytecode ===");
         console2.log("");
 
-        LiquidityPool newLiquidityPoolImpl = new LiquidityPool(priorityWithdrawalQueueProxy);
+        LiquidityPool newLiquidityPoolImpl = new LiquidityPool(
+            ILiquidityPool.ConstructorAddresses({
+                stakingManager: address(0),
+                nodesManager: address(0),
+                eETH: EETH,
+                withdrawRequestNFT: address(0),
+                liquifier: address(0),
+                etherFiRedemptionManager: ETHERFI_REDEMPTION_MANAGER,
+                roleRegistry: ROLE_REGISTRY,
+                priorityWithdrawalQueue: priorityWithdrawalQueueProxy,
+                blacklister: address(0),
+                etherFiAdminContract: address(0),
+                membershipManager: address(0)
+            })
+        );
+        // blacklister immutable added to PWQ; placeholder address(0) here mirrors the
+        // pattern used elsewhere in this script — the operator must substitute the
+        // deployed Blacklister address before running the bytecode-match verification.
         PriorityWithdrawalQueue newPWQImpl = new PriorityWithdrawalQueue(
-            LIQUIDITY_POOL, EETH, WEETH, ROLE_REGISTRY, WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, PWQ_MIN_DELAY
+            LIQUIDITY_POOL, EETH, WEETH, address(0), ROLE_REGISTRY, PWQ_minDelay
         );
         EtherFiRedemptionManager newRedemptionManagerImpl = new EtherFiRedemptionManager(
-            LIQUIDITY_POOL, EETH, WEETH, WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, ROLE_REGISTRY, ETHERFI_RESTAKER, priorityWithdrawalQueueProxy
+            IEtherFiRedemptionManager.ConstructorAddresses({
+                liquidityPool: LIQUIDITY_POOL,
+                eEth: EETH,
+                weEth: WEETH,
+                treasury: WITHDRAW_REQUEST_NFT_BUYBACK_SAFE,
+                roleRegistry: ROLE_REGISTRY,
+                etherFiRestaker: ETHERFI_RESTAKER,
+                priorityWithdrawalQueue: priorityWithdrawalQueueProxy,
+                blacklister: address(0),
+                stEthPriceFeed: 0x86392dC19c0b719886221c78AB11eb8Cf5c52812
+            }), 10_000, 100, 10_000, 24 hours, 1e16
         );
 
         contractCodeChecker.verifyContractByteCodeMatch(liquidityPoolImpl, address(newLiquidityPoolImpl));
@@ -290,12 +317,11 @@ contract PriorityQueueTransactions is Script, Utils {
     }
 
     function getPWQImmutableSelectors() internal pure returns (bytes4[] memory selectors) {
-        selectors = new bytes4[](5);
+        selectors = new bytes4[](4);
         selectors[0] = bytes4(keccak256("liquidityPool()"));
         selectors[1] = bytes4(keccak256("eETH()"));
         selectors[2] = bytes4(keccak256("roleRegistry()"));
-        selectors[3] = bytes4(keccak256("treasury()"));
-        selectors[4] = bytes4(keccak256("MIN_DELAY()"));
+        selectors[3] = bytes4(keccak256("minDelay()"));
     }
 
     //--------------------------------------------------------------------------------------
@@ -414,7 +440,7 @@ contract PriorityQueueTransactions is Script, Utils {
 
         // 4. LiquidityPool: new priorityWithdrawalQueue immutable set correctly
         {
-            address pwq = LiquidityPool(payable(LIQUIDITY_POOL)).priorityWithdrawalQueue();
+            address pwq = address(LiquidityPool(payable(LIQUIDITY_POOL)).priorityWithdrawalQueue());
             require(pwq == priorityWithdrawalQueueProxy, "LiquidityPool: wrong priorityWithdrawalQueue immutable");
             console2.log("[IMMUTABLES OK] LiquidityPool.priorityWithdrawalQueue:", pwq);
         }

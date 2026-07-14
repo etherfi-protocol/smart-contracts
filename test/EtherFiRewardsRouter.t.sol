@@ -2,11 +2,11 @@
 pragma solidity ^0.8.24;
 
 import "forge-std/Test.sol";
-import "../src/EtherFiRewardsRouter.sol";
-import "../src/RoleRegistry.sol";
-import "../src/UUPSProxy.sol";
-import "./TestERC20.sol";
-import "./TestERC721.sol";
+import "@etherfi/rewards/EtherFiRewardsRouter.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/utils/UUPSProxy.sol";
+import "@tests/TestERC20.sol";
+import "@tests/TestERC721.sol";
 
 contract MockLiquidityPool {
     uint128 public totalValueOutOfLp;
@@ -48,7 +48,7 @@ contract EtherFiRewardsRouterTest is Test {
     function setUp() public {
         // Deploy RoleRegistry
         vm.startPrank(owner);
-        roleRegistryImpl = new RoleRegistry();
+        roleRegistryImpl = new RoleRegistry(address(0xdead));
         roleRegistryProxy = new UUPSProxy(
             address(roleRegistryImpl),
             abi.encodeWithSelector(RoleRegistry.initialize.selector, owner)
@@ -66,7 +66,9 @@ contract EtherFiRewardsRouterTest is Test {
         );
         
         // Grant admin role
-        roleRegistry.grantRole(ETHERFI_REWARDS_ROUTER_ADMIN_ROLE, admin);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), admin);
+        // `_authorizeUpgrade` now requires UPGRADE_TIMELOCK_ROLE.
+        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), owner);
         vm.stopPrank();
         
         // Deploy proxy and initialize (outside prank so owner is address(this))
@@ -75,10 +77,7 @@ contract EtherFiRewardsRouterTest is Test {
             abi.encodeWithSelector(EtherFiRewardsRouter.initialize.selector)
         );
         rewardsRouter = EtherFiRewardsRouter(payable(address(proxy)));
-        
-        // Transfer ownership to owner address
-        rewardsRouter.transferOwnership(owner);
-        
+
         // Deploy test tokens
         testToken = new TestERC20("Test Token", "TEST");
         testNFT = new TestERC721("Test NFT", "TNFT");
@@ -104,8 +103,9 @@ contract EtherFiRewardsRouterTest is Test {
     // ============ Initialization Tests ============
     
     function test_initialize_setsOwner() public {
-        // Owner is transferred to owner address in setUp
-        assertEq(rewardsRouter.owner(), owner);
+        // Ownership is now governed by the RoleRegistry rather than a per-contract
+        // Ownable owner; the router defers all access control to it.
+        assertEq(roleRegistry.owner(), owner);
     }
     
     function test_initialize_canOnlyBeCalledOnce() public {
@@ -196,7 +196,7 @@ contract EtherFiRewardsRouterTest is Test {
         // Even with high totalValueOutOfLp, should revert if contract balance is 0
         mockLiquidityPool.setTotalValueOutOfLp(type(uint128).max);
         
-        vm.expectRevert("Contract balance is zero");
+        vm.expectRevert(EtherFiRewardsRouter.ContractBalanceIsZero.selector);
         rewardsRouter.withdrawToLiquidityPool();
     }
 
@@ -207,7 +207,7 @@ contract EtherFiRewardsRouterTest is Test {
         // totalValueOutOfLp is 0, so min(balance, 0) = 0
         mockLiquidityPool.setTotalValueOutOfLp(0);
         
-        vm.expectRevert("Contract balance is zero");
+        vm.expectRevert(EtherFiRewardsRouter.ContractBalanceIsZero.selector);
         rewardsRouter.withdrawToLiquidityPool();
     }
     
@@ -267,7 +267,7 @@ contract EtherFiRewardsRouterTest is Test {
         uint256 amount = 100 ether;
         
         vm.prank(unauthorizedUser);
-        vm.expectRevert(EtherFiRewardsRouter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         rewardsRouter.recoverERC20(address(testToken), amount);
     }
     
@@ -336,7 +336,7 @@ contract EtherFiRewardsRouterTest is Test {
         uint256 tokenId = testNFT.mint(address(rewardsRouter));
         
         vm.prank(unauthorizedUser);
-        vm.expectRevert(EtherFiRewardsRouter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         rewardsRouter.recoverERC721(address(testNFT), tokenId);
     }
     
@@ -373,8 +373,9 @@ contract EtherFiRewardsRouterTest is Test {
         address newAdmin = vm.addr(100);
         
         // Grant role
-        vm.prank(owner);
-        roleRegistry.grantRole(ETHERFI_REWARDS_ROUTER_ADMIN_ROLE, newAdmin);
+        vm.startPrank(owner);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), newAdmin);
+        vm.stopPrank();
         
         uint256 amount = 100 ether;
         testToken.mint(address(rewardsRouter), amount);
@@ -385,12 +386,13 @@ contract EtherFiRewardsRouterTest is Test {
         assertEq(testToken.balanceOf(treasury), amount);
         
         // Revoke role
-        vm.prank(owner);
-        roleRegistry.revokeRole(ETHERFI_REWARDS_ROUTER_ADMIN_ROLE, newAdmin);
+        vm.startPrank(owner);
+        roleRegistry.revokeRole(roleRegistry.OPERATION_MULTISIG_ROLE(), newAdmin);
+        vm.stopPrank();
         
         testToken.mint(address(rewardsRouter), amount);
         vm.prank(newAdmin);
-        vm.expectRevert(EtherFiRewardsRouter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         rewardsRouter.recoverERC20(address(testToken), amount);
     }
     

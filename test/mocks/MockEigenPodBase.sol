@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.9;
 
-import "../../src/eigenlayer-interfaces/IEigenPod.sol";
-import "../../src/eigenlayer-interfaces/ISemVerMixin.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/ISemVerMixin.sol";
 
 contract MockEigenPodBase is IEigenPod {
     constructor() {}

@@ -7,8 +7,8 @@ import "forge-std/StdJson.sol";
 import "forge-std/console.sol";
 import "forge-std/console2.sol";
 import "openzeppelin-contracts-upgradeable/contracts/interfaces/draft-IERC1822Upgradeable.sol";
-import {Deployed} from "../deploys/Deployed.s.sol";
-import {EtherFiTimelock} from "../../src/EtherFiTimelock.sol";
+import {Deployed} from "@scripts/deploys/Deployed.s.sol";
+import {EtherFiTimelock} from "@etherfi/governance/EtherFiTimelock.sol";
 
 interface ICreate2Factory {
     function deploy(bytes memory code, bytes32 salt) external payable returns (address);
@@ -28,8 +28,8 @@ contract Utils is Script, Deployed {
         0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
     ICreate2Factory constant mainnetCreate2Factory = ICreate2Factory(0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99);
 
-    uint256 constant MIN_DELAY_OPERATING_TIMELOCK = 28800; // 8 hours
-    uint256 constant MIN_DELAY_TIMELOCK = 259200; // 72 hours
+    uint256 constant minDelay_OPERATING_TIMELOCK = 28800; // 8 hours
+    uint256 constant minDelay_TIMELOCK = 259200; // 72 hours
 
     //-------------------------------------------------------------------------
     // Immutable Snapshot Helpers for Upgrade Verification

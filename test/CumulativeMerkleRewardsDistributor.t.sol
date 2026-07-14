@@ -1,5 +1,6 @@
-import "./TestSetup.sol";
+import "@tests/TestSetup.sol";
 import "forge-std/console2.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
 
 contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
     address[] public accounts = new address[](4);
@@ -107,7 +108,7 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
    }
 
    function test_whitelisting() public {
-    vm.expectRevert(ICumulativeMerkleRewardsDistributor.IncorrectRole.selector);
+    vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
     cumulativeMerkleRewardsDistributorInstance.updateWhitelistedRecipient(accounts[0], false);
    }
 
@@ -146,15 +147,16 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
 
    function test_pausing() public {
     vm.prank(chad);
-    vm.expectRevert(ICumulativeMerkleRewardsDistributor.IncorrectRole.selector);
+    // pause() is onlyAdmin → OPERATION_MULTISIG_ROLE → reverts with OnlyOperatingMultisig.
+    vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
     cumulativeMerkleRewardsDistributorInstance.pause();
     vm.startPrank(admin);
     cumulativeMerkleRewardsDistributorInstance.pause();
-    vm.expectRevert(ICumulativeMerkleRewardsDistributor.ContractPaused.selector);
+    vm.expectRevert(Pausable.ContractPaused.selector);
     cumulativeMerkleRewardsDistributorInstance.claim(address(eETHInstance), accounts[0], 100 ether, merkleRoot, proofs[0]);
-    vm.expectRevert(ICumulativeMerkleRewardsDistributor.ContractPaused.selector);
+    vm.expectRevert(Pausable.ContractPaused.selector);
     cumulativeMerkleRewardsDistributorInstance.setPendingMerkleRoot(address(eETHInstance), merkleRoot);
-    vm.expectRevert(ICumulativeMerkleRewardsDistributor.ContractPaused.selector);
+    vm.expectRevert(Pausable.ContractPaused.selector);
     vm.roll(block.number + 15000);
     vm.warp(block.timestamp + 15000 * 12);
     cumulativeMerkleRewardsDistributorInstance.finalizeMerkleRoot(address(eETHInstance), block.number - 12000);
@@ -164,12 +166,201 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
    }
    function test_upgrading() public {
     vm.prank(chad);
-    vm.expectRevert(RoleRegistry.OnlyProtocolUpgrader.selector);
+    vm.expectRevert(RoleRegistry.OnlyUpgradeTimelock.selector);
     cumulativeMerkleRewardsDistributorInstance.upgradeTo(address(0x555));
     CumulativeMerkleRewardsDistributor newImpl = new CumulativeMerkleRewardsDistributor(address(roleRegistryInstance)); 
     vm.prank(roleRegistryInstance.owner());
     cumulativeMerkleRewardsDistributorInstance.upgradeTo(address(newImpl));
     vm.assertEq(cumulativeMerkleRewardsDistributorInstance.getImplementation(), address(newImpl));
+   }
+
+   // --------------------------------------------------------
+   //  pauseContractUntil / unpauseContractUntil
+   // --------------------------------------------------------
+
+   bytes32 constant PAUSABLE_UNTIL_SLOT =
+       0x2c7e4bc092c2002f0baaf2f47367bc442b098266b43d189dafe4cb25f1e1fea2;
+
+   address pauseUntilPauser = makeAddr("pauseUntilPauser");
+   address unpauseUntilUnpauser = makeAddr("unpauseUntilUnpauser");
+   address pauseUntilDurationSetter = makeAddr("pauseUntilDurationSetter");
+
+   function _grantPauseUntilRoles(address pauserAddr, address unpauserAddr) internal {
+       vm.startPrank(owner);
+       // pauseContractUntil requires GUARDIAN_ROLE; unpauseContractUntil and
+       // setPauseUntilDuration require OPERATION_MULTISIG_ROLE.
+       roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), pauserAddr);
+       roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), unpauserAddr);
+       roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), pauseUntilDurationSetter);
+       vm.stopPrank();
+       // warp past MAX_PAUSE_DURATION + PAUSER_UNTIL_COOLDOWN so the first-pause cooldown
+       // (which treats lastPauseTimestamp[pauser] = 0 as unix 0) is satisfied
+       if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+
+       uint256 maxDur = cumulativeMerkleRewardsDistributorInstance.MAX_PAUSE_DURATION();
+       vm.prank(pauseUntilDurationSetter);
+       cumulativeMerkleRewardsDistributorInstance.setPauseUntilDuration(maxDur);
+   }
+
+   function _pausedUntil() internal view returns (uint256) {
+       return uint256(vm.load(address(cumulativeMerkleRewardsDistributorInstance), PAUSABLE_UNTIL_SLOT));
+   }
+
+   function test_pauseContractUntil_requiresRole() public {
+       _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
+
+       vm.prank(chad);
+       vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
+       cumulativeMerkleRewardsDistributorInstance.pauseUntil();
+   }
+
+   function test_pauseContractUntil_setsState() public {
+       _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
+
+       vm.prank(pauseUntilPauser);
+       cumulativeMerkleRewardsDistributorInstance.pauseUntil();
+       assertEq(_pausedUntil(), block.timestamp + cumulativeMerkleRewardsDistributorInstance.MAX_PAUSE_DURATION());
+   }
+
+   function test_unpauseContractUntil_requiresRole() public {
+       _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
+       vm.prank(pauseUntilPauser);
+       cumulativeMerkleRewardsDistributorInstance.pauseUntil();
+
+       vm.prank(chad);
+       vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+       cumulativeMerkleRewardsDistributorInstance.unpauseUntil();
+   }
+
+   function test_unpauseContractUntil_clearsState() public {
+       _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
+       vm.prank(pauseUntilPauser);
+       cumulativeMerkleRewardsDistributorInstance.pauseUntil();
+
+       vm.prank(unpauseUntilUnpauser);
+       cumulativeMerkleRewardsDistributorInstance.unpauseUntil();
+       assertEq(_pausedUntil(), 0);
+   }
+
+   function test_unpauseContractUntil_revertsIfNotPaused() public {
+       _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
+       vm.prank(unpauseUntilUnpauser);
+       vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
+       cumulativeMerkleRewardsDistributorInstance.unpauseUntil();
+   }
+
+   // --- setPauseUntilDuration ---
+
+   function test_setPauseUntilDuration_requiresRole() public {
+       _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
+       uint256 maxDur = cumulativeMerkleRewardsDistributorInstance.MAX_PAUSE_DURATION();
+
+       // bob holds no roles in setUpTests; chad/admin/owner all have OPERATION_TIMELOCK_ROLE.
+       vm.prank(bob);
+       vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
+       cumulativeMerkleRewardsDistributorInstance.setPauseUntilDuration(maxDur);
+
+       // Guardian-only (pauseUntilPauser) cannot set the duration; needs admin role.
+       vm.prank(pauseUntilPauser);
+       vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
+       cumulativeMerkleRewardsDistributorInstance.setPauseUntilDuration(maxDur);
+   }
+
+   function test_setPauseUntilDuration_setsValue() public {
+       _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
+       uint256 d = cumulativeMerkleRewardsDistributorInstance.MIN_PAUSE_DURATION() + 1 hours;
+
+       vm.prank(pauseUntilDurationSetter);
+       cumulativeMerkleRewardsDistributorInstance.setPauseUntilDuration(d);
+
+       vm.prank(pauseUntilPauser);
+       cumulativeMerkleRewardsDistributorInstance.pauseUntil();
+       assertEq(_pausedUntil(), block.timestamp + d);
+   }
+
+   function test_setPauseUntilDuration_revertsOnInvalidValue() public {
+       _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
+       uint256 belowMin = cumulativeMerkleRewardsDistributorInstance.MIN_PAUSE_DURATION() - 1;
+       uint256 aboveMax = cumulativeMerkleRewardsDistributorInstance.MAX_PAUSE_DURATION() + 1;
+
+       vm.prank(pauseUntilDurationSetter);
+       vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+       cumulativeMerkleRewardsDistributorInstance.setPauseUntilDuration(belowMin);
+
+       vm.prank(pauseUntilDurationSetter);
+       vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+       cumulativeMerkleRewardsDistributorInstance.setPauseUntilDuration(aboveMax);
+   }
+
+   // --- each gated function (whenNotPaused → also blocked by pause-until) ---
+
+   function test_setPendingMerkleRoot_blockedByPauseContractUntil() public {
+       _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
+       vm.prank(pauseUntilPauser);
+       cumulativeMerkleRewardsDistributorInstance.pauseUntil();
+
+       vm.prank(admin);
+       vm.expectRevert(
+           abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _pausedUntil())
+       );
+       cumulativeMerkleRewardsDistributorInstance.setPendingMerkleRoot(address(eETHInstance), merkleRoot);
+   }
+
+   function test_finalizeMerkleRoot_blockedByPauseContractUntil() public {
+       // set a pending root before pausing so finalize has something to validate
+       vm.prank(admin);
+       cumulativeMerkleRewardsDistributorInstance.setPendingMerkleRoot(address(eETHInstance), merkleRoot);
+       vm.roll(block.number + 15000);
+       vm.warp(block.timestamp + 15000 * 12);
+
+       _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
+       vm.prank(pauseUntilPauser);
+       cumulativeMerkleRewardsDistributorInstance.pauseUntil();
+
+       vm.prank(admin);
+       vm.expectRevert(
+           abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _pausedUntil())
+       );
+       cumulativeMerkleRewardsDistributorInstance.finalizeMerkleRoot(address(eETHInstance), block.number - 12000);
+   }
+
+   function test_claim_blockedByPauseContractUntil() public {
+       setMerkleRoot(address(eETHInstance));
+
+       _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
+       vm.prank(pauseUntilPauser);
+       cumulativeMerkleRewardsDistributorInstance.pauseUntil();
+
+       vm.expectRevert(
+           abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _pausedUntil())
+       );
+       cumulativeMerkleRewardsDistributorInstance.claim(address(eETHInstance), accounts[0], 100 ether, merkleRoot, proofs[0]);
+   }
+
+   function test_claim_unblockedAfterPauseExpires() public {
+       setMerkleRoot(address(eETHInstance));
+
+       _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
+       vm.prank(pauseUntilPauser);
+       cumulativeMerkleRewardsDistributorInstance.pauseUntil();
+
+       vm.warp(block.timestamp + cumulativeMerkleRewardsDistributorInstance.MAX_PAUSE_DURATION() + 1);
+
+       cumulativeMerkleRewardsDistributorInstance.claim(address(eETHInstance), accounts[0], 100 ether, merkleRoot, proofs[0]);
+       assertEq(eETHInstance.balanceOf(accounts[0]), 100 ether);
+   }
+
+   function test_claim_unblockedAfterExplicitUnpause() public {
+       setMerkleRoot(address(eETHInstance));
+
+       _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
+       vm.prank(pauseUntilPauser);
+       cumulativeMerkleRewardsDistributorInstance.pauseUntil();
+       vm.prank(unpauseUntilUnpauser);
+       cumulativeMerkleRewardsDistributorInstance.unpauseUntil();
+
+       cumulativeMerkleRewardsDistributorInstance.claim(address(eETHInstance), accounts[0], 100 ether, merkleRoot, proofs[0]);
+       assertEq(eETHInstance.balanceOf(accounts[0]), 100 ether);
    }
 
    function test_verify_bytes() public {
@@ -181,4 +372,64 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
     // verifyContractByteCodeMatch(deployedImpl, address(cumulativeMerkleRewardsDistributorImplementation));
     // verifyContractByteCodeMatch(deployedProxy, address(cumulativeMerkleRewardsDistributorInstance));
    }
+
+    /// @dev M-07: contract added `receive() external payable {}` + AssetRecovery (recoverETH /
+    ///      recoverERC20) so any ETH airdropped to the contract can be swept by Operations.
+    ///      Pre-fix, plain ETH transfers would revert (no receive/fallback), trapping funds.
+    function test_receive_acceptsPlainEthTransfer() public {
+        address payable cmrd = payable(address(cumulativeMerkleRewardsDistributorInstance));
+        uint256 balBefore = cmrd.balance;
+
+        vm.deal(bob, 1 ether);
+        vm.prank(bob);
+        (bool ok, ) = cmrd.call{value: 1 ether}("");
+        assertTrue(ok, "plain ETH transfer should succeed via receive()");
+        assertEq(cmrd.balance - balBefore, 1 ether, "balance should reflect transfer");
+    }
+
+    function test_recoverETH_movesEthToRecipient() public {
+        address payable cmrd = payable(address(cumulativeMerkleRewardsDistributorInstance));
+        vm.deal(cmrd, 5 ether);
+
+        address payable to = payable(makeAddr("recipient"));
+        uint256 toBalBefore = to.balance;
+        uint256 cmrdBalBefore = cmrd.balance;
+
+        vm.prank(admin);
+        cumulativeMerkleRewardsDistributorInstance.recoverETH(to, 3 ether);
+
+        assertEq(to.balance - toBalBefore, 3 ether, "recipient should receive recovered ETH");
+        assertEq(cmrdBalBefore - cmrd.balance, 3 ether, "contract balance should drop by recovered amount");
+    }
+
+    function test_recoverETH_revertsForNonOperator() public {
+        address payable cmrd = payable(address(cumulativeMerkleRewardsDistributorInstance));
+        vm.deal(cmrd, 1 ether);
+
+        vm.prank(bob); // bob holds no roles
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
+        cumulativeMerkleRewardsDistributorInstance.recoverETH(payable(bob), 1 ether);
+    }
+
+    function test_recoverERC20_movesTokenToRecipient() public {
+        // setUp() already minted 1000 rETH to the distributor; recover 100.
+        address to = makeAddr("recipient");
+        uint256 cmrdBefore = rETH.balanceOf(address(cumulativeMerkleRewardsDistributorInstance));
+
+        vm.prank(admin);
+        cumulativeMerkleRewardsDistributorInstance.recoverERC20(address(rETH), to, 100 ether);
+
+        assertEq(rETH.balanceOf(to), 100 ether, "recipient should receive recovered tokens");
+        assertEq(
+            cmrdBefore - rETH.balanceOf(address(cumulativeMerkleRewardsDistributorInstance)),
+            100 ether,
+            "contract balance should drop by recovered amount"
+        );
+    }
+
+    function test_recoverERC20_revertsForNonOperator() public {
+        vm.prank(bob);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
+        cumulativeMerkleRewardsDistributorInstance.recoverERC20(address(rETH), bob, 1 ether);
+    }
 }

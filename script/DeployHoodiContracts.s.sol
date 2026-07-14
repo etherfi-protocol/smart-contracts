@@ -2,9 +2,9 @@
 pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
-import "../src/EtherFiNodesManager.sol";
-import "../src/EtherFiNode.sol";
-import "../src/EtherFiRateLimiter.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/staking/EtherFiNode.sol";
+import "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
 
 interface IUpgradable {
     function upgradeTo(address newImplementation) external;
@@ -29,7 +29,10 @@ contract DeployHoodiContracts is Script {
         
         // Deploy EtherFiRateLimiter first
         console.log("Deploying EtherFiRateLimiter implementation...");
-        EtherFiRateLimiter rateLimiterImpl = new EtherFiRateLimiter(roleRegistryProxy);
+        // Per-address bucket immutables — pass mainnet placeholders for testnet impl.
+        // This impl is reused only for EtherFiNodesManager's global-bucket API here;
+        // the per-address API is unreachable because no EETH/WeETH lives on Hoodi.
+        EtherFiRateLimiter rateLimiterImpl = new EtherFiRateLimiter(roleRegistryProxy, 0x35fA164735182de50811E8e2E824cFb9B6118ac2, 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee);
         console.log("EtherFiRateLimiter implementation deployed at:", address(rateLimiterImpl));
         
         // Deploy new EtherFiNodesManager implementation
@@ -45,8 +48,7 @@ contract DeployHoodiContracts is Script {
             liquidityPoolProxy,
             etherFiNodesManagerProxy,
             eigenPodManagerProxy,
-            delegationManagerProxy,
-            roleRegistryProxy
+            delegationManagerProxy
         );
         console.log("EtherFiNode deployed at:", address(newNode));
 

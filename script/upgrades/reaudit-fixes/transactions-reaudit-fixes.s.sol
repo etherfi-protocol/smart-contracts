@@ -3,19 +3,21 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
-import {Utils, ICreate2Factory} from "../../utils/utils.sol";
-import {EtherFiTimelock} from "../../../src/EtherFiTimelock.sol";
-import {EtherFiNode} from "../../../src/EtherFiNode.sol";
-import {EtherFiRedemptionManager} from "../../../src/EtherFiRedemptionManager.sol";
-import {EtherFiRestaker} from "../../../src/EtherFiRestaker.sol";
-import {EtherFiRewardsRouter} from "../../../src/EtherFiRewardsRouter.sol";
-import {Liquifier} from "../../../src/Liquifier.sol";
-import {WithdrawRequestNFT} from "../../../src/WithdrawRequestNFT.sol";
-import {EtherFiViewer} from "../../../src/helpers/EtherFiViewer.sol";
-import {StakingManager} from "../../../src/StakingManager.sol";
-import {LiquidityPool} from "../../../src/LiquidityPool.sol";
+import {Utils, ICreate2Factory} from "@scripts/utils/utils.sol";
+import {EtherFiTimelock} from "@etherfi/governance/EtherFiTimelock.sol";
+import {EtherFiNode} from "@etherfi/staking/EtherFiNode.sol";
+import {EtherFiRedemptionManager} from "@etherfi/withdrawals/EtherFiRedemptionManager.sol";
+import {IEtherFiRedemptionManager} from "@etherfi/withdrawals/interfaces/IEtherFiRedemptionManager.sol";
+import {EtherFiRestaker} from "@etherfi/restaking/EtherFiRestaker.sol";
+import {EtherFiRewardsRouter} from "@etherfi/rewards/EtherFiRewardsRouter.sol";
+import {Liquifier} from "@etherfi/deposits/Liquifier.sol";
+import {ILiquifier} from "@etherfi/deposits/interfaces/ILiquifier.sol";
+import {WithdrawRequestNFT} from "@etherfi/withdrawals/WithdrawRequestNFT.sol";
+import {EtherFiViewer} from "@etherfi/helpers/EtherFiViewer.sol";
+import {StakingManager} from "@etherfi/staking/StakingManager.sol";
+import {LiquidityPool} from "@etherfi/core/LiquidityPool.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import {ContractCodeChecker} from "../../../script/ContractCodeChecker.sol";
+import {ContractCodeChecker} from "@scripts/ContractCodeChecker.sol";
 
 /**
  * @title ReauditFixesTransactions
@@ -34,7 +36,7 @@ import {ContractCodeChecker} from "../../../script/ContractCodeChecker.sol";
 contract ReauditFixesTransactions is Utils {
     EtherFiTimelock etherFiTimelock = EtherFiTimelock(payable(UPGRADE_TIMELOCK));
     ContractCodeChecker contractCodeChecker;
-    uint256 constant TIMELOCK_MIN_DELAY = 259200; // 72 hours
+    uint256 constant TIMELOCK_minDelay = 259200; // 72 hours
 
     //--------------------------------------------------------------------------------------
     //---------------------------- NEW IMPLEMENTATION ADDRESSES ----------------------------
@@ -161,7 +163,7 @@ contract ReauditFixesTransactions is Utils {
             data,
             bytes32(0), // predecessor
             timelockSalt,
-            TIMELOCK_MIN_DELAY
+            TIMELOCK_minDelay
         );
         writeSafeJson("script/upgrades/reaudit-fixes", "reaudit-fixes-upgrade_schedule.json", ETHERFI_UPGRADE_ADMIN, UPGRADE_TIMELOCK, 0, scheduleCalldata, 1);
 
@@ -181,10 +183,10 @@ contract ReauditFixesTransactions is Utils {
         // Execute against fork for testing
         console2.log("=== Scheduling Batch on Fork ===");
         vm.prank(ETHERFI_UPGRADE_ADMIN);
-        etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, TIMELOCK_MIN_DELAY);
+        etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, TIMELOCK_minDelay);
 
         // Warp past timelock delay
-        vm.warp(block.timestamp + TIMELOCK_MIN_DELAY + 1);
+        vm.warp(block.timestamp + TIMELOCK_minDelay + 1);
 
         console2.log("=== Executing Batch on Fork ===");
         vm.prank(ETHERFI_UPGRADE_ADMIN);
@@ -202,12 +204,32 @@ contract ReauditFixesTransactions is Utils {
         console2.log("=== Verifying Deployed Bytecode ===");
         console2.log("");
 
-        EtherFiNode newEtherFiNodeImplementation = new EtherFiNode(address(LIQUIDITY_POOL), address(ETHERFI_NODES_MANAGER), address(EIGENLAYER_POD_MANAGER), address(EIGENLAYER_DELEGATION_MANAGER), address(ROLE_REGISTRY));
-        EtherFiRedemptionManager newEtherFiRedemptionManagerImplementation = new EtherFiRedemptionManager(address(LIQUIDITY_POOL), address(EETH), address(WEETH), address(TREASURY), address(ROLE_REGISTRY), address(ETHERFI_RESTAKER), address(0x0));
-        EtherFiRestaker newEtherFiRestakerImplementation = new EtherFiRestaker(address(EIGENLAYER_REWARDS_COORDINATOR), address(ETHERFI_REDEMPTION_MANAGER));
+        EtherFiNode newEtherFiNodeImplementation = new EtherFiNode(address(LIQUIDITY_POOL), address(ETHERFI_NODES_MANAGER), address(EIGENLAYER_POD_MANAGER), address(EIGENLAYER_DELEGATION_MANAGER));
+        EtherFiRedemptionManager newEtherFiRedemptionManagerImplementation = new EtherFiRedemptionManager(IEtherFiRedemptionManager.ConstructorAddresses({
+            liquidityPool: address(LIQUIDITY_POOL),
+            eEth: address(EETH),
+            weEth: address(WEETH),
+            treasury: address(TREASURY),
+            roleRegistry: address(ROLE_REGISTRY),
+            etherFiRestaker: address(ETHERFI_RESTAKER),
+            priorityWithdrawalQueue: address(0x0),
+            blacklister: address(0x0),
+            stEthPriceFeed: 0x86392dC19c0b719886221c78AB11eb8Cf5c52812
+        }), 10_000, 100, 10_000, 24 hours, 1e16);
+        EtherFiRestaker newEtherFiRestakerImplementation = new EtherFiRestaker(address(LIQUIDITY_POOL), address(LIQUIFIER), address(EIGENLAYER_REWARDS_COORDINATOR), address(ETHERFI_REDEMPTION_MANAGER), address(ROLE_REGISTRY), address(ETHERFI_RATE_LIMITER), address(EIGENLAYER_STRATEGY_MANAGER), address(EIGENLAYER_DELEGATION_MANAGER));
         EtherFiRewardsRouter newEtherFiRewardsRouterImplementation = new EtherFiRewardsRouter(address(LIQUIDITY_POOL), address(TREASURY), address(ROLE_REGISTRY));
-        Liquifier newLiquifierImplementation = new Liquifier();
-        WithdrawRequestNFT newWithdrawRequestNFTImplementation = new WithdrawRequestNFT(address(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE));
+        Liquifier newLiquifierImplementation = new Liquifier(ILiquifier.ConstructorAddresses({
+            liquidityPool: address(LIQUIDITY_POOL),
+            lidoWithdrawalQueue: address(LIDO_WITHDRAWAL_QUEUE),
+            lido: 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84,
+            stEth_Eth_Pool: 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022,
+            roleRegistry: address(ROLE_REGISTRY),
+            stEthPriceFeed: 0x86392dC19c0b719886221c78AB11eb8Cf5c52812,
+            blacklister: address(0xdEaD),
+            etherfiRestaker: address(ETHERFI_RESTAKER),
+            l1SyncPool: address(ETHERFI_L1_SYNC_POOL_ETH)
+        }), 100, 24 hours, 500, 1e16);
+        WithdrawRequestNFT newWithdrawRequestNFTImplementation = new WithdrawRequestNFT(address(LIQUIDITY_POOL), address(ROLE_REGISTRY), address(0x0), address(ETHERFI_ADMIN));
         EtherFiViewer newEtherFiViewerImplementation = new EtherFiViewer(address(EIGENLAYER_POD_MANAGER), address(EIGENLAYER_DELEGATION_MANAGER));
 
         contractCodeChecker.verifyContractByteCodeMatch(etherFiNodeImpl, address(newEtherFiNodeImplementation));

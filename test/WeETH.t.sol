@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
-import "./TestERC20.sol";
-import "./TestERC721.sol";
-import {ForceETHSender} from "./EETH.t.sol";
+import "@tests/TestSetup.sol";
+import "@tests/TestERC20.sol";
+import "@tests/TestERC721.sol";
+import {ForceETHSender} from "@tests/EETH.t.sol";
+import "@etherfi/governance/Blacklister.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
 
 contract WeETHTest is TestSetup {
     function setUp() public {
@@ -16,7 +18,7 @@ contract WeETHTest is TestSetup {
     }
 
     function test_WrapEETHFailsIfZeroAmount() public {
-        vm.expectRevert("weETH: can't wrap zero eETH");
+        vm.expectRevert(WeETH.ZeroAmount.selector);
         weEthInstance.wrap(0);
     }
 
@@ -65,7 +67,7 @@ contract WeETHTest is TestSetup {
         // alice priv key = 2
         ILiquidityPool.PermitInput memory permitInput = createPermitInput(2, address(weEthInstance), 2 ether, aliceNonce, 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR());
 
-        vm.expectRevert("TRANSFER_AMOUNT_EXCEEDS_ALLOWANCE");
+        vm.expectRevert(EETH.TransferAmountExceedsAllowance.selector);
         weEthInstance.wrapWithPermit(5 ether, permitInput);
 
     }
@@ -84,7 +86,7 @@ contract WeETHTest is TestSetup {
         // 69 is an invalid private key for alice
         ILiquidityPool.PermitInput memory permitInput = createPermitInput(69, address(weEthInstance), 5 ether, aliceNonce, 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR());
 
-        vm.expectRevert("TRANSFER_AMOUNT_EXCEEDS_ALLOWANCE");
+        vm.expectRevert(EETH.TransferAmountExceedsAllowance.selector);
         weEthInstance.wrapWithPermit(5 ether, permitInput);
     }
 
@@ -121,7 +123,7 @@ contract WeETHTest is TestSetup {
     }
 
     function test_UnWrapEETHFailsIfZeroAmount() public {
-        vm.expectRevert("Cannot unwrap a zero amount");
+        vm.expectRevert(WeETH.ZeroAmount.selector);
         weEthInstance.unwrap(0);
     }
 
@@ -208,8 +210,7 @@ contract WeETHTest is TestSetup {
 
         //----------------------------------------------------------------------------------------------------------
 
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(10 ether);
+        _rebaseUncapped(10 ether);
 
         _transferTo(address(liquidityPoolInstance), 10 ether);
 
@@ -232,8 +233,7 @@ contract WeETHTest is TestSetup {
 
         //----------------------------------------------------------------------------------------------------------
 
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(50 ether);
+        _rebaseUncapped(50 ether);
 
         _transferTo(address(liquidityPoolInstance), 50 ether);   
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 110 ether);
@@ -274,8 +274,7 @@ contract WeETHTest is TestSetup {
         vm.stopPrank();
 
         // Rewards enter LP
-        vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(1 ether);
+        _rebaseUncapped(1 ether);
         _transferTo(address(liquidityPoolInstance), 1 ether);
         assertEq(address(liquidityPoolInstance).balance, 4 ether);
 
@@ -468,4 +467,474 @@ contract WeETHTest is TestSetup {
         weEthInstance.recoverERC721(address(0), alice, tokenId);
     }
 
+    // -------------------------------------------------------------------------
+    // Pause + blacklist
+    //
+    // WeETH gates all token movement through `_beforeTokenTransfer`, which
+    // (a) reverts with "PAUSED" when `paused` is set, and (b) calls
+    // `blacklister.nonBlacklisted(from)` / `(to)`. This hook runs on mint
+    // (wrap), burn (unwrap), and transfer, so each path must respect the gate.
+    // Pause is gated by PROTOCOL_PAUSER / PROTOCOL_UNPAUSER on RoleRegistry.
+    // -------------------------------------------------------------------------
+
+    function _expectBlacklistedRevert(address user) internal {
+        vm.expectRevert(abi.encodeWithSelector(Blacklister.BlacklistedUser.selector, user));
+    }
+
+    function _aliceWithEEth(uint256 amount) internal {
+        startHoax(alice);
+        liquidityPoolInstance.deposit{value: amount}();
+        eETHInstance.approve(address(weEthInstance), amount);
+        vm.stopPrank();
+    }
+
+    function _aliceWithWeEth(uint256 amount) internal {
+        _aliceWithEEth(amount);
+        vm.prank(alice);
+        weEthInstance.wrap(amount);
+    }
+
+    // ---- pause role gating --------------------------------------------------
+
+    function test_WeETH_pause_requiresPauserRole() public {
+        // pause() / unpause() are gated by onlyAdmin (OPERATION_MULTISIG_ROLE).
+        vm.prank(bob);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        weEthInstance.pause();
+
+        vm.prank(admin);
+        weEthInstance.pause();
+        assertTrue(weEthInstance.paused());
+    }
+
+    function test_WeETH_unpause_requiresUnpauserRole() public {
+        vm.prank(admin);
+        weEthInstance.pause();
+
+        vm.prank(bob);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        weEthInstance.unpause();
+
+        vm.prank(admin);
+        weEthInstance.unpause();
+        assertFalse(weEthInstance.paused());
+    }
+
+    // ---- paused blocks mint/burn/transfer via _beforeTokenTransfer ----------
+
+    function test_WeETH_wrap_revertsWhenPaused() public {
+        _aliceWithEEth(1 ether);
+        vm.prank(admin);
+        weEthInstance.pause();
+
+        vm.prank(alice);
+        vm.expectRevert(Pausable.ContractPaused.selector);
+        weEthInstance.wrap(1 ether);
+    }
+
+    function test_WeETH_unwrap_revertsWhenPaused() public {
+        _aliceWithWeEth(1 ether);
+
+        vm.prank(admin);
+        weEthInstance.pause();
+
+        vm.prank(alice);
+        vm.expectRevert(Pausable.ContractPaused.selector);
+        weEthInstance.unwrap(0.5 ether);
+    }
+
+    function test_WeETH_transfer_revertsWhenPaused() public {
+        _aliceWithWeEth(1 ether);
+
+        vm.prank(admin);
+        weEthInstance.pause();
+
+        vm.prank(alice);
+        vm.expectRevert(Pausable.ContractPaused.selector);
+        weEthInstance.transfer(bob, 0.5 ether);
+    }
+
+    function test_WeETH_transfer_succeedsAfterUnpause() public {
+        _aliceWithWeEth(1 ether);
+
+        vm.prank(admin);
+        weEthInstance.pause();
+        vm.prank(admin);
+        weEthInstance.unpause();
+
+        vm.prank(alice);
+        weEthInstance.transfer(bob, 0.5 ether);
+        assertEq(weEthInstance.balanceOf(bob), 0.5 ether);
+    }
+
+    // ---- blacklist gates mint (wrap) / burn (unwrap) / transfer -------------
+
+    function test_WeETH_wrap_revertsForBlacklistedRecipient() public {
+        // wrap mints to msg.sender — gate trips on `to` (msg.sender).
+        _aliceWithEEth(1 ether);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(alice);
+
+        vm.prank(alice);
+        _expectBlacklistedRevert(alice);
+        weEthInstance.wrap(1 ether);
+    }
+
+    function test_WeETH_unwrap_revertsForBlacklistedUser() public {
+        _aliceWithWeEth(1 ether);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(alice);
+
+        // unwrap burns from msg.sender — gate trips on `from`. Note this also
+        // exercises the EETH `_transferShares` path on the way back, which has
+        // its own gate; alice is blacklisted there too, so either revert
+        // could surface — both are `BlacklistedUser(alice)`.
+        vm.prank(alice);
+        _expectBlacklistedRevert(alice);
+        weEthInstance.unwrap(0.5 ether);
+    }
+
+    function test_WeETH_transfer_revertsWhenSenderBlacklisted() public {
+        _aliceWithWeEth(1 ether);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(alice);
+
+        vm.prank(alice);
+        _expectBlacklistedRevert(alice);
+        weEthInstance.transfer(bob, 0.5 ether);
+    }
+
+    function test_WeETH_transfer_revertsWhenRecipientBlacklisted() public {
+        _aliceWithWeEth(1 ether);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(bob);
+
+        vm.prank(alice);
+        _expectBlacklistedRevert(bob);
+        weEthInstance.transfer(bob, 0.5 ether);
+    }
+
+    function test_WeETH_transferFrom_revertsForBlacklistedParticipants() public {
+        _aliceWithWeEth(1 ether);
+        vm.prank(alice);
+        weEthInstance.approve(bob, 1 ether);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(alice);
+
+        vm.prank(bob);
+        _expectBlacklistedRevert(alice);
+        weEthInstance.transferFrom(alice, bob, 0.5 ether);
+    }
+
+    function test_WeETH_transfer_succeedsAfterBlacklistExpires() public {
+        _aliceWithWeEth(1 ether);
+
+        vm.prank(owner);
+        blacklisterInstance.setBlacklistUntil(alice, 1 days);
+
+        vm.prank(alice);
+        _expectBlacklistedRevert(alice);
+        weEthInstance.transfer(bob, 0.5 ether);
+
+        vm.warp(block.timestamp + 1 days);
+
+        vm.prank(alice);
+        weEthInstance.transfer(bob, 0.5 ether);
+        assertEq(weEthInstance.balanceOf(bob), 0.5 ether);
+    }
+
+    function test_WeETH_transfer_succeedsAfterUnblacklist() public {
+        _aliceWithWeEth(1 ether);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(alice);
+        vm.prank(owner);
+        blacklisterInstance.unblacklistUser(alice);
+
+        vm.prank(alice);
+        weEthInstance.transfer(bob, 0.5 ether);
+        assertEq(weEthInstance.balanceOf(bob), 0.5 ether);
+    }
+
+    // -------------------------------------------------------------------------
+    // pauseContractUntil / unpauseContractUntil
+    //
+    // WeETH inherits PausableUntil. The `_beforeTokenTransfer` hook calls
+    // `_requireNotPausedUntil`, so every token movement — wrap (mint), unwrap
+    // (burn), transfer, transferFrom — is gated. Entry points are gated by
+    // PAUSE_UNTIL_ROLE / UNPAUSE_UNTIL_ROLE on RoleRegistry. The state lives in
+    // the same fixed namespaced storage slot as EETH (slot is per-contract; the
+    // path inside each contract is identical).
+    // -------------------------------------------------------------------------
+
+    bytes32 constant PAUSABLE_UNTIL_SLOT =
+        0x2c7e4bc092c2002f0baaf2f47367bc442b098266b43d189dafe4cb25f1e1fea2;
+
+    address pauseUntilPauser = makeAddr("pauseUntilPauser");
+    address unpauseUntilUnpauser = makeAddr("unpauseUntilUnpauser");
+    address pauseUntilDurationSetter = makeAddr("pauseUntilDurationSetter");
+
+    function _grantPauseUntilRoles() internal {
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(roleRegistryInstance.SUPER_GUARDIAN_ROLE(), pauseUntilPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), unpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), pauseUntilDurationSetter);
+        vm.stopPrank();
+        // Foundry's default block.timestamp is too small to clear the cooldown
+        // check on the very first pause (lastPauseTimestamp[0] = 0 ⇒ trips
+        // 0 + MAX_PAUSE_DURATION + PAUSER_UNTIL_COOLDOWN > block.timestamp).
+        if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+
+        // Resolve before prank — nested staticcall otherwise consumes the prank.
+        uint256 maxDuration = weEthInstance.MAX_PAUSE_DURATION();
+        vm.prank(pauseUntilDurationSetter);
+        weEthInstance.setPauseUntilDuration(maxDuration);
+    }
+
+    function _weETHPausedUntil() internal view returns (uint256) {
+        return uint256(vm.load(address(weEthInstance), PAUSABLE_UNTIL_SLOT));
+    }
+
+    // ---- pauseContractUntil role gating -------------------------------------
+
+    function test_WeETH_pauseContractUntil_requiresRole() public {
+        _grantPauseUntilRoles();
+
+        vm.prank(bob);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
+        weEthInstance.pauseUntil();
+
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseUntil();
+        assertEq(_weETHPausedUntil(), block.timestamp + weEthInstance.MAX_PAUSE_DURATION());
+    }
+
+    function test_WeETH_unpauseContractUntil_requiresRole() public {
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseUntil();
+
+        vm.prank(bob);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        weEthInstance.unpauseUntil();
+
+        vm.prank(unpauseUntilUnpauser);
+        weEthInstance.unpauseUntil();
+        assertEq(_weETHPausedUntil(), 0);
+    }
+
+    function test_WeETH_unpauseContractUntil_revertsIfNotPaused() public {
+        _grantPauseUntilRoles();
+        vm.prank(unpauseUntilUnpauser);
+        vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
+        weEthInstance.unpauseUntil();
+    }
+
+    function test_WeETH_pauseContractUntil_revertsIfAlreadyPaused() public {
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseUntil();
+
+        vm.prank(pauseUntilPauser);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _weETHPausedUntil())
+        );
+        weEthInstance.pauseUntil();
+    }
+
+    function test_WeETH_pauseContractUntil_cooldownEnforced() public {
+        _grantPauseUntilRoles();
+
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseUntil();
+
+        vm.prank(unpauseUntilUnpauser);
+        weEthInstance.unpauseUntil();
+
+        // Past MAX_PAUSE_DURATION but inside cooldown window — should still revert.
+        vm.warp(block.timestamp + weEthInstance.MAX_PAUSE_DURATION() + 1);
+        vm.prank(pauseUntilPauser);
+        vm.expectRevert(PausableUntil.PauserCooldownStillActive.selector);
+        weEthInstance.pauseUntil();
+
+        vm.warp(block.timestamp + weEthInstance.PAUSER_UNTIL_COOLDOWN());
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseUntil();
+    }
+
+    // ---- pause-until blocks every token movement ----------------------------
+
+    function test_WeETH_wrap_revertsWhenPausedUntil() public {
+        _aliceWithEEth(1 ether);
+
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseUntil();
+        uint256 pausedUntilTs = _weETHPausedUntil();
+
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, pausedUntilTs)
+        );
+        weEthInstance.wrap(1 ether);
+    }
+
+    function test_WeETH_unwrap_revertsWhenPausedUntil() public {
+        _aliceWithWeEth(1 ether);
+
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseUntil();
+        uint256 pausedUntilTs = _weETHPausedUntil();
+
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, pausedUntilTs)
+        );
+        weEthInstance.unwrap(0.5 ether);
+    }
+
+    function test_WeETH_transfer_revertsWhenPausedUntil() public {
+        _aliceWithWeEth(1 ether);
+
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseUntil();
+        uint256 pausedUntilTs = _weETHPausedUntil();
+
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, pausedUntilTs)
+        );
+        weEthInstance.transfer(bob, 0.5 ether);
+    }
+
+    function test_WeETH_transferFrom_revertsWhenPausedUntil() public {
+        _aliceWithWeEth(1 ether);
+        vm.prank(alice);
+        weEthInstance.approve(bob, 1 ether);
+
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseUntil();
+        uint256 pausedUntilTs = _weETHPausedUntil();
+
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, pausedUntilTs)
+        );
+        weEthInstance.transferFrom(alice, bob, 0.5 ether);
+    }
+
+    // ---- recovery paths -----------------------------------------------------
+
+    function test_WeETH_transfer_unblockedAfterPauseExpires() public {
+        _aliceWithWeEth(1 ether);
+
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseUntil();
+
+        vm.warp(block.timestamp + weEthInstance.MAX_PAUSE_DURATION() + 1);
+
+        vm.prank(alice);
+        weEthInstance.transfer(bob, 0.5 ether);
+        assertEq(weEthInstance.balanceOf(bob), 0.5 ether);
+    }
+
+    function test_WeETH_transfer_unblockedAfterManualUnpause() public {
+        _aliceWithWeEth(1 ether);
+
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseUntil();
+
+        vm.prank(unpauseUntilUnpauser);
+        weEthInstance.unpauseUntil();
+
+        vm.prank(alice);
+        weEthInstance.transfer(bob, 0.5 ether);
+        assertEq(weEthInstance.balanceOf(bob), 0.5 ether);
+    }
+
+    function test_WeETH_wrap_unblockedAfterPauseExpires() public {
+        _aliceWithEEth(1 ether);
+
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseUntil();
+
+        vm.warp(block.timestamp + weEthInstance.MAX_PAUSE_DURATION() + 1);
+
+        vm.prank(alice);
+        weEthInstance.wrap(1 ether);
+        assertGt(weEthInstance.balanceOf(alice), 0);
+    }
+
+    // ---- setPauseUntilDuration role gating ----------------------------------
+
+    function test_WeETH_setPauseUntilDuration_requiresRole() public {
+        _grantPauseUntilRoles();
+        uint256 maxDur = weEthInstance.MAX_PAUSE_DURATION();
+
+        vm.prank(bob);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
+        weEthInstance.setPauseUntilDuration(maxDur);
+
+        // PAUSE_UNTIL_ROLE alone is insufficient.
+        vm.prank(pauseUntilPauser);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
+        weEthInstance.setPauseUntilDuration(maxDur);
+    }
+
+    function test_WeETH_setPauseUntilDuration_setsValue() public {
+        _grantPauseUntilRoles();
+        uint256 d = weEthInstance.MIN_PAUSE_DURATION() + 1 hours;
+
+        vm.prank(pauseUntilDurationSetter);
+        weEthInstance.setPauseUntilDuration(d);
+
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseUntil();
+        assertEq(weEthInstance.pausedUntil(), block.timestamp + d);
+    }
+
+    function test_WeETH_setPauseUntilDuration_revertsOnInvalidValue() public {
+        _grantPauseUntilRoles();
+        uint256 belowMin = weEthInstance.MIN_PAUSE_DURATION() - 1;
+        uint256 aboveMax = weEthInstance.MAX_PAUSE_DURATION() + 1;
+
+        vm.prank(pauseUntilDurationSetter);
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        weEthInstance.setPauseUntilDuration(belowMin);
+
+        vm.prank(pauseUntilDurationSetter);
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        weEthInstance.setPauseUntilDuration(aboveMax);
+    }
+
+    // ---- spender (msg.sender) blacklist on transferFrom ---------------------
+    // `_beforeTokenTransfer` now blacklist-checks msg.sender in addition to
+    // from/to, so a blacklisted spender cannot move tokens even between clean
+    // parties.
+
+    function test_WeETH_transferFrom_revertsWhenSpenderBlacklisted() public {
+        address spender = vm.addr(0xCAFE);
+
+        _aliceWithWeEth(1 ether);
+        vm.prank(alice);
+        weEthInstance.approve(spender, 1 ether);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(spender);
+
+        vm.prank(spender);
+        _expectBlacklistedRevert(spender);
+        weEthInstance.transferFrom(alice, bob, 0.5 ether);
+    }
 }

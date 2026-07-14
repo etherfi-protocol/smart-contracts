@@ -19,6 +19,9 @@ typechain-types
 .vscode/
 release/logs/txns/*
 
+# Lock files
+foundry.lock
+
 # Hardhat files
 cache
 artifacts

@@ -4,12 +4,12 @@ pragma solidity ^0.8.27;
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 import "forge-std/StdJson.sol";
-import "../../utils/utils.sol";
-import "../../../src/EtherFiNodesManager.sol";
-import "../../../src/RoleRegistry.sol";
-import "../../../src/EtherFiTimelock.sol";
-import "../../../src/interfaces/IEtherFiNode.sol";
-import "../../../src/eigenlayer-interfaces/IEigenPod.sol";
+import "@scripts/utils/utils.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/governance/EtherFiTimelock.sol";
+import "@etherfi/staking/interfaces/IEtherFiNode.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 
 /**
  * @title Consolidate Validators
@@ -456,7 +456,7 @@ contract CompoundValidators is Script, Utils {
             data,
             bytes32(0), // predecessor
             timelockSalt,
-            MIN_DELAY_OPERATING_TIMELOCK
+            minDelay_OPERATING_TIMELOCK
         );
         console2.log("=== Schedule", operationName, "Tx ===");
         console2.logBytes(scheduleCalldata);
@@ -485,11 +485,11 @@ contract CompoundValidators is Script, Utils {
             data,
             bytes32(0),
             timelockSalt,
-            MIN_DELAY_OPERATING_TIMELOCK
+            minDelay_OPERATING_TIMELOCK
         );
         
         // Execute
-        vm.warp(block.timestamp + MIN_DELAY_OPERATING_TIMELOCK + 1);
+        vm.warp(block.timestamp + minDelay_OPERATING_TIMELOCK + 1);
         vm.prank(address(ETHERFI_OPERATING_ADMIN));
         etherFiOperatingTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
     }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
+import "@tests/TestSetup.sol";
 import "forge-std/console2.sol";
 
 contract EtherFiOracleTest is TestSetup {
@@ -10,6 +10,32 @@ contract EtherFiOracleTest is TestSetup {
 
         // Timestamp = 1, BlockNumber = 0
         vm.roll(0);
+
+        vm.prank(alice);
+        etherFiAdminInstance.updateMaxFinalizedWithdrawalAmountPerDay(10_000 ether);
+        vm.prank(alice);
+        etherFiAdminInstance.updateMaxNumValidatorsToApprovePerDay(200);
+    }
+
+    /// setReportStartSlot was removed from EtherFiOracle in the role-consolidation
+    /// refactor. Tests that need to set the start slot now write the storage
+    /// directly. `reportStartSlot` sits at slot 253 offset 12 (uint32, packed).
+    function _setReportStartSlot(uint32 newSlot) internal {
+        bytes32 cur = vm.load(address(etherFiOracleInstance), bytes32(uint256(253)));
+        uint256 mask = ~(uint256(0xffffffff) << 96);
+        uint256 newVal = (uint256(cur) & mask) | (uint256(newSlot) << 96);
+        vm.store(address(etherFiOracleInstance), bytes32(uint256(253)), bytes32(newVal));
+    }
+
+    /// updateLastPublishedBlockStamps was also removed. Write the two packed
+    /// uint32s (offsets 16 and 20 in slot 253) directly.
+    function _setLastPublishedBlockStamps(uint32 newRefSlot, uint32 newRefBlock) internal {
+        bytes32 cur = vm.load(address(etherFiOracleInstance), bytes32(uint256(253)));
+        uint256 mask = ~((uint256(0xffffffff) << 128) | (uint256(0xffffffff) << 160));
+        uint256 newVal = (uint256(cur) & mask)
+            | (uint256(newRefSlot) << 128)
+            | (uint256(newRefBlock) << 160);
+        vm.store(address(etherFiOracleInstance), bytes32(uint256(253)), bytes32(newVal));
     }
 
     function test_addCommitteeMember() public {
@@ -17,12 +43,12 @@ contract EtherFiOracleTest is TestSetup {
 
         // chad is not a commitee member
         vm.prank(chad);
-        vm.expectRevert("You are not registered as the Oracle committee member");
+        vm.expectRevert(EtherFiOracle.NotRegistered.selector);
         etherFiOracleInstance.submitReport(reportAtPeriod2A);
 
         // chad is added to the committee
         vm.prank(owner);
-        etherFiOracleInstance.addCommitteeMember(chad);
+        etherFiOracleInstance.addCommitteeMember(chad, 2);
         (bool registered, bool enabled, uint32 lastReportRefSlot, uint32 numReports) = etherFiOracleInstance.committeeMemberStates(chad);
         assertEq(registered, true);
         assertEq(enabled, true);
@@ -37,7 +63,7 @@ contract EtherFiOracleTest is TestSetup {
 
         // Owner disables chad's report submission
         vm.prank(owner);
-        etherFiOracleInstance.manageCommitteeMember(chad, false);
+        etherFiOracleInstance.manageCommitteeMember(chad, false, 2);
         (registered, enabled, lastReportRefSlot, numReports) = etherFiOracleInstance.committeeMemberStates(chad);
         assertEq(registered, true);
         assertEq(enabled, false);
@@ -46,7 +72,7 @@ contract EtherFiOracleTest is TestSetup {
 
         // chad fails to submit a report
         vm.prank(chad);
-        vm.expectRevert("You are disabled");
+        vm.expectRevert(EtherFiOracle.MemberDisabled.selector);
         etherFiOracleInstance.submitReport(reportAtPeriod3);
     }
 
@@ -62,17 +88,17 @@ contract EtherFiOracleTest is TestSetup {
 
         // At timpestamp = 12289, blocknumber = 1024, epoch = 32
         _moveClock(1024);
-        vm.expectRevert("Report Epoch is not finalized yet");
+        vm.expectRevert(EtherFiOracle.EpochNotFinalized.selector);
         etherFiOracleInstance.submitReport(reportAtPeriod2A);
 
         // At timpestamp = 12673, blocknumber = 1056, epoch = 33
         _moveClock(1 * slotsPerEpoch);
-        vm.expectRevert("Report Epoch is not finalized yet");
+        vm.expectRevert(EtherFiOracle.EpochNotFinalized.selector);
         etherFiOracleInstance.submitReport(reportAtPeriod2A);
 
         // At timpestamp = 13045, blocknumber = 1087, epoch = 33
         _moveClock(31);
-        vm.expectRevert("Report Epoch is not finalized yet");
+        vm.expectRevert(EtherFiOracle.EpochNotFinalized.selector);
         etherFiOracleInstance.submitReport(reportAtPeriod2A);
 
         // At timpestamp = 13057, blocknumber = 1088, epoch = 34
@@ -87,7 +113,7 @@ contract EtherFiOracleTest is TestSetup {
 
         // alice submits the period 2 report with consensus version = 2
         vm.prank(alice);
-        vm.expectRevert("Report is for wrong consensusVersion");
+        vm.expectRevert(EtherFiOracle.WrongConsensusVersion.selector);
         etherFiOracleInstance.submitReport(reportAtPeriod2C);
 
        // Update the Consensus Version to 2
@@ -109,12 +135,12 @@ contract EtherFiOracleTest is TestSetup {
         etherFiOracleInstance.submitReport(reportAtPeriod2A);
 
         // alice submits another period 2 report
-        vm.expectRevert("You don't need to submit a report");
+        vm.expectRevert(EtherFiOracle.ReportNotNeeded.selector);
         vm.prank(alice);
         etherFiOracleInstance.submitReport(reportAtPeriod2A);
 
         // alice submits a different report
-        vm.expectRevert("You don't need to submit a report");
+        vm.expectRevert(EtherFiOracle.ReportNotNeeded.selector);
         vm.prank(alice);
         etherFiOracleInstance.submitReport(reportAtPeriod2B);
         
@@ -123,22 +149,22 @@ contract EtherFiOracleTest is TestSetup {
         // 66 epoch
 
         // alice submits reports with wrong {slotFrom, slotTo, blockFrom}
-        vm.expectRevert("Report is for wrong slotFrom");
+        vm.expectRevert(EtherFiOracle.WrongSlotFrom.selector);
         vm.prank(alice);
         etherFiOracleInstance.submitReport(reportAtPeriod4);
 
         // alice submits period 2 report
-        vm.expectRevert("Report is for wrong slotTo");
+        vm.expectRevert(EtherFiOracle.WrongSlotTo.selector);
         vm.prank(alice);
         etherFiOracleInstance.submitReport(reportAtPeriod2A);
 
         // alice submits period 3A report
-        vm.expectRevert("Report is for wrong blockTo");
+        vm.expectRevert(EtherFiOracle.WrongBlockTo.selector);
         vm.prank(alice);
         etherFiOracleInstance.submitReport(reportAtPeriod3A);
 
         // alice submits period 3B report
-        vm.expectRevert("Report is for wrong blockFrom");
+        vm.expectRevert(EtherFiOracle.WrongBlockFrom.selector);
         vm.prank(alice);
         etherFiOracleInstance.submitReport(reportAtPeriod3B);
 
@@ -179,6 +205,12 @@ contract EtherFiOracleTest is TestSetup {
     }
 
     function test_consensus() public {
+        // Seed TVL so the report's positive accruedRewards stays within the 25 bps
+        // LiquidityPool positive rebase cap (a zero-TVL pool rejects any positive rebase).
+        vm.deal(alice, 1000 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 1000 ether}();
+
         // Now it's period 2!
         _moveClock(1024 + 2 * slotsPerEpoch);
 
@@ -226,7 +258,7 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_report_submission_before_processing_last_published_one_fails() public {
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         // period 2
         _moveClock(1024 + 2 * slotsPerEpoch);
@@ -242,14 +274,14 @@ contract EtherFiOracleTest is TestSetup {
         _initReportBlockStamp(report);
 
         vm.prank(alice);
-        vm.expectRevert("Last published report is not handled yet");
+        vm.expectRevert(EtherFiOracle.LastReportNotHandled.selector);
         etherFiOracleInstance.submitReport(report);
     }
 
     function test_change_report_start_slot1() public { 
         vm.prank(owner);
         bytes[] memory emptyBytes = new bytes[](0);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
         _moveClock(1024 + 2 * 32);
@@ -274,8 +306,7 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(slotTo, 2 * 1024 - 1);
         assertEq(blockFrom, 1024);
 
-        vm.prank(owner);
-        etherFiOracleInstance.setReportStartSlot(1 * 1024 + 512);
+        _setReportStartSlot(1 * 1024 + 512);
 
         _moveClock(1 * 1024 + 512);
 
@@ -311,8 +342,7 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(blockFrom, 0);
 
         console.log(etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp));
-        vm.prank(owner);
-        etherFiOracleInstance.setReportStartSlot(1 * 1024 + 512);
+        _setReportStartSlot(1 * 1024 + 512);
 
         (slotFrom, slotTo, blockFrom) = etherFiOracleInstance.blockStampForNextReport();
         assertEq(slotFrom, 1 * 1024 + 512);
@@ -321,8 +351,7 @@ contract EtherFiOracleTest is TestSetup {
     }
 
     function test_report_start_slot() public {
-        vm.prank(owner);
-        etherFiOracleInstance.setReportStartSlot(2048);
+        _setReportStartSlot(2048);
 
         // note that the block timestamp starts from 1 (= slot 0) and the block number starts from 0
 
@@ -333,7 +362,7 @@ contract EtherFiOracleTest is TestSetup {
 
         // this should fail because not start yet
         vm.prank(alice);
-        vm.expectRevert("Report Epoch is not finalized yet");
+        vm.expectRevert(EtherFiOracle.EpochNotFinalized.selector);
         etherFiOracleInstance.submitReport(reportAtSlot3071);
 
         // current slot = 1500
@@ -344,7 +373,7 @@ contract EtherFiOracleTest is TestSetup {
 
         // this should fail because start but in period 1
         vm.prank(alice);
-        vm.expectRevert("Report Epoch is not finalized yet");
+        vm.expectRevert(EtherFiOracle.EpochNotFinalized.selector);
         etherFiOracleInstance.submitReport(reportAtSlot3071);
 
         // 2048 + 1024 + 64 = 3136
@@ -354,14 +383,13 @@ contract EtherFiOracleTest is TestSetup {
         etherFiOracleInstance.submitReport(reportAtSlot3071);
 
         // change startSlot to 3264
-        vm.prank(owner);
-        etherFiOracleInstance.setReportStartSlot(3264);
+        _setReportStartSlot(3264);
 
         // slot 3236
         _moveClock(100);
         
         vm.prank(alice);
-        vm.expectRevert("Report Epoch is not finalized yet");
+        vm.expectRevert(EtherFiOracle.EpochNotFinalized.selector);
         etherFiOracleInstance.submitReport(reportAtSlot4287);
 
         _moveClock(28 + 1024 + 2 * slotsPerEpoch);
@@ -370,47 +398,18 @@ contract EtherFiOracleTest is TestSetup {
         etherFiOracleInstance.submitReport(reportAtSlot4287);
     }
 
-    function test_unpublishReport() public {
-        vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
-
-        // period 2
-        _moveClock(1024 + 2 * slotsPerEpoch);
-
-        uint32 lastPublishedReportRefSlot = etherFiOracleInstance.lastPublishedReportRefSlot();
-        uint32 lastPublishedReportRefBlock = etherFiOracleInstance.lastPublishedReportRefBlock();
-
-        // Oracle accidentally generated an wrong report
-        bytes32 reportHash = etherFiOracleInstance.generateReportHash(reportAtPeriod2A);
-        vm.prank(alice);
-        bool consensusReached = etherFiOracleInstance.submitReport(reportAtPeriod2A);
-        assertEq(consensusReached, true);
-
-        assertEq(etherFiOracleInstance.lastPublishedReportRefSlot(), reportAtPeriod2A.refSlotTo);
-        assertEq(etherFiOracleInstance.lastPublishedReportRefBlock(), reportAtPeriod2A.refBlockTo);
-
-        // Owner performs manual operations to undo the published report
-        vm.startPrank(owner);
-        etherFiOracleInstance.unpublishReport(reportHash);
-        etherFiOracleInstance.updateLastPublishedBlockStamps(lastPublishedReportRefSlot, lastPublishedReportRefBlock);
-        vm.stopPrank();
-
-        assertEq(etherFiOracleInstance.lastPublishedReportRefSlot(), lastPublishedReportRefSlot);
-        assertEq(etherFiOracleInstance.lastPublishedReportRefBlock(), lastPublishedReportRefBlock);
-    }
-
     function test_pause() public {
         _moveClock(1024 + 2 * slotsPerEpoch);
         
         vm.prank(alice);
-        etherFiOracleInstance.pauseContract();
+        etherFiOracleInstance.pause();
 
         vm.prank(alice);
-        vm.expectRevert("Pausable: paused");
+        vm.expectRevert(Pausable.ContractPaused.selector);
         etherFiOracleInstance.submitReport(reportAtPeriod2A);
 
         vm.prank(alice);
-        etherFiOracleInstance.unPauseContract();
+        etherFiOracleInstance.unpause();
 
         vm.prank(alice);
         etherFiOracleInstance.submitReport(reportAtPeriod2A);
@@ -421,7 +420,7 @@ contract EtherFiOracleTest is TestSetup {
 
         // TODO enable this test for mainnet
         // vm.expectRevert("Quorum size must be greater than 1");
-        // etherFiOracleInstance.setQuorumSize(1);
+        // etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         etherFiOracleInstance.setQuorumSize(2);
 
@@ -431,10 +430,10 @@ contract EtherFiOracleTest is TestSetup {
     function test_set_oracle_report_period() public {
         vm.startPrank(owner);
 
-        vm.expectRevert("Report period cannot be zero");
+        vm.expectRevert(EtherFiOracle.InvalidReportPeriod.selector);
         etherFiOracleInstance.setOracleReportPeriod(0);
 
-        vm.expectRevert("Report period must be a multiple of the epoch");
+        vm.expectRevert(EtherFiOracle.InvalidReportPeriod.selector);
         etherFiOracleInstance.setOracleReportPeriod(127);
 
         etherFiOracleInstance.setOracleReportPeriod(128);
@@ -449,22 +448,28 @@ contract EtherFiOracleTest is TestSetup {
     }
 
     function test_huge_positive_rebaes() public {
-        // TVL after `launch_validator` is 60 ETH
-        // EtherFIAdmin limits the APR per rebase as 100 % == 10000 bps
-        // launch_validator();
+        // Seed a realistic TVL so the APR formula is non-trivial. EtherFiAdmin still
+        // limits the per-report APR (acceptableRebaseAprInBps == 10000 bps == 100%);
+        // note that LiquidityPool independently caps a single positive rebase at 25 bps
+        // of TVL, so the "below 100% APR" leg also has to stay under that cap.
+        vm.deal(alice, 1000 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 1000 ether}();
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
 
         _moveClock(1 days / 12);
 
-        // Change in APR is below 100%
-        report.accruedRewards = int128(64 ether - 1 ether) / int128(365);
+        // 1 ETH on 1000 ETH TVL: 10 bps (< the 25 bps LP cap) and ~36% annualized
+        // (< the 100% APR cap) — accepted.
+        report.accruedRewards = 1 ether;
         _executeAdminTasks(report);
 
         _moveClock(1 days / 12);
 
-        // Change in APR is above 100%, which reverts
-        report.accruedRewards = int128(64 ether + 1 ether) / int128(365);
+        // A huge positive rebase blows past the acceptable APR and is rejected by the
+        // oracle TVL-change guard before it ever reaches the LiquidityPool rebase.
+        report.accruedRewards = 10 ether;
         _executeAdminTasks(report, "EtherFiAdmin: TVL changed too much");
     }
 
@@ -474,47 +479,47 @@ contract EtherFiOracleTest is TestSetup {
 
     // Note: Working with MembershipManager which is to be deprecated
     function test_huge_negative_rebaes() public {
-        // TVL after `launch_validator` is 60 ETH
-        // EtherFIAdmin limits the APR per rebase as 100 % == 10000 bps
-        // launch_validator();
+        // Seed a realistic TVL so the APR formula is non-trivial. The negative
+        // (slashing) direction is NOT bounded by the LiquidityPool positive cap — it is
+        // governed by the oracle's APR guard (acceptableRebaseAprInBps == 100%).
+        vm.deal(alice, 1000 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 1000 ether}();
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
 
         _moveClock(1 days / 12);
 
-        // Change in APR is below 100%
-        report.accruedRewards = int128(63 ether) / int128(365);
+        // Small positive rebase within both caps to advance the handled slot.
+        report.accruedRewards = 1 ether;
         _executeAdminTasks(report);
 
         _moveClock(1 days / 12);
 
-        // Change in APR is above 100%, which reverts
-        report.accruedRewards = int128(-65 ether) / int128(365);
+        // A huge negative rebase exceeds the acceptable APR (in absolute terms) and is
+        // rejected by the oracle TVL-change guard.
+        report.accruedRewards = -10 ether;
         _executeAdminTasks(report, "EtherFiAdmin: TVL changed too much");
     }
 
     function test_SD_5() public {
+        // numActive=3 (alice, bob, chad), quorum stays at the default 2 because
+        // setQuorumSize(5) would now revert with InvalidQuorum (numActive < quorum).
         vm.prank(owner);
-        etherFiOracleInstance.addCommitteeMember(chad);
+        etherFiOracleInstance.addCommitteeMember(chad, 2);
 
-        vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(5);
-        
         _moveClock(1024 + 2 * slotsPerEpoch);
-        
+
         // alice submits the period 2 report
         vm.prank(alice);
         etherFiOracleInstance.submitReport(reportAtPeriod2A);
-           
+
         // check the consensus state
         bytes32 reportHash = etherFiOracleInstance.generateReportHash(reportAtPeriod2A);
         (uint32 support, bool consensusReached, uint32 consensusTimestamp) = etherFiOracleInstance.consensusStates(reportHash);
         assertEq(support, 1);
         assertEq(consensusReached, false);
         assertEq(consensusTimestamp, 0);
-
-        vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
 
         // bob submits the period 2 report
         uint32 curTimestamp = uint32(block.timestamp);
@@ -529,7 +534,7 @@ contract EtherFiOracleTest is TestSetup {
 
         // chad submits the period 2 report
         vm.prank(chad);
-        vm.expectRevert("Consensus already reached");
+        vm.expectRevert(EtherFiOracle.ConsensusAlreadyReached.selector);
         etherFiOracleInstance.submitReport(reportAtPeriod2A);
         (support, consensusReached, consensusTimestamp) = etherFiOracleInstance.consensusStates(reportHash);
         assertEq(support, 2);
@@ -538,9 +543,15 @@ contract EtherFiOracleTest is TestSetup {
     }
 
     function test_postReportWaitTimeInSlots() public {
+        // Seed TVL so the report's positive accruedRewards stays within the 25 bps
+        // LiquidityPool positive rebase cap (a zero-TVL pool rejects any positive rebase).
+        vm.deal(alice, 1000 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 1000 ether}();
+
         bytes[] memory emptyBytes = new bytes[](0);
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         // period 2
         _moveClock(1024 + 2 * slotsPerEpoch);
@@ -556,7 +567,7 @@ contract EtherFiOracleTest is TestSetup {
         etherFiAdminInstance.updatePostReportWaitTimeInSlots(1);
         assertEq(etherFiAdminInstance.canExecuteTasks(reportAtPeriod2A), false);
 
-        vm.expectRevert("EtherFiAdmin: report is too fresh");
+        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: report is too fresh"));
         vm.prank(alice);
         etherFiAdminInstance.executeTasks(reportAtPeriod2A);
 
@@ -566,32 +577,14 @@ contract EtherFiOracleTest is TestSetup {
         etherFiAdminInstance.executeTasks(reportAtPeriod2A);
     }
 
-    function test_all_pause() public {
-        vm.startPrank(admin);
-        bool isAdminPauser = roleRegistryInstance.hasRole(roleRegistryInstance.PROTOCOL_PAUSER(), admin);
-        bool isAdminUnpauser = roleRegistryInstance.hasRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), admin);
-
-        etherFiAdminInstance.pause(true, true, true, false, false, false);
-        etherFiAdminInstance.pause(true, true, true, false, false, false);
-        etherFiAdminInstance.pause(true, true, true, true, true, true);
-        etherFiAdminInstance.pause(true, true, true, true, true, true);
-        vm.stopPrank();
-
-        vm.expectRevert(EtherFiAdmin.IncorrectRole.selector);
-        vm.prank(chad);
-        etherFiAdminInstance.unPause(false, false, false, false, false, false);
-
-        vm.startPrank(admin);
-        etherFiAdminInstance.unPause(false, false, false, true, true, true);
-        etherFiAdminInstance.unPause(true, true, true, true, true, true);
-        etherFiAdminInstance.unPause(true, true, true, true, true, true);
-        vm.stopPrank();
-    }
+    // test_all_pause removed: EtherFiAdmin.pause / unPause were deleted in the
+    // role-consolidation refactor. Per-contract pauseContract / unPauseContract
+    // calls are exercised in their own contract-specific tests.
 
     function test_report_earlier_than_last_admin_execution_fails() public {
         vm.prank(owner);
         bytes[] memory emptyBytes = new bytes[](0);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
         _moveClock(1024 + 2 * 32);
@@ -616,7 +609,7 @@ contract EtherFiOracleTest is TestSetup {
         report.refBlockFrom = 1024;
         report.refBlockTo = 2 * 1024 - 1;
 
-        vm.expectRevert("Report must be based on the block after the last admin execution block");
+        vm.expectRevert(EtherFiOracle.ReportBlockTooOld.selector);
         etherFiOracleInstance.submitReport(report);
 
         // After a period, the oracle bot submits the new report such that the report's 'refBlockTo' > 'lastAdminExecutionBlock'
@@ -635,8 +628,7 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_consensus_scenario_example1() public {
         vm.startPrank(owner);
-        etherFiOracleInstance.addCommitteeMember(chad);
-        etherFiOracleInstance.setQuorumSize(2);
+        etherFiOracleInstance.addCommitteeMember(chad, 2);
         vm.stopPrank();
 
         _moveClock(1024 + 2 * slotsPerEpoch);
@@ -661,7 +653,7 @@ contract EtherFiOracleTest is TestSetup {
         // Bob realized that he generated a wrong report and try to submit the correct report
         // which fails because no more than 1 report can be submitted within the same period by the same committee member
         vm.prank(chad);
-        vm.expectRevert("You don't need to submit a report");
+        vm.expectRevert(EtherFiOracle.ReportNotNeeded.selector);
         etherFiOracleInstance.submitReport(report);
 
         // However, in the next period, the committee can re-try to publish the correct report
@@ -681,8 +673,7 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_execute_task_treasury_payout() public {
         vm.startPrank(owner);
-        etherFiOracleInstance.addCommitteeMember(chad);
-        etherFiOracleInstance.setQuorumSize(2);
+        etherFiOracleInstance.addCommitteeMember(chad, 2);
         liquidityPoolInstance.setFeeRecipient(address(owner));
         vm.stopPrank();
 
@@ -701,38 +692,38 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_removeCommitteeMember() public {
         vm.prank(owner);
-        etherFiOracleInstance.addCommitteeMember(chad);
-        
+        etherFiOracleInstance.addCommitteeMember(chad, 2);
+
         assertEq(etherFiOracleInstance.numCommitteeMembers(), 3); // alice, bob, chad
         assertEq(etherFiOracleInstance.numActiveCommitteeMembers(), 3);
 
         vm.prank(owner);
-        etherFiOracleInstance.removeCommitteeMember(chad);
+        etherFiOracleInstance.removeCommitteeMember(chad, 2);
 
         assertEq(etherFiOracleInstance.numCommitteeMembers(), 2);
         assertEq(etherFiOracleInstance.numActiveCommitteeMembers(), 2);
-        
+
         (bool registered, bool enabled,,) = etherFiOracleInstance.committeeMemberStates(chad);
         assertEq(registered, false);
         assertEq(enabled, false);
 
         vm.prank(owner);
-        vm.expectRevert("Not registered");
-        etherFiOracleInstance.removeCommitteeMember(chad);
+        vm.expectRevert(EtherFiOracle.NotRegistered.selector);
+        etherFiOracleInstance.removeCommitteeMember(chad, 2);
     }
 
     function test_removeCommitteeMember_disabled() public {
         vm.prank(owner);
-        etherFiOracleInstance.addCommitteeMember(chad);
-        
+        etherFiOracleInstance.addCommitteeMember(chad, 2);
+
         vm.prank(owner);
-        etherFiOracleInstance.manageCommitteeMember(chad, false);
-        
+        etherFiOracleInstance.manageCommitteeMember(chad, false, 2);
+
         assertEq(etherFiOracleInstance.numCommitteeMembers(), 3);
         assertEq(etherFiOracleInstance.numActiveCommitteeMembers(), 2);
 
         vm.prank(owner);
-        etherFiOracleInstance.removeCommitteeMember(chad);
+        etherFiOracleInstance.removeCommitteeMember(chad, 2);
 
         assertEq(etherFiOracleInstance.numCommitteeMembers(), 2);
         assertEq(etherFiOracleInstance.numActiveCommitteeMembers(), 2);
@@ -740,7 +731,7 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_getConsensusTimestamp() public {
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         _moveClock(1024 + 2 * slotsPerEpoch);
 
@@ -754,13 +745,13 @@ contract EtherFiOracleTest is TestSetup {
 
         // Test with non-existent hash
         bytes32 fakeHash = keccak256("fake");
-        vm.expectRevert("Consensus is not reached yet");
+        vm.expectRevert(EtherFiOracle.ConsensusNotReached.selector);
         etherFiOracleInstance.getConsensusTimestamp(fakeHash);
     }
 
     function test_getConsensusSlot() public {
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         _moveClock(1024 + 2 * slotsPerEpoch);
         uint32 currentSlot = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
@@ -775,7 +766,7 @@ contract EtherFiOracleTest is TestSetup {
 
         // Test with non-existent hash
         bytes32 fakeHash = keccak256("fake");
-        vm.expectRevert("Consensus is not reached yet");
+        vm.expectRevert(EtherFiOracle.ConsensusNotReached.selector);
         etherFiOracleInstance.getConsensusSlot(fakeHash);
     }
 
@@ -785,77 +776,23 @@ contract EtherFiOracleTest is TestSetup {
         assertTrue(genesisTime >= 0);
     }
 
-    function test_setEtherFiAdmin() public {
-        // EtherFiAdmin is already set in setUpTests, so we can only test the revert
-        vm.prank(owner);
-        vm.expectRevert("EtherFiAdmin is already set");
-        etherFiOracleInstance.setEtherFiAdmin(address(0x5678));
-    }
-
-    function test_updateAdmin() public {
-        address newAdmin = address(0x1234);
-        
-        vm.prank(owner);
-        etherFiOracleInstance.updateAdmin(newAdmin, true);
-        assertEq(etherFiOracleInstance.admins(newAdmin), true);
-
-        vm.prank(owner);
-        etherFiOracleInstance.updateAdmin(newAdmin, false);
-        assertEq(etherFiOracleInstance.admins(newAdmin), false);
-
-        // Test that non-owner cannot update admin
-        vm.prank(chad);
-        vm.expectRevert();
-        etherFiOracleInstance.updateAdmin(newAdmin, true);
-    }
-
     function test_getImplementation() public {
         address impl = etherFiOracleInstance.getImplementation();
         assertTrue(impl != address(0));
     }
 
-    function test_setReportStartSlot_edgeCases() public {
-        _moveClock(1024 + 2 * slotsPerEpoch);
-
-        // Test: start slot must be after last published report (if there is one)
-        // First submit a report
-        vm.prank(alice);
-        etherFiOracleInstance.submitReport(reportAtPeriod2A);
-        
-        // Try to set start slot to the same as last published report
-        vm.prank(owner);
-        vm.expectRevert("The start slot should be in the future");
-        etherFiOracleInstance.setReportStartSlot(reportAtPeriod2A.refSlotTo);
-
-        // Test: start slot must be at beginning of epoch
-        uint32 currentSlot = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
-        uint32 futureSlot = currentSlot + 100;
-        vm.prank(owner);
-        vm.expectRevert("The start slot should be at the beginning of the epoch");
-        etherFiOracleInstance.setReportStartSlot(futureSlot);
-
-        // Test: valid start slot
-        uint32 validSlot = ((futureSlot / 32) + 1) * 32;
-        // Ensure it's actually in the future
-        if (validSlot <= currentSlot) {
-            validSlot = ((currentSlot / 32) + 2) * 32;
-        }
-        // Also ensure it's after the last published report
-        if (validSlot <= reportAtPeriod2A.refSlotTo) {
-            validSlot = ((reportAtPeriod2A.refSlotTo / 32) + 1) * 32;
-        }
-        vm.prank(owner);
-        etherFiOracleInstance.setReportStartSlot(validSlot);
-    }
+    // test_setReportStartSlot_edgeCases removed: setReportStartSlot was deleted
+    // from EtherFiOracle as part of role consolidation. The state remains
+    // settable for test purposes via _setReportStartSlot below.
 
     function test_setConsensusVersion_edgeCases() public {
         // Test: new version must be greater than current
         vm.prank(owner);
-        vm.expectRevert("New consensus version must be greater than the current one");
+        vm.expectRevert(EtherFiOracle.InvalidConsensusVersion.selector);
         etherFiOracleInstance.setConsensusVersion(1);
 
         vm.prank(owner);
-        vm.expectRevert("New consensus version must be greater than the current one");
+        vm.expectRevert(EtherFiOracle.InvalidConsensusVersion.selector);
         etherFiOracleInstance.setConsensusVersion(0);
 
         // Test: valid version update
@@ -868,44 +805,17 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(etherFiOracleInstance.consensusVersion(), 5);
     }
 
-    function test_unpublishReport_edgeCases() public {
-        vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
-
-        _moveClock(1024 + 2 * slotsPerEpoch);
-
-        bytes32 reportHash = etherFiOracleInstance.generateReportHash(reportAtPeriod2A);
-        
-        // Test: cannot unpublish report that hasn't reached consensus
-        vm.prank(owner);
-        vm.expectRevert("Consensus is not reached yet");
-        etherFiOracleInstance.unpublishReport(reportHash);
-
-        // Submit report to reach consensus
-        vm.prank(alice);
-        etherFiOracleInstance.submitReport(reportAtPeriod2A);
-
-        // Now unpublish should work
-        vm.prank(owner);
-        etherFiOracleInstance.unpublishReport(reportHash);
-
-        // Verify consensus is reset
-        (uint32 support, bool consensusReached,) = etherFiOracleInstance.consensusStates(reportHash);
-        assertEq(support, 0);
-        assertEq(consensusReached, false);
-    }
-
     function test_shouldSubmitReport_reportSlotNotStarted() public {
         uint32 currentSlot = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
         uint32 futureSlot = ((currentSlot / 32) + 2) * 32; // Ensure it's in the future and at epoch boundary
         
         vm.prank(owner);
-        etherFiOracleInstance.setReportStartSlot(futureSlot);
+        _setReportStartSlot(futureSlot);
 
         // Move clock but not enough to reach reportStartSlot
         _moveClock(100);
 
-        vm.expectRevert("Report Epoch is not finalized yet");
+        vm.expectRevert(EtherFiOracle.EpochNotFinalized.selector);
         etherFiOracleInstance.shouldSubmitReport(alice);
     }
 
@@ -916,13 +826,19 @@ contract EtherFiOracleTest is TestSetup {
         _initReportBlockStamp(report);
         report.refBlockTo = uint32(block.number); // Should be < block.number
 
-        vm.expectRevert("Report is for wrong blockTo");
+        vm.expectRevert(EtherFiOracle.WrongBlockTo.selector);
         etherFiOracleInstance.verifyReport(report);
     }
 
     function test_slotForNextReport_edgeCases() public {
+        // Seed TVL so the report's positive accruedRewards stays within the 25 bps
+        // LiquidityPool positive rebase cap (a zero-TVL pool rejects any positive rebase).
+        vm.deal(alice, 1000 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 1000 ether}();
+
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         // Submit a report first to have a published report
         _moveClock(1024 + 2 * slotsPerEpoch);
@@ -940,8 +856,14 @@ contract EtherFiOracleTest is TestSetup {
     }
 
     function test_blockStampForNextReport() public {
+        // Seed TVL so the report's positive accruedRewards stays within the 25 bps
+        // LiquidityPool positive rebase cap (a zero-TVL pool rejects any positive rebase).
+        vm.deal(alice, 1000 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 1000 ether}();
+
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         // Submit a report first
         _moveClock(1024 + 2 * slotsPerEpoch);
@@ -962,44 +884,124 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_manageCommitteeMember_alreadyInTargetState() public {
         vm.prank(owner);
-        etherFiOracleInstance.addCommitteeMember(chad);
+        etherFiOracleInstance.addCommitteeMember(chad, 2);
 
         // Try to enable when already enabled
         vm.prank(owner);
-        vm.expectRevert("Already in the target state");
-        etherFiOracleInstance.manageCommitteeMember(chad, true);
+        vm.expectRevert(EtherFiOracle.AlreadyInTargetState.selector);
+        etherFiOracleInstance.manageCommitteeMember(chad, true, 2);
 
         // Disable first
         vm.prank(owner);
-        etherFiOracleInstance.manageCommitteeMember(chad, false);
+        etherFiOracleInstance.manageCommitteeMember(chad, false, 2);
 
         // Try to disable when already disabled
         vm.prank(owner);
-        vm.expectRevert("Already in the target state");
-        etherFiOracleInstance.manageCommitteeMember(chad, false);
+        vm.expectRevert(EtherFiOracle.AlreadyInTargetState.selector);
+        etherFiOracleInstance.manageCommitteeMember(chad, false, 2);
     }
 
     function test_addCommitteeMember_alreadyRegistered() public {
         vm.prank(owner);
-        etherFiOracleInstance.addCommitteeMember(chad);
+        etherFiOracleInstance.addCommitteeMember(chad, 2);
 
         vm.prank(owner);
-        vm.expectRevert("Already registered");
-        etherFiOracleInstance.addCommitteeMember(chad);
+        vm.expectRevert(EtherFiOracle.AlreadyRegistered.selector);
+        etherFiOracleInstance.addCommitteeMember(chad, 2);
+    }
+
+    // ========== _checkQuorum invariant tests ==========
+    // _checkQuorum reverts with InvalidQuorum when:
+    //   - quorumSize < minQuorumSize, or
+    //   - numActiveCommitteeMembers < quorumSize (too few members for the quorum), or
+    //   - numActiveCommitteeMembers >= 2 * quorumSize (quorum not a strict majority).
+    // The check runs after every add/remove/manage/setQuorum mutation, so each
+    // mutation needs to leave the (members, quorum) pair inside the valid band.
+
+    function test_setQuorumSize_revertsWhenBelowMinQuorumSize() public {
+        vm.prank(owner);
+        vm.expectRevert(EtherFiOracle.InvalidQuorum.selector);
+        etherFiOracleInstance.setQuorumSize(0);
+    }
+
+    function test_setQuorumSize_revertsWhenAboveActiveMembers() public {
+        // numActive = 2 (alice, bob); quorum = 3 violates numActive < quorum
+        vm.prank(owner);
+        vm.expectRevert(EtherFiOracle.InvalidQuorum.selector);
+        etherFiOracleInstance.setQuorumSize(3);
+    }
+
+    function test_setQuorumSize_revertsWhenRatioTooLow() public {
+        // First grow membership to 3 so the ratio path is reachable
+        vm.prank(owner);
+        etherFiOracleInstance.addCommitteeMember(chad, 2);
+
+        // 3 / 1 = 3 >= 2 -> revert (quorum is too small for the active set)
+        vm.prank(owner);
+        vm.expectRevert(EtherFiOracle.InvalidQuorum.selector);
+        etherFiOracleInstance.setQuorumSize(1);
+    }
+
+    function test_setQuorumSize_acceptsAtEqualityBoundary() public {
+        // numActive == quorum is allowed (numActive < quorum is the failing edge)
+        vm.prank(owner);
+        etherFiOracleInstance.setQuorumSize(2);
+        assertEq(etherFiOracleInstance.quorumSize(), 2);
+    }
+
+    function test_addCommitteeMember_revertsWhenRatioReachesTwo() public {
+        // numActive becomes 3 after the add. Passing _quorumSize=1 means
+        // numActive >= 2 * quorum (3 >= 2) -> revert.
+        vm.prank(owner);
+        vm.expectRevert(EtherFiOracle.InvalidQuorum.selector);
+        etherFiOracleInstance.addCommitteeMember(chad, 1);
+    }
+
+    function test_removeCommitteeMember_revertsWhenBelowQuorum() public {
+        // numActive=2, quorum=2; removing alice drops numActive to 1 < quorum -> revert
+        vm.prank(owner);
+        vm.expectRevert(EtherFiOracle.InvalidQuorum.selector);
+        etherFiOracleInstance.removeCommitteeMember(alice, 2);
+    }
+
+    function test_removeCommitteeMember_okWhenMemberWasDisabled() public {
+        // Disabling alice already accounted for the numActive drop, so removing her
+        // (which only touches numCommitteeMembers, not numActive) keeps quorum valid.
+        vm.prank(owner);
+        etherFiOracleInstance.addCommitteeMember(chad, 2);
+        // numActive=3 after add; disable alice -> numActive=2, quorum=2 (still valid)
+        vm.prank(owner);
+        etherFiOracleInstance.manageCommitteeMember(alice, false, 2);
+
+        vm.prank(owner);
+        etherFiOracleInstance.removeCommitteeMember(alice, 2);
+
+        assertEq(etherFiOracleInstance.numActiveCommitteeMembers(), 2);
+        assertEq(etherFiOracleInstance.numCommitteeMembers(), 2);
+    }
+
+    function test_manageCommitteeMember_disablingRevertsWhenBelowQuorum() public {
+        // numActive=2, quorum=2; disabling bob drops numActive to 1 -> revert
+        vm.prank(owner);
+        vm.expectRevert(EtherFiOracle.InvalidQuorum.selector);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 2);
+    }
+
+    function test_manageCommitteeMember_reenableKeepsQuorumValid() public {
+        // First need a disable that is legal (so add chad to give us headroom)
+        vm.prank(owner);
+        etherFiOracleInstance.addCommitteeMember(chad, 2);
+        vm.prank(owner);
+        etherFiOracleInstance.manageCommitteeMember(chad, false, 2);
+        assertEq(etherFiOracleInstance.numActiveCommitteeMembers(), 2);
+
+        // Re-enable chad: numActive goes back to 3, quorum=2, still valid
+        vm.prank(owner);
+        etherFiOracleInstance.manageCommitteeMember(chad, true, 2);
+        assertEq(etherFiOracleInstance.numActiveCommitteeMembers(), 3);
     }
 
     // ========== EtherFiAdmin Additional Coverage Tests ==========
-
-    function test_initializeRoleRegistry() public {
-        // RoleRegistry is already initialized in setUpTests
-        address roleRegistryAddr = address(roleRegistryInstance);
-        assertEq(address(etherFiAdminInstance.roleRegistry()), roleRegistryAddr);
-        
-        // Test: can only initialize once
-        vm.prank(owner);
-        vm.expectRevert("already initialized");
-        etherFiAdminInstance.initializeRoleRegistry(roleRegistryAddr);
-    }
 
     function test_setValidatorTaskBatchSize() public {
         // RoleRegistry is already initialized and alice already has the role in setUpTests
@@ -1007,17 +1009,114 @@ contract EtherFiOracleTest is TestSetup {
         etherFiAdminInstance.setValidatorTaskBatchSize(50);
         // validatorTaskBatchSize is internal, tested indirectly through executeValidatorApprovalTask
 
-        // Test: non-admin cannot set
-        vm.prank(chad);
-        vm.expectRevert(EtherFiAdmin.IncorrectRole.selector);
+        // Test: non-admin cannot set (onlyAdmin → OPERATION_TIMELOCK_ROLE)
+        vm.prank(bob);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         etherFiAdminInstance.setValidatorTaskBatchSize(75);
+    }
+
+    function test_setValidatorTaskBatchSize_guardrail() public {
+        uint256 maxBatchSize = etherFiAdminInstance.maxValidatorTaskBatchSize();
+        assertEq(maxBatchSize, 1_000); // configured in TestSetup
+
+        // boundary value is accepted
+        vm.prank(alice);
+        etherFiAdminInstance.setValidatorTaskBatchSize(uint16(maxBatchSize));
+
+        // one above the cap reverts
+        vm.prank(alice);
+        vm.expectRevert(EtherFiAdmin.InvalidValidatorTaskBatchSize.selector);
+        etherFiAdminInstance.setValidatorTaskBatchSize(uint16(maxBatchSize + 1));
+    }
+
+    function test_updateAcceptableRebaseApr_guardrail() public {
+        int256 maxApr = etherFiAdminInstance.maxAcceptableRebaseAprInBps();
+        assertEq(maxApr, 10_000); // configured in TestSetup
+
+        // boundary value is accepted
+        vm.prank(alice);
+        etherFiAdminInstance.updateAcceptableRebaseApr(int32(maxApr));
+        assertEq(etherFiAdminInstance.acceptableRebaseAprInBps(), int32(maxApr));
+
+        // negative limit is not allowed in acceptable rebase apr
+        vm.prank(alice);
+        vm.expectRevert(EtherFiAdmin.InvalidAcceptableRebaseApr.selector);
+        etherFiAdminInstance.updateAcceptableRebaseApr(-1);
+
+        // one above the cap reverts
+        vm.prank(alice);
+        vm.expectRevert(EtherFiAdmin.InvalidAcceptableRebaseApr.selector);
+        etherFiAdminInstance.updateAcceptableRebaseApr(int32(maxApr + 1));
+    }
+
+    function _defaultEtherFiAdminCtorAddrs() internal view returns (IEtherFiAdmin.ConstructorAddresses memory) {
+        return IEtherFiAdmin.ConstructorAddresses({
+            etherFiOracle: address(etherFiOracleInstance),
+            stakingManager: address(stakingManagerInstance),
+            auctionManager: address(auctionInstance),
+            etherFiNodesManager: address(managerInstance),
+            liquidityPool: address(liquidityPoolInstance),
+            withdrawRequestNft: address(withdrawRequestNFTInstance),
+            roleRegistry: address(roleRegistryInstance),
+            priorityWithdrawalQueue: address(priorityQueueInstance)
+        });
+    }
+
+    function test_constructor_maxValidatorTaskBatchSize_guardrail() public {
+        EtherFiAdmin nonZeroValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 500, 1000);
+        assertEq(nonZeroValue.maxValidatorTaskBatchSize(), 1_000);
+
+        // value 0 reverts
+        vm.expectRevert(EtherFiAdmin.InvalidValidatorTaskBatchSize.selector);
+        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 0, 7200, 100_000 ether, 500, 1000);
+    }
+
+    function test_constructor_maxAcceptableRebaseAprInBps_guardrail() public {
+        EtherFiAdmin validValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 500, 1000);
+        assertEq(validValue.maxAcceptableRebaseAprInBps(), 500);
+
+        // value 0 reverts
+        vm.expectRevert(EtherFiAdmin.InvalidMaxAcceptableRebaseApr.selector);
+        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 0, 1_000, 7200, 100_000 ether, 500, 1000);
+
+        // negative values revert
+        vm.expectRevert(EtherFiAdmin.InvalidMaxAcceptableRebaseApr.selector);
+        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), -1, 1_000, 7200, 100_000 ether, 500, 1000);
+
+        // values above 10_000 revert
+        vm.expectRevert(EtherFiAdmin.InvalidMaxAcceptableRebaseApr.selector);
+        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 10_001, 1_000, 7200, 100_000 ether, 500, 1000);
+    }
+
+    function test_constructor_staleOracleReportBlockWindow_guardrail() public {
+        EtherFiAdmin validValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 500, 1000);
+        assertEq(validValue.staleOracleReportBlockWindow(), 7200);
+
+        // value 0 reverts
+        vm.expectRevert(EtherFiAdmin.InvalidStaleOracleReportBlockWindow.selector);
+        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 0, 100_000 ether, 500, 1000);
+    }
+
+    function test_constructor_maxAcceptableFinalizedWithdrawalAmountPerDay_guardrail() public {
+        EtherFiAdmin validValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 500, 1000);
+        assertEq(validValue.maxAcceptableFinalizedWithdrawalAmountPerDay(), 100_000 ether);
+
+        // value 0 reverts
+        vm.expectRevert(EtherFiAdmin.InvalidMaxAcceptableFinalizedWithdrawalAmount.selector);
+        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 0, 500, 1000);
+    }
+
+    function test_constructor_maxAcceptableNumValidatorsToApprovePerDay_zero_is_allowed() public {
+        // _maxAcceptableNumValidatorsToApprovePerDay = 0 signals "pause new validators"
+        EtherFiAdmin zeroAllowed = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 0, 1000);
+        assertEq(zeroAllowed.maxAcceptableNumValidatorsToApprovePerDay(), 0);
     }
 
     function test_executeValidatorApprovalTask() public {
         // RoleRegistry is already initialized and alice already has the role in setUpTests
 
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         _moveClock(1024 + 2 * slotsPerEpoch);
 
@@ -1043,7 +1142,8 @@ contract EtherFiOracleTest is TestSetup {
 
         // Execute the validator approval task
         // Note: We need valid pubKeys and signatures, but for testing we can use empty ones
-        // The actual validation happens in liquidityPool.batchApproveRegistration
+        // The actual deposit-data construction now lives in EtherFiAdmin._approveValidators
+        // which forwards to liquidityPool.confirmAndFundBeaconValidators.
         bytes[] memory pubKeys = new bytes[](1);
         bytes[] memory signatures = new bytes[](1);
         pubKeys[0] = new bytes(48);
@@ -1074,7 +1174,7 @@ contract EtherFiOracleTest is TestSetup {
         bytes[] memory signatures = new bytes[](0);
 
         vm.prank(alice);
-        vm.expectRevert("EtherFiAdmin: report didn't reach consensus");
+        vm.expectRevert(EtherFiAdmin.ConsensusNotReached.selector);
         etherFiAdminInstance.executeValidatorApprovalTask(fakeHash, validators, pubKeys, signatures);
     }
 
@@ -1082,7 +1182,7 @@ contract EtherFiOracleTest is TestSetup {
         // RoleRegistry is already initialized and alice already has the role in setUpTests
 
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         _moveClock(1024 + 2 * slotsPerEpoch);
 
@@ -1099,7 +1199,7 @@ contract EtherFiOracleTest is TestSetup {
         bytes[] memory signatures = new bytes[](1);
 
         vm.prank(alice);
-        vm.expectRevert("EtherFiAdmin: task doesn't exist");
+        vm.expectRevert(EtherFiAdmin.TaskDoesNotExist.selector);
         etherFiAdminInstance.executeValidatorApprovalTask(reportHash, validators, pubKeys, signatures);
     }
 
@@ -1109,7 +1209,7 @@ contract EtherFiOracleTest is TestSetup {
         // bob doesn't have the role, so we'll use alice for both
 
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         _moveClock(1024 + 2 * slotsPerEpoch);
 
@@ -1143,7 +1243,7 @@ contract EtherFiOracleTest is TestSetup {
 
         // Test: cannot invalidate non-existent task
         vm.prank(alice);
-        vm.expectRevert("EtherFiAdmin: task doesn't exist");
+        vm.expectRevert(EtherFiAdmin.TaskDoesNotExist.selector);
         etherFiAdminInstance.invalidateValidatorApprovalTask(reportHash, report.validatorsToApprove);
     }
 
@@ -1151,7 +1251,7 @@ contract EtherFiOracleTest is TestSetup {
         // RoleRegistry is already initialized and alice already has both roles in setUpTests
 
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         _moveClock(1024 + 2 * slotsPerEpoch);
 
@@ -1195,8 +1295,8 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(etherFiAdminInstance.acceptableRebaseAprInBps(), 5000);
 
         // Test: non-admin cannot update
-        vm.prank(chad);
-        vm.expectRevert(EtherFiAdmin.IncorrectRole.selector);
+        vm.prank(bob);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         etherFiAdminInstance.updateAcceptableRebaseApr(10000);
     }
 
@@ -1208,8 +1308,8 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(etherFiAdminInstance.postReportWaitTimeInSlots(), 10);
 
         // Test: non-admin cannot update
-        vm.prank(chad);
-        vm.expectRevert(EtherFiAdmin.IncorrectRole.selector);
+        vm.prank(bob);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         etherFiAdminInstance.updatePostReportWaitTimeInSlots(20);
     }
 
@@ -1218,7 +1318,7 @@ contract EtherFiOracleTest is TestSetup {
 
         // Execute a task to set lastHandledReportRefSlot
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         _moveClock(1024 + 2 * slotsPerEpoch);
 
@@ -1242,7 +1342,7 @@ contract EtherFiOracleTest is TestSetup {
 
         // Execute a task to set lastHandledReportRefBlock
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         _moveClock(1024 + 2 * slotsPerEpoch);
 
@@ -1268,7 +1368,7 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_canExecuteTasks_edgeCases() public {
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         _moveClock(1024 + 2 * slotsPerEpoch);
 
@@ -1294,7 +1394,7 @@ contract EtherFiOracleTest is TestSetup {
     function test_executeTasks_wrongRefSlotFrom() public {
         // RoleRegistry is already initialized and alice already has the role in setUpTests
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         _moveClock(1024 + 2 * slotsPerEpoch);
 
@@ -1315,14 +1415,14 @@ contract EtherFiOracleTest is TestSetup {
 
         // Submit the wrong report (this will fail at verifyReport, but we can test executeTasks directly)
         vm.prank(alice);
-        vm.expectRevert("Report is for wrong slotFrom");
+        vm.expectRevert(EtherFiOracle.WrongSlotFrom.selector);
         etherFiOracleInstance.submitReport(wrongReport);
     }
 
     function test_executeTasks_wrongRefBlockFrom() public {
         // RoleRegistry is already initialized and alice already has the role in setUpTests
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         _moveClock(1024 + 2 * slotsPerEpoch);
 
@@ -1343,13 +1443,13 @@ contract EtherFiOracleTest is TestSetup {
 
         // Submit the wrong report (this will fail at verifyReport)
         vm.prank(alice);
-        vm.expectRevert("Report is for wrong blockFrom");
+        vm.expectRevert(EtherFiOracle.WrongBlockFrom.selector);
         etherFiOracleInstance.submitReport(wrongReport);
     }
 
-    function test_executeTasks_insufficientRole() public {
+    function test_executeTasks_permissionless() public {
         vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
+        etherFiOracleInstance.manageCommitteeMember(bob, false, 1);
 
         _moveClock(1024 + 2 * slotsPerEpoch);
 
@@ -1361,46 +1461,1266 @@ contract EtherFiOracleTest is TestSetup {
 
         _moveClock(int256(uint256(etherFiAdminInstance.postReportWaitTimeInSlots()) + 1));
 
-        vm.prank(chad);
-        vm.expectRevert(EtherFiAdmin.IncorrectRole.selector);
+        // executeTasks is permissionless once consensus is reached and the report
+        // passes the freshness/sequencing checks. Use a fresh, role-less address.
+        address randoCaller = makeAddr("randoCaller");
+        assertFalse(roleRegistryInstance.hasRole(roleRegistryInstance.ORACLE_OPERATIONS_ROLE(), randoCaller));
+        assertFalse(roleRegistryInstance.hasRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), randoCaller));
+
+        vm.prank(randoCaller);
+        etherFiAdminInstance.executeTasks(report);
+
+        assertEq(etherFiAdminInstance.lastHandledReportRefSlot(), report.refSlotTo);
+        assertEq(etherFiAdminInstance.lastHandledReportRefBlock(), report.refBlockTo);
+    }
+
+    // test_pause_unPause_edgeCases / test_pause_unPause_insufficientRole removed:
+    // EtherFiAdmin.pause / unPause were deleted in the role-consolidation refactor.
+
+    function test_executeTasks_revertsWhenFinalizedWithdrawalExceedsCap() public {
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.finalizedWithdrawalAmount = 20000 ether; // > 10000 ether/day cap
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report, "EtherFiAdmin: finalized withdrawal amount exceeds max");
+    }
+
+    // EtherFiAdmin gained `maxNumberOfRequestsToFinalizePerReport` (configured to 1000 in
+    // setUpTests). A report claiming to finalize a range larger than that must be rejected
+    // even when every other gate (per-day cap, LP liquidity, ascending id) is satisfied.
+    // No actual requests need to exist — the cap check sits BEFORE the sum-of-requests loop.
+    function test_executeTasks_revertsWhenRequestRangeExceedsCap() public {
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        // delta from lastFinalizedRequestId(=0) = 1001 > cap(1000)
+        report.lastFinalizedWithdrawalRequestId = 1001;
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report, "EtherFiAdmin: number of requests to finalize exceeds max");
+    }
+
+    // Boundary check: a report with delta == cap (1000) must pass the new range gate.
+    // We pin the gate by submitting delta = 1000 and a single real request — finalizeRequests
+    // is happy because the underlying share rate is in range, and the validation loop walks
+    // requests [1, 1000] where only id=1 has non-zero amount (matches finalizedWithdrawalAmount).
+    function test_executeTasks_passesRangeCapAtBoundary() public {
+        _unpauseWithdrawNFT();
+        _seedLp(200 ether);
+        uint256 requestId = _makeWithdrawRequest(1 ether);
+        assertEq(requestId, 1);
+
+        // Move the next-request cursor up so report can point at id=1000 (delta = 1000 == cap).
+        bytes32 slot306 = vm.load(address(withdrawRequestNFTInstance), bytes32(uint256(306)));
+        uint256 cleared = uint256(slot306) & ~uint256(0xffffffff);          // clear nextRequestId
+        uint256 patched = cleared | uint256(1001);                           // nextRequestId = 1001
+        vm.store(address(withdrawRequestNFTInstance), bytes32(uint256(306)), bytes32(patched));
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.lastFinalizedWithdrawalRequestId = 1000;       // delta = 1000 - 0 == cap
+        report.finalizedWithdrawalAmount = 1 ether;           // backed by request #1 only
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report);
+        assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), 1000);
+    }
+
+    function test_executeTasks_revertsWhenValidatorApprovalsExceedCap() public {
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.validatorsToApprove = new uint256[](400); // > 200/day cap
+        for (uint256 i = 0; i < 400; i++) {
+            report.validatorsToApprove[i] = i + 1;
+        }
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report, "EtherFiAdmin: number of validators to approve exceeds max");
+    }
+
+    // Happy path: a report with a non-zero finalized-withdrawal amount that stays
+    // within the per-day cap processes cleanly and advances the LP's locked
+    // accounting.
+    function test_executeTasks_finalizedWithdrawalWithinCap_succeeds() public {
+        // Seed via bob so requestWithdraw caller has eETH; the sum-of-requests
+        // gate requires a real request to back the finalized amount.
+        _unpauseWithdrawNFT();
+        _seedLp(200 ether);
+        uint256 requestId = _makeWithdrawRequest(10 ether);
+
+        uint256 lockedBefore = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.finalizedWithdrawalAmount = 10 ether;
+        report.lastFinalizedWithdrawalRequestId = uint32(requestId);
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report);
+
+        assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), lockedBefore + 10 ether);
+    }
+
+    // LP-liquidity sanity check in _handleWithdrawals: finalized amount +
+    // existing LP lock + priority-queue lock must not exceed the LP's ETH
+    // balance.
+    function test_executeTasks_revertsWhenFinalizedWithdrawalExceedsLpLiquidity() public {
+        // Deposit a small amount so the LP balance is modest.
+        vm.deal(alice, 5 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 5 ether}();
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.finalizedWithdrawalAmount = 6 ether; // 6 > LP balance (5)
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
+    }
+
+    // The liquidity check compares against the LP's actual ETH balance, not
+    // the internal totalValueInLp accounting. ETH that arrives at the LP
+    // outside a deposit path (e.g., validator principal returning before the
+    // next rebase) bumps the balance while accounting lags — a finalized
+    // withdrawal drawing on those funds should still pass the check.
+    function test_executeTasks_finalizedWithdrawalWithinLpBalance_succeeds() public {
+        _unpauseWithdrawNFT();
+        _seedLp(10 ether);
+        uint256 requestId = _makeWithdrawRequest(6 ether);
+
+        // addEthAmountLockedForWithdrawal now requires totalValueInLp >= amount (strict guard).
+        // Deposit ensures totalValueInLp (10) >= finalizedWithdrawalAmount (6).
+        assertGe(liquidityPoolInstance.totalValueInLp(), 6 ether);
+
+        uint256 lockedBefore = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.finalizedWithdrawalAmount = 6 ether; // <= totalValueInLp (10)
+        report.lastFinalizedWithdrawalRequestId = uint32(requestId);
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report);
+
+        assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), lockedBefore + 6 ether);
+    }
+
+    // =====================================================================
+    // canExecuteTasks unit tests
+    //
+    // canExecuteTasks and executeTasks share _validateReport. Each test
+    // exercises one gate: where the gate trips, canExecuteTasks must return
+    // false AND executeTasks must revert with the matching string. Any
+    // future drift between the two functions should fail one of these tests.
+    // =====================================================================
+
+    // Submit `_report` so it reaches consensus and clear any post-report
+    // wait time. Does NOT call executeTasks.
+    function _submitForConsensus(IEtherFiOracle.OracleReport memory _report) internal {
+        _initReportBlockStamp(_report);
+
+        uint32 currentSlot = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
+        uint32 currentEpoch = (currentSlot / 32);
+        uint32 reportEpoch = (_report.refSlotTo / 32) + 3;
+        if (currentEpoch < reportEpoch) {
+            uint32 numSlotsToMove = 32 * (reportEpoch - currentEpoch);
+            _moveClock(int256(int32(numSlotsToMove)));
+        }
+
+        vm.prank(alice);
+        etherFiOracleInstance.submitReport(_report);
+        vm.prank(bob);
+        etherFiOracleInstance.submitReport(_report);
+
+        int256 offset = int256(int16(etherFiAdminInstance.postReportWaitTimeInSlots()));
+        if (offset > 2 * 32) offset -= 2 * 32;
+        if (offset > 0) _moveClock(offset);
+    }
+
+    function test_canExecuteTasks_falseWhenNoConsensus() public {
+        _moveClock(1024 + 2 * slotsPerEpoch);
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        _initReportBlockStamp(report);
+
+        // No submission, so no consensus on the hash.
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: report didn't reach consensus"));
         etherFiAdminInstance.executeTasks(report);
     }
 
-    function test_pause_unPause_edgeCases() public {
-        // Roles are already granted in setUpTests, but we need to check if admin has the roles
-        // If not, we'll grant them
-        if (!roleRegistryInstance.hasRole(roleRegistryInstance.PROTOCOL_PAUSER(), admin)) {
-            vm.prank(owner);
-            roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), admin);
-        }
-        if (!roleRegistryInstance.hasRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), admin)) {
-            vm.prank(owner);
-            roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), admin);
-        }
+    // After a successful execute, slotForNextReportToProcess() advances past
+    // the report's refSlotFrom. The same report can no longer be executed,
+    // and the refSlotFrom gate is what trips. (refBlockFrom is structurally
+    // symmetric — checked by the same once-stale-always-stale relationship.)
+    function test_canExecuteTasks_falseWhenWrongRefSlotFrom() public {
+        IEtherFiOracle.OracleReport memory firstReport = _emptyOracleReport();
+        _executeAdminTasks(firstReport);
 
-        // Test: pause already paused contract
-        vm.prank(admin);
-        etherFiAdminInstance.pause(true, false, false, false, false, false);
-        
-        vm.prank(admin);
-        etherFiAdminInstance.pause(true, false, false, false, false, false); // Should not revert
+        assertEq(etherFiAdminInstance.canExecuteTasks(firstReport), false);
 
-        // Test: unpause already unpaused contract
-        vm.prank(admin);
-        etherFiAdminInstance.unPause(true, false, false, false, false, false);
-        
-        vm.prank(admin);
-        etherFiAdminInstance.unPause(true, false, false, false, false, false); // Should not revert
+        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: report has wrong `refSlotFrom`"));
+        etherFiAdminInstance.executeTasks(firstReport);
     }
 
-    function test_pause_unPause_insufficientRole() public {
-        // RoleRegistry is already initialized in setUpTests
-        vm.prank(chad);
-        vm.expectRevert(EtherFiAdmin.IncorrectRole.selector);
-        etherFiAdminInstance.pause(true, false, false, false, false, false);
+    function test_canExecuteTasks_falseWhenTooFresh() public {
+        vm.prank(alice);
+        etherFiAdminInstance.updatePostReportWaitTimeInSlots(10);
 
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        _initReportBlockStamp(report);
+
+        _moveClock(1024 + 2 * slotsPerEpoch);
+
+        vm.prank(alice);
+        etherFiOracleInstance.submitReport(report);
+        vm.prank(bob);
+        etherFiOracleInstance.submitReport(report);
+
+        // Consensus reached this same block; wait window of 10 slots not yet elapsed.
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: report is too fresh"));
+        etherFiAdminInstance.executeTasks(report);
+
+        // Once the wait elapses, the gate flips.
+        _moveClock(11);
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), true);
+    }
+
+    function test_canExecuteTasks_falseWhenAprAboveCap() public {
+        // Tighten the cap so any non-zero rebase trips it.
+        vm.prank(alice);
+        etherFiAdminInstance.updateAcceptableRebaseApr(0);
+
+        // TVL > 0 so the APR formula is non-trivial.
+        vm.deal(alice, 10 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.accruedRewards = 0.01 ether;
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: TVL changed too much"));
+        etherFiAdminInstance.executeTasks(report);
+    }
+
+    // The APR check uses absApr, so a negative rebase of equal magnitude
+    // must trip the same gate.
+    function test_canExecuteTasks_falseWhenNegativeAprAboveCap() public {
+        vm.prank(alice);
+        etherFiAdminInstance.updateAcceptableRebaseApr(0);
+
+        vm.deal(alice, 10 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.accruedRewards = -0.01 ether;
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: TVL changed too much"));
+        etherFiAdminInstance.executeTasks(report);
+    }
+
+    // Regression pin: protocolFees == 0 with a negative accruedRewards must
+    // pass validation. An earlier refactor accidentally extended the 20%
+    // rule to protocolFees == 0, which would have rejected this case
+    // (5*0 > 0 + ar when ar < 0). We only assert the validation gate here;
+    // the downstream rebase path is exercised by the existing
+    // test_huge_negative_rebaes.
+    function test_canExecuteTasks_trueWhenZeroFeesAndNegativeRewards() public {
+        vm.deal(alice, 10 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.protocolFees = 0;
+        report.accruedRewards = -1 wei;
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), true);
+    }
+
+    // 5*pf == pf+ar -> 4*pf == ar, i.e. fees are exactly 20% of total
+    // rewards. The gate is `pf*5 > totalRewards` (strict), so equality
+    // passes.
+    function test_canExecuteTasks_trueAtTwentyPercentBoundary() public {
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.accruedRewards = 4 ether;
+        report.protocolFees = 1 ether; // 5*1 == 1+4
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), true);
+    }
+
+    function test_canExecuteTasks_falseWhenFeesExceedTwentyPercent() public {
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        // 5*pf > pf+ar : pick pf=2, ar=4 -> 10 > 6.
+        report.accruedRewards = 4 ether;
+        report.protocolFees = 2 ether;
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: protocol fees exceed 20% total rewards"));
+        etherFiAdminInstance.executeTasks(report);
+    }
+
+    // Regression pin: protocolFees is uint128, but the 20% cap arithmetic is signed. A value above
+    // int128 max must be rejected outright. Before the fix, the cap math cast it to int128, wrapping
+    // it negative so `5*pf > totalRewards` was false and the cap was silently bypassed.
+    function test_canExecuteTasks_falseWhenFeesExceedInt128Max() public {
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.accruedRewards = 0;
+        report.protocolFees = uint128(type(int128).max) + 1; // wraps negative on an int128 cast
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: protocol fees exceed int128 max"));
+        etherFiAdminInstance.executeTasks(report);
+    }
+
+    function test_canExecuteTasks_falseWhenValidatorRateAboveCap() public {
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.validatorsToApprove = new uint256[](400); // > 200/day cap
+        for (uint256 i = 0; i < 400; i++) {
+            report.validatorsToApprove[i] = i + 1;
+        }
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: number of validators to approve exceeds max"));
+        etherFiAdminInstance.executeTasks(report);
+    }
+
+    function test_canExecuteTasks_falseWhenWithdrawalRateAboveCap() public {
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.finalizedWithdrawalAmount = 20000 ether; // > 10000 ether/day cap
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: finalized withdrawal amount exceeds max"));
+        etherFiAdminInstance.executeTasks(report);
+    }
+
+    function test_canExecuteTasks_falseWhenFinalizedExceedsLpLiquidity() public {
+        vm.deal(alice, 5 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 5 ether}();
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.finalizedWithdrawalAmount = 6 ether; // 6 > LP balance (5)
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity"));
+        etherFiAdminInstance.executeTasks(report);
+    }
+
+    function test_canExecuteTasks_trueOnHappyPath() public {
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), true);
+
+        etherFiAdminInstance.executeTasks(report);
+
+        // After execution the same report no longer matches the cursor.
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+    }
+
+    // =====================================================================
+    // _validateReport: lastFinalizedWithdrawalRequestId / sum-of-requests gate
+    //
+    // The new sanity check sums valid request amounts in
+    // (state.lastFinalizedRequestId, report.lastFinalizedWithdrawalRequestId]
+    // and requires it to equal report.finalizedWithdrawalAmount. It also
+    // refuses to roll the on-chain cursor backwards. Each test pins one
+    // branch of that logic.
+    // =====================================================================
+
+    // Report claims more was finalized than the on-chain requests sum to.
+    // 1 ether of real request, report says 2 ether → mismatch.
+    function test_canExecuteTasks_falseWhenReportedAmountAboveSum() public {
+        _unpauseWithdrawNFT();
+        _seedLp(10 ether);
+        uint256 r1 = _makeWithdrawRequest(1 ether);
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.lastFinalizedWithdrawalRequestId = uint32(r1);
+        report.finalizedWithdrawalAmount = 2 ether;
+
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: sum of requests does not match finalized withdrawal amount"));
+        etherFiAdminInstance.executeTasks(report);
+    }
+
+    // Symmetric: report claims less than the on-chain sum.
+    // 2 ether of real request, report says 1 ether → mismatch.
+    function test_canExecuteTasks_falseWhenReportedAmountBelowSum() public {
+        _unpauseWithdrawNFT();
+        _seedLp(10 ether);
+        uint256 r1 = _makeWithdrawRequest(2 ether);
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.lastFinalizedWithdrawalRequestId = uint32(r1);
+        report.finalizedWithdrawalAmount = 1 ether;
+
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: sum of requests does not match finalized withdrawal amount"));
+        etherFiAdminInstance.executeTasks(report);
+    }
+
+    // Equality edge: report's cursor == state's cursor. The loop bounds
+    // collapse to zero iterations so sum is 0. A non-zero amount can't be
+    // explained by any request → mismatch. (LP is seeded so the
+    // exceeds-LP-liquidity gate ahead of the sum check doesn't trip first.)
+    function test_canExecuteTasks_falseWhenIdEqualsCursorButAmountNonZero() public {
+        _unpauseWithdrawNFT();
+        _seedLp(10 ether);
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        // state's lastFinalizedRequestId is 0 (fresh setup) and we report 0 too
+        report.lastFinalizedWithdrawalRequestId = 0;
+        report.finalizedWithdrawalAmount = 1 ether;
+
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: sum of requests does not match finalized withdrawal amount"));
+        etherFiAdminInstance.executeTasks(report);
+    }
+
+    // Equality edge, valid case: cursor == state, amount == 0. Loop is a
+    // no-op and sum 0 == amount 0. This is the steady-state "nothing
+    // happened this period" report.
+    function test_canExecuteTasks_trueWhenIdEqualsCursorAndAmountZero() public {
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.lastFinalizedWithdrawalRequestId = 0;
+        report.finalizedWithdrawalAmount = 0;
+
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), true);
+    }
+
+    // Happy path: single valid request, sum matches.
+    function test_canExecuteTasks_trueWhenSumMatchesSingleRequest() public {
+        _unpauseWithdrawNFT();
+        _seedLp(10 ether);
+        uint256 r1 = _makeWithdrawRequest(3 ether);
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.lastFinalizedWithdrawalRequestId = uint32(r1);
+        report.finalizedWithdrawalAmount = 3 ether;
+
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), true);
+
+        etherFiAdminInstance.executeTasks(report);
+        assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), uint32(r1));
+    }
+
+    // Happy path: loop runs over many ids; sum across all of them matches.
+    function test_canExecuteTasks_trueWhenSumMatchesMultipleRequests() public {
+        _unpauseWithdrawNFT();
+        _seedLp(20 ether);
+        _makeWithdrawRequest(1 ether);
+        _makeWithdrawRequest(2 ether);
+        uint256 r3 = _makeWithdrawRequest(3 ether);
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.lastFinalizedWithdrawalRequestId = uint32(r3);
+        report.finalizedWithdrawalAmount = 6 ether; // 1 + 2 + 3
+
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), true);
+    }
+
+    // Invalidated requests are excluded from the sum (request.isValid gates
+    // the accumulator). The oracle must report only the valid total.
+    function test_canExecuteTasks_trueWhenInvalidRequestsExcludedFromSum() public {
+        _unpauseWithdrawNFT();
+        _seedLp(20 ether);
+        _makeWithdrawRequest(1 ether);
+        uint256 r2 = _makeWithdrawRequest(2 ether);
+        uint256 r3 = _makeWithdrawRequest(3 ether);
+
+        _invalidateRequest(r2);
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.lastFinalizedWithdrawalRequestId = uint32(r3);
+        report.finalizedWithdrawalAmount = 4 ether; // 1 + 3; r2 excluded
+
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), true);
+    }
+
+    // Mirror: if the oracle accidentally counts an invalidated request's
+    // amount, the sum overshoots the on-chain total → revert.
+    function test_canExecuteTasks_falseWhenInvalidRequestIncludedInSum() public {
+        _unpauseWithdrawNFT();
+        _seedLp(20 ether);
+        _makeWithdrawRequest(1 ether);
+        uint256 r2 = _makeWithdrawRequest(2 ether);
+        uint256 r3 = _makeWithdrawRequest(3 ether);
+
+        _invalidateRequest(r2);
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.lastFinalizedWithdrawalRequestId = uint32(r3);
+        report.finalizedWithdrawalAmount = 6 ether; // wrong: still counts r2
+
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: sum of requests does not match finalized withdrawal amount"));
+        etherFiAdminInstance.executeTasks(report);
+    }
+
+    // Cleanup scenario: every pending request was invalidated. Cursor still
+    // advances past them but amount stays 0 and the sum check passes.
+    function test_canExecuteTasks_trueWhenAllRequestsInvalidAndAmountZero() public {
+        _unpauseWithdrawNFT();
+        _seedLp(10 ether);
+        uint256 r1 = _makeWithdrawRequest(1 ether);
+        uint256 r2 = _makeWithdrawRequest(2 ether);
+
+        _invalidateRequest(r1);
+        _invalidateRequest(r2);
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.lastFinalizedWithdrawalRequestId = uint32(r2);
+        report.finalizedWithdrawalAmount = 0;
+
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), true);
+    }
+
+    // The cursor cannot move backwards. After processing r1 in a first
+    // report, a follow-up with lastFinalizedWithdrawalRequestId < state's
+    // cursor is rejected by the strict `<` guard before the sum loop runs.
+    function test_canExecuteTasks_falseWhenIdLessThanStateCursor() public {
+        _unpauseWithdrawNFT();
+        _seedLp(20 ether);
+        uint256 r1 = _makeWithdrawRequest(2 ether);
+
+        IEtherFiOracle.OracleReport memory firstReport = _emptyOracleReport();
+        firstReport.lastFinalizedWithdrawalRequestId = uint32(r1);
+        firstReport.finalizedWithdrawalAmount = 2 ether;
+        _moveClock(1 days / 12);
+        _executeAdminTasks(firstReport);
+
+        assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), uint32(r1));
+
+        // Second report points to id 0, less than state's cursor (r1 = 1).
+        IEtherFiOracle.OracleReport memory secondReport = _emptyOracleReport();
+        secondReport.lastFinalizedWithdrawalRequestId = 0;
+        secondReport.finalizedWithdrawalAmount = 0;
+        _moveClock(1 days / 12);
+        _submitForConsensus(secondReport);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(secondReport), false);
+
+        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: finalized withdrawal request id is less than last finalized request id"));
+        etherFiAdminInstance.executeTasks(secondReport);
+    }
+
+    // Cursor advances on each successful report. A second report finalizing
+    // only the newly-created request sums only over the new range, not the
+    // already-finalized r1.
+    function test_canExecuteTasks_trueOnSecondReportAfterCursorAdvances() public {
+        _unpauseWithdrawNFT();
+        _seedLp(20 ether);
+        uint256 r1 = _makeWithdrawRequest(1 ether);
+
+        IEtherFiOracle.OracleReport memory firstReport = _emptyOracleReport();
+        firstReport.lastFinalizedWithdrawalRequestId = uint32(r1);
+        firstReport.finalizedWithdrawalAmount = 1 ether;
+        _moveClock(1 days / 12);
+        _executeAdminTasks(firstReport);
+
+        uint256 r2 = _makeWithdrawRequest(2 ether);
+
+        IEtherFiOracle.OracleReport memory secondReport = _emptyOracleReport();
+        secondReport.lastFinalizedWithdrawalRequestId = uint32(r2);
+        secondReport.finalizedWithdrawalAmount = 2 ether; // only the new request
+
+        _moveClock(1 days / 12);
+        _submitForConsensus(secondReport);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(secondReport), true);
+
+        etherFiAdminInstance.executeTasks(secondReport);
+        assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), uint32(r2));
+    }
+
+    // Successive report mistakenly resums from id 0 instead of just the new
+    // range, so the amount double-counts r1 (already finalized). Mismatch
+    // trips the sum gate, not the "id less than cursor" gate.
+    function test_canExecuteTasks_falseOnSecondReportSummingFromZero() public {
+        _unpauseWithdrawNFT();
+        _seedLp(20 ether);
+        uint256 r1 = _makeWithdrawRequest(1 ether);
+
+        IEtherFiOracle.OracleReport memory firstReport = _emptyOracleReport();
+        firstReport.lastFinalizedWithdrawalRequestId = uint32(r1);
+        firstReport.finalizedWithdrawalAmount = 1 ether;
+        _moveClock(1 days / 12);
+        _executeAdminTasks(firstReport);
+
+        uint256 r2 = _makeWithdrawRequest(2 ether);
+
+        IEtherFiOracle.OracleReport memory secondReport = _emptyOracleReport();
+        secondReport.lastFinalizedWithdrawalRequestId = uint32(r2);
+        // Oracle bug: re-counted r1 (already finalized) into the new amount.
+        secondReport.finalizedWithdrawalAmount = 3 ether; // r1 + r2 instead of r2
+
+        _moveClock(1 days / 12);
+        _submitForConsensus(secondReport);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(secondReport), false);
+
+        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: sum of requests does not match finalized withdrawal amount"));
+        etherFiAdminInstance.executeTasks(secondReport);
+    }
+
+    // ========== EtherFiAdmin finalizeWithdrawalsWhenStale Tests ==========
+
+    // Permissionless escape hatch that lets anyone finalize pending withdrawal
+    // requests once the oracle has gone silent for staleOracleReportBlockWindow
+    // blocks. Walks pending requests in order, skips invalidated ones, stops
+    // when LP balance can't cover the next valid request, and only commits if
+    // it accumulated something to lock.
+
+    function _unpauseWithdrawNFT() internal {
+        if (withdrawRequestNFTInstance.paused()) {
+            vm.prank(admin);
+            withdrawRequestNFTInstance.unpause();
+        }
+    }
+
+    // Bob deposits ETH so the LP has both `totalValueInLp` and actual ETH
+    // balance to cover finalized withdrawals later, then receives eETH that
+    // we'll use to back the withdraw request.
+    function _seedLp(uint256 amount) internal {
+        vm.deal(bob, amount);
+        vm.prank(bob);
+        liquidityPoolInstance.deposit{value: amount}();
+    }
+
+    function _makeWithdrawRequest(uint96 amount) internal returns (uint256) {
+        vm.prank(bob);
+        eETHInstance.approve(address(liquidityPoolInstance), amount);
+        vm.prank(bob);
+        return liquidityPoolInstance.requestWithdraw(bob, amount);
+    }
+
+    function _invalidateRequest(uint256 requestId) internal {
+        vm.prank(alice);
+        withdrawRequestNFTInstance.invalidateRequest(requestId);
+    }
+
+    // Forces LP balance AND totalValueInLp to `target` in lockstep so the
+    // strict tVIL <= balance invariant enforced by _checkTotalValueInLp
+    // stays intact. vm.deal alone would drop balance without touching tVIL
+    // and trip the invariant on the next addEthAmountLockedForWithdrawal.
+    // Slot 207 packs totalValueOutOfLp (offset 0) and totalValueInLp
+    // (offset 16) per `forge inspect LiquidityPool storage`.
+    function _forceLpBalanceAndTVIL(uint128 target) internal {
+        bytes32 slot = bytes32(uint256(207));
+        bytes32 raw = vm.load(address(liquidityPoolInstance), slot);
+        uint128 outOf = uint128(uint256(raw)); // low 128 bits = totalValueOutOfLp
+        bytes32 packed = bytes32((uint256(target) << 128) | uint256(outOf));
+        vm.store(address(liquidityPoolInstance), slot, packed);
+        vm.deal(address(liquidityPoolInstance), uint256(target));
+    }
+
+    // Roll forward until block.number == lastHandledReportRefBlock + staleOracleReportBlockWindow
+    // (the boundary at which the staleness check first passes).
+    function _advanceToStaleBoundary() internal {
+        uint256 staleAt = uint256(etherFiAdminInstance.lastHandledReportRefBlock())
+            + etherFiAdminInstance.staleOracleReportBlockWindow();
+        if (block.number < staleAt) {
+            _moveClock(int256(staleAt - block.number));
+        }
+    }
+
+    // Reverts when the last report is still fresh — block.number sits below
+    // lastHandledReportRefBlock + staleOracleReportBlockWindow. With both
+    // fields at zero post-setup, we're trivially fresh.
+    function test_finalizeWithdrawalsWhenStale_revertsWhenNotStale() public {
+        // setUp() rolls to block 0; lastHandledReportRefBlock is 0; stale
+        // window is 7200, so 0 < 7200 → not stale.
+        assertLt(block.number, etherFiAdminInstance.staleOracleReportBlockWindow());
+
+        vm.expectRevert(EtherFiAdmin.OracleReportNotStale.selector);
+        etherFiAdminInstance.finalizeWithdrawalsWhenStale();
+    }
+
+    // One block before the staleness boundary still reverts; the check uses
+    // strict `<`.
+    function test_finalizeWithdrawalsWhenStale_revertsOneBlockBeforeStaleBoundary() public {
+        uint256 staleWindow = etherFiAdminInstance.staleOracleReportBlockWindow();
+        _moveClock(int256(staleWindow - 1));
+        assertEq(block.number, staleWindow - 1);
+
+        vm.expectRevert(EtherFiAdmin.OracleReportNotStale.selector);
+        etherFiAdminInstance.finalizeWithdrawalsWhenStale();
+    }
+
+    // At exactly lastHandledReportRefBlock + staleOracleReportBlockWindow
+    // the report is considered stale and the staleness check passes. With no
+    // pending requests we then revert with NoWithdrawalsToFinalize — proving
+    // we cleared the freshness check.
+    function test_finalizeWithdrawalsWhenStale_succeedsAtExactStaleBoundary() public {
+        _advanceToStaleBoundary();
+        assertEq(block.number, etherFiAdminInstance.staleOracleReportBlockWindow());
+
+        vm.expectRevert(EtherFiAdmin.NoWithdrawalsToFinalize.selector);
+        etherFiAdminInstance.finalizeWithdrawalsWhenStale();
+    }
+
+    // After processing a fresh oracle report, the staleness window resets
+    // relative to the report's refBlockTo. Calling again immediately reverts
+    // with OracleReportNotStale even if we were previously stale.
+    function test_finalizeWithdrawalsWhenStale_revertsAfterFreshReport() public {
+        _unpauseWithdrawNFT();
+        _seedLp(10 ether);
+        _makeWithdrawRequest(1 ether);
+
+        // Bring us past the initial stale window so we can run a fresh report.
+        _advanceToStaleBoundary();
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        _executeAdminTasks(report);
+        assertGt(etherFiAdminInstance.lastHandledReportRefBlock(), 0);
+        assertLt(
+            block.number,
+            uint256(etherFiAdminInstance.lastHandledReportRefBlock())
+                + etherFiAdminInstance.staleOracleReportBlockWindow()
+        );
+
+        vm.expectRevert(EtherFiAdmin.OracleReportNotStale.selector);
+        etherFiAdminInstance.finalizeWithdrawalsWhenStale();
+    }
+
+    // No pending withdrawal requests at all → loop body never runs → revert
+    // with NoWithdrawalsToFinalize (rather than silently no-op).
+    function test_finalizeWithdrawalsWhenStale_revertsWhenNoPendingRequests() public {
+        _advanceToStaleBoundary();
+
+        assertEq(withdrawRequestNFTInstance.nextRequestId(), 1);
+        assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), 0);
+
+        vm.expectRevert(EtherFiAdmin.NoWithdrawalsToFinalize.selector);
+        etherFiAdminInstance.finalizeWithdrawalsWhenStale();
+    }
+
+    // LP balance is below the first request's amount → break immediately on
+    // iteration 1 → finalizedWithdrawalAmount stays at 0 → revert.
+    function test_finalizeWithdrawalsWhenStale_revertsWhenInsufficientLiquidityForFirstRequest() public {
+        _unpauseWithdrawNFT();
+        _seedLp(10 ether);
+        _makeWithdrawRequest(5 ether);
+
+        // Drain totalValueInLp below the request amount; the staleness function
+        // reads `liquidityPool.totalValueInLp()`, so we have to drop both
+        // accounting and balance to make the liquidity check fail.
+        _forceLpBalanceAndTVIL(1 ether);
+
+        _advanceToStaleBoundary();
+
+        vm.expectRevert(EtherFiAdmin.NoWithdrawalsToFinalize.selector);
+        etherFiAdminInstance.finalizeWithdrawalsWhenStale();
+    }
+
+    // Happy path: single valid request, LP has enough — finalizes the request,
+    // moves ETH from LP to the NFT, and advances lastFinalizedRequestId.
+    function test_finalizeWithdrawalsWhenStale_singleValidRequest_succeeds() public {
+        _unpauseWithdrawNFT();
+        _seedLp(10 ether);
+        uint256 requestId = _makeWithdrawRequest(1 ether);
+
+        _advanceToStaleBoundary();
+
+        uint256 lpBalanceBefore = address(liquidityPoolInstance).balance;
+        uint256 nftBalanceBefore = address(withdrawRequestNFTInstance).balance;
+        uint128 lockedBefore = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
+
+        etherFiAdminInstance.finalizeWithdrawalsWhenStale();
+
+        assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), uint32(requestId));
+        assertTrue(withdrawRequestNFTInstance.isFinalized(requestId));
+        assertEq(address(liquidityPoolInstance).balance, lpBalanceBefore - 1 ether);
+        assertEq(address(withdrawRequestNFTInstance).balance, nftBalanceBefore + 1 ether);
+        assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), lockedBefore + 1 ether);
+    }
+
+    // Multiple valid requests, LP covers them all. Locked amount equals the
+    // sum, and lastFinalizedRequestId advances to the last one.
+    function test_finalizeWithdrawalsWhenStale_finalizesAllValidRequests() public {
+        _unpauseWithdrawNFT();
+        _seedLp(20 ether);
+        _makeWithdrawRequest(1 ether);
+        _makeWithdrawRequest(2 ether);
+        uint256 r3 = _makeWithdrawRequest(3 ether);
+
+        _advanceToStaleBoundary();
+
+        uint256 lpBalanceBefore = address(liquidityPoolInstance).balance;
+        uint128 lockedBefore = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
+
+        etherFiAdminInstance.finalizeWithdrawalsWhenStale();
+
+        assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), uint32(r3));
+        assertEq(address(liquidityPoolInstance).balance, lpBalanceBefore - 6 ether);
+        assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), lockedBefore + 6 ether);
+    }
+
+    // Invalid request in the middle is skipped: requestId still advances past
+    // it (so it ends up "finalized" too), but its amount is NOT added to the
+    // locked total.
+    function test_finalizeWithdrawalsWhenStale_skipsInvalidRequestsInMiddle() public {
+        _unpauseWithdrawNFT();
+        _seedLp(20 ether);
+        _makeWithdrawRequest(1 ether);
+        uint256 r2 = _makeWithdrawRequest(2 ether);
+        uint256 r3 = _makeWithdrawRequest(3 ether);
+
+        _invalidateRequest(r2);
+
+        _advanceToStaleBoundary();
+
+        uint256 lpBalanceBefore = address(liquidityPoolInstance).balance;
+        uint128 lockedBefore = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
+
+        etherFiAdminInstance.finalizeWithdrawalsWhenStale();
+
+        // r2 is invalid but the loop walks past it, so lastFinalized lands on r3.
+        assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), uint32(r3));
+        // Only valid amounts contribute: 1 + 3 = 4.
+        assertEq(address(liquidityPoolInstance).balance, lpBalanceBefore - 4 ether);
+        assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), lockedBefore + 4 ether);
+    }
+
+    // Trailing invalid requests are still included in lastFinalizedRequestId
+    // even though they contribute zero to the locked amount.
+    function test_finalizeWithdrawalsWhenStale_includesTrailingInvalidRequests() public {
+        _unpauseWithdrawNFT();
+        _seedLp(20 ether);
+        _makeWithdrawRequest(1 ether);
+        _makeWithdrawRequest(2 ether);
+        uint256 r3 = _makeWithdrawRequest(3 ether);
+
+        _invalidateRequest(r3);
+
+        _advanceToStaleBoundary();
+
+        uint256 lpBalanceBefore = address(liquidityPoolInstance).balance;
+
+        etherFiAdminInstance.finalizeWithdrawalsWhenStale();
+
+        // Loop continues through the trailing invalid → finalizes up through r3.
+        assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), uint32(r3));
+        // Only the two valid requests' amounts get locked.
+        assertEq(address(liquidityPoolInstance).balance, lpBalanceBefore - 3 ether);
+    }
+
+    // Every pending request is invalid (e.g. all guardian-invalidated): the loop
+    // walks past each one (advancing the cursor) and accumulates 0 ETH. The fix
+    // for audit L-01 means this no longer reverts — the cursor must advance so an
+    // invalid prefix cannot wall off valid requests queued behind it. No ETH is
+    // locked because nothing valid was finalized.
+    function test_finalizeWithdrawalsWhenStale_advancesPastAllInvalidWithoutRevert() public {
+        _unpauseWithdrawNFT();
+        _seedLp(10 ether);
+        uint256 r1 = _makeWithdrawRequest(1 ether);
+        uint256 r2 = _makeWithdrawRequest(1 ether);
+        _invalidateRequest(r1);
+        _invalidateRequest(r2);
+
+        _advanceToStaleBoundary();
+
+        uint128 lockedBefore = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
+        uint256 lpBalanceBefore = address(liquidityPoolInstance).balance;
+
+        // Pre-L-01-fix this reverted with NoWithdrawalsToFinalize; now it succeeds.
+        etherFiAdminInstance.finalizeWithdrawalsWhenStale();
+
+        // Cursor advanced past the whole invalid run...
+        assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), uint32(r2));
+        assertTrue(withdrawRequestNFTInstance.isFinalized(r1));
+        assertTrue(withdrawRequestNFTInstance.isFinalized(r2));
+        // ...but no ETH was locked or moved, since nothing valid was finalized.
+        assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), lockedBefore);
+        assertEq(address(liquidityPoolInstance).balance, lpBalanceBefore);
+    }
+
+    // Liquidity runs out mid-way: finalize as many as fit, stop at the first
+    // valid request the LP can't cover. The leftover request stays pending.
+    function test_finalizeWithdrawalsWhenStale_stopsAtLiquidityLimit() public {
+        _unpauseWithdrawNFT();
+        _seedLp(20 ether);
+        uint256 r1 = _makeWithdrawRequest(3 ether);
+        _makeWithdrawRequest(4 ether);
+        uint256 r3 = _makeWithdrawRequest(5 ether);
+
+        // Cap LP balance at 5 ether: r1 fits (3), r1+r2 doesn't (7 > 5), break.
+        // Lockstep tVIL so the post-lock invariant holds.
+        _forceLpBalanceAndTVIL(5 ether);
+
+        _advanceToStaleBoundary();
+
+        uint128 lockedBefore = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
+
+        etherFiAdminInstance.finalizeWithdrawalsWhenStale();
+
+        // Stopped after r1. r2 and r3 stay unfinalized.
+        assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), uint32(r1));
+        assertTrue(withdrawRequestNFTInstance.isFinalized(r1));
+        assertFalse(withdrawRequestNFTInstance.isFinalized(r3));
+        assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), lockedBefore + 3 ether);
+    }
+
+    // Invalid + valid-fundable combo: loop skips the invalid (advancing past
+    // it) then finalizes the valid one. lastFinalizedRequestId lands on the
+    // valid one — i.e., the invalid in front of it gets dragged in.
+    function test_finalizeWithdrawalsWhenStale_finalizesValidAfterLeadingInvalid() public {
+        _unpauseWithdrawNFT();
+        _seedLp(20 ether);
+        uint256 r1 = _makeWithdrawRequest(1 ether);
+        uint256 r2 = _makeWithdrawRequest(2 ether);
+        _invalidateRequest(r1);
+
+        _advanceToStaleBoundary();
+
+        uint128 lockedBefore = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
+        uint256 lpBalanceBefore = address(liquidityPoolInstance).balance;
+
+        etherFiAdminInstance.finalizeWithdrawalsWhenStale();
+
+        assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), uint32(r2));
+        assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), lockedBefore + 2 ether);
+        assertEq(address(liquidityPoolInstance).balance, lpBalanceBefore - 2 ether);
+    }
+
+    // The function is permissionless — a role-less address can still trigger it
+    // once the report is stale.
+    function test_finalizeWithdrawalsWhenStale_isPermissionless() public {
+        _unpauseWithdrawNFT();
+        _seedLp(10 ether);
+        uint256 requestId = _makeWithdrawRequest(1 ether);
+
+        _advanceToStaleBoundary();
+
+        address randoCaller = makeAddr("randoCaller2");
+        assertFalse(roleRegistryInstance.hasRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), randoCaller));
+        assertFalse(roleRegistryInstance.hasRole(roleRegistryInstance.ORACLE_OPERATIONS_ROLE(), randoCaller));
+
+        vm.prank(randoCaller);
+        etherFiAdminInstance.finalizeWithdrawalsWhenStale();
+
+        assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), uint32(requestId));
+    }
+
+    function test_finalizeWithdrawalsWhenStale_revertsWhenCooldownPeriodNotElapsed() public {
+        _unpauseWithdrawNFT();
+        _seedLp(10 ether);
+        _makeWithdrawRequest(1 ether);
+
+        _advanceToStaleBoundary();
+        
+        etherFiAdminInstance.finalizeWithdrawalsWhenStale();
+
+        vm.expectRevert(EtherFiAdmin.StaleReportFinalizationCooldown.selector);
+        etherFiAdminInstance.finalizeWithdrawalsWhenStale();
+    }
+
+    // Calling twice back-to-back: second call has nothing new to finalize so
+    // it reverts with NoWithdrawalsToFinalize (not OracleReportNotStale —
+    // staleness is still satisfied, the inner loop just finds nothing).
+    function test_finalizeWithdrawalsWhenStale_secondCallWithNoNewRequestsReverts() public {
+        _unpauseWithdrawNFT();
+        _seedLp(10 ether);
+        _makeWithdrawRequest(1 ether);
+
+        _advanceToStaleBoundary();
+
+        etherFiAdminInstance.finalizeWithdrawalsWhenStale();
+
+        vm.roll(block.number + etherFiAdminInstance.STALE_REPORT_FINALIZATION_COOLDOWN() + 1);
+
+        vm.expectRevert(EtherFiAdmin.NoWithdrawalsToFinalize.selector);
+        etherFiAdminInstance.finalizeWithdrawalsWhenStale();
+    }
+
+    // A partial-fill call followed by another after liquidity replenishes:
+    // the second call picks up the leftover request that the first one
+    // couldn't cover after cooldown period.
+    function test_finalizeWithdrawalsWhenStale_resumesAfterLiquidityReplenishes() public {
+        _unpauseWithdrawNFT();
+        _seedLp(20 ether);
+        uint256 r1 = _makeWithdrawRequest(3 ether);
+        uint256 r2 = _makeWithdrawRequest(4 ether);
+
+        // First call: only r1 fits. Lockstep tVIL with balance so the
+        // post-lock invariant holds when r1 gets finalized.
+        _forceLpBalanceAndTVIL(3 ether);
+        _advanceToStaleBoundary();
+        etherFiAdminInstance.finalizeWithdrawalsWhenStale();
+        assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), uint32(r1));
+        assertFalse(withdrawRequestNFTInstance.isFinalized(r2));
+
+        // After r1's ETH has moved out, LP balance is 0. Replenish so r2 fits.
+        // Bump totalValueInLp via a deposit so addEthAmountLockedForWithdrawal
+        // doesn't trip its own InsufficientLiquidity guard.
+        _seedLp(10 ether);
+
+        vm.roll(block.number + etherFiAdminInstance.STALE_REPORT_FINALIZATION_COOLDOWN() + 1);
+
+        etherFiAdminInstance.finalizeWithdrawalsWhenStale();
+        assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), uint32(r2));
+        assertTrue(withdrawRequestNFTInstance.isFinalized(r2));
+    }
+
+    // Boundary: liquidity exactly equals the request amount. The check is
+    // `liquidity < accumulated + amount` so equality should succeed.
+    function test_finalizeWithdrawalsWhenStale_succeedsWhenLiquidityExactlyMatches() public {
+        _unpauseWithdrawNFT();
+        _seedLp(5 ether);
+        uint256 requestId = _makeWithdrawRequest(5 ether);
+
+        // LP balance and request amount are both 5 ether.
+        assertEq(address(liquidityPoolInstance).balance, 5 ether);
+
+        _advanceToStaleBoundary();
+
+        etherFiAdminInstance.finalizeWithdrawalsWhenStale();
+
+        assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), uint32(requestId));
+        assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), 5 ether);
+    }
+
+    //--------------------------------------------------------------------------------------
+    //------------------------------  unpublishReport  -------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    // Re-declared locally so `vm.expectEmit` can match the oracle's event by signature.
+    event ReportUnpublished(bytes32 indexed hash);
+
+    /// Drives `_report` to consensus (published, but NOT executed) by having both
+    /// committee members (alice, bob => quorum 2) submit it. Mirrors the oracle
+    /// portion of `_executeAdminTasks` but stops short of `executeTasks`, so the
+    /// report stays published-and-unhandled — the exact precondition unpublishReport
+    /// operates on. Mutates `_report`'s block stamps in place (memory reference).
+    function _publishReportToConsensus(IEtherFiOracle.OracleReport memory _report) internal returns (bytes32) {
+        _initReportBlockStamp(_report);
+
+        // Advance the clock until the report's epoch is finalized, same as _executeAdminTasks.
+        uint32 currentEpoch = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp) / 32;
+        uint32 reportEpoch = (_report.refSlotTo / 32) + 3;
+        if (currentEpoch < reportEpoch) {
+            _moveClock(int256(int32(32 * (reportEpoch - currentEpoch))));
+        }
+
+        vm.prank(alice);
+        assertEq(etherFiOracleInstance.submitReport(_report), false);
+        vm.prank(bob);
+        assertEq(etherFiOracleInstance.submitReport(_report), true);
+
+        bytes32 hash = etherFiOracleInstance.generateReportHash(_report);
+        assertTrue(etherFiOracleInstance.isConsensusReached(hash));
+        return hash;
+    }
+
+    /// Brings the oracle to "period-4 report is published but not yet executed",
+    /// returning the exact report struct and its hash. Period 3 is fully executed
+    /// first so that (a) lastPublished / lastHandled are aligned for the period-4
+    /// submission and (b) period-4's refSlotFrom is > 0 — unpublishReport computes
+    /// `refSlotFrom - 1`, which would underflow for the genesis (refSlotFrom == 0) report.
+    function _setupPublishedPeriod4()
+        internal
+        returns (IEtherFiOracle.OracleReport memory report, bytes32 hash)
+    {
+        // Seed TVL so period 3's positive accruedRewards clears the LP positive-rebase cap.
+        vm.deal(alice, 1000 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 1000 ether}();
+
+        _moveClock(1024 + 2 * slotsPerEpoch); // period 2
+        _moveClock(1024);                      // period 3
+
+        IEtherFiOracle.OracleReport memory report3 = reportAtPeriod3;
+        report3.lastFinalizedWithdrawalRequestId = 0;
+        _executeAdminTasks(report3);           // publish AND execute period 3
+
+        _moveClock(1024);                      // period 4
+
+        report = reportAtPeriod4;
+        report.lastFinalizedWithdrawalRequestId = 0;
+        hash = _publishReportToConsensus(report);
+    }
+
+    function test_unpublishReport() public {
+        (IEtherFiOracle.OracleReport memory report, bytes32 hash) = _setupPublishedPeriod4();
+
+        // Sanity: report is published and both members are recorded against its slot.
+        (,, uint32 aliceSlotBefore, uint32 aliceReportsBefore) = etherFiOracleInstance.committeeMemberStates(alice);
+        (,, uint32 bobSlotBefore, uint32 bobReportsBefore) = etherFiOracleInstance.committeeMemberStates(bob);
+        assertEq(aliceSlotBefore, report.refSlotTo);
+        assertEq(bobSlotBefore, report.refSlotTo);
+        assertGt(aliceReportsBefore, 0);
+        assertGt(bobReportsBefore, 0);
+        assertEq(etherFiOracleInstance.lastPublishedReportRefSlot(), report.refSlotTo);
+        assertEq(etherFiOracleInstance.lastPublishedReportRefBlock(), report.refBlockTo);
+
+        address[] memory members = new address[](2);
+        members[0] = alice;
+        members[1] = bob;
+
+        vm.expectEmit(true, false, false, false, address(etherFiOracleInstance));
+        emit ReportUnpublished(hash);
+        vm.prank(owner);
+        etherFiOracleInstance.unpublishReport(report, members);
+
+        // Consensus is cleared.
+        (uint32 support, bool consensusReached,) = etherFiOracleInstance.consensusStates(hash);
+        assertEq(support, 0);
+        assertEq(consensusReached, false);
+        assertFalse(etherFiOracleInstance.isConsensusReached(hash));
+
+        // Published pointers roll back to just before the unpublished report.
+        assertEq(etherFiOracleInstance.lastPublishedReportRefSlot(), report.refSlotFrom - 1);
+        assertEq(etherFiOracleInstance.lastPublishedReportRefBlock(), report.refBlockFrom - 1);
+
+        // Member states roll back and numReports is decremented by exactly one.
+        (,, uint32 aliceSlotAfter, uint32 aliceReportsAfter) = etherFiOracleInstance.committeeMemberStates(alice);
+        (,, uint32 bobSlotAfter, uint32 bobReportsAfter) = etherFiOracleInstance.committeeMemberStates(bob);
+        assertEq(aliceSlotAfter, report.refSlotFrom - 1);
+        assertEq(bobSlotAfter, report.refSlotFrom - 1);
+        assertEq(aliceReportsAfter, aliceReportsBefore - 1);
+        assertEq(bobReportsAfter, bobReportsBefore - 1);
+    }
+
+    /// The whole point of the fix: after unpublishing, the same report can be
+    /// submitted and re-published from scratch because member slots were rolled back.
+    function test_unpublishReport_allowsResubmission() public {
+        (IEtherFiOracle.OracleReport memory report, bytes32 hash) = _setupPublishedPeriod4();
+
+        address[] memory members = new address[](2);
+        members[0] = alice;
+        members[1] = bob;
+        vm.prank(owner);
+        etherFiOracleInstance.unpublishReport(report, members);
+
+        // Both members may submit the identical report again, reaching consensus anew.
+        vm.prank(alice);
+        assertEq(etherFiOracleInstance.submitReport(report), false);
+        vm.prank(bob);
+        assertEq(etherFiOracleInstance.submitReport(report), true);
+
+        assertTrue(etherFiOracleInstance.isConsensusReached(hash));
+        assertEq(etherFiOracleInstance.lastPublishedReportRefSlot(), report.refSlotTo);
+        assertEq(etherFiOracleInstance.lastPublishedReportRefBlock(), report.refBlockTo);
+    }
+
+    function test_unpublishReport_revertsWhenConsensusNotReached() public {
+        // reportAtPeriod4 was never submitted, so no consensus exists for it.
+        address[] memory members = new address[](2);
+        members[0] = alice;
+        members[1] = bob;
+        vm.prank(owner);
+        vm.expectRevert(EtherFiOracle.ConsensusNotReached.selector);
+        etherFiOracleInstance.unpublishReport(reportAtPeriod4, members);
+    }
+
+    function test_unpublishReport_revertsWhenReportAlreadyExecuted() public {
+        vm.deal(alice, 1000 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 1000 ether}();
+
+        _moveClock(1024 + 2 * slotsPerEpoch);
+        _moveClock(1024);
+
+        IEtherFiOracle.OracleReport memory report = reportAtPeriod3;
+        report.lastFinalizedWithdrawalRequestId = 0;
+        _executeAdminTasks(report); // published AND executed; stamps mutated in place
+
+        address[] memory members = new address[](2);
+        members[0] = alice;
+        members[1] = bob;
+        vm.prank(owner);
+        vm.expectRevert(EtherFiOracle.ReportExecuted.selector);
+        etherFiOracleInstance.unpublishReport(report, members);
+    }
+
+    function test_unpublishReport_revertsWhenMembersLengthBelowQuorum() public {
+        (IEtherFiOracle.OracleReport memory report,) = _setupPublishedPeriod4();
+
+        // quorumSize is 2; a single-member array is below quorum.
+        assertEq(etherFiOracleInstance.quorumSize(), 2);
+        address[] memory members = new address[](1);
+        members[0] = alice;
+        vm.prank(owner);
+        vm.expectRevert(EtherFiOracle.InvalidMembersLength.selector);
+        etherFiOracleInstance.unpublishReport(report, members);
+    }
+
+    function test_unpublishReport_revertsWhenMemberDidNotParticipate() public {
+        (IEtherFiOracle.OracleReport memory report,) = _setupPublishedPeriod4();
+
+        // chad never submitted this report, so his lastReportRefSlot != refSlotTo.
+        address[] memory members = new address[](2);
+        members[0] = alice; // participated
+        members[1] = chad;  // did not participate
+        vm.prank(owner);
+        vm.expectRevert(EtherFiOracle.MemberNotParticipated.selector);
+        etherFiOracleInstance.unpublishReport(report, members);
+    }
+
+    function test_unpublishReport_revertsForNonOperatingMultisig() public {
+        address[] memory members = new address[](2);
+        members[0] = alice;
+        members[1] = bob;
+        // chad lacks OPERATION_MULTISIG_ROLE; the modifier reverts before any state check.
         vm.prank(chad);
-        vm.expectRevert(EtherFiAdmin.IncorrectRole.selector);
-        etherFiAdminInstance.unPause(true, false, false, false, false, false);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        etherFiOracleInstance.unpublishReport(reportAtPeriod4, members);
     }
 }

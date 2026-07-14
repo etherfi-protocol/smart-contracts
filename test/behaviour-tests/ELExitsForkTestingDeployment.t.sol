@@ -3,18 +3,19 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Test.sol";
 import "forge-std/console2.sol";
-import "../../src/StakingManager.sol";
-import "../../src/EtherFiNodesManager.sol";
-import "../../src/EtherFiNode.sol";
-import "../../src/EtherFiRateLimiter.sol";
-import "../../src/LiquidityPool.sol";
-import "../../src/UUPSProxy.sol";
-import "../../src/AuctionManager.sol";
-import "../../src/EtherFiTimelock.sol";
-import "../../src/interfaces/IRoleRegistry.sol";
-import "../../src/interfaces/ILiquidityPool.sol";
-import "../../src/interfaces/IStakingManager.sol";
-import {IEigenPod, IEigenPodTypes } from "../../src/eigenlayer-interfaces/IEigenPod.sol";
+import "@etherfi/staking/StakingManager.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/staking/EtherFiNode.sol";
+import "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/utils/UUPSProxy.sol";
+import "@etherfi/staking/AuctionManager.sol";
+import "@etherfi/governance/EtherFiTimelock.sol";
+import "@etherfi/governance/interfaces/IRoleRegistry.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/staking/interfaces/IStakingManager.sol";
+import {IEigenPod, IEigenPodTypes } from "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 
 interface IUpgradable {
     function upgradeTo(address newImplementation) external;
@@ -109,7 +110,7 @@ contract ELExitsForkTestingDeploymentTest is Test {
     function _deployRateLimiter() internal {
         console2.log("--- Step 1: Deploying EtherFiRateLimiter (New Contract) ---");
 
-        EtherFiRateLimiter rateLimiterImpl = new EtherFiRateLimiter(address(roleRegistry));
+        EtherFiRateLimiter rateLimiterImpl = new EtherFiRateLimiter(address(roleRegistry), 0x35fA164735182de50811E8e2E824cFb9B6118ac2, 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee);
         console2.log("Rate limiter implementation:", address(rateLimiterImpl));
 
         UUPSProxy rateLimiterProxy = new UUPSProxy(address(rateLimiterImpl), "");
@@ -148,8 +149,7 @@ contract ELExitsForkTestingDeploymentTest is Test {
             address(liquidityPool),
             address(etherFiNodesManager),
             eigenPodManager,
-            delegationManager,
-            address(roleRegistry)
+            delegationManager
         );
         console2.log("New EtherFiNode implementation:", address(newEtherFiNodeImpl));
         console2.log("");
@@ -184,18 +184,18 @@ contract ELExitsForkTestingDeploymentTest is Test {
 
         // Assign NEW EL trigger exit role to a realistic address
         address realElExiter = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F; // etherFiAdminExecuter
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), realElExiter);
+        roleRegistry.grantRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), realElExiter);
         console2.log("Granted ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE to:", realElExiter);
 
         // Assign rate limiter admin role to a realistic address  
         address realRateLimiterAdmin = 0x0EF8fa4760Db8f5Cd4d993f3e3416f30f942D705; // etherFiAdmin
-        roleRegistry.grantRole(rateLimiter.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), realRateLimiterAdmin);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), realRateLimiterAdmin);
         console2.log("Granted ETHERFI_RATE_LIMITER_ADMIN_ROLE to:", realRateLimiterAdmin);
 
         // Grant other necessary roles (following prelude pattern)
         address admin = realRateLimiterAdmin; // Use realistic admin address
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_ADMIN_ROLE(), admin);
-        roleRegistry.grantRole(rateLimiter.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), admin);
 
         vm.stopPrank();
         console2.log("[OK] All roles granted");
@@ -230,7 +230,7 @@ contract ELExitsForkTestingDeploymentTest is Test {
 
         // Test 1: EL-triggered withdrawal with real role
         address realElExiter = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
-        bool hasElExitRole = roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), realElExiter);
+        bool hasElExitRole = roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), realElExiter);
 
         if (hasElExitRole) {
             console2.log("[OK] EL Exit role correctly assigned to real address");
@@ -265,7 +265,7 @@ contract ELExitsForkTestingDeploymentTest is Test {
 
         // Test 3: Call forwarding (set up a realistic example)
         address realAdmin = address(0x0EF8fa4760Db8f5Cd4d993f3e3416f30f942D705); // etherFiAdmin
-        bool hasNodesManagerAdminRole = roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_ADMIN_ROLE(), realAdmin);
+        bool hasNodesManagerAdminRole = roleRegistry.hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), realAdmin);
 
         if (hasNodesManagerAdminRole) {
             bytes4 eigenPodSelector = bytes4(keccak256("activateRestaking()"));
@@ -321,7 +321,7 @@ contract ELExitsForkTestingDeploymentTest is Test {
         console2.log("=== SIMULATING EL EXIT WITH REAL CONSTRAINTS ===");
 
         address realElExiter = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
-        bool hasRole = roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), realElExiter);
+        bool hasRole = roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), realElExiter);
 
         console2.log("Real EL Exiter:", realElExiter);
         console2.log("Has EL Exit Role:", hasRole);

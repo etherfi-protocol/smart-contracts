@@ -3,9 +3,9 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Script.sol";
 
-import "src/CumulativeMerkleRewardsDistributor.sol";
-import "src/UUPSProxy.sol";
-import "../../src/helpers/AddressProvider.sol";
+import "@etherfi/rewards/CumulativeMerkleRewardsDistributor.sol";
+import "@etherfi/utils/UUPSProxy.sol";
+import "@etherfi/helpers/AddressProvider.sol";
 import "forge-std/console.sol";
 
 /* Deploy Command
@@ -34,9 +34,9 @@ contract DeployCumulativeMerkleRewardsDistributor is Script {
         bytes memory initializerData =  abi.encodeWithSelector(CumulativeMerkleRewardsDistributor.initialize.selector);
         CumulativeMerkleRewardsDistributor cumulativeMerkleRewardsDistributorImplementation = new CumulativeMerkleRewardsDistributor(roleRegistryProxyAddress);
         UUPSProxy cumulativeMerkleRewardsDistributorProxy = new UUPSProxy(address(cumulativeMerkleRewardsDistributorImplementation), initializerData);
-        CumulativeMerkleRewardsDistributor cumulativeMerkleInstance = CumulativeMerkleRewardsDistributor(address(cumulativeMerkleRewardsDistributorProxy));
-        //cumulativeMerkleInstance.grantRole(keccak256("CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE"), msg.sender);
-        cumulativeMerkleInstance.transferOwnership(address(timelockAddress));
+        CumulativeMerkleRewardsDistributor cumulativeMerkleInstance = CumulativeMerkleRewardsDistributor(payable(address(cumulativeMerkleRewardsDistributorProxy)));
+        // Access control is governed by the RoleRegistry; the contract no longer
+        // has a per-contract Ownable owner to transfer.
 
         vm.stopBroadcast();
     }

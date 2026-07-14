@@ -3,11 +3,11 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
-import "../ContractCodeChecker.sol";
-import "../../src/EtherFiNode.sol";
-import "../../src/EtherFiNodesManager.sol";
-import "../../src/StakingManager.sol";
-import "../../src/EtherFiRateLimiter.sol";
+import "@scripts/ContractCodeChecker.sol";
+import "@etherfi/staking/EtherFiNode.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/staking/StakingManager.sol";
+import "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
 
 
 contract PectraUpgradeBytecode is Script {
@@ -55,10 +55,10 @@ contract PectraUpgradeBytecode is Script {
         address deployedEtherFiNodesManager = address(0x0f366dF7af5003fC7C6524665ca58bDeAdDC3745);
         address deployedStakingManager = address(0xa38d03ea42F8bc31892336E1F42523e94FB91a7A);
 
-        EtherFiNode etherFiNodeImplementation = new EtherFiNode(address(liquidityPoolProxy), address(etherFiNodesManagerProxy), address(eigenPodManager), address(delegationManager), address(roleRegistryProxy));
+        EtherFiNode etherFiNodeImplementation = new EtherFiNode(address(liquidityPoolProxy), address(etherFiNodesManagerProxy), address(eigenPodManager), address(delegationManager));
         EtherFiNodesManager etherFiNodesManagerImplementation = new EtherFiNodesManager(address(stakingManagerProxy), address(roleRegistryProxy), address(rateLimiterProxy));
         StakingManager stakingManagerImplementation = new StakingManager(address(liquidityPoolProxy), address(etherFiNodesManagerProxy), address(stakingDepositContract), address(auctionManager), address(etherFiNodeBeacon), address(roleRegistryProxy));
-        EtherFiRateLimiter rateLimiterImplementation = new EtherFiRateLimiter(address(roleRegistryProxy));
+        EtherFiRateLimiter rateLimiterImplementation = new EtherFiRateLimiter(address(roleRegistryProxy), 0x35fA164735182de50811E8e2E824cFb9B6118ac2, 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee);
 
         console.log("Rate limiter implementation:", address(rateLimiterImplementation));
         console.log("Etherfi node implementation:", address(etherFiNodeImplementation));

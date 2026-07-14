@@ -3,11 +3,11 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
 import "forge-std/console.sol";
-import "../../src/interfaces/IStakingManager.sol";
-import "../../src/interfaces/IEtherFiNodesManager.sol";
-import "../../src/interfaces/ILiquidityPool.sol";
-import {LiquidityPool} from "../../src/LiquidityPool.sol";
-import "../../src/interfaces/IRoleRegistry.sol";
+import "@etherfi/staking/interfaces/IStakingManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import {LiquidityPool} from "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/governance/interfaces/IRoleRegistry.sol";
 
 /**
  * @title Staking Part 2: Create Validator

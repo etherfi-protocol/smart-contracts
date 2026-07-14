@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
+import "@tests/TestSetup.sol";
 
 contract AuctionManagerTest is TestSetup {
     event BidCreated(
@@ -21,7 +21,7 @@ contract AuctionManagerTest is TestSetup {
     function test_DisableInitializer() public {
         vm.expectRevert("Initializable: contract is already initialized");
         vm.prank(owner);
-        auctionImplementation.initialize(address(nodeOperatorManagerInstance));
+        auctionImplementation.initialize();
     }
     
 
@@ -151,8 +151,9 @@ contract AuctionManagerTest is TestSetup {
     function test_DisableWhitelist() public {
         assertTrue(auctionInstance.whitelistEnabled());
 
-        vm.expectRevert("Caller is not the admin");
-        vm.prank(owner);
+        // chad has no roles and must be rejected.
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.prank(chad);
         auctionInstance.disableWhitelist();
 
         vm.prank(alice);
@@ -169,8 +170,8 @@ contract AuctionManagerTest is TestSetup {
 
         assertFalse(auctionInstance.whitelistEnabled());
 
-        vm.expectRevert("Caller is not the admin");
-        vm.prank(owner);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.prank(chad);
         auctionInstance.enableWhitelist();
 
         vm.prank(alice);
@@ -224,18 +225,18 @@ contract AuctionManagerTest is TestSetup {
         startHoax(alice);
         auctionInstance.createBid{value: 0.004 ether}(4, 0.001 ether);
 
-        vm.expectRevert("Bid size is too small");
+        vm.expectRevert(AuctionManager.InvalidBidSize.selector);
         auctionInstance.createBid{value: 0.004 ether}(0, 0.001 ether);
         vm.stopPrank();
 
-        vm.expectRevert("Insufficient public keys");
+        vm.expectRevert(AuctionManager.InsufficientPublicKeys.selector);
         startHoax(alice);
         auctionInstance.createBid{value: 1 ether}(1, 1 ether);
         vm.stopPrank();
 
         assertTrue(auctionInstance.whitelistEnabled());
 
-        vm.expectRevert("Only whitelisted addresses");
+        vm.expectRevert(AuctionManager.NotWhitelisted.selector);
         hoax(jess);
         auctionInstance.createBid{value: 0.01 ether}(1, 0.01 ether);
 
@@ -262,7 +263,7 @@ contract AuctionManagerTest is TestSetup {
         assertEq(auctionInstance.numberOfActiveBids(), 6);
 
         // jess cannot bid below the min bid amount because he was not whitelisted
-        vm.expectRevert("Incorrect bid value");
+        vm.expectRevert(AuctionManager.IncorrectBidValue.selector);
         hoax(jess);
         uint256[] memory henryBidIds = auctionInstance.createBid{
             value: 0.001 ether
@@ -285,7 +286,7 @@ contract AuctionManagerTest is TestSetup {
         vm.prank(alice);
         auctionInstance.enableWhitelist();
 
-        vm.expectRevert("Only whitelisted addresses");
+        vm.expectRevert(AuctionManager.NotWhitelisted.selector);
         hoax(jess);
         auctionInstance.createBid{value: 0.01 ether}(1, 0.01 ether);
 
@@ -317,30 +318,30 @@ contract AuctionManagerTest is TestSetup {
             5
         );
 
-        vm.expectRevert("Incorrect bid value");
+        vm.expectRevert(AuctionManager.IncorrectBidValue.selector);
         hoax(alice);
         auctionInstance.createBid{value: 0.00001 ether}(1, 0.00001 ether);
 
-        vm.expectRevert("Incorrect bid value");
+        vm.expectRevert(AuctionManager.IncorrectBidValue.selector);
         hoax(alice);
         auctionInstance.createBid{value: 5.1 ether}(1, 5.1 ether);
 
         vm.prank(alice);
         auctionInstance.disableWhitelist();
 
-        vm.expectRevert("Incorrect bid value");
+        vm.expectRevert(AuctionManager.IncorrectBidValue.selector);
         hoax(alice);
         auctionInstance.createBid{value: 5.1 ether}(1, 5.1 ether);
 
-        vm.expectRevert("Incorrect bid value");
+        vm.expectRevert(AuctionManager.IncorrectBidValue.selector);
         hoax(alice);
         auctionInstance.createBid{value: 0.00001 ether}(1, 0.00001 ether);
 
-        vm.expectRevert("Incorrect bid value");
+        vm.expectRevert(AuctionManager.IncorrectBidValue.selector);
         hoax(jess);
         auctionInstance.createBid{value: 0.001 ether}(1, 0.001 ether);
 
-        vm.expectRevert("Incorrect bid value");
+        vm.expectRevert(AuctionManager.IncorrectBidValue.selector);
         hoax(henry);
         auctionInstance.createBid{value: 5.1 ether}(1, 5.1 ether);
     }
@@ -364,7 +365,7 @@ contract AuctionManagerTest is TestSetup {
         assertEq(bidderAddress, alice);
         assertTrue(isActive);
 
-        vm.expectRevert("Insufficient public keys");
+        vm.expectRevert(AuctionManager.InsufficientPublicKeys.selector);
         hoax(alice);
         auctionInstance.createBid{value: 0.2 ether}(2, 0.1 ether);
 
@@ -385,11 +386,11 @@ contract AuctionManagerTest is TestSetup {
             0.1 ether
         );
 
-        vm.expectRevert("Insufficient public keys");
+        vm.expectRevert(AuctionManager.InsufficientPublicKeys.selector);
         hoax(alice);
         auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
 
-        vm.expectRevert("Insufficient public keys");
+        vm.expectRevert(AuctionManager.InsufficientPublicKeys.selector);
         hoax(alice);
         auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
     }
@@ -499,7 +500,7 @@ contract AuctionManagerTest is TestSetup {
             10
         );
 
-        vm.expectRevert("Incorrect bid value");
+        vm.expectRevert(AuctionManager.IncorrectBidValue.selector);
         hoax(alice);
         auctionInstance.createBid{value: 0.4 ether}(
             5,
@@ -516,17 +517,17 @@ contract AuctionManagerTest is TestSetup {
 
         assertFalse(auctionInstance.paused());
         vm.prank(alice);
-        auctionInstance.pauseContract();
+        auctionInstance.pause();
         assertTrue(auctionInstance.paused());
 
-        vm.expectRevert("Pausable: paused");
+        vm.expectRevert(Pausable.ContractPaused.selector);
         hoax(alice);
         auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
 
         assertEq(auctionInstance.numberOfActiveBids(), 0);
 
         vm.prank(alice);
-        auctionInstance.unPauseContract();
+        auctionInstance.unpause();
 
         hoax(alice);
         auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
@@ -551,7 +552,7 @@ contract AuctionManagerTest is TestSetup {
         auctionInstance.cancelBidBatch(bid1Id);
 
         hoax(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
-        vm.expectRevert("Bid already cancelled");
+        vm.expectRevert(AuctionManager.BidAlreadyCancelled.selector);
         auctionInstance.cancelBid(bid1Id[0]);
     }
 
@@ -566,13 +567,13 @@ contract AuctionManagerTest is TestSetup {
         auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
 
         vm.prank(alice);
-        vm.expectRevert("Invalid bid");
+        vm.expectRevert(AuctionManager.InvalidBid.selector);
         auctionInstance.cancelBid(1);
     }
 
     function test_CancelBidFailsWhenNotExistingBid() public {
         vm.prank(alice);
-        vm.expectRevert("Invalid bid");
+        vm.expectRevert(AuctionManager.InvalidBid.selector);
         auctionInstance.cancelBid(1);
     }
 
@@ -666,14 +667,14 @@ contract AuctionManagerTest is TestSetup {
         assertEq(auctionInstance.numberOfActiveBids(), 2);
 
         vm.prank(alice);
-        auctionInstance.pauseContract();
+        auctionInstance.pause();
 
-        vm.expectRevert("Pausable: paused");
+        vm.expectRevert(Pausable.ContractPaused.selector);
         hoax(0x9154a74AAfF2F586FB0a884AeAb7A64521c64bCf);
         auctionInstance.cancelBid(bid2Id[0]);
 
         vm.prank(alice);
-        auctionInstance.unPauseContract();
+        auctionInstance.unpause();
 
         assertEq(auctionInstance.numberOfActiveBids(), 2);
 
@@ -734,11 +735,11 @@ contract AuctionManagerTest is TestSetup {
 
     function test_SetMaxBidAmount() public {
         vm.prank(alice);
-        vm.expectRevert("Min bid exceeds max bid");
+        vm.expectRevert(AuctionManager.InvalidMaxBid.selector);
         auctionInstance.setMaxBidPrice(0.001 ether);
 
-        vm.prank(owner);
-        vm.expectRevert("Caller is not the admin");
+        vm.prank(chad);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         auctionInstance.setMaxBidPrice(10 ether);
 
         assertEq(auctionInstance.maxBidAmount(), 5 ether);
@@ -749,11 +750,11 @@ contract AuctionManagerTest is TestSetup {
 
     function test_SetMinBidAmount() public {
         vm.prank(alice);
-        vm.expectRevert("Min bid exceeds max bid");
+        vm.expectRevert(AuctionManager.InvalidMinBid.selector);
         auctionInstance.setMinBidPrice(5 ether);
 
-        vm.prank(owner);
-        vm.expectRevert("Caller is not the admin");
+        vm.prank(chad);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         auctionInstance.setMinBidPrice(0.005 ether);
 
         assertEq(auctionInstance.minBidAmount(), 0.01 ether);
@@ -763,16 +764,18 @@ contract AuctionManagerTest is TestSetup {
     }
 
     function test_SetWhitelistBidAmount() public {
-        vm.prank(alice);
-        vm.expectRevert("Ownable: caller is not the owner");
+        // updateWhitelistMinBidAmount is now onlyOperations (OPERATION_MULTISIG_ROLE).
+        // bob has no roles in TestSetup.
+        vm.prank(bob);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         auctionInstance.updateWhitelistMinBidAmount(0.005 ether);
 
         vm.prank(owner);
-        vm.expectRevert("Invalid Amount");
+        vm.expectRevert(AuctionManager.InvalidWhitelistAmount.selector);
         auctionInstance.updateWhitelistMinBidAmount(0);
 
         vm.prank(owner);
-        vm.expectRevert("Invalid Amount");
+        vm.expectRevert(AuctionManager.InvalidWhitelistAmount.selector);
         auctionInstance.updateWhitelistMinBidAmount(0.2 ether);
 
         assertEq(auctionInstance.whitelistBidAmount(), 0.001 ether);
@@ -835,28 +838,6 @@ contract AuctionManagerTest is TestSetup {
         vm.expectEmit(true, false, false, true);
         emit BidCancelled(bidIds[0]);
         auctionInstance.cancelBid(bidIds[0]);      
-    }
-
-    function test_CanOnlySetAddressesOnce() public {
-        vm.startPrank(owner);
-
-        vm.expectRevert("Address already set");
-        auctionInstance.setStakingManagerContractAddress(address(0));
-    }
-
-    function test_SetAccumulatedRevenueThreshold() public {
-        vm.prank(bob);
-        vm.expectRevert("Caller is not the admin");
-        auctionInstance.setAccumulatedRevenueThreshold(0.005 ether);
-
-        // TODO: consider if 0 is an invalid threshold amount
-        // vm.prank(alice);
-        // vm.expectRevert("Invalid Amount");
-        // auctionInstance.updateAccumulatedRevenueThreshold(0);
-
-        vm.prank(alice);
-        auctionInstance.setAccumulatedRevenueThreshold(2 ether);
-        assertEq(auctionInstance.accumulatedRevenueThreshold(), 2 ether);
     }
 
     /*

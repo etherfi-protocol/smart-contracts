@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
+import "@tests/TestSetup.sol";
 import "forge-std/console2.sol";
 
 contract MembershipManagerTest is TestSetup {
@@ -19,7 +19,7 @@ contract MembershipManagerTest is TestSetup {
 //         vm.stopPrank();
 
 //         vm.prank(admin);
-//         withdrawRequestNFTInstance.unPauseContract();
+//         withdrawRequestNFTInstance.unpause();
 
 
 //         _upgradeMembershipManagerFromV0ToV1();
@@ -249,7 +249,7 @@ contract MembershipManagerTest is TestSetup {
 
 //         // PAUSE CONTRACTS AND GET READY FOR SNAPSHOT
 //         vm.startPrank(owner);
-//         earlyAdopterPoolInstance.pauseContract();
+//         earlyAdopterPoolInstance.pause();
 //         vm.stopPrank();
 
 //         /// SNAPSHOT FROM PYTHON SCRIPT GETS TAKEN HERE
@@ -320,7 +320,7 @@ contract MembershipManagerTest is TestSetup {
 
 //         // PAUSE CONTRACTS AND GET READY FOR SNAPSHOT
 //         vm.startPrank(owner);
-//         earlyAdopterPoolInstance.pauseContract();
+//         earlyAdopterPoolInstance.pause();
 //         vm.stopPrank();
 
 //         /// SNAPSHOT FROM PYTHON SCRIPT GETS TAKEN HERE
@@ -749,7 +749,7 @@ contract MembershipManagerTest is TestSetup {
 
 //         /// MERKLE TREE GETS GENERATED AND UPDATED
 //         vm.prank(owner);
-//         earlyAdopterPoolInstance.pauseContract();
+//         earlyAdopterPoolInstance.pause();
 //         vm.prank(alice);
 //         membershipNftInstance.setUpForEap(rootMigration2, requiredEapPointsPerEapDeposit);
 
@@ -931,14 +931,14 @@ contract MembershipManagerTest is TestSetup {
 
 //         vm.expectRevert(MembershipManager.OnlyAdmin.selector);
 //         vm.prank(owner);
-//         membershipManagerV1Instance.pauseContract();
+//         membershipManagerV1Instance.pause();
 
 //         vm.prank(alice);
-//         membershipManagerV1Instance.pauseContract();
+//         membershipManagerV1Instance.pause();
 //         assertEq(membershipManagerV1Instance.paused(), true);
 
 //         vm.prank(alice);
-//         membershipManagerV1Instance.unPauseContract();
+//         membershipManagerV1Instance.unpause();
 //         assertEq(membershipManagerV1Instance.paused(), false);
 //     }
 
@@ -1413,4 +1413,9 @@ contract MembershipManagerTest is TestSetup {
 //         assertEq(eETHInstance.balanceOf(address(membershipManagerV1Instance)), 0 ether);
 //         assertEq(eETHInstance.balanceOf(alice), 0.5 ether);
 //     }
+
+    function setUp() public {
+        setUpTests();
+    }
+
 }

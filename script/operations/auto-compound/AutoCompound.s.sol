@@ -4,17 +4,17 @@ pragma solidity ^0.8.27;
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 import "forge-std/StdJson.sol";
-import "../../utils/utils.sol";
-import "../../utils/GnosisTxGeneratorLib.sol";
-import "../../utils/StringHelpers.sol";
-import "../../utils/ValidatorHelpers.sol";
-import "../../utils/SafeTxHashLib.sol";
-import "../../../src/interfaces/IEtherFiNodesManager.sol";
-import "../../../src/interfaces/IEtherFiNode.sol";
-import "../../../src/eigenlayer-interfaces/IEigenPod.sol";
-import "../consolidations/GnosisConsolidationLib.sol";
+import "@scripts/utils/utils.sol";
+import "@scripts/utils/GnosisTxGeneratorLib.sol";
+import "@scripts/utils/StringHelpers.sol";
+import "@scripts/utils/ValidatorHelpers.sol";
+import "@scripts/utils/SafeTxHashLib.sol";
+import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNode.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
+import "@scripts/operations/consolidations/GnosisConsolidationLib.sol";
 import "@openzeppelin/contracts/governance/TimelockController.sol";
-import "../../../src/EtherFiTimelock.sol";
+import "@etherfi/governance/EtherFiTimelock.sol";
 /**
  * @title AutoCompound
  * @notice Generates auto-compounding (0x02) consolidation transactions grouped by EigenPod
@@ -56,7 +56,7 @@ contract AutoCompound is Script, Utils {
     IEtherFiNodesManager constant nodesManager = IEtherFiNodesManager(ETHERFI_NODES_MANAGER);
     EtherFiTimelock constant etherFiTimelock = EtherFiTimelock(payable(OPERATING_TIMELOCK));
     
-    // Note: MIN_DELAY_OPERATING_TIMELOCK is inherited from Utils (via TimelockUtils)
+    // Note: minDelay_OPERATING_TIMELOCK is inherited from Utils (via TimelockUtils)
     
     // Default parameters
     string constant DEFAULT_OUTPUT_FILE = "auto-compound-txns.json";
@@ -294,7 +294,7 @@ contract AutoCompound is Script, Utils {
             payloads,
             bytes32(0), // predecessor
             salt,
-            MIN_DELAY_OPERATING_TIMELOCK
+            minDelay_OPERATING_TIMELOCK
         );
         
         // Build execute calldata
@@ -308,8 +308,8 @@ contract AutoCompound is Script, Utils {
         );
 
         vm.prank(address(ETHERFI_OPERATING_ADMIN));
-        etherFiTimelock.scheduleBatch(targets, values, payloads, bytes32(0), salt, MIN_DELAY_OPERATING_TIMELOCK);
-        vm.warp(block.timestamp + MIN_DELAY_OPERATING_TIMELOCK + 1);
+        etherFiTimelock.scheduleBatch(targets, values, payloads, bytes32(0), salt, minDelay_OPERATING_TIMELOCK);
+        vm.warp(block.timestamp + minDelay_OPERATING_TIMELOCK + 1);
         vm.prank(address(ETHERFI_OPERATING_ADMIN));
         etherFiTimelock.executeBatch(targets, values, payloads, bytes32(0), salt);
     }
@@ -428,7 +428,7 @@ contract AutoCompound is Script, Utils {
         if (needsLinking) {
             console2.log("EXECUTION ORDER:");
             console2.log("1. Execute schedule transaction (link-schedule.json)");
-            console2.log("2. Wait", MIN_DELAY_OPERATING_TIMELOCK / 3600, "hours for timelock delay");
+            console2.log("2. Wait", minDelay_OPERATING_TIMELOCK / 3600, "hours for timelock delay");
             console2.log("3. Execute execute transaction (link-execute.json)");
             console2.log("4. Execute consolidation transaction (consolidation.json)");
         } else {

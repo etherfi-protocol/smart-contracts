@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import "../../test/TestSetup.sol";
-import "../../src/EtherFiTimelock.sol";
-import "../../src/EtherFiNode.sol";
-import "../../src/EtherFiNodesManager.sol";
-import "../../src/LiquidityPool.sol";
-import "../../src/StakingManager.sol";
-import "../../src/EtherFiOracle.sol";
-import "../../src/EtherFiAdmin.sol";
-import "../../src/EETH.sol";
-import "../../src/WeETH.sol";
-import "../../src/RoleRegistry.sol";
-import "../../src/EtherFiRateLimiter.sol";
-import "../../lib/openzeppelin-contracts/contracts/access/IAccessControl.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/governance/EtherFiTimelock.sol";
+import "@etherfi/staking/EtherFiNode.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/staking/StakingManager.sol";
+import "@etherfi/oracle/EtherFiOracle.sol";
+import "@etherfi/oracle/EtherFiAdmin.sol";
+import "@etherfi/core/EETH.sol";
+import "@etherfi/core/WeETH.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
+import "@openzeppelin/contracts/access/IAccessControl.sol";
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 
@@ -71,20 +71,16 @@ contract ElExitsTransactions is Script {
     //--------------------------------------------------------------------------------------
 
     bytes32 ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE =
-        EtherFiNodesManager(payable(etherFiNodesManagerImpl))
-            .ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE();
+        RoleRegistry(roleRegistry).EXECUTOR_OPERATIONS_ROLE();
 
     bytes32 ETHERFI_NODES_MANAGER_POD_PROVER_ROLE =
-        EtherFiNodesManager(payable(etherFiNodesManagerImpl))
-            .ETHERFI_NODES_MANAGER_POD_PROVER_ROLE();
+        RoleRegistry(roleRegistry).EIGENPOD_OPERATIONS_ROLE();
 
     bytes32 STAKING_MANAGER_ADMIN_ROLE =
-        StakingManager(payable(stakingManagerImpl))
-            .STAKING_MANAGER_ADMIN_ROLE();
+        RoleRegistry(roleRegistry).OPERATION_MULTISIG_ROLE();
 
     bytes32 ETHERFI_RATE_LIMITER_ADMIN_ROLE =
-        EtherFiRateLimiter(payable(etherFiRateLimiterImpl))
-            .ETHERFI_RATE_LIMITER_ADMIN_ROLE();
+        RoleRegistry(roleRegistry).OPERATION_MULTISIG_ROLE();
 
     //--------------------------------------------------------------------------------------
     //------------------------------- SELECTORS ---------------------------------------
@@ -95,8 +91,8 @@ contract ElExitsTransactions is Script {
     // cast sig "updateAllowedForwardedEigenpodCalls(bytes4,bool)"
     bytes4 UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR = 0x4cba6c74;
 
-    uint256 MIN_DELAY_OPERATING_TIMELOCK = 28800; // 8 hours
-    uint256 MIN_DELAY_TIMELOCK = 259200; // 72 hours
+    uint256 minDelay_OPERATING_TIMELOCK = 28800; // 8 hours
+    uint256 minDelay_TIMELOCK = 259200; // 72 hours
 
     // External calls selectors
     bytes4 UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_ONE = 0x9a15bf92; // claim(uint256,bytes32[],bytes)
@@ -325,7 +321,7 @@ contract ElExitsTransactions is Script {
             data,
             bytes32(0), // predecessor
             timelockSalt,
-            MIN_DELAY_TIMELOCK // minDelay
+            minDelay_TIMELOCK // minDelay
         );
         console2.log("====== Schedule Execute El Exit Transactions Tx:");
         console2.logBytes(scheduleCalldata);
@@ -348,10 +344,10 @@ contract ElExitsTransactions is Script {
         // uncomment to run against fork
         // console2.log("=== SCHEDULING BATCH ===");
         // console2.log("Current timestamp:", block.timestamp);
-        // etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, MIN_DELAY_TIMELOCK);
+        // etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, minDelay_TIMELOCK);
 
         // console2.log("=== FAST FORWARDING TIME ===");
-        // vm.warp(block.timestamp + MIN_DELAY_TIMELOCK + 1); // +1 to ensure it's past the delay
+        // vm.warp(block.timestamp + minDelay_TIMELOCK + 1); // +1 to ensure it's past the delay
         // console2.log("New timestamp:", block.timestamp);
         // etherFiTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
     }
@@ -496,7 +492,7 @@ contract ElExitsTransactions is Script {
             data,
             bytes32(0), // predecessor
             timelockSalt,
-            MIN_DELAY_OPERATING_TIMELOCK // minDelay
+            minDelay_OPERATING_TIMELOCK // minDelay
         );
         console2.log("====== Schedule Clean Up Old Whitelist Mappings In EtherFiNodesManager Tx:");
         console2.logBytes(scheduleCalldata);
@@ -518,10 +514,10 @@ contract ElExitsTransactions is Script {
         // uncomment to run against fork
         // console2.log("=== SCHEDULING BATCH ===");
         // console2.log("Current timestamp:", block.timestamp);
-        // etherFiOperatingTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, MIN_DELAY_OPERATING_TIMELOCK);
+        // etherFiOperatingTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, minDelay_OPERATING_TIMELOCK);
 
         // console2.log("=== FAST FORWARDING TIME ===");
-        // vm.warp(block.timestamp + MIN_DELAY_OPERATING_TIMELOCK + 1); // +1 to ensure it's past the delay
+        // vm.warp(block.timestamp + minDelay_OPERATING_TIMELOCK + 1); // +1 to ensure it's past the delay
         // console2.log("New timestamp:", block.timestamp);
         // etherFiOperatingTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
     }
@@ -577,7 +573,7 @@ contract ElExitsTransactions is Script {
             data,
             bytes32(0), // predecessor
             timelockSalt,
-            MIN_DELAY_OPERATING_TIMELOCK // minDelay
+            minDelay_OPERATING_TIMELOCK // minDelay
         );
         console2.log("====== Schedule New Mappings In EtherFiNodesManager Tx:");
         console2.logBytes(scheduleCalldata);
@@ -600,10 +596,10 @@ contract ElExitsTransactions is Script {
         // uncomment to run against fork
         // console2.log("=== SCHEDULING BATCH ===");
         // console2.log("Current timestamp:", block.timestamp);
-        // etherFiOperatingTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, MIN_DELAY_OPERATING_TIMELOCK);
+        // etherFiOperatingTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, minDelay_OPERATING_TIMELOCK);
 
         // // console2.log("=== FAST FORWARDING TIME ===");
-        // vm.warp(block.timestamp + MIN_DELAY_OPERATING_TIMELOCK + 1); // +1 to ensure it's past the delay
+        // vm.warp(block.timestamp + minDelay_OPERATING_TIMELOCK + 1); // +1 to ensure it's past the delay
         // console2.log("New timestamp:", block.timestamp);
         // etherFiOperatingTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
     }
@@ -739,7 +735,7 @@ contract ElExitsTransactions is Script {
             data,
             bytes32(0), // predecessor
             timelockSalt,
-            MIN_DELAY_OPERATING_TIMELOCK // minDelay
+            minDelay_OPERATING_TIMELOCK // minDelay
         );
         console2.log("====== Schedule Rollback New Mappings In EtherFiNodesManager Tx:");
         console2.logBytes(scheduleCalldata);
@@ -762,10 +758,10 @@ contract ElExitsTransactions is Script {
         // uncomment to run against fork
         // console2.log("=== SCHEDULING BATCH ===");
         // console2.log("Current timestamp:", block.timestamp);
-        // etherFiOperatingTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, MIN_DELAY_OPERATING_TIMELOCK);
+        // etherFiOperatingTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, minDelay_OPERATING_TIMELOCK);
 
         // console2.log("=== FAST FORWARDING TIME ===");
-        // vm.warp(block.timestamp + MIN_DELAY_OPERATING_TIMELOCK + 1); // +1 to ensure it's past the delay
+        // vm.warp(block.timestamp + minDelay_OPERATING_TIMELOCK + 1); // +1 to ensure it's past the delay
         // console2.log("New timestamp:", block.timestamp);
         // etherFiOperatingTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
     }
@@ -816,7 +812,7 @@ contract ElExitsTransactions is Script {
             data,
             bytes32(0), // predecessor
             timelockSalt,
-            MIN_DELAY_TIMELOCK // minDelay
+            minDelay_TIMELOCK // minDelay
         );
         console2.log("====== Rollback Schedule Tx:");
         console2.logBytes(scheduleCalldata);
@@ -840,10 +836,10 @@ contract ElExitsTransactions is Script {
         // uncomment to run against fork
         // console2.log("=== SCHEDULING BATCH ===");
         // console2.log("Current timestamp:", block.timestamp);
-        // etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, MIN_DELAY_TIMELOCK);
+        // etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, minDelay_TIMELOCK);
 
         // console2.log("=== FAST FORWARDING TIME ===");
-        // vm.warp(block.timestamp + MIN_DELAY_TIMELOCK + 1); // +1 to ensure it's past the delay
+        // vm.warp(block.timestamp + minDelay_TIMELOCK + 1); // +1 to ensure it's past the delay
         // console2.log("New timestamp:", block.timestamp);
         // etherFiTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
     }
@@ -988,7 +984,7 @@ contract ElExitsTransactions is Script {
             data,
             bytes32(0), // predecessor
             timelockSalt,
-            MIN_DELAY_OPERATING_TIMELOCK // minDelay
+            minDelay_OPERATING_TIMELOCK // minDelay
         );
         console2.log("====== Schedule Rollback Cleaned Up Old Whitelist Mappings In EtherFiNodesManager Tx:");
         console2.logBytes(scheduleCalldata);
@@ -1012,10 +1008,10 @@ contract ElExitsTransactions is Script {
         // uncomment to run against fork
         // console2.log("=== SCHEDULING BATCH ===");
         // console2.log("Current timestamp:", block.timestamp);
-        // etherFiOperatingTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, MIN_DELAY_OPERATING_TIMELOCK);
+        // etherFiOperatingTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, minDelay_OPERATING_TIMELOCK);
 
         // console2.log("=== FAST FORWARDING TIME ===");
-        // vm.warp(block.timestamp + MIN_DELAY_OPERATING_TIMELOCK + 1); // +1 to ensure it's past the delay
+        // vm.warp(block.timestamp + minDelay_OPERATING_TIMELOCK + 1); // +1 to ensure it's past the delay
         // console2.log("New timestamp:", block.timestamp);
         // etherFiOperatingTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
     }

@@ -3,93 +3,21 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Test.sol";
 import "forge-std/console2.sol";
-import "../src/EtherFiRateLimiter.sol";
-import "../src/UUPSProxy.sol";
-import "../src/interfaces/IEtherFiRateLimiter.sol";
-import "../src/interfaces/IRoleRegistry.sol";
-import "../lib/BucketLimiter.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
+import "@etherfi/governance/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
+import "@etherfi/governance/rate-limiting/libraries/BucketLimiter.sol";
 
-contract MockRoleRegistry is IRoleRegistry {
-    mapping(bytes32 => mapping(address => bool)) public roleAssignments;
-    mapping(address => bool) public protocolUpgraders;
-    mapping(address => bool) public protocolPausers;
-    mapping(address => bool) public protocolUnpausers;
-    address public override owner;
-
-    bytes32 public constant ETHERFI_RATE_LIMITER_ADMIN_ROLE = keccak256("ETHERFI_RATE_LIMITER_ADMIN_ROLE");
-    bytes32 public constant PROTOCOL_PAUSER_ROLE = keccak256("PROTOCOL_PAUSER");
-    bytes32 public constant PROTOCOL_UNPAUSER_ROLE = keccak256("PROTOCOL_UNPAUSER");
-
-    constructor() {
-        owner = msg.sender;
-    }
-
-    function initialize(address _owner) external override {
-        owner = _owner;
-    }
-
-    function MAX_ROLE() external pure override returns (uint256) {
-        return 256;
-    }
-
-    function grantRole(bytes32 role, address account) external {
-        roleAssignments[role][account] = true;
-    }
-
-    function revokeRole(bytes32 role, address account) external {
-        roleAssignments[role][account] = false;
-    }
-
-    function hasRole(bytes32 role, address account) external view returns (bool) {
-        return roleAssignments[role][account];
-    }
-
-    function roleHolders(bytes32 role) external view override returns (address[] memory) {
-        // Simplified implementation - return empty array
-        return new address[](0);
-    }
-
-    function checkRoles(address account, bytes memory encodedRoles) external view override {
-        // Simplified implementation - no-op
-    }
-
-    function setProtocolUpgrader(address account, bool status) external {
-        protocolUpgraders[account] = status;
-    }
-
-    function setProtocolPauser(address account, bool status) external {
-        protocolPausers[account] = status;
-    }
-
-    function setProtocolUnpauser(address account, bool status) external {
-        protocolUnpausers[account] = status;
-    }
-
-    function onlyProtocolUpgrader(address account) external view {
-        require(protocolUpgraders[account], "Not protocol upgrader");
-    }
-
-    function PROTOCOL_PAUSER() external pure returns (bytes32) {
-        return PROTOCOL_PAUSER_ROLE;
-    }
-
-    function PROTOCOL_UNPAUSER() external pure returns (bytes32) {
-        return PROTOCOL_UNPAUSER_ROLE;
-    }
-}
-
-contract EtherFiRateLimiterTest is Test {
+contract EtherFiRateLimiterTest is TestSetup {
     EtherFiRateLimiter public rateLimiter;
-    MockRoleRegistry public roleRegistry;
-    UUPSProxy public proxy;
-    
-    address public admin = makeAddr("admin");
+    RoleRegistry public roleRegistry;
+
     address public consumer1 = makeAddr("consumer1");
     address public consumer2 = makeAddr("consumer2");
     address public unauthorizedUser = makeAddr("unauthorized");
     address public pauser = makeAddr("pauser");
     address public unpauser = makeAddr("unpauser");
-    address public upgrader = makeAddr("upgrader");
 
     bytes32 public constant LIMIT_ID_1 = keccak256("LIMIT_1");
     bytes32 public constant LIMIT_ID_2 = keccak256("LIMIT_2");
@@ -107,24 +35,17 @@ contract EtherFiRateLimiterTest is Test {
     event ConsumerUpdated(bytes32 indexed id, address indexed consumer, bool allowed);
 
     function setUp() public {
-        // Deploy mock role registry
-        roleRegistry = new MockRoleRegistry();
-        
-        // Deploy rate limiter implementation
-        EtherFiRateLimiter impl = new EtherFiRateLimiter(address(roleRegistry));
-        
-        // Deploy proxy
-        proxy = new UUPSProxy(address(impl), "");
-        rateLimiter = EtherFiRateLimiter(address(proxy));
-        
-        // Initialize
-        rateLimiter.initialize();
-        
-        // Setup roles
-        roleRegistry.grantRole(roleRegistry.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), admin);
-        roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER_ROLE(), pauser);
-        roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER_ROLE(), unpauser);
-        roleRegistry.setProtocolUpgrader(upgrader, true);
+        setUpTests();
+        rateLimiter = rateLimiterInstance;
+        roleRegistry = roleRegistryInstance;
+
+        vm.startPrank(owner);
+        // pauser / unpauser roles consolidated into OPERATION_MULTISIG_ROLE
+        // (rate limiter modifiers use onlyAdmin = OPERATION_TIMELOCK_ROLE).
+        roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), pauser);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), unpauser);
+        vm.stopPrank();
     }
 
     //--------------------------------------------------------------------------------------
@@ -152,7 +73,7 @@ contract EtherFiRateLimiterTest is Test {
 
         // Should fail with unauthorized user
         vm.prank(unauthorizedUser);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         rateLimiter.createNewLimiter(LIMIT_ID_2, DEFAULT_CAPACITY, DEFAULT_REFILL_RATE);
     }
 
@@ -167,7 +88,7 @@ contract EtherFiRateLimiterTest is Test {
 
         // Should fail with unauthorized user
         vm.prank(unauthorizedUser);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         rateLimiter.updateConsumers(LIMIT_ID_1, consumer2, true);
     }
 
@@ -182,7 +103,7 @@ contract EtherFiRateLimiterTest is Test {
 
         // Should fail with unauthorized user
         vm.prank(unauthorizedUser);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         rateLimiter.setCapacity(LIMIT_ID_1, DEFAULT_CAPACITY * 3);
     }
 
@@ -197,7 +118,7 @@ contract EtherFiRateLimiterTest is Test {
 
         // Should fail with unauthorized user
         vm.prank(unauthorizedUser);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         rateLimiter.setRefillRate(LIMIT_ID_1, DEFAULT_REFILL_RATE * 3);
     }
 
@@ -212,40 +133,40 @@ contract EtherFiRateLimiterTest is Test {
 
         // Should fail with unauthorized user
         vm.prank(unauthorizedUser);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         rateLimiter.setRemaining(LIMIT_ID_1, DEFAULT_CAPACITY / 4);
     }
 
     function test_onlyPauserCanPause() public {
         // Should succeed with pauser
         vm.prank(pauser);
-        rateLimiter.pauseContract();
+        rateLimiter.pause();
         assertTrue(rateLimiter.paused());
 
         // Should fail with unauthorized user
         vm.prank(unauthorizedUser);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
-        rateLimiter.pauseContract();
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        rateLimiter.pause();
     }
 
     function test_onlyUnpauserCanUnpause() public {
         // Setup: Pause first
         vm.prank(pauser);
-        rateLimiter.pauseContract();
+        rateLimiter.pause();
 
         // Should succeed with unpauser
         vm.prank(unpauser);
-        rateLimiter.unPauseContract();
+        rateLimiter.unpause();
         assertFalse(rateLimiter.paused());
 
         // Pause again for next test
         vm.prank(pauser);
-        rateLimiter.pauseContract();
+        rateLimiter.pause();
 
         // Should fail with unauthorized user
         vm.prank(unauthorizedUser);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
-        rateLimiter.unPauseContract();
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        rateLimiter.unpause();
     }
 
     //--------------------------------------------------------------------------------------
@@ -428,11 +349,11 @@ contract EtherFiRateLimiterTest is Test {
 
         // Pause contract
         vm.prank(pauser);
-        rateLimiter.pauseContract();
+        rateLimiter.pause();
 
         // Try to consume while paused
         vm.prank(consumer1);
-        vm.expectRevert("Pausable: paused");
+        vm.expectRevert(Pausable.ContractPaused.selector);
         rateLimiter.consume(LIMIT_ID_1, SMALL_AMOUNT);
     }
 
@@ -810,14 +731,13 @@ contract EtherFiRateLimiterTest is Test {
     function test_upgradeability() public {
         // Verify upgrade authorization
         vm.prank(unauthorizedUser);
-        vm.expectRevert("Not protocol upgrader");
+        vm.expectRevert(RoleRegistry.OnlyUpgradeTimelock.selector);
         rateLimiter.upgradeTo(address(0x1));
 
-        // Should succeed with proper role (this is just testing the authorization, not doing actual upgrade)
-        vm.prank(upgrader);
-        // We'll just test that it doesn't revert due to role check
-        // Actually upgrading would require a new implementation
-        vm.expectRevert(); // Will revert for other reasons but not role check
+        // Owner is the protocol upgrader; passes role check but reverts for other reasons
+        // since address(0x1) is not a valid UUPS implementation.
+        vm.prank(owner);
+        vm.expectRevert();
         rateLimiter.upgradeTo(address(0x1));
     }
 
@@ -902,7 +822,10 @@ contract EtherFiRateLimiterTest is Test {
         bytes32 limitId
     ) public {
         vm.assume(limitId != bytes32(0)); // Avoid zero limit ID
-        
+        // TestSetup pre-creates eETH/weETH mint/burn/transfer limiters; skip any
+        // fuzzer pick that collides with an already-registered ID.
+        vm.assume(!rateLimiter.limitExists(limitId));
+
         vm.prank(admin);
         rateLimiter.createNewLimiter(limitId, capacity, refillRate);
         

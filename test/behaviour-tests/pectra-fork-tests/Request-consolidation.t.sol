@@ -3,17 +3,18 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Test.sol";
 import "forge-std/console2.sol";
-import "../../../src/EtherFiNodesManager.sol";
-import "../../../src/EtherFiNode.sol";
-import "../../../src/EtherFiTimelock.sol";
-import "../../../src/EtherFiRateLimiter.sol";
-import "../../../src/RoleRegistry.sol";
-import "../../../src/interfaces/IRoleRegistry.sol";
-import "../../../src/interfaces/IEtherFiRateLimiter.sol";
-import "../../../src/interfaces/IStakingManager.sol";
-import {IEigenPod, IEigenPodTypes } from "../../../src/eigenlayer-interfaces/IEigenPod.sol";
-import "../../TestSetup.sol";
-import "../../../script/deploys/Deployed.s.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/staking/EtherFiNode.sol";
+import "@etherfi/governance/EtherFiTimelock.sol";
+import "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/governance/interfaces/IRoleRegistry.sol";
+import "@etherfi/governance/rate-limiting/interfaces/IEtherFiRateLimiter.sol";
+import "@etherfi/staking/interfaces/IStakingManager.sol";
+import {IEigenPod, IEigenPodTypes } from "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
+import {EigenPodTestHelpers} from "@tests/utils/EigenPodTestHelpers.sol";
+import "@tests/TestSetup.sol";
+import "@scripts/deploys/Deployed.s.sol";
 /**
  * @title RequestConsolidationTest
  * @notice test for request consolidation
@@ -52,9 +53,12 @@ contract RequestConsolidationTest is TestSetup, Deployed {
 
         // Setup consolidation rate limiter bucket
         vm.startPrank(roleRegistry.owner());
-        bytes32 rateLimiterAdminRole = keccak256("ETHERFI_RATE_LIMITER_ADMIN_ROLE");
-        roleRegistry.grantRole(rateLimiterAdminRole, roleRegistry.owner());
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE(), realElExiter);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), roleRegistry.owner());
+        // RateLimiter mutators (createNewLimiter, updateConsumers) are now onlyAdmin → OPERATION_TIMELOCK_ROLE.
+        roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), roleRegistry.owner());
+        roleRegistry.grantRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), realElExiter);
+        // ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE consolidated into EXECUTOR_OPERATIONS_ROLE.
+        roleRegistry.grantRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), ETHERFI_OPERATING_ADMIN);
         vm.stopPrank();
 
         vm.startPrank(roleRegistry.owner());
@@ -113,7 +117,7 @@ contract RequestConsolidationTest is TestSetup, Deployed {
 
     function test_RequestConsolidation() public {
         console2.log("=== REQUEST CONSOLIDATION TEST ===");
-        bool hasRole = roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE(), ETHERFI_OPERATING_ADMIN);
+        bool hasRole = roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), ETHERFI_OPERATING_ADMIN);
         require(hasRole, "test: ETHERFI_OPERATING_ADMIN does not have the Consolidation Role");
 
         bytes[] memory pubkeys = new bytes[](3);
@@ -132,6 +136,9 @@ contract RequestConsolidationTest is TestSetup, Deployed {
         console.log("Linking legacy validator ids for one validator complete");  
 
         ( , IEigenPod pod0) = _resolvePod(pubkeys[0]);
+
+        // Target validator must be ACTIVE in pod0; here all 3 reqs target pubkeys[0].
+        EigenPodTestHelpers.forceValidatorActive(pod0, pubkeys[0]);
 
         IEigenPodTypes.ConsolidationRequest[] memory reqs = _consolidationRequestsFromPubkeys(pubkeys);
 
@@ -152,7 +159,7 @@ contract RequestConsolidationTest is TestSetup, Deployed {
 
     function test_switchToCompounding() public {
         console2.log("=== SWITCH TO COMPOUNDING TEST ===");
-        bool hasRole = roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE(), ETHERFI_OPERATING_ADMIN);
+        bool hasRole = roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), ETHERFI_OPERATING_ADMIN);
         require(hasRole, "test: ETHERFI_OPERATING_ADMIN does not have the Consolidation Role");
 
         bytes[] memory pubkeys = new bytes[](1);
@@ -165,6 +172,10 @@ contract RequestConsolidationTest is TestSetup, Deployed {
         vm.stopPrank();  
 
         ( , IEigenPod pod0) = _resolvePod(pubkeys[0]);
+
+        // Switch-to-compounding has src == target, so the same single pubkey
+        // must be ACTIVE in pod0.
+        EigenPodTestHelpers.forceValidatorActive(pod0, pubkeys[0]);
 
         IEigenPodTypes.ConsolidationRequest[] memory reqs = _switchToCompoundingRequestsFromPubkeys(pubkeys);
 
@@ -209,8 +220,14 @@ contract RequestConsolidationTest is TestSetup, Deployed {
 
         ( , IEigenPod pod0) = _resolvePod(pubkeys[0]);
 
+        // Switch-to-compounding has src == target, so each request's pubkey
+        // must be ACTIVE in pod0.
+        for (uint256 i = 0; i < pubkeys.length; ++i) {
+            EigenPodTestHelpers.forceValidatorActive(pod0, pubkeys[i]);
+        }
+
         IEigenPodTypes.ConsolidationRequest[] memory reqs = _switchToCompoundingRequestsFromPubkeys(pubkeys);
-        
+
         uint256 feePer = pod0.getConsolidationRequestFee();
         uint256 n = reqs.length;
         uint256 valueToSend = feePer * n;

@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
-import "../src/EtherFiNode.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/staking/EtherFiNode.sol";
 import "@openzeppelin/contracts/proxy/beacon/IBeacon.sol";
 import "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
-import "../src/eigenlayer-interfaces/IEigenPodManager.sol";
-import "../src/eigenlayer-interfaces/IEigenPod.sol";
-import "../src/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
-import "../src/eigenlayer-libraries/BeaconChainProofs.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPodManager.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
+import "@eigenlayer-libraries/BeaconChainProofs.sol";
 
-import "./eigenlayer-utils/ProofParsing.sol";
-import "./eigenlayer-mocks/BeaconChainOracleMock.sol";
+import "@tests/eigenlayer-utils/ProofParsing.sol";
+import "@tests/eigenlayer-mocks/BeaconChainOracleMock.sol";
 
 import "forge-std/console2.sol";
 import "forge-std/console.sol";
@@ -72,10 +72,10 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         EtherFiNodesManager newManagerImpl = new EtherFiNodesManager(address(0x0), address(0x0));
         EtherFiNode newNodeImpl = new EtherFiNode(address(0x0), address(0x0), address(0x0), address(0x0));
 
-        vm.startPrank(managerInstance.owner());
+        vm.startPrank(roleRegistryInstance.owner());
         managerInstance.upgradeTo(address(newManagerImpl));
         vm.stopPrank();
-        vm.startPrank(stakingManagerInstance.owner());
+        vm.startPrank(roleRegistryInstance.owner());
         stakingManagerInstance.upgradeEtherFiNode(address(newNodeImpl));
         vm.stopPrank();
 
@@ -177,7 +177,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         data[0] = abi.encodeWithSelector(selector, podOwner, alice);
 
         // whitelist this external call
-        vm.prank(managerInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         managerInstance.updateAllowedForwardedExternalCalls(selector, delayedWithdrawalRouter, true);
 
         vm.prank(owner);
@@ -237,7 +237,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         data[0] = abi.encodeWithSelector(selector, operator, signatureWithExpiry, bytes32(0));
 
         // whitelist this external call
-        vm.prank(managerInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         managerInstance.updateAllowedForwardedExternalCalls(selector, delegationManager, true);
 
         assertEq(eigenLayerDelegationManager.isDelegated(podOwner), false);
@@ -260,7 +260,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
             data[0] = abi.encodeWithSelector(selector, podOwner);
 
             // whitelist this external call
-            vm.prank(managerInstance.owner());
+            vm.prank(roleRegistryInstance.owner());
             managerInstance.updateAllowedForwardedExternalCalls(selector, delegationManager, true);
 
             vm.prank(owner);
@@ -281,7 +281,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
             data[0] = abi.encodeWithSelector(selector, dsrv, signatureWithExpiry, bytes32(0));
 
             // whitelist this external call
-            vm.prank(managerInstance.owner());
+            vm.prank(roleRegistryInstance.owner());
             managerInstance.updateAllowedForwardedExternalCalls(selector, delegationManager, true);
 
             vm.startPrank(owner);
@@ -385,7 +385,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         vm.stopPrank();
 
-        vm.startPrank(managerInstance.owner());
+        vm.startPrank(roleRegistryInstance.owner());
         managerInstance.updateAllowedForwardedEigenpodCalls(selector1, true);
         managerInstance.updateAllowedForwardedExternalCalls(selector2, eigenPodManager, true);
         managerInstance.updateAllowedForwardedExternalCalls(selector3, delegationManager, true);

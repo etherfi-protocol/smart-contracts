@@ -7,9 +7,9 @@ import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 
-import "../interfaces/IProtocolRevenueManager.sol";
-import "../interfaces/IEtherFiNodesManager.sol";
-import "../interfaces/IAuctionManager.sol";
+import "@etherfi/archive/interfaces/IProtocolRevenueManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
+import "@etherfi/staking/interfaces/IAuctionManager.sol";
 
 contract ProtocolRevenueManager is
     Initializable,

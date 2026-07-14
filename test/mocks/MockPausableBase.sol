@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity >=0.5.0;
 
-import "../../src/eigenlayer-interfaces/IPauserRegistry.sol";
-import "../../src/eigenlayer-interfaces/IPausable.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IPauserRegistry.sol";
+import "@etherfi/interfaces/eigenlayer-interfaces/IPausable.sol";
 
 /**
  * @title Adds pausability to a contract, with pausing & unpausing controlled by the `pauser` and `unpauser` of a PauserRegistry contract.

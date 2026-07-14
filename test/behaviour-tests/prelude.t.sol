@@ -2,25 +2,31 @@ pragma solidity ^0.8.27;
 
 import "forge-std/console2.sol";
 import "forge-std/Test.sol";
-import "../../test/common/ArrayTestHelper.sol";
-import "../../src/interfaces/ILiquidityPool.sol";
-import "../../src/interfaces/IStakingManager.sol";
-import "../../src/StakingManager.sol";
-import "../../src/interfaces/IEtherFiNodesManager.sol";
-import "../../src/EtherFiNodesManager.sol";
-import "../../src/interfaces/IEtherFiNode.sol";
-import {IEigenPod, IEigenPodTypes } from "../../src/eigenlayer-interfaces/IEigenPod.sol";
-import "../../src/EtherFiNode.sol";
-import "../../src/EtherFiRateLimiter.sol";
-import "../../src/UUPSProxy.sol";
-import "../../src/NodeOperatorManager.sol";
-import "../../src/interfaces/ITNFT.sol";
-import "../../src/interfaces/IBNFT.sol";
-import "../../src/AuctionManager.sol";
-import "../../src/libraries/DepositDataRootGenerator.sol";
+import {StdStorage, stdStorage} from "forge-std/StdStorage.sol";
+import "@tests/common/ArrayTestHelper.sol";
+import {fundContract} from "@tests/TestSetup.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/staking/interfaces/IStakingManager.sol";
+import "@etherfi/staking/StakingManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNode.sol";
+import {IEigenPod, IEigenPodTypes } from "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
+import "@etherfi/staking/EtherFiNode.sol";
+import "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
+import "@etherfi/utils/UUPSProxy.sol";
+import "@etherfi/staking/NodeOperatorManager.sol";
+import "@etherfi/archive/interfaces/ITNFT.sol";
+import "@etherfi/archive/interfaces/IBNFT.sol";
+import "@etherfi/staking/AuctionManager.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/governance/Blacklister.sol";
+import "@etherfi/staking/libraries/DepositDataRootGenerator.sol";
 
 
 contract PreludeTest is Test, ArrayTestHelper {
+    using stdStorage for StdStorage;
+
 
     StakingManager stakingManager;
     ILiquidityPool liquidityPool;
@@ -36,7 +42,7 @@ contract PreludeTest is Test, ArrayTestHelper {
     address eigenPodManager = address(0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338);
     address delegationManager = address(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
     address etherFiNodeBeacon = address(0x3c55986Cfee455E2533F4D29006634EcF9B7c03F);
-    RoleRegistry roleRegistry = RoleRegistry(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9);
+    IRoleRegistry roleRegistry = IRoleRegistry(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9);
     IStrategy beaconStrategy = IStrategy(address(0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0));
 
     // role users
@@ -57,6 +63,7 @@ contract PreludeTest is Test, ArrayTestHelper {
 
     TestValidatorParams defaultTestValidatorParams;
     EtherFiRateLimiter rateLimiter;
+    Blacklister blacklisterInstance;
 
     function setUp() public {
 
@@ -67,7 +74,24 @@ contract PreludeTest is Test, ArrayTestHelper {
         etherFiNodesManager = EtherFiNodesManager(payable(0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F));
         auctionManager = AuctionManager(0x00C452aFFee3a17d9Cecc1Bcd2B8d5C7635C4CB9);
 
-        // deploy new staking manager implementation
+        // Deploy a fresh Blacklister so any upgraded impl that wires it as an immutable
+        // has a non-zero target to call into.
+        Blacklister blacklisterImpl = new Blacklister(address(roleRegistry));
+        blacklisterInstance = Blacklister(address(new UUPSProxy(address(blacklisterImpl), abi.encodeWithSelector(Blacklister.initialize.selector))));
+
+        // Deploy rate limiter first with proxy pattern (used by EtherFiNodesManager).
+        // Pass the on-chain eETH / weETH proxy addresses so the per-address bucket API
+        // works for behaviour tests that wrap or transfer through them.
+        EtherFiRateLimiter rateLimiterImpl = new EtherFiRateLimiter(address(roleRegistry), 0x35fA164735182de50811E8e2E824cFb9B6118ac2, 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee);
+        UUPSProxy rateLimiterProxy = new UUPSProxy(address(rateLimiterImpl), "");
+        rateLimiter = EtherFiRateLimiter(address(rateLimiterProxy));
+        rateLimiter.initialize();
+
+        // Upgrade StakingManager / LP / EtherFiNodesManager FIRST, while the
+        // deployed RoleRegistry still exposes the legacy `onlyProtocolUpgrader`
+        // selector that their currently-deployed `_authorizeUpgrade` calls into.
+        // Once we swap RoleRegistry below, that selector is gone, so the order
+        // matters.
         StakingManager stakingManagerImpl = new StakingManager(
             address(liquidityPool),
             address(etherFiNodesManager),
@@ -76,54 +100,78 @@ contract PreludeTest is Test, ArrayTestHelper {
             address(etherFiNodeBeacon),
             address(roleRegistry)
         );
-        vm.prank(stakingManager.owner());
+        vm.prank(roleRegistry.owner());
         stakingManager.upgradeTo(address(stakingManagerImpl));
 
-        LiquidityPool liquidityPoolImpl = new LiquidityPool(address(0x0));
-        vm.prank(LiquidityPool(payable(address(liquidityPool))).owner());
+        // Wire LP immutables to the real mainnet proxy addresses so calls into
+        // eETH / withdrawRequestNFT / etc. land on live contracts rather than 0x0.
+        LiquidityPool liquidityPoolImpl = new LiquidityPool(
+            ILiquidityPool.ConstructorAddresses({
+                stakingManager: address(stakingManager),
+                nodesManager: address(etherFiNodesManager),
+                eETH: 0x35fA164735182de50811E8e2E824cFb9B6118ac2,
+                withdrawRequestNFT: 0x7d5706f6ef3F89B3951E23e557CDFBC3239D4E2c,
+                liquifier: 0x9FFDF407cDe9a93c47611799DA23924Af3EF764F,
+                etherFiRedemptionManager: 0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0,
+                roleRegistry: address(roleRegistry),
+                priorityWithdrawalQueue: 0x35e7D6feF6f72aDd3c3e39dEc6d9CCc29e3345FA,
+                blacklister: address(blacklisterInstance),
+                etherFiAdminContract: 0x0EF8fa4760Db8f5Cd4d993f3e3416f30f942D705,
+                membershipManager: 0x3d320286E014C3e1ce99Af6d6B00f0C1D63E3000
+            })
+        );
+        vm.prank(roleRegistry.owner());
         LiquidityPool(payable(address(liquidityPool))).upgradeTo(address(liquidityPoolImpl));
 
-        // Deploy rate limiter first with proxy pattern
-        EtherFiRateLimiter rateLimiterImpl = new EtherFiRateLimiter(address(roleRegistry));
-        UUPSProxy rateLimiterProxy = new UUPSProxy(address(rateLimiterImpl), "");
-        rateLimiter = EtherFiRateLimiter(address(rateLimiterProxy));
-        rateLimiter.initialize();
-        
+        EtherFiNodesManager etherFiNodesManagerImpl = new EtherFiNodesManager(address(stakingManager), address(roleRegistry), address(rateLimiter));
+        vm.prank(roleRegistry.owner());
+        etherFiNodesManager.upgradeTo(address(etherFiNodesManagerImpl));
+
+        // Now swap RoleRegistry in place so newly-added role getters defined in
+        // RolesLibrary are reachable from the freshly-upgraded impls.
+        address newRoleRegistryImpl = address(new RoleRegistry(address(0xdead)));
+        vm.prank(roleRegistry.owner());
+        RoleRegistry(address(roleRegistry)).upgradeTo(newRoleRegistryImpl);
+
+        // `upgradeEtherFiNode` checks UPGRADE_TIMELOCK_ROLE via
+        // `onlyUpgradeTimelock`. Grant it to every proxy owner pranked below.
+        vm.startPrank(roleRegistry.owner());
+        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), roleRegistry.owner());
+        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), roleRegistry.owner());
+        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), roleRegistry.owner());
+        vm.stopPrank();
+
         // upgrade etherFiNode impl
         etherFiNodeImpl = new EtherFiNode(
             address(liquidityPool),
             address(etherFiNodesManager),
             eigenPodManager,
-            delegationManager,
-            address(roleRegistry)
+            delegationManager
         );
-        vm.prank(stakingManager.owner());
+        vm.prank(roleRegistry.owner());
         stakingManager.upgradeEtherFiNode(address(etherFiNodeImpl));
 
-        // deploy new efnm implementation
-        EtherFiNodesManager etherFiNodesManagerImpl = new EtherFiNodesManager(address(stakingManager), address(roleRegistry), address(rateLimiter));
-        vm.prank(etherFiNodesManager.owner());
-        etherFiNodesManager.upgradeTo(address(etherFiNodesManagerImpl));
-
-        vm.prank(auctionManager.owner());
+        vm.prank(roleRegistry.owner());
         auctionManager.disableWhitelist();
 
         // permissions
         vm.startPrank(roleRegistry.owner());
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_ADMIN_ROLE(), admin);
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(), callForwarder);
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), eigenlayerAdmin);
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManager));
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_POD_PROVER_ROLE(), address(podProver));
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), elExiter);
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE(), admin);
-        roleRegistry.grantRole(stakingManager.STAKING_MANAGER_NODE_CREATOR_ROLE(), admin);
-        roleRegistry.grantRole(stakingManager.STAKING_MANAGER_ADMIN_ROLE(), admin);
-        roleRegistry.grantRole(liquidityPoolImpl.LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE(), admin);
-        roleRegistry.grantRole(liquidityPoolImpl.LIQUIDITY_POOL_ADMIN_ROLE(), admin);
-        roleRegistry.grantRole(rateLimiter.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), admin);
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE(), elExiter);
+        roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.EIGENPOD_OPERATIONS_ROLE(), callForwarder);
+        roleRegistry.grantRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), eigenlayerAdmin);
+        roleRegistry.grantRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), address(stakingManager));
+        roleRegistry.grantRole(roleRegistry.EIGENPOD_OPERATIONS_ROLE(), address(podProver));
+        roleRegistry.grantRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), elExiter);
+        roleRegistry.grantRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), elExiter);
         vm.stopPrank();
+
+        // register admin as a validator spawner so helper_createValidator can drive validator creation through LP entry points
+        vm.prank(admin);
+        liquidityPool.registerValidatorSpawner(admin);
 
         vm.startPrank(admin);
         rateLimiter.createNewLimiter(etherFiNodesManager.UNRESTAKING_LIMIT_ID(), 172_800_000_000_000, 2_000_000_000);
@@ -212,13 +260,15 @@ contract PreludeTest is Test, ArrayTestHelper {
             depositDataRoot: initialDepositRoot,
             ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
         });
-        vm.deal(address(liquidityPool), 10000 ether);
+        // Fund the LP through receive() so balance and totalValueInLp stay in sync (vm.deal would clobber balance only).
+        fundContract(address(liquidityPool), 10000 ether);
 
-        vm.prank(address(liquidityPool));
-        stakingManager.registerBeaconValidators(toArray(initialDepositData), toArray_u256(params.bidId), params.etherFiNode);
+        // Drive validator creation through LP entry points so _accountForEthSentOut keeps accounting consistent.
+        vm.prank(admin);
+        liquidityPool.batchRegister(toArray(initialDepositData), toArray_u256(params.bidId), params.etherFiNode);
 
-        vm.prank(address(liquidityPool));
-        stakingManager.createBeaconValidators{value: 1 ether}(toArray(initialDepositData), toArray_u256(params.bidId), params.etherFiNode);
+        vm.prank(admin);
+        liquidityPool.batchCreateBeaconValidators(toArray(initialDepositData), toArray_u256(params.bidId), params.etherFiNode);
 
         uint256 confirmAmount = params.validatorSize - 1 ether;
 
@@ -235,8 +285,8 @@ contract PreludeTest is Test, ArrayTestHelper {
             depositDataRoot: confirmDepositRoot,
             ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
         });
-        vm.prank(address(liquidityPool));
-        stakingManager.confirmAndFundBeaconValidators{value: confirmAmount}(toArray(confirmDepositData), params.validatorSize);
+        vm.prank(admin);
+        liquidityPool.confirmAndFundBeaconValidators(toArray(confirmDepositData), params.validatorSize);
 
         if (params.withdrawable) {
             // Poke some withdrawable funds into the restakedExecutionLayerGwei storage slot of the eigenpod.
@@ -327,12 +377,26 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.prank(admin);
         liquidityPool.setValidatorSizeWei(33 ether);
 
-        vm.prank(admin);
-        liquidityPool.batchApproveRegistration(
-            toArray_u256(bidId),
-            toArray_bytes(pubkey),
-            toArray_bytes(signature)
-        );
+        // The old batchApproveRegistration entry on LP is gone; the equivalent path is now
+        // EtherFiAdmin.executeValidatorApprovalTask -> LP.confirmAndFundBeaconValidators.
+        // Build DepositData here and call confirmAndFundBeaconValidators directly,
+        // pranking the etherFiAdminContract (which carries the oracle-operations role).
+        uint256 validatorSizeWei = liquidityPool.validatorSizeWei();
+        uint256 remainingEthPerValidator = validatorSizeWei - stakingManager.INITIAL_DEPOSIT_AMOUNT();
+        address eigenPod = address(IEtherFiNode(etherFiNodesManager.etherfiNodeAddress(bidId)).getEigenPod());
+        bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod);
+        bytes32 depositDataRoot = stakingManager.generateDepositDataRoot(pubkey, signature, withdrawalCredentials, remainingEthPerValidator);
+
+        IStakingManager.DepositData[] memory depositData = new IStakingManager.DepositData[](1);
+        depositData[0] = IStakingManager.DepositData({
+            publicKey: pubkey,
+            signature: signature,
+            depositDataRoot: depositDataRoot,
+            ipfsHashForEncryptedValidatorKey: ""
+        });
+
+        vm.prank(LiquidityPool(payable(address(liquidityPool))).etherFiAdminContract());
+        liquidityPool.confirmAndFundBeaconValidators(depositData, validatorSizeWei);
     }
 
     function test_forwardingWhitelist() public {
@@ -350,10 +414,10 @@ contract PreludeTest is Test, ArrayTestHelper {
         // user with no role should not be able to forward calls
         vm.startPrank(user);
         {
-            vm.expectRevert(IEtherFiNode.IncorrectRole.selector);
+            vm.expectRevert(RoleRegistry.OnlyEigenpodOperations.selector);
             etherFiNodesManager.forwardEigenPodCall(toArray(etherFiNode), toArray_bytes(""));
 
-            vm.expectRevert(IEtherFiNode.IncorrectRole.selector);
+            vm.expectRevert(RoleRegistry.OnlyEigenpodOperations.selector);
             etherFiNodesManager.forwardExternalCall(toArray(etherFiNode), toArray_bytes(""), address(0));
         }
         vm.stopPrank();
@@ -361,7 +425,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         // grant roles
         vm.startPrank(roleRegistry.owner());
         {
-            roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(), user);
+            roleRegistry.grantRole(roleRegistry.EIGENPOD_OPERATIONS_ROLE(), user);
         }
         vm.stopPrank();
 
@@ -417,8 +481,8 @@ contract PreludeTest is Test, ArrayTestHelper {
         
         vm.startPrank(roleRegistry.owner());
         {
-            roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(), user1);
-            roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(), user2);
+            roleRegistry.grantRole(roleRegistry.EIGENPOD_OPERATIONS_ROLE(), user1);
+            roleRegistry.grantRole(roleRegistry.EIGENPOD_OPERATIONS_ROLE(), user2);
         }
         vm.stopPrank();
 
@@ -492,11 +556,11 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // Test 4: Access control - only admin can update whitelists
         vm.prank(user1);
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         etherFiNodesManager.updateAllowedForwardedExternalCalls(user2, transferSelector, usdc, true);
 
         vm.prank(user1);
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         etherFiNodesManager.updateAllowedForwardedEigenpodCalls(user2, podOwnerSelector, true);
     }
 
@@ -516,7 +580,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         oldNodes[0] = 0x0F3e5FA1720E0b99d4DF5ed38783d6f7d71AaF12;
         oldNodes[1] = 0xB94AD22998B357fC52e6ff6bE1024a1846BE6f73;
         vm.prank(user);
-        vm.expectRevert(IStakingManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         stakingManager.backfillExistingEtherFiNodes(oldNodes);
 
         vm.prank(admin);
@@ -538,11 +602,11 @@ contract PreludeTest is Test, ArrayTestHelper {
         );
 
         // only owner should be able to upgrade
-        vm.expectRevert(IRoleRegistry.OnlyProtocolUpgrader.selector);
+        vm.expectRevert(IRoleRegistry.OnlyUpgradeTimelock.selector);
         stakingManager.upgradeTo(address(stakingManagerImpl));
 
         // should succeed when called by owner
-        address owner = stakingManager.owner();
+        address owner = roleRegistry.owner();
         vm.prank(owner);
         stakingManager.upgradeTo(address(stakingManagerImpl));
     }
@@ -581,12 +645,15 @@ contract PreludeTest is Test, ArrayTestHelper {
             ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
         });
 
-        vm.deal(address(liquidityPool), 100 ether);
-        vm.prank(address(liquidityPool));
-        stakingManager.registerBeaconValidators(toArray(initialDepositData), bidIds, etherFiNode);
-        
-        vm.prank(address(liquidityPool));
-        stakingManager.createBeaconValidators{value: 1 ether}(toArray(initialDepositData), bidIds, etherFiNode);
+        // Fund the LP through receive() so balance and totalValueInLp stay in sync.
+        fundContract(address(liquidityPool), 100 ether);
+
+        // Drive validator creation through LP entry points so _accountForEthSentOut keeps accounting consistent.
+        vm.prank(admin);
+        liquidityPool.batchRegister(toArray(initialDepositData), bidIds, etherFiNode);
+
+        vm.prank(admin);
+        liquidityPool.batchCreateBeaconValidators(toArray(initialDepositData), bidIds, etherFiNode);
 
         uint256 validatorSize = 32 ether;
         uint256 confirmAmount = validatorSize - 1 ether;
@@ -605,8 +672,8 @@ contract PreludeTest is Test, ArrayTestHelper {
             ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
         });
 
-        vm.prank(address(liquidityPool));
-        stakingManager.confirmAndFundBeaconValidators{value: confirmAmount}(toArray(confirmDepositData), validatorSize);
+        vm.prank(admin);
+        liquidityPool.confirmAndFundBeaconValidators(toArray(confirmDepositData), validatorSize);
     }
 
     function test_withdrawRestakedValidatorETH() public {
@@ -635,7 +702,18 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.store(eigenpod, bytes32(uint256(52)) /*slot*/, bytes32(uint256(10000 ether / 1 gwei)));
         vm.deal(eigenpod, 10000 ether);
 
-        vm.prank(eigenlayerAdmin);
+        // Slot 52 only fixes the EigenPod's own withdrawable accounting. EigenLayer
+        // also tracks `podOwnerDepositShares[node]` in EigenPodManager — at the
+        // current fork block this validator's recorded deposit shares may be below
+        // the queued amount, which would revert with `SharesNegative()`. Poke a
+        // large positive value so the queue request can subtract without underflow.
+        stdstore
+            .target(eigenPodManager)
+            .sig("podOwnerDepositShares(address)")
+            .with_key(etherFiNodeAddress)
+            .checked_write_int(int256(10_000 ether));
+
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(pubkeyHash), 1 ether);
 
         uint256 startingBalance = address(liquidityPool).balance;
@@ -646,6 +724,93 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // liquidity pool should have received at least the withdrawal amount (may include additional execution layer rewards)
         assertGe(address(liquidityPool).balance, startingBalance + 1 ether);
+    }
+
+    function test_sweepFunds_gated_by_eigenlayerAdmin() public {
+        uint256 nodeId = 10885; // pre-linked legacy id used elsewhere
+        address nodeAddr = etherFiNodesManager.etherfiNodeAddress(nodeId);
+        if (nodeAddr == address(0)) return; // skip if fork no longer has this legacy id
+
+        // Random caller: revert.
+        address rando = makeAddr("rando");
+        vm.prank(rando);
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
+        etherFiNodesManager.sweepFunds(nodeId);
+
+        // ADMIN_ROLE alone (held by `admin`) no longer satisfies sweep.
+        vm.prank(admin);
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
+        etherFiNodesManager.sweepFunds(nodeId);
+
+        // EIGENLAYER_ADMIN_ROLE can sweep (no-op when node has no balance).
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.sweepFunds(nodeId);
+    }
+
+    function test_completeQueuedWithdrawals_autoSweeps_to_LP() public {
+        bytes memory validatorPubkey = hex"892c95f4e93ab042ee39397bff22cc43298ff4b2d6d6dec3f28b8b8ebcb5c65ab5e6fc29301c1faee473ec095f9e4306";
+        bytes32 pubkeyHash = etherFiNodesManager.calculateValidatorPubkeyHash(validatorPubkey);
+        uint256 legacyID = 10885;
+
+        vm.prank(elExiter);
+        etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(legacyID), toArray_bytes(validatorPubkey));
+
+        address nodeAddr = etherFiNodesManager.etherfiNodeAddress(uint256(pubkeyHash));
+        vm.startPrank(admin);
+        rateLimiter.updateConsumers(etherFiNodesManager.UNRESTAKING_LIMIT_ID(), nodeAddr, true);
+        vm.stopPrank();
+
+        address eigenpod = etherFiNodesManager.getEigenPod(uint256(pubkeyHash));
+        vm.store(eigenpod, bytes32(uint256(52)), bytes32(uint256(10_000 ether / 1 gwei)));
+        vm.deal(eigenpod, 10_000 ether);
+        stdstore
+            .target(eigenPodManager)
+            .sig("podOwnerDepositShares(address)")
+            .with_key(nodeAddr)
+            .checked_write_int(int256(10_000 ether));
+
+        vm.prank(admin);
+        bytes32 root = etherFiNodesManager.queueETHWithdrawal(uint256(pubkeyHash), 1 ether);
+
+        // build the explicit Withdrawal struct that mirrors what the node queued
+        IStrategy[] memory strategies = new IStrategy[](1);
+        strategies[0] = IStrategy(0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0);
+        uint256[] memory scaledShares = new uint256[](1);
+        scaledShares[0] = 1 ether;
+        IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
+        withdrawals[0] = IDelegationManagerTypes.Withdrawal({
+            staker: nodeAddr,
+            delegatedTo: IDelegationManager(delegationManager).delegatedTo(nodeAddr),
+            withdrawer: nodeAddr,
+            nonce: IDelegationManager(delegationManager).cumulativeWithdrawalsQueued(nodeAddr) - 1,
+            startBlock: uint32(block.number),
+            strategies: strategies,
+            scaledShares: scaledShares
+        });
+        // sanity: hash matches what queueETHWithdrawal returned
+        assertEq(IDelegationManager(delegationManager).calculateWithdrawalRoot(withdrawals[0]), root, "withdrawal root mismatch");
+
+        IERC20[][] memory tokens = new IERC20[][](1);
+        tokens[0] = new IERC20[](1);
+        bool[] memory receiveAsTokens = new bool[](1);
+        receiveAsTokens[0] = true;
+
+        vm.roll(block.number + (7200 * 15));
+
+        uint256 lpBefore = address(liquidityPool).balance;
+        uint256 nodeBefore = nodeAddr.balance;
+
+        // Manager wrapper must emit FundsTransferred(nodeAddr, amount) for off-chain indexers.
+        // Topic check only — amount depends on dynamic pre-existing pod state.
+        vm.expectEmit(true, false, false, false, address(etherFiNodesManager));
+        emit IEtherFiNodesManager.FundsTransferred(nodeAddr, 0);
+
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.completeQueuedWithdrawals(uint256(pubkeyHash), withdrawals, tokens, receiveAsTokens);
+
+        // ETH should have flowed pod -> node -> LP (auto-sweep tail). Node ends with no residual.
+        assertEq(nodeAddr.balance, nodeBefore, "node retains no residual after auto-sweep");
+        assertGe(address(liquidityPool).balance, lpBefore + 1 ether, "LP credited at least the withdrawal amount");
     }
 
     function test_EtherFiNodePermissions() public {
@@ -707,23 +872,23 @@ contract PreludeTest is Test, ArrayTestHelper {
         uint256 nodeId = 1;
 
         // none of the EFNM roles should be allowed to upgrade
-        vm.expectRevert(IRoleRegistry.OnlyProtocolUpgrader.selector);
+        vm.expectRevert(IRoleRegistry.OnlyUpgradeTimelock.selector);
         vm.prank(eigenlayerAdmin);
         etherFiNodesManager.upgradeTo(address(0));
-        vm.expectRevert(IRoleRegistry.OnlyProtocolUpgrader.selector);
+        vm.expectRevert(IRoleRegistry.OnlyUpgradeTimelock.selector);
         vm.prank(user);
         etherFiNodesManager.upgradeTo(address(0));
-        vm.expectRevert(IRoleRegistry.OnlyProtocolUpgrader.selector);
+        vm.expectRevert(IRoleRegistry.OnlyUpgradeTimelock.selector);
         vm.prank(callForwarder);
         etherFiNodesManager.upgradeTo(address(0));
 
         vm.startPrank(user);
 
         // Normal user should fail for all eigenlayer functions
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         etherFiNodesManager.setProofSubmitter(nodeId, address(0));
 
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyEigenpodOperations.selector);
         etherFiNodesManager.startCheckpoint(nodeId);
 
         BeaconChainProofs.BalanceProof[] memory balanceProofs = new BeaconChainProofs.BalanceProof[](1);
@@ -731,36 +896,36 @@ contract PreludeTest is Test, ArrayTestHelper {
             balanceContainerRoot: bytes32(uint256(1)),
             proof: ""
         });
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyEigenpodOperations.selector);
         etherFiNodesManager.verifyCheckpointProofs(nodeId, containerProof, balanceProofs);
 
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyExecutorOperations.selector);
         etherFiNodesManager.queueETHWithdrawal(nodeId, 1 ether);
 
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
         etherFiNodesManager.completeQueuedETHWithdrawals(nodeId, true);
 
         IDelegationManager.QueuedWithdrawalParams[] memory params = new IDelegationManager.QueuedWithdrawalParams[](1);
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyExecutorOperations.selector);
         etherFiNodesManager.queueWithdrawals(nodeId, params);
 
         IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
         IERC20[][] memory tokens = new IERC20[][](1);
         bool[] memory receiveAsTokens = new bool[](1);
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
         etherFiNodesManager.completeQueuedWithdrawals(nodeId, withdrawals, tokens, receiveAsTokens);
 
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
         etherFiNodesManager.sweepFunds(nodeId);
 
         // normal user should fail for all call forwarding
         address[] memory nodes = new address[](1);
         bytes[] memory data = new bytes[](1);
 
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyEigenpodOperations.selector);
         etherFiNodesManager.forwardEigenPodCall(nodes, data);
 
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyEigenpodOperations.selector);
         etherFiNodesManager.forwardExternalCall(nodes, data, address(0));
 
         vm.stopPrank();
@@ -798,9 +963,9 @@ contract PreludeTest is Test, ArrayTestHelper {
 
 
         // only protocolUpgrader can upgrade etherFiNode
-        EtherFiNode nodeImpl = new EtherFiNode(address(0), address(0), address(0), address(0), address(0));
+        EtherFiNode nodeImpl = new EtherFiNode(address(0), address(0), address(0), address(0));
         vm.prank(admin);
-        vm.expectRevert(IRoleRegistry.OnlyProtocolUpgrader.selector);
+        vm.expectRevert(IRoleRegistry.OnlyUpgradeTimelock.selector);
         stakingManager.upgradeEtherFiNode(address(nodeImpl));
 
         vm.prank(roleRegistry.owner());
@@ -829,7 +994,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         assertEq(address(newNode.getEigenPod()), address(0));
 
         // admin creates one and it should be connected
-        vm.prank(eigenlayerAdmin);
+        vm.prank(address(stakingManager));
         address newPod = etherFiNodesManager.createEigenPod(address(newNode));
         assert(newPod != address(0));
         assertEq(newPod, address(newNode.getEigenPod()));
@@ -841,7 +1006,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         IEtherFiNode newNode = IEtherFiNode(stakingManager.instantiateEtherFiNode(/*createEigenPod=*/true));
         address newSubmitter = vm.addr(0xabc123);
 
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.setProofSubmitter(address(newNode), newSubmitter);
 
         IEigenPod pod = newNode.getEigenPod();
@@ -888,7 +1053,7 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // only POD_PROVER can start checkpoint
         vm.prank(eigenlayerAdmin);
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyEigenpodOperations.selector);
         etherFiNodesManager.startCheckpoint(uint256(val.pubkeyHash));
 
         // initiate a checkpoint
@@ -912,7 +1077,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         pubkeys[2] = vm.randomBytes(48);
 
         // should fail if not admin
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyExecutorOperations.selector);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
 
         vm.prank(elExiter);
@@ -950,7 +1115,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         uint256 startingLPBalance = address(liquidityPool).balance;
 
         // should be able to withdraw arbitrary amounts not tied to any particular validator
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val1.pubkeyHash), 1234 ether);
 
         // need to fast forward so that withdrawal is claimable
@@ -979,11 +1144,11 @@ contract PreludeTest is Test, ArrayTestHelper {
         TestValidator memory val = helper_createValidator(params);
 
         // queue up multiple withdrawals
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 1 ether);
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 1 ether);
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 1 ether);
 
         // need to fast forward so that withdrawal is claimable
@@ -1058,7 +1223,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         // Grant role to the triggering EOA
         vm.startPrank(roleRegistry.owner());
         roleRegistry.grantRole(
-            etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(),
+            roleRegistry.EXECUTOR_OPERATIONS_ROLE(),
             elExiter
         );
         vm.stopPrank();
@@ -1117,7 +1282,7 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         vm.startPrank(roleRegistry.owner());
         roleRegistry.grantRole(
-            etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(),
+            roleRegistry.EXECUTOR_OPERATIONS_ROLE(),
             elExiter
         );
         vm.stopPrank();
@@ -1251,16 +1416,16 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.stopPrank();
 
         // First withdrawal within limit should succeed
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 5 ether);
 
         // Second withdrawal within limit should succeed
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 4 ether);
 
         // Third withdrawal exceeding limit should fail
         vm.expectRevert();
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 2 ether);
     }
 
@@ -1288,13 +1453,13 @@ contract PreludeTest is Test, ArrayTestHelper {
         params[0].__deprecated_withdrawer = address(0);
 
         // First withdrawal within limit should succeed
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueWithdrawals(uint256(val.pubkeyHash), params);
 
         // Second withdrawal exceeding limit should fail (15 + 10 > 20)
         shares[0] = 10 ether;
         vm.expectRevert(abi.encodeWithSignature("LimitExceeded()"));
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueWithdrawals(uint256(val.pubkeyHash), params);
     }
 
@@ -1319,7 +1484,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         // Grant role to the triggering EOA
         vm.startPrank(roleRegistry.owner());
         roleRegistry.grantRole(
-            etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(),
+            roleRegistry.EXECUTOR_OPERATIONS_ROLE(),
             elExiter
         );
         vm.stopPrank();
@@ -1372,7 +1537,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.stopPrank();
 
         // Test consuming within capacity - should succeed
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 30 ether);
         
         // Check remaining capacity is reduced
@@ -1381,11 +1546,11 @@ contract PreludeTest is Test, ArrayTestHelper {
         
         // Test consuming more than remaining capacity - should fail
         vm.expectRevert(abi.encodeWithSignature("LimitExceeded()"));
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 25 ether);
         
         // Test consuming exactly remaining capacity - should succeed
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 20 ether);
         
         // Verify capacity is now exhausted
@@ -1397,7 +1562,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         bytes32 limitId = etherFiNodesManager.UNRESTAKING_LIMIT_ID();
 
         // Debug: check if admin has the role
-        bool hasRole = roleRegistry.hasRole(rateLimiter.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), admin);
+        bool hasRole = roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), admin);
         assertTrue(hasRole, "Admin should have the rate limiter role");
 
         // Admin should be able to set capacity and refill rate
@@ -1444,13 +1609,13 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.stopPrank();
 
         // Test multiple consumption attempts within capacity - all should succeed
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val1.pubkeyHash), 25 ether);
         
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val2.pubkeyHash), 30 ether);
         
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val3.pubkeyHash), 20 ether);
         
         // Check remaining capacity after multiple consumptions (100 - 25 - 30 - 20 = 25 ETH)
@@ -1458,7 +1623,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         assertEq(remaining, 25_000_000_000);
         
         // Test that unauthorized access is blocked by the access control
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyExecutorOperations.selector);
         vm.prank(user);
         etherFiNodesManager.queueETHWithdrawal(uint256(val1.pubkeyHash), 10 ether);
         
@@ -1468,11 +1633,11 @@ contract PreludeTest is Test, ArrayTestHelper {
         
         // Test final consumption that would exceed remaining capacity should fail
         vm.expectRevert(abi.encodeWithSignature("LimitExceeded()"));
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val1.pubkeyHash), 30 ether);
         
         // Test final consumption within remaining capacity should succeed
-        vm.prank(eigenlayerAdmin);
+        vm.prank(admin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val1.pubkeyHash), 25 ether);
         
         // Verify capacity is now exhausted

@@ -1,9 +1,16 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
+import "@tests/TestSetup.sol";
 
 contract AuctionManagerV2Test is AuctionManager {
+    constructor(
+        address _roleRegistry,
+        address _blacklister,
+        address _nodeOperatorManagerContract,
+        address _stakingManagerContractAddress,
+        address _treasury
+    ) AuctionManager(_roleRegistry, _blacklister, _nodeOperatorManagerContract, _stakingManagerContractAddress, _treasury) {}
     function isUpgraded() public pure returns(bool){
         return true;
     }
@@ -130,7 +137,13 @@ contract AddressProviderTest is TestSetup {
         assertEq(addressProviderInstance.getImplementationAddress("RegulationsManager"), address(regulationsManagerImplementation));
         assertEq(addressProviderInstance.getImplementationAddress("AuctionManager"), address(auctionImplementation));
 
-        AuctionManagerV2Test auctionManagerV2Implementation = new AuctionManagerV2Test();
+        AuctionManagerV2Test auctionManagerV2Implementation = new AuctionManagerV2Test(
+            address(roleRegistryInstance),
+            address(blacklisterInstance),
+            address(nodeOperatorManagerInstance),
+            address(stakingManagerInstance),
+            address(treasuryInstance)
+        );
         auctionInstance.upgradeTo(address(auctionManagerV2Implementation));
 
         assertEq(addressProviderInstance.getImplementationAddress("AuctionManager"), address(auctionManagerV2Implementation));

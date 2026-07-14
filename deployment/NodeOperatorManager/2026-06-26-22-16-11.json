@@ -1,0 +1,12 @@
+{
+  "contractName": "NodeOperatorManager",
+  "deploymentParameters": {
+    "factory": "0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99",
+    "salt": "0x0f1e8d966c85bcd3b352d94da15fe2eae61f897c000000000000000000000000",
+    "constructorArgs": {
+      "_roleRegistry": "0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9",
+      "_auctionManagerContractAddress": "0x00C452aFFee3a17d9Cecc1Bcd2B8d5C7635C4CB9"
+    }
+  },
+  "deployedAddress": "0x2474d68d6E9f7Be77C9A343ce21DBE16F0743BD3"
+}

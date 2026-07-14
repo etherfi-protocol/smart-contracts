@@ -5,17 +5,17 @@ import "forge-std/Script.sol";
 import "forge-std/console.sol";
 import "forge-std/StdJson.sol";
 
-import "../script/Create2Factory.sol";
+import "@scripts/Create2Factory.sol";
 
-import "../src/EtherFiNode.sol";
-import "../src/RoleRegistry.sol";
-import "../src/StakingManager.sol";
-import "../src/EtherFiNodesManager.sol";
-import "../src/LiquidityPool.sol";
-import "../src/WeETH.sol";
-import "../src/EETH.sol";
-import "../src/EtherFiAdmin.sol";
-import "../src/EtherFiOracle.sol";
+import "@etherfi/staking/EtherFiNode.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/staking/StakingManager.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/core/WeETH.sol";
+import "@etherfi/core/EETH.sol";
+import "@etherfi/oracle/EtherFiAdmin.sol";
+import "@etherfi/oracle/EtherFiOracle.sol";
 
 interface ICreate2Factory {
     function deploy(bytes memory code, bytes32 salt) external payable returns (address);

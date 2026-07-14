@@ -4,15 +4,15 @@ pragma solidity ^0.8.27;
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 import "forge-std/StdJson.sol";
-import "../../utils/utils.sol";
-import "../../../src/EtherFiNodesManager.sol";
-import "../../../src/LiquidityPool.sol";
-import "../../../src/EtherFiOracle.sol";
-import "../../../src/EtherFiAdmin.sol";
-import "../../../src/RoleRegistry.sol";
-import "../../../test/common/ArrayTestHelper.sol";
-import "../../deploys/Deployed.s.sol";
-import "../../../src/WithdrawRequestNFT.sol";
+import "@scripts/utils/utils.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/oracle/EtherFiOracle.sol";
+import "@etherfi/oracle/EtherFiAdmin.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@tests/common/ArrayTestHelper.sol";
+import "@scripts/deploys/Deployed.s.sol";
+import "@etherfi/withdrawals/WithdrawRequestNFT.sol";
 
 // Commands:
 // forge script script/el-exits/val-consolidations/topUpFork.s.sol --fork-url $MAINNET_RPC_URL -vvvv
@@ -69,8 +69,9 @@ contract TopUpFork is Script, Deployed, Utils, ArrayTestHelper {
 
         IEtherFiOracle.OracleReport memory report;
         uint256[] memory emptyVals = new uint256[](0);
+        // OracleReport lost `withdrawalRequestsToInvalidate` in the role-consolidation refactor.
         report = IEtherFiOracle.OracleReport(
-            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, emptyVals, 0, 0
+            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0, 0
         );
 
         (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();

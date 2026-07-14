@@ -3,14 +3,14 @@
 pragma solidity ^0.8.27;
 
 import "forge-std/console2.sol";
-import "../../../src/EtherFiNodesManager.sol";
-import "../../../src/EtherFiNode.sol";
-import "../../../src/EtherFiTimelock.sol";
-import "../../../src/interfaces/IRoleRegistry.sol";
-import "../../../src/RoleRegistry.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/staking/EtherFiNode.sol";
+import "@etherfi/governance/EtherFiTimelock.sol";
+import "@etherfi/governance/interfaces/IRoleRegistry.sol";
+import "@etherfi/governance/RoleRegistry.sol";
 
-import {IEigenPod, IEigenPodTypes } from "../../../src/eigenlayer-interfaces/IEigenPod.sol";
-import "../../TestSetup.sol";
+import {IEigenPod, IEigenPodTypes } from "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
+import "@tests/TestSetup.sol";
 /**
  * @title ELExitsTest
  * @notice test for EL exits
@@ -34,6 +34,15 @@ contract ELExitsTest is TestSetup {
 
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
+
+        // `requestExecutionLayerTriggeredWithdrawal` is gated by
+        // `onlyExecutorOperations`. On mainnet, `realElExiter` held the legacy
+        // STAKING_MANAGER_NODE_CREATOR_ROLE; in the consolidated model that
+        // maps to EXECUTOR_OPERATIONS_ROLE, which isn't auto-migrated.
+        bytes32 execRole = roleRegistryInstance.EXECUTOR_OPERATIONS_ROLE();
+        address rrOwner = roleRegistryInstance.owner();
+        vm.prank(rrOwner);
+        roleRegistryInstance.grantRole(execRole, realElExiter);
     }
 
     function _resolvePod(bytes memory pubkey) internal view returns (IEtherFiNode etherFiNode, IEigenPod pod) {

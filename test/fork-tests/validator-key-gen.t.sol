@@ -3,20 +3,24 @@ pragma solidity ^0.8.27;
 
 import "forge-std/console2.sol";
 import "forge-std/Test.sol";
-import "../../test/common/ArrayTestHelper.sol";
+import "@tests/common/ArrayTestHelper.sol";
+import {fundContract} from "@tests/TestSetup.sol";
 
-import "../../src/libraries/DepositDataRootGenerator.sol";
+import "@etherfi/staking/libraries/DepositDataRootGenerator.sol";
 
-import "../../src/interfaces/IStakingManager.sol";
-import "../../src/interfaces/IEtherFiNode.sol";
+import "@etherfi/staking/interfaces/IStakingManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNode.sol";
 
-import "../../src/StakingManager.sol";
-import "../../src/LiquidityPool.sol";
-import "../../src/EtherFiNodesManager.sol";
-import "../../src/EtherFiNode.sol";
-import "../../src/NodeOperatorManager.sol";
-import "../../src/AuctionManager.sol";
-import "../../src/RoleRegistry.sol";
+import "@etherfi/staking/StakingManager.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/staking/EtherFiNode.sol";
+import "@etherfi/staking/NodeOperatorManager.sol";
+import "@etherfi/staking/AuctionManager.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@etherfi/utils/UUPSProxy.sol";
+import "@etherfi/governance/Blacklister.sol";
 
 // Command to run this test: forge test --match-contract ValidatorKeyGenTest
 
@@ -42,6 +46,15 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
         vm.deal(tom, 100 ether);
 
+        // Deploy a Blacklister so impls that wire it as an immutable have a
+        // non-zero target.
+        Blacklister bImpl = new Blacklister(address(roleRegistry));
+        Blacklister blacklister = Blacklister(address(new UUPSProxy(address(bImpl), abi.encodeWithSelector(Blacklister.initialize.selector))));
+
+        // Upgrade StakingManager / LP FIRST, against the LIVE RoleRegistry — the
+        // deployed impls' `_authorizeUpgrade` still calls `onlyProtocolUpgrader`,
+        // a selector the new RoleRegistry impl no longer exposes. Swap
+        // RoleRegistry only after these have been upgraded.
         StakingManager stakingManagerImpl = new StakingManager(
             address(liquidityPool),
             address(etherFiNodesManager),
@@ -50,18 +63,53 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
             address(etherFiNodeBeacon),
             address(roleRegistry)
         );
-        vm.prank(stakingManager.owner());
+        vm.prank(roleRegistry.owner());
         stakingManager.upgradeTo(address(stakingManagerImpl));
 
-        LiquidityPool liquidityPoolImpl = new LiquidityPool(address(0x0));
-        vm.prank(liquidityPool.owner());
+        // Wire LP immutables to real mainnet proxy addresses so calls into
+        // eETH / withdrawRequestNFT / etc. land on live contracts.
+        LiquidityPool liquidityPoolImpl = new LiquidityPool(
+            ILiquidityPool.ConstructorAddresses({
+                stakingManager: address(stakingManager),
+                nodesManager: address(etherFiNodesManager),
+                eETH: 0x35fA164735182de50811E8e2E824cFb9B6118ac2,
+                withdrawRequestNFT: 0x7d5706f6ef3F89B3951E23e557CDFBC3239D4E2c,
+                liquifier: 0x9FFDF407cDe9a93c47611799DA23924Af3EF764F,
+                etherFiRedemptionManager: 0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0,
+                roleRegistry: address(roleRegistry),
+                priorityWithdrawalQueue: 0x35e7D6feF6f72aDd3c3e39dEc6d9CCc29e3345FA,
+                blacklister: address(blacklister),
+                etherFiAdminContract: 0x0EF8fa4760Db8f5Cd4d993f3e3416f30f942D705,
+                membershipManager: 0x3d320286E014C3e1ce99Af6d6B00f0C1D63E3000
+            })
+        );
+        vm.prank(roleRegistry.owner());
         liquidityPool.upgradeTo(address(liquidityPoolImpl));
 
+        AuctionManager auctionManagerImpl = new AuctionManager(address(roleRegistry), address(blacklister), address(nodeOperatorManager), address(stakingManager), 0x0c83EAe1FE72c390A02E426572854931EefF93BA);
+        vm.prank(roleRegistry.owner());
+        auctionManager.upgradeTo(address(auctionManagerImpl));
+
+        // Now swap RoleRegistry so newly-added role getters (e.g. BLACKLISTED_USER)
+        // are reachable from the freshly-upgraded contracts' modifiers.
+        address newRoleRegistryImpl = address(new RoleRegistry(address(0xdead)));
+        vm.prank(roleRegistry.owner());
+        roleRegistry.upgradeTo(newRoleRegistryImpl);
+
         vm.startPrank(roleRegistry.owner());
-        roleRegistry.grantRole(liquidityPool.LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE(), admin);
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManager));
-        roleRegistry.grantRole(stakingManager.STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE(), admin);
-        auctionManager.updateAdmin(admin, true);
+        roleRegistry.grantRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), address(stakingManager));
+        roleRegistry.grantRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), admin);
+        // OPERATING_TIMELOCK is granted OPERATION_TIMELOCK_ROLE on mainnet — grant
+        // it explicitly on the fork so registerValidatorSpawner / batchCreateBeaconValidators
+        // pass through the consolidated onlyAdmin gate.
+        roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), operatingTimelock);
+        roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), admin);
+        // EXECUTOR_OPERATIONS_ROLE (formerly ETHERFI_NODES_MANAGER_EL_EXITER_ROLE) is required by
+        // StakingManager.instantiateEtherFiNode, which the test helpers call.
+        roleRegistry.grantRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), operatingTimelock);
+        roleRegistry.grantRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), admin);
         vm.stopPrank();
     }
 
@@ -160,7 +208,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         bidIds[0] = 1; 
 
         vm.prank(unregisteredUser);
-        vm.expectRevert("Incorrect Caller");
+        vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
         liquidityPool.batchRegister(depositDataArray, bidIds, etherFiNode);
     }
 
@@ -182,10 +230,10 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
 
         // Pause contract
         vm.prank(admin);
-        liquidityPool.pauseContract();
+        liquidityPool.pause();
 
         vm.prank(spawner);
-        vm.expectRevert("Pausable: paused");
+        vm.expectRevert(Pausable.ContractPaused.selector);
         liquidityPool.batchRegister(depositDataArray, bidIds, etherFiNode);
     }
 
@@ -440,7 +488,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
     }
 
     function test_roleGrant_succeeds() public {
-        assertEq(roleRegistry.hasRole(keccak256("STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE"), address(admin)), true);
+        assertEq(roleRegistry.hasRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), address(admin)), true);
     }
 
     // ==================== batchCreateBeaconValidators Tests ====================
@@ -457,7 +505,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         bidIds[0] = 1; 
 
         vm.prank(unauthorizedUser);
-        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOracleOperations.selector);
         liquidityPool.batchCreateBeaconValidators(depositDataArray, bidIds, etherFiNode);
     }
 
@@ -472,10 +520,10 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
 
         // Pause contract
         vm.prank(admin);
-        liquidityPool.pauseContract();
+        liquidityPool.pause();
 
         vm.prank(admin);
-        vm.expectRevert("Pausable: paused");
+        vm.expectRevert(Pausable.ContractPaused.selector);
         liquidityPool.batchCreateBeaconValidators(depositDataArray, bidIds, etherFiNode);
     }
 
@@ -490,7 +538,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         uint256[] memory bidIds = new uint256[](1);
         bidIds[0] = 999999;
 
-        vm.deal(address(liquidityPool), 100 ether);
+        fundContract(address(liquidityPool), 100 ether);
 
         vm.prank(admin);
         // Will revert because validator is not in REGISTERED status
@@ -539,7 +587,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         liquidityPool.batchRegister(depositDataArray, createdBids, etherFiNode);
 
         // Fund LP with sufficient ETH (1 ether per validator)
-        vm.deal(address(liquidityPool), 100 ether);
+        fundContract(address(liquidityPool), 100 ether);
 
         // Now create validators
         vm.prank(admin);
@@ -586,11 +634,11 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         vm.prank(spawner);
         liquidityPool.batchRegister(depositDataArray, createdBids, etherFiNode);
 
-        // Record initial balances
+        fundContract(address(liquidityPool), 100 ether);
+
+        // Record balances after funding so the assertions measure only the validator-creation delta
         uint128 initialTotalOut = liquidityPool.totalValueOutOfLp();
         uint128 initialTotalIn = liquidityPool.totalValueInLp();
-
-        vm.deal(address(liquidityPool), 100 ether);
 
         uint256 expectedEthOut = 1 ether; // 1 ether per validator
 
@@ -640,7 +688,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
                 pubkey,
                 signature,
                 withdrawalCreds,
-                stakingManager.initialDepositAmount()
+                stakingManager.INITIAL_DEPOSIT_AMOUNT()
             );
 
             depositData[i] = IStakingManager.DepositData({
@@ -655,7 +703,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         vm.prank(spawner);
         liquidityPool.batchRegister(depositData, createdBids, etherFiNode);
 
-        vm.deal(address(liquidityPool), 100 ether);
+        fundContract(address(liquidityPool), 100 ether);
 
         // Create all validators - should require 3 ether
         vm.prank(admin);
@@ -707,7 +755,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
 
         // Try to invalidate without the role
         vm.prank(unauthorizedUser);
-        vm.expectRevert(IStakingManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOracleOperations.selector);
         stakingManager.invalidateRegisteredBeaconValidator(depositData, createdBids[0], etherFiNode);
     }
 
@@ -757,7 +805,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         liquidityPool.batchRegister(toArray(depositData), createdBids, etherFiNode);
 
         // Confirm the validator
-        vm.deal(address(liquidityPool), 100 ether);
+        fundContract(address(liquidityPool), 100 ether);
         vm.prank(admin);
         liquidityPool.batchCreateBeaconValidators(toArray(depositData), createdBids, etherFiNode);
 

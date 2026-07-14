@@ -2,18 +2,18 @@
 pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
-import "../test/TestSetup.sol";
-import "../src/EtherFiTimelock.sol";
-import "../src/EtherFiNode.sol";
-import "../src/EtherFiNodesManager.sol";
-import "../src/LiquidityPool.sol";
-import "../src/StakingManager.sol";
-import "../src/EtherFiOracle.sol";
-import "../src/EtherFiAdmin.sol";
-import "../src/EETH.sol";
-import "../src/WeETH.sol";
-import "../src/RoleRegistry.sol";
-import "../lib/openzeppelin-contracts/contracts/access/IAccessControl.sol";
+import "@tests/TestSetup.sol";
+import "@etherfi/governance/EtherFiTimelock.sol";
+import "@etherfi/staking/EtherFiNode.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/staking/StakingManager.sol";
+import "@etherfi/oracle/EtherFiOracle.sol";
+import "@etherfi/oracle/EtherFiAdmin.sol";
+import "@etherfi/core/EETH.sol";
+import "@etherfi/core/WeETH.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@openzeppelin/contracts/access/IAccessControl.sol";
 import "forge-std/console2.sol";
 
 contract V3PreludeTransactions is Script {
@@ -65,11 +65,11 @@ contract V3PreludeTransactions is Script {
     //--------------------------------------------------------------------------------------
     bytes32 ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE = EtherFiNode(payable(etherFiNodeImpl)).ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE();
     bytes32 ETHERFI_NODE_CALL_FORWARDER_ROLE = EtherFiNode(payable(etherFiNodeImpl)).ETHERFI_NODE_CALL_FORWARDER_ROLE();
-    bytes32 STAKING_MANAGER_NODE_CREATOR_ROLE = StakingManager(payable(stakingManagerImpl)).STAKING_MANAGER_NODE_CREATOR_ROLE();
-    bytes32 ETHERFI_NODES_MANAGER_ADMIN_ROLE = EtherFiNodesManager(payable(etherFiNodesManagerImpl)).ETHERFI_NODES_MANAGER_ADMIN_ROLE();
-    bytes32 ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE = EtherFiNodesManager(payable(etherFiNodesManagerImpl)).ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE();
-    bytes32 ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE = EtherFiNodesManager(payable(etherFiNodesManagerImpl)).ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE();
-    bytes32 LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE = LiquidityPool(payable(liquidityPoolImpl)).LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE();
+    bytes32 STAKING_MANAGER_NODE_CREATOR_ROLE = StakingManager(payable(stakingManagerImpl)).EXECUTOR_OPERATIONS_ROLE();
+    bytes32 ETHERFI_NODES_MANAGER_ADMIN_ROLE = EtherFiNodesManager(payable(etherFiNodesManagerImpl)).OPERATION_TIMELOCK_ROLE();
+    bytes32 ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE = EtherFiNodesManager(payable(etherFiNodesManagerImpl)).EIGENPOD_OPERATIONS_ROLE();
+    bytes32 ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE = EtherFiNodesManager(payable(etherFiNodesManagerImpl)).HOUSEKEEPING_OPERATIONS_ROLE();
+    bytes32 LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE = LiquidityPool(payable(liquidityPoolImpl)).EXECUTOR_OPERATIONS_ROLE();
 
     function run() public {
 

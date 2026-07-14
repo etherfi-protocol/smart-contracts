@@ -3,22 +3,22 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
-import "../src/interfaces/IStakingManager.sol";
-import "../src/interfaces/IEtherFiNodesManager.sol";
-import "../src/interfaces/IEtherFiNode.sol";
-import "../src/interfaces/ILiquidityPool.sol";
-import "../src/interfaces/IEtherFiOracle.sol";
-import "../src/interfaces/IEtherFiAdmin.sol";
-import "../src/interfaces/IeETH.sol";
-import "../src/interfaces/IWeETH.sol";
-import "../src/interfaces/ITNFT.sol";
-import "../src/StakingManager.sol";
-import "../src/EtherFiNodesManager.sol";
-import "../src/EtherFiNode.sol";
-import "../src/LiquidityPool.sol";
-import "../src/AuctionManager.sol";
-import "../src/RoleRegistry.sol";
-import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "@etherfi/staking/interfaces/IStakingManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
+import "@etherfi/staking/interfaces/IEtherFiNode.sol";
+import "@etherfi/core/interfaces/ILiquidityPool.sol";
+import "@etherfi/oracle/interfaces/IEtherFiOracle.sol";
+import "@etherfi/oracle/interfaces/IEtherFiAdmin.sol";
+import "@etherfi/core/interfaces/IeETH.sol";
+import "@etherfi/core/interfaces/IWeETH.sol";
+import "@etherfi/archive/interfaces/ITNFT.sol";
+import "@etherfi/staking/StakingManager.sol";
+import "@etherfi/staking/EtherFiNodesManager.sol";
+import "@etherfi/staking/EtherFiNode.sol";
+import "@etherfi/core/LiquidityPool.sol";
+import "@etherfi/staking/AuctionManager.sol";
+import "@etherfi/governance/RoleRegistry.sol";
+import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 interface IUpgrade {
     function upgradeTo(address) external;
@@ -123,18 +123,8 @@ contract VerifyV3Upgrade is Script {
             "EtherFiNodesManager has correct RoleRegistry"
         );
 
-        // Check a sample EtherFiNode implementation has correct RoleRegistry
-        console2.log("Checking EtherFiNode implementation RoleRegistry...");
-        address beacon = stakingManager.getEtherFiNodeBeacon();
-        address etherFiNodeImpl = getImplementation(beacon);
-        if (etherFiNodeImpl != address(0)) {
-            // Create a temporary instance to check the roleRegistry
-            EtherFiNode nodeImpl = EtherFiNode(payable(etherFiNodeImpl));
-            checkCondition(
-                address(nodeImpl.roleRegistry()) == address(roleRegistry),
-                "EtherFiNode implementation has correct RoleRegistry"
-            );
-        }
+        // EtherFiNode no longer holds a direct roleRegistry reference after the roles refactor;
+        // role checks now live on EtherFiNodesManager via the shared RolesLibrary.
 
         // Check LiquidityPool has correct RoleRegistry
         console2.log("Checking LiquidityPool RoleRegistry...");
@@ -192,7 +182,7 @@ contract VerifyV3Upgrade is Script {
             protocolUpgrader != address(0),
             "Protocol upgrader (RoleRegistry owner) is set"
         );
-        try roleRegistry.onlyProtocolUpgrader(protocolUpgrader) {
+        try roleRegistry.onlyUpgradeTimelock(protocolUpgrader) {
             checkCondition(true, "Protocol upgrader is owner");
         } catch {
             checkCondition(false, "Protocol upgrader is not owner");
@@ -274,62 +264,38 @@ contract VerifyV3Upgrade is Script {
     }
 
     function verifyRoleAssignments() internal {
-        // Define expected roles based on prelude.t.sol
+        // After role consolidation, all per-contract roles map to one of the 8 tier roles:
+        //   UPGRADE_TIMELOCK_ROLE, OPERATION_TIMELOCK_ROLE, OPERATION_MULTISIG_ROLE,
+        //   GUARDIAN_ROLE, ORACLE_OPERATIONS_ROLE..EIGENPOD_OPERATIONS_ROLE. Verify the consolidated constants exist.
 
-        // StakingManager roles
-        bytes32 STAKING_MANAGER_NODE_CREATOR_ROLE = keccak256(
-            "STAKING_MANAGER_NODE_CREATOR_ROLE"
-        );
-        console2.log("Checking StakingManager roles...");
-
-        // At least check that the role exists in the system
+        console2.log("Checking consolidated role constants...");
         checkCondition(
-            STAKING_MANAGER_NODE_CREATOR_ROLE ==
-                stakingManager.STAKING_MANAGER_NODE_CREATOR_ROLE(),
-            "STAKING_MANAGER_NODE_CREATOR_ROLE constant matches"
-        );
-
-        // EtherFiNodesManager roles
-        bytes32 ETHERFI_NODES_MANAGER_ADMIN_ROLE = keccak256(
-            "ETHERFI_NODES_MANAGER_ADMIN_ROLE"
-        );
-        bytes32 ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE = keccak256(
-            "ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE"
-        );
-        bytes32 ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE = keccak256(
-            "ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE"
-        );
-
-        console2.log("Checking EtherFiNodesManager roles...");
-        checkCondition(
-            ETHERFI_NODES_MANAGER_ADMIN_ROLE ==
-                etherFiNodesManager.ETHERFI_NODES_MANAGER_ADMIN_ROLE(),
-            "ETHERFI_NODES_MANAGER_ADMIN_ROLE constant matches"
+            keccak256("OPERATION_TIMELOCK_ROLE") == roleRegistry.OPERATION_TIMELOCK_ROLE(),
+            "OPERATION_TIMELOCK_ROLE constant matches"
         );
         checkCondition(
-            ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE ==
-                etherFiNodesManager
-                    .ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(),
-            "ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE constant matches"
+            keccak256("OPERATION_MULTISIG_ROLE") == roleRegistry.OPERATION_MULTISIG_ROLE(),
+            "OPERATION_MULTISIG_ROLE constant matches"
         );
         checkCondition(
-            ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE ==
-                etherFiNodesManager.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(),
-            "ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE constant matches"
-        );
-
-        // Check protocol pauser/unpauser roles exist
-        bytes32 PROTOCOL_PAUSER = keccak256("PROTOCOL_PAUSER");
-        bytes32 PROTOCOL_UNPAUSER = keccak256("PROTOCOL_UNPAUSER");
-
-        console2.log("Checking protocol pause roles...");
-        checkCondition(
-            PROTOCOL_PAUSER == roleRegistry.PROTOCOL_PAUSER(),
-            "PROTOCOL_PAUSER constant matches"
+            keccak256("GUARDIAN_ROLE") == roleRegistry.GUARDIAN_ROLE(),
+            "GUARDIAN_ROLE constant matches"
         );
         checkCondition(
-            PROTOCOL_UNPAUSER == roleRegistry.PROTOCOL_UNPAUSER(),
-            "PROTOCOL_UNPAUSER constant matches"
+            keccak256("ORACLE_OPERATIONS_ROLE") == roleRegistry.ORACLE_OPERATIONS_ROLE(),
+            "ORACLE_OPERATIONS_ROLE constant matches"
+        );
+        checkCondition(
+            keccak256("HOUSEKEEPING_OPERATIONS_ROLE") == roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(),
+            "HOUSEKEEPING_OPERATIONS_ROLE constant matches"
+        );
+        checkCondition(
+            keccak256("EXECUTOR_OPERATIONS_ROLE") == roleRegistry.EXECUTOR_OPERATIONS_ROLE(),
+            "EXECUTOR_OPERATIONS_ROLE constant matches"
+        );
+        checkCondition(
+            keccak256("EIGENPOD_OPERATIONS_ROLE") == roleRegistry.EIGENPOD_OPERATIONS_ROLE(),
+            "EIGENPOD_OPERATIONS_ROLE constant matches"
         );
     }
 

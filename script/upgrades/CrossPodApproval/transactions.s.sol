@@ -3,17 +3,17 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
-import {UUPSUpgradeable} from "../../../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import {RoleRegistry} from "../../../src/RoleRegistry.sol";
-import {EtherFiTimelock} from "../../../src/EtherFiTimelock.sol";
-import {EtherFiNodesManager} from "../../../src/EtherFiNodesManager.sol";
-import {LiquidityPool} from "../../../src/LiquidityPool.sol";
-import {EtherFiRateLimiter} from "../../../src/EtherFiRateLimiter.sol";
-import {IEtherFiNodesManager} from "../../../src/interfaces/IEtherFiNodesManager.sol";
-import {ContractCodeChecker} from "../../ContractCodeChecker.sol";
-import {Deployed} from "../../deploys/Deployed.s.sol";
-import {Utils} from "../../utils/utils.sol";
-import {IEigenPodTypes} from "../../../src/eigenlayer-interfaces/IEigenPod.sol";
+import {UUPSUpgradeable} from "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import {RoleRegistry} from "@etherfi/governance/RoleRegistry.sol";
+import {EtherFiTimelock} from "@etherfi/governance/EtherFiTimelock.sol";
+import {EtherFiNodesManager} from "@etherfi/staking/EtherFiNodesManager.sol";
+import {LiquidityPool} from "@etherfi/core/LiquidityPool.sol";
+import {EtherFiRateLimiter} from "@etherfi/governance/rate-limiting/EtherFiRateLimiter.sol";
+import {IEtherFiNodesManager} from "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
+import {ContractCodeChecker} from "@scripts/ContractCodeChecker.sol";
+import {Deployed} from "@scripts/deploys/Deployed.s.sol";
+import {Utils} from "@scripts/utils/utils.sol";
+import {IEigenPodTypes} from "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 
 // forge script script/upgrades/CrossPodApproval/transactions.s.sol:CrossPodApprovalScript --fork-url $MAINNET_RPC_URL -vvvv
 contract CrossPodApprovalScript is Script, Deployed, Utils {
@@ -23,7 +23,7 @@ contract CrossPodApprovalScript is Script, Deployed, Utils {
     EtherFiTimelock constant etherFiTimelock = EtherFiTimelock(payable(UPGRADE_TIMELOCK));
     RoleRegistry constant roleRegistry = RoleRegistry(ROLE_REGISTRY);
     EtherFiNodesManager constant etherFiNodesManager = EtherFiNodesManager(payable(ETHERFI_NODES_MANAGER));
-    uint256 constant TIMELOCK_MIN_DELAY = 259200;
+    uint256 constant TIMELOCK_minDelay = 259200;
 
     ContractCodeChecker public contractCodeChecker;
 
@@ -44,8 +44,8 @@ contract CrossPodApprovalScript is Script, Deployed, Utils {
         vm.selectFork(vm.createFork(forkUrl));
 
         setUpEtherFiRateLimiter();
-        ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE = EtherFiNodesManager(payable(etherFiNodesManagerImpl)).ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE();
-        LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE = LiquidityPool(payable(liquidityPoolImpl)).LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE();
+        ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE = roleRegistry.EXECUTOR_OPERATIONS_ROLE();
+        LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE = roleRegistry.ORACLE_OPERATIONS_ROLE();
 
         address[] memory targets = new address[](6);
         bytes[] memory data = new bytes[](targets.length);
@@ -94,7 +94,7 @@ contract CrossPodApprovalScript is Script, Deployed, Utils {
             data,
             bytes32(0),
             timelockSalt,
-            TIMELOCK_MIN_DELAY
+            TIMELOCK_minDelay
         );
 
         console2.log("Schedule calldata:");
@@ -115,8 +115,8 @@ contract CrossPodApprovalScript is Script, Deployed, Utils {
         console2.log("");
 
         vm.startPrank(ETHERFI_UPGRADE_ADMIN);
-        etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, TIMELOCK_MIN_DELAY);
-        vm.warp(block.timestamp + TIMELOCK_MIN_DELAY + 1);
+        etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, TIMELOCK_minDelay);
+        vm.warp(block.timestamp + TIMELOCK_minDelay + 1);
         etherFiTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
         vm.stopPrank();
 
@@ -187,7 +187,7 @@ contract CrossPodApprovalScript is Script, Deployed, Utils {
         bytes[] memory pubkeys = new bytes[](1);
         pubkeys[0] = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
 
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyExecutorOperations.selector);
         vm.prank(OPERATING_TIMELOCK);
         EtherFiNodesManager(payable(ETHERFI_NODES_MANAGER)).linkLegacyValidatorIds(validatorIds, pubkeys);
     

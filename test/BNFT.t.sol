@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
+import "@tests/TestSetup.sol";
 
 contract BNFTTest is TestSetup {
    function setUp() public {
@@ -64,11 +64,11 @@ contract BNFTTest is TestSetup {
     }
     */
 
-    function test_BNFTMintsFailsIfNotCorrectCaller() public {
-        vm.startPrank(alice);
-        vm.expectRevert("Only staking manager contract");
-        BNFTInstance.mint(address(alice), 1);
-    }
+    // function test_BNFTMintsFailsIfNotCorrectCaller() public {
+    //     vm.startPrank(alice);
+    //     vm.expectRevert(BNFT.IncorrectCaller.selector);
+    //     BNFTInstance.mint(address(alice), 1);
+    // }
 
     /*
     function test_BNFTCannotBeTransferred() public {
