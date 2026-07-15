@@ -35,8 +35,16 @@ interface IOwnableRead { function owner() external view returns (address); }
 contract RevertEscrowDrainTest is Test, Deployed {
     Blacklister internal blacklister;
 
+    /// @dev Last mainnet state before the 26Q2 security upgrade + escrow-drain
+    ///      claim flush executed (2026-07-14, upgrade at block 25533308). These
+    ///      tests validate the upgrade/migration path from live PRE-upgrade
+    ///      state — the deployed post-upgrade impls dropped `owner()` and
+    ///      already ran `initializeOnUpgradeV2`, so a latest-block fork can no
+    ///      longer exercise them.
+    uint256 constant PRE_UPGRADE_BLOCK = 25_526_000;
+
     function setUp() public {
-        vm.createSelectFork(vm.envString("MAINNET_RPC_URL"));
+        vm.createSelectFork(vm.envString("MAINNET_RPC_URL"), PRE_UPGRADE_BLOCK);
         // The new impls wire a Blacklister as an immutable; deploy a fresh one for the harness.
         Blacklister bImpl = new Blacklister(ROLE_REGISTRY);
         blacklister = Blacklister(address(new UUPSProxy(address(bImpl), abi.encodeWithSelector(Blacklister.initialize.selector))));

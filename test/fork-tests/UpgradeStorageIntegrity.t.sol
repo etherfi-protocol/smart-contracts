@@ -135,9 +135,16 @@ contract UpgradeStorageIntegrityTest is Test, SecurityUpgradesConstants {
         assertEq(a.paused,     b.paused,     "WRN.paused");
     }
 
+    /// @dev Last mainnet state before the 26Q2 security upgrade executed
+    ///      (block 25533308, 2026-07-14). These tests validate the upgrade path
+    ///      from live PRE-upgrade state — the deployed post-upgrade impls
+    ///      dropped `owner()` and already ran `initializeOnUpgradeV2`, so a
+    ///      latest-block fork can no longer exercise them.
+    uint256 constant PRE_UPGRADE_BLOCK = 25_526_000;
+
     function setUp() public {
-        // Latest-block fork; realistic mainnet state.
-        vm.createSelectFork(vm.envString("MAINNET_RPC_URL"));
+        // Pinned pre-upgrade fork; realistic mainnet state.
+        vm.createSelectFork(vm.envString("MAINNET_RPC_URL"), PRE_UPGRADE_BLOCK);
 
         // NOTE: RoleRegistry is intentionally NOT upgraded here. The currently
         // deployed LP/WRN/PQ impls authorize upgrades via the legacy

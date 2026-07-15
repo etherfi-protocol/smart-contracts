@@ -506,7 +506,12 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         uint256 restakerBalanceBefore = address(etherFiRestakerInstance).balance;
         assertEq(restakerBalanceBefore, amount);
 
-        vm.prank(roleRegistryInstance.owner());
+        address roleRegOwner = roleRegistryInstance.owner();
+        bytes32 housekeepingRole = roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE();
+        vm.prank(roleRegOwner);
+        roleRegistryInstance.grantRole(housekeepingRole, roleRegOwner);
+
+        vm.prank(roleRegOwner);
         etherFiRestakerInstance.withdrawEther();
 
         assertEq(address(etherFiRestakerInstance).balance, 0);

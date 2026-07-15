@@ -151,7 +151,8 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.prank(roleRegistry.owner());
         stakingManager.upgradeEtherFiNode(address(etherFiNodeImpl));
 
-        vm.prank(roleRegistry.owner());
+        address operatingMultisig = roleRegistry.roleHolders(roleRegistry.OPERATION_MULTISIG_ROLE())[0];
+        vm.prank(operatingMultisig);
         auctionManager.disableWhitelist();
 
         // permissions
