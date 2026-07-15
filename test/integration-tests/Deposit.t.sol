@@ -240,7 +240,13 @@ contract DepositIntegrationTest is TestSetup {
         stEth.transfer(address(etherFiRestakerInstance), stEthAmount);
 
         uint256 stETHAmountOfRestakerBeforeDeposit = stEth.balanceOf(address(etherFiRestakerInstance));
-        vm.prank(roleRegistryInstance.owner());
+
+        address roleRegOwner = roleRegistryInstance.owner();
+        bytes32 executorRole = roleRegistryInstance.EXECUTOR_OPERATIONS_ROLE();
+        vm.prank(roleRegOwner);
+        roleRegistryInstance.grantRole(executorRole, roleRegOwner);
+
+        vm.prank(roleRegOwner);
         uint256 shares = etherFiRestakerInstance.depositIntoStrategy(address(stEth), stEthAmount);
 
         assertGt(shares, 0);

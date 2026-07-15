@@ -715,6 +715,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         bytes32 _operatingMultisigRole = roleRegistryInstance.OPERATION_MULTISIG_ROLE();
         bytes32 _operatingTimelockRole = roleRegistryInstance.OPERATION_TIMELOCK_ROLE();
         bytes32 _upgradeTimelockRole = roleRegistryInstance.UPGRADE_TIMELOCK_ROLE();
+        bytes32 _housekeepingRole = roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE();
+        bytes32 _guardianRole = roleRegistryInstance.GUARDIAN_ROLE();
         address _roleRegOwner = roleRegistryInstance.owner();
         address _operatingTimelockAddr = deployed.OPERATING_TIMELOCK();
         vm.startPrank(_roleRegOwner);
@@ -741,7 +743,11 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // routes them through OPERATION_TIMELOCK / OPERATION_MULTISIG, so we
         // mirror that historical access for the addresses tests prank as.
         // Note: HOUSEKEEPING / GUARDIAN are intentionally NOT granted here —
-        // tests for sweepFunds & friends rely on `admin` lacking them.
+        // tests for sweepFunds & friends rely on `admin` lacking them. The 26Q2
+        // upgrade (mainnet block 25533308) granted both to the operating multisig,
+        // which is `admin` on this fork, so revoke them to restore that assumption.
+        roleRegistryInstance.revokeRole(_housekeepingRole, admin);
+        roleRegistryInstance.revokeRole(_guardianRole, admin);
         roleRegistryInstance.grantRole(_operatingTimelockRole, owner);
         roleRegistryInstance.grantRole(_operatingTimelockRole, alice);
         roleRegistryInstance.grantRole(_operatingTimelockRole, admin);
@@ -1497,6 +1503,10 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         for (uint256 i = 0; i < eethIds.length; i++) {
             if (!rateLimiterInstance.limitExists(eethIds[i])) {
                 rateLimiterInstance.createNewLimiter(eethIds[i], maxUint64, maxUint64);
+            } else {
+                rateLimiterInstance.setCapacity(eethIds[i], maxUint64);
+                rateLimiterInstance.setRefillRate(eethIds[i], maxUint64);
+                rateLimiterInstance.setRemaining(eethIds[i], maxUint64);
             }
             rateLimiterInstance.updateConsumers(eethIds[i], address(eETHInstance), true);
         }

@@ -41,11 +41,14 @@ contract V0MigrationForkTest is Test {
 
     MembershipManager mm;
 
+    /// @dev Last mainnet state before the 26Q2 security upgrade executed
+    ///      (block 25533308, 2026-07-14). The V0 migration has since run on
+    ///      mainnet, so this test must fork pre-upgrade state to keep
+    ///      exercising the migration path it was written to validate.
+    uint256 constant PRE_UPGRADE_BLOCK = 25_526_000;
+
     function setUp() public {
-        // Use the latest fork — these are pure read/migrate flows so block
-        // pinning is unnecessary. If a tester wants a specific block they can
-        // override via cheatcodes before calling test_*.
-        vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
+        vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL"), PRE_UPGRADE_BLOCK));
         mm = MembershipManager(payable(MEMBERSHIP_MANAGER));
     }
 
