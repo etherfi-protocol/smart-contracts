@@ -34,6 +34,12 @@ contract EtherFiNode is IEtherFiNode {
     //--------------------------------------------------------------------------------------
     uint32 public constant EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS = 100800;
     address public constant BEACON_ETH_STRATEGY_ADDRESS = address(0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0);
+    /// @dev EIP-7002 withdrawal request predeploy. Called directly for validators whose
+    ///      withdrawal credentials point at this node rather than at an EigenPod.
+    address public constant WITHDRAWAL_REQUEST_PREDEPLOY = 0x00000961Ef480Eb55e80D19ad83579A64c007002;
+    /// @dev EIP-7251 consolidation request predeploy. Called directly for validators whose
+    ///      withdrawal credentials point at this node rather than at an EigenPod.
+    address public constant CONSOLIDATION_REQUEST_PREDEPLOY = 0x0000BBdDc7CE488642fb579F8B00f3a590007251;
     /// @dev Suggested gas stipend for contract receiving ETH to perform a few
     /// storage reads and writes, but low enough to prevent griefing.
     uint256 internal constant GAS_STIPEND_NO_GRIEF = 100_000;
@@ -121,7 +127,17 @@ contract EtherFiNode is IEtherFiNode {
      * @dev Only the etherFi nodes manager can call this function
      */
     function requestExecutionLayerTriggeredWithdrawal(IEigenPod.WithdrawalRequest[] calldata requests) external payable onlyEtherFiNodesManager {
-        getEigenPod().requestWithdrawal{value: msg.value}(requests);
+        IEigenPod pod = getEigenPod();
+        if (address(pod) != address(0)) {
+            pod.requestWithdrawal{value: msg.value}(requests);
+            return;
+        }
+
+        // No pod: this node is the validators' withdrawal address, so it must call the predeploy itself
+        uint256 fee = _predeployFee(WITHDRAWAL_REQUEST_PREDEPLOY);
+        for (uint256 i = 0; i < requests.length; i++) {
+            _callPredeploy(WITHDRAWAL_REQUEST_PREDEPLOY, abi.encodePacked(requests[i].pubkey, requests[i].amountGwei), fee);
+        }
     }
 
     /**
@@ -130,7 +146,17 @@ contract EtherFiNode is IEtherFiNode {
      * @dev Only the etherFi nodes manager can call this function
      */
     function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable onlyEtherFiNodesManager {
-        getEigenPod().requestConsolidation{value: msg.value}(requests);
+        IEigenPod pod = getEigenPod();
+        if (address(pod) != address(0)) {
+            pod.requestConsolidation{value: msg.value}(requests);
+            return;
+        }
+
+        // No pod: this node is the validators' withdrawal address, so it must call the predeploy itself
+        uint256 fee = _predeployFee(CONSOLIDATION_REQUEST_PREDEPLOY);
+        for (uint256 i = 0; i < requests.length; i++) {
+            _callPredeploy(CONSOLIDATION_REQUEST_PREDEPLOY, bytes.concat(requests[i].srcPubkey, requests[i].targetPubkey), fee);
+        }
     }
 
     //--------------------------------------------------------------------------------------
@@ -256,6 +282,39 @@ contract EtherFiNode is IEtherFiNode {
      * @dev Shared by sweepFunds and completeQueued*Withdrawals.
      * @return balance The balance of the node
      */
+    /**
+     * @notice Permanently retires this node's EigenPod, ending its restaking.
+     * @dev Only the etherFi nodes manager can call this function. The node is the pod owner,
+     *      which is who EigenLayer requires as the caller.
+     */
+    function disablePod() external onlyEtherFiNodesManager {
+        eigenPodManager.disablePod();
+    }
+
+    /**
+     * @notice Sweeps all remaining ETH out of this node's retired EigenPod to the liquidity pool.
+     * @dev Only the etherFi nodes manager can call this function. Only callable once the pod
+     *      has been retired via disablePod().
+     * @return balance The amount forwarded to the liquidity pool
+     */
+    function withdrawDisabledPodETH() external onlyEtherFiNodesManager returns (uint256 balance) {
+        getEigenPod().withdrawDisabledPodETH(address(this));
+        return _sweepToLiquidityPool();
+    }
+
+    /// @dev Reads the current fee from an EIP-7002/7251 predeploy, matching EigenPod._getFee
+    function _predeployFee(address predeploy) private view returns (uint256) {
+        (bool ok, bytes memory result) = predeploy.staticcall("");
+        if (!ok || result.length != 32) revert FeeQueryFailed();
+        return uint256(bytes32(result));
+    }
+
+    /// @dev Submits one request to an EIP-7002/7251 predeploy, paying the per-request fee
+    function _callPredeploy(address predeploy, bytes memory callData, uint256 fee) private {
+        (bool ok, ) = predeploy.call{value: fee}(callData);
+        if (!ok) revert PredeployFailed();
+    }
+
     function _sweepToLiquidityPool() private returns (uint256 balance) {
         uint256 contractBalance = address(this).balance;
         uint256 totalValueOutOfLp = liquidityPool.totalValueOutOfLp();
@@ -277,6 +336,28 @@ contract EtherFiNode is IEtherFiNode {
      */
     function getEigenPod() public view returns (IEigenPod) {
         return eigenPodManager.ownerToPod(address(this));
+    }
+
+    /**
+     * @notice Returns the current EIP-7002 withdrawal request fee for this node's validators.
+     * @dev Reads the pod when there is one, otherwise the predeploy directly.
+     * @return The fee per request
+     */
+    function getWithdrawalRequestFee() public view returns (uint256) {
+        IEigenPod pod = getEigenPod();
+        if (address(pod) != address(0)) return pod.getWithdrawalRequestFee();
+        return _predeployFee(WITHDRAWAL_REQUEST_PREDEPLOY);
+    }
+
+    /**
+     * @notice Returns the current EIP-7251 consolidation request fee for this node's validators.
+     * @dev Reads the pod when there is one, otherwise the predeploy directly.
+     * @return The fee per request
+     */
+    function getConsolidationRequestFee() public view returns (uint256) {
+        IEigenPod pod = getEigenPod();
+        if (address(pod) != address(0)) return pod.getConsolidationRequestFee();
+        return _predeployFee(CONSOLIDATION_REQUEST_PREDEPLOY);
     }
 
     //--------------------------------------------------------------------------------------

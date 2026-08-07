@@ -249,10 +249,12 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // initial deposit
         address eigenPod = address(IEtherFiNode(params.etherFiNode).getEigenPod());
+        // The pod when the node has one, otherwise the node itself
+        address credTarget = etherFiNodesManager.withdrawalCredentialTarget(params.etherFiNode);
         bytes32 initialDepositRoot = depositDataRootGenerator.generateDepositDataRoot(
             pubkey,
             signature,
-            etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod),
+            etherFiNodesManager.addressToCompoundingWithdrawalCredentials(credTarget),
             1 ether
         );
         IStakingManager.DepositData memory initialDepositData = IStakingManager.DepositData({
@@ -277,7 +279,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         bytes32 confirmDepositRoot = depositDataRootGenerator.generateDepositDataRoot(
             pubkey,
             signature,
-            etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod),
+            etherFiNodesManager.addressToCompoundingWithdrawalCredentials(credTarget),
             confirmAmount
         );
         IStakingManager.DepositData memory confirmDepositData = IStakingManager.DepositData({

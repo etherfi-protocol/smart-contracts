@@ -130,7 +130,7 @@ contract StakingManager is
             bytes32 validatorCreationDataHash = keccak256(abi.encode(d.publicKey, d.signature, d.depositDataRoot, d.ipfsHashForEncryptedValidatorKey, bidIds[i], etherFiNode));
             if (validatorCreationStatus[validatorCreationDataHash] != ValidatorCreationStatus.REGISTERED) revert InvalidValidatorCreationStatus();
 
-            bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(address(IEtherFiNode(etherFiNode).getEigenPod()));
+            bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(etherFiNodesManager.withdrawalCredentialTarget(etherFiNode));
             bytes32 computedDataRoot = generateDepositDataRoot(d.publicKey, d.signature, withdrawalCredentials, INITIAL_DEPOSIT_AMOUNT);
             if (computedDataRoot != d.depositDataRoot) revert IncorrectBeaconRoot();
 
@@ -162,7 +162,7 @@ contract StakingManager is
     function registerBeaconValidators(DepositData[] calldata depositData, uint256[] calldata bidIds, address etherFiNode) external {
         if (msg.sender != liquidityPool) revert InvalidCaller();
         if (depositData.length != bidIds.length) revert InvalidDepositData();
-        if (address(IEtherFiNode(etherFiNode).getEigenPod()) == address(0) || !deployedEtherFiNodes[etherFiNode]) revert InvalidEtherFiNode();
+        if (!deployedEtherFiNodes[etherFiNode]) revert InvalidEtherFiNode();
 
         // process each 1 eth deposit to create validators for later verification from oracle
         for (uint256 i = 0; i < depositData.length; i++) {
@@ -171,7 +171,7 @@ contract StakingManager is
             if (!auctionManager.isBidActive(bidIds[i])) revert InactiveBid();
 
             // verify deposit root
-            bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(address(IEtherFiNode(etherFiNode).getEigenPod()));
+            bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(etherFiNodesManager.withdrawalCredentialTarget(etherFiNode));
             bytes32 computedDataRoot = generateDepositDataRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, INITIAL_DEPOSIT_AMOUNT);
             if (computedDataRoot != depositData[i].depositDataRoot) revert IncorrectBeaconRoot();
 
@@ -208,7 +208,7 @@ contract StakingManager is
             if (address(etherFiNode) == address(0x0)) revert UnlinkedPubkey();
 
             // verify deposit root
-            bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(address(etherFiNode.getEigenPod()));
+            bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(etherFiNodesManager.withdrawalCredentialTarget(address(etherFiNode)));
             bytes32 computedDataRoot = generateDepositDataRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, remainingDeposit);
             if (computedDataRoot != depositData[i].depositDataRoot) revert IncorrectBeaconRoot();
 

@@ -21,6 +21,10 @@ interface IEtherFiNode {
     function sweepFunds() external returns (uint256 balance);
     function requestExecutionLayerTriggeredWithdrawal(IEigenPod.WithdrawalRequest[] calldata requests) external payable;
     function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable;
+    function getWithdrawalRequestFee() external view returns (uint256);
+    function getConsolidationRequestFee() external view returns (uint256);
+    function disablePod() external;
+    function withdrawDisabledPodETH() external returns (uint256 balance);
 
 
     // call forwarding
@@ -94,5 +98,7 @@ interface IEtherFiNode {
     error InvalidForwardedCall();
     error InvalidCaller();
     error NoCompleteableWithdrawals();
+    error FeeQueryFailed();
+    error PredeployFailed();
 
 }

@@ -11,6 +11,7 @@ interface IEtherFiNodesManager {
 
     function addressToWithdrawalCredentials(address addr) external pure returns (bytes memory);
     function addressToCompoundingWithdrawalCredentials(address addr) external pure returns (bytes memory);
+    function withdrawalCredentialTarget(address node) external view returns (address);
     function etherfiNodeAddress(uint256 id) external view returns(address);
     function etherFiNodeFromPubkeyHash(bytes32 pubkeyHash) external view returns (IEtherFiNode);
     function linkPubkeyToNode(bytes calldata pubkey, address nodeAddress, uint256 legacyId) external;
@@ -122,6 +123,7 @@ interface IEtherFiNodesManager {
     event UserAllowedForwardedExternalCallsUpdated(address indexed user, bytes4 indexed selector, address indexed _target, bool _allowed);
     event UserAllowedForwardedEigenpodCallsUpdated(address indexed user, bytes4 indexed selector, bool _allowed);
     event FundsTransferred(address indexed nodeAddress, uint256 amount);
+    event PodDisabled(address indexed nodeAddress, address indexed pod);
     event ValidatorWithdrawalRequestSent(address indexed pod, bytes32 indexed validatorPubkeyHash, bytes validatorPubkey);
     event ValidatorSwitchToCompoundingRequested(address indexed pod, bytes32 indexed validatorPubkeyHash, bytes validatorPubkey);
     event ValidatorConsolidationRequested(address indexed pod, bytes32 indexed sourcePubkeyHash, bytes sourcePubkey, bytes32 targetPubkeyHash, bytes targetPubkey);
@@ -141,4 +143,5 @@ interface IEtherFiNodesManager {
     error EmptyConsolidationRequest();
     error InsufficientWithdrawalFees();
     error InsufficientConsolidationFees();
+    error MixedNodeRequest();
 }

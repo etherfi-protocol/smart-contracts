@@ -98,6 +98,31 @@ contract EtherFiNodesManager is
     }
 
     /**
+     * @notice Permanently retires a node's EigenPod, ending its restaking.
+     * @param node The node whose pod to retire
+     * @dev Irreversible, so gated on the operating timelock. Requires every beacon share to be
+     *      queued and matured first. Retire the pod before consolidating its validators out,
+     *      otherwise the negative balance delta cuts the beacon chain slashing factor.
+     */
+    function disablePod(address node) external onlyOperatingTimelock whenNotPaused {
+        _validateNode(node);
+        IEtherFiNode(node).disablePod();
+        emit PodDisabled(node, address(IEtherFiNode(node).getEigenPod()));
+    }
+
+    /**
+     * @notice Sweeps all remaining ETH out of a retired EigenPod to the liquidity pool.
+     * @param node The node whose retired pod to sweep
+     */
+    function withdrawDisabledPodETH(address node) external onlyHousekeepingOperations whenNotPaused {
+        _validateNode(node);
+        uint256 balance = IEtherFiNode(node).withdrawDisabledPodETH();
+        if (balance > 0) {
+            emit FundsTransferred(node, balance);
+        }
+    }
+
+    /**
      * @notice Starts a checkpoint for a given node
      * @param node The node to start the checkpoint for
      */
@@ -251,15 +276,24 @@ contract EtherFiNodesManager is
 
         bytes32 pubKeyHash = calculateValidatorPubkeyHash(requests[0].pubkey);
         IEtherFiNode node = etherFiNodeFromPubkeyHash[pubKeyHash];
-        IEigenPod pod = node.getEigenPod();
+        address target = withdrawalCredentialTarget(address(node));
+
+        // Every request must belong to the node resolved from requests[0]. With a pod, EigenLayer
+        // enforces this and reverts. Without one we call the predeploy directly, and it accepts any
+        // pubkey from any caller: the consensus layer silently drops requests whose source
+        // withdrawal address is not the caller, so an unchecked batch would burn the fee and emit
+        // events for exits that never happen.
+        for (uint256 i = 1; i < requests.length; i++) {
+            if (etherFiNodeFromPubkeyHash[calculateValidatorPubkeyHash(requests[i].pubkey)] != node) revert MixedNodeRequest();
+        }
 
         // submitting an execution layer withdrawal request requires paying a fee per request
-        if (msg.value < pod.getWithdrawalRequestFee() * requests.length) revert InsufficientWithdrawalFees();
+        if (msg.value < node.getWithdrawalRequestFee() * requests.length) revert InsufficientWithdrawalFees();
         node.requestExecutionLayerTriggeredWithdrawal{value: msg.value}(requests);
 
         for (uint256 i = 0; i < requests.length; i++) {
             bytes32 currentPubKeyHash = calculateValidatorPubkeyHash(requests[i].pubkey);
-            emit ValidatorWithdrawalRequestSent(address(pod), currentPubKeyHash, requests[i].pubkey);
+            emit ValidatorWithdrawalRequestSent(target, currentPubKeyHash, requests[i].pubkey);
         }
     }
 
@@ -280,13 +314,21 @@ contract EtherFiNodesManager is
         uint256 totalConsolidationGwei = _getTotalConsolidationGwei(requests);
         rateLimiter.consume(CONSOLIDATION_REQUEST_LIMIT_ID, SafeCast.toUint64(totalConsolidationGwei));
 
-        // eigenlayer will revert if all validators don't belong to the same pod
+        // resolved from the source validator only; the target may live outside this node
         bytes32 pubKeyHash = calculateValidatorPubkeyHash(requests[0].srcPubkey);
         IEtherFiNode node = etherFiNodeFromPubkeyHash[pubKeyHash];
-        IEigenPod pod = node.getEigenPod();
+        address target = withdrawalCredentialTarget(address(node));
+
+        // Every source validator must belong to the node resolved from requests[0]. See the same
+        // check in requestExecutionLayerTriggeredWithdrawal: the predeploy accepts any pubkey, so
+        // without this an unchecked batch would burn the fee on consolidations that never happen.
+        // The target is deliberately not constrained; it may live outside this node.
+        for (uint256 i = 1; i < requests.length; i++) {
+            if (etherFiNodeFromPubkeyHash[calculateValidatorPubkeyHash(requests[i].srcPubkey)] != node) revert MixedNodeRequest();
+        }
 
         // submitting an execution layer consolidation request requires paying a fee per request
-        if (msg.value < pod.getConsolidationRequestFee() * requests.length) revert InsufficientConsolidationFees();
+        if (msg.value < node.getConsolidationRequestFee() * requests.length) revert InsufficientConsolidationFees();
         node.requestConsolidation{value: msg.value}(requests);
 
         for (uint256 i = 0; i < requests.length; ) {
@@ -295,9 +337,9 @@ contract EtherFiNodesManager is
 
             // Emit appropriate event based on whether this is a switch or consolidation
             if (srcPkHash == targetPkHash) {
-                emit ValidatorSwitchToCompoundingRequested(address(pod), srcPkHash, requests[i].srcPubkey);
+                emit ValidatorSwitchToCompoundingRequested(target, srcPkHash, requests[i].srcPubkey);
             } else {
-                emit ValidatorConsolidationRequested(address(pod), srcPkHash, requests[i].srcPubkey, targetPkHash, requests[i].targetPubkey);
+                emit ValidatorConsolidationRequested(target, srcPkHash, requests[i].srcPubkey, targetPkHash, requests[i].targetPubkey);
             }
             unchecked { ++i; }
         }
@@ -569,6 +611,20 @@ contract EtherFiNodesManager is
      * @param addr The address to convert
      * @return The withdrawal credential format
      */
+    /**
+     * @notice Returns the address a node's validators point their withdrawal credentials at.
+     * @param node The node to resolve the credential target for
+     * @dev The pod when the node has one, otherwise the node itself. A node's pod is created
+     *      only inside StakingManager.instantiateEtherFiNode and createPod() reverts on a
+     *      second call, so this never changes for a given node.
+     * @return The withdrawal credential target
+     */
+    function withdrawalCredentialTarget(address node) public view returns (address) {
+        _validateNode(node);
+        address pod = address(IEtherFiNode(node).getEigenPod());
+        return pod == address(0) ? node : pod;
+    }
+
     function addressToWithdrawalCredentials(address addr) public pure returns (bytes memory) {
         return abi.encodePacked(bytes1(0x01), bytes11(0x0), addr);
     }
