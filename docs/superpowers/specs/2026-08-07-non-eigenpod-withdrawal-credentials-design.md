@@ -2,8 +2,7 @@
 
 Design for spinning up validators whose withdrawal credentials point at an
 ether.fi contract instead of an EigenPod. Milestone: "Staking and AVS contract
-changes are shipped for audit" of the Linear project
-[RIP EigenLayer](https://linear.app/ether-fi/project/rip-eigenlayer-a17c66cbc6cb).
+changes are shipped for audit" of the EigenLayer consolidation project.
 
 Covers STAKE-1824, 1825, 1826, 1827, 1829, 1830, 1831, 1832, 1833, 1834.
 
