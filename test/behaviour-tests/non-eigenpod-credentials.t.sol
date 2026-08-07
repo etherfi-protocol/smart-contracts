@@ -3,6 +3,20 @@ pragma solidity ^0.8.27;
 
 import "@tests/behaviour-tests/prelude.t.sol";
 
+/// @notice Stands in for a v1.14.0 EigenPod after disablePod(), so the sweep path can be tested
+///         before EigenLayer ships. Mirrors EigenPod.withdrawDisabledPodETH: owner-only in the real
+///         contract, and sends the pod's entire balance to the recipient.
+contract DisabledPodStub {
+    function restakingDisabled() external pure returns (bool) { return true; }
+
+    function withdrawDisabledPodETH(address recipient) external {
+        (bool ok, ) = payable(recipient).call{value: address(this).balance}("");
+        require(ok, "stub: transfer failed");
+    }
+
+    receive() external payable {}
+}
+
 /// @notice Validators whose withdrawal credentials point at the EtherFiNode instead of an EigenPod.
 /// @dev Inherits PreludeTest for its mainnet-fork setUp, which upgrades StakingManager,
 ///      LiquidityPool and EtherFiNodesManager in place and grants the roles these flows need.
@@ -239,6 +253,181 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         assertEq(WITHDRAWAL_REQUEST_PREDEPLOY.balance, predeployBalanceBefore + fee);
     }
 
+    function _validatorOn(address node, uint256 seed) internal returns (TestValidator memory) {
+        TestValidatorParams memory params = defaultTestValidatorParams;
+        params.etherFiNode = node;
+        params.pubkey = abi.encodePacked(bytes32(keccak256(abi.encode(seed))), bytes16(uint128(seed)));
+        return helper_createValidator(params);
+    }
+
+    function _consolidation(bytes memory src, bytes memory target)
+        internal
+        pure
+        returns (IEigenPodTypes.ConsolidationRequest[] memory reqs)
+    {
+        reqs = new IEigenPodTypes.ConsolidationRequest[](1);
+        reqs[0] = IEigenPodTypes.ConsolidationRequest({srcPubkey: src, targetPubkey: target});
+    }
+
+    /// @dev Partial withdrawal to the node, rather than a full exit.
+    function test_podLess_partialWithdrawalReachesPredeploy() public {
+        address node = _newPodLessNode();
+        TestValidator memory val = _validatorOn(node, 1);
+        _setExitRateLimit(10_000 ether, 10_000 ether);
+
+        bytes[] memory pubkeys = new bytes[](1);
+        pubkeys[0] = val.pubkey;
+        uint64[] memory amounts = new uint64[](1);
+        amounts[0] = 1_000_000_000; // 1 ETH in gwei
+        IEigenPodTypes.WithdrawalRequest[] memory requests = _requestsFromPubkeys(pubkeys, amounts);
+
+        uint256 fee = IEtherFiNode(node).getWithdrawalRequestFee();
+        uint256 before = WITHDRAWAL_REQUEST_PREDEPLOY.balance;
+
+        vm.expectEmit(true, true, false, true, address(etherFiNodesManager));
+        emit IEtherFiNodesManager.ValidatorWithdrawalRequestSent(node, val.pubkeyHash, val.pubkey);
+
+        vm.deal(elExiter, fee);
+        vm.prank(elExiter);
+        etherFiNodesManager.requestExecutionLayerTriggeredWithdrawal{value: fee}(requests);
+
+        assertEq(WITHDRAWAL_REQUEST_PREDEPLOY.balance, before + fee);
+    }
+
+    /// @dev Several validators on one node exit in a single batch, one predeploy call each.
+    function test_podLess_batchWithdrawalForOneNode() public {
+        address node = _newPodLessNode();
+        TestValidator memory a = _validatorOn(node, 2);
+        TestValidator memory b = _validatorOn(node, 3);
+        _setExitRateLimit(10_000 ether, 10_000 ether);
+
+        bytes[] memory pubkeys = new bytes[](2);
+        pubkeys[0] = a.pubkey;
+        pubkeys[1] = b.pubkey;
+        uint64[] memory amounts = new uint64[](2);
+        IEigenPodTypes.WithdrawalRequest[] memory requests = _requestsFromPubkeys(pubkeys, amounts);
+
+        uint256 fee = IEtherFiNode(node).getWithdrawalRequestFee();
+        uint256 before = WITHDRAWAL_REQUEST_PREDEPLOY.balance;
+
+        vm.deal(elExiter, fee * 2);
+        vm.prank(elExiter);
+        etherFiNodesManager.requestExecutionLayerTriggeredWithdrawal{value: fee * 2}(requests);
+
+        assertEq(WITHDRAWAL_REQUEST_PREDEPLOY.balance, before + fee * 2);
+    }
+
+    function test_podLess_withdrawalRejectsInsufficientFee() public {
+        address node = _newPodLessNode();
+        TestValidator memory val = _validatorOn(node, 4);
+        _setExitRateLimit(10_000 ether, 10_000 ether);
+
+        bytes[] memory pubkeys = new bytes[](1);
+        pubkeys[0] = val.pubkey;
+        uint64[] memory amounts = new uint64[](1);
+        IEigenPodTypes.WithdrawalRequest[] memory requests = _requestsFromPubkeys(pubkeys, amounts);
+
+        uint256 fee = IEtherFiNode(node).getWithdrawalRequestFee();
+        vm.deal(elExiter, fee);
+
+        vm.expectRevert(IEtherFiNodesManager.InsufficientWithdrawalFees.selector);
+        vm.prank(elExiter);
+        etherFiNodesManager.requestExecutionLayerTriggeredWithdrawal{value: fee - 1}(requests);
+    }
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------  CONSOLIDATION  --------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    /// @dev src == target switches the validator's credentials from 0x01 to 0x02.
+    function test_podLess_switchToCompoundingReachesPredeploy() public {
+        address node = _newPodLessNode();
+        TestValidator memory val = _validatorOn(node, 5);
+
+        IEigenPodTypes.ConsolidationRequest[] memory requests = _consolidation(val.pubkey, val.pubkey);
+        uint256 fee = IEtherFiNode(node).getConsolidationRequestFee();
+        uint256 before = CONSOLIDATION_REQUEST_PREDEPLOY.balance;
+
+        vm.expectEmit(true, true, false, true, address(etherFiNodesManager));
+        emit IEtherFiNodesManager.ValidatorSwitchToCompoundingRequested(node, val.pubkeyHash, val.pubkey);
+
+        vm.deal(elExiter, fee);
+        vm.prank(elExiter);
+        etherFiNodesManager.requestConsolidation{value: fee}(requests);
+
+        assertEq(CONSOLIDATION_REQUEST_PREDEPLOY.balance, before + fee);
+    }
+
+    /// @dev A true consolidation between two validators sharing the node.
+    function test_podLess_consolidationWithinOneNode() public {
+        address node = _newPodLessNode();
+        TestValidator memory src = _validatorOn(node, 6);
+        TestValidator memory target = _validatorOn(node, 7);
+
+        IEigenPodTypes.ConsolidationRequest[] memory requests = _consolidation(src.pubkey, target.pubkey);
+        uint256 fee = IEtherFiNode(node).getConsolidationRequestFee();
+        uint256 before = CONSOLIDATION_REQUEST_PREDEPLOY.balance;
+
+        vm.expectEmit(true, true, false, true, address(etherFiNodesManager));
+        emit IEtherFiNodesManager.ValidatorConsolidationRequested(node, src.pubkeyHash, src.pubkey, target.pubkeyHash, target.pubkey);
+
+        vm.deal(elExiter, fee);
+        vm.prank(elExiter);
+        etherFiNodesManager.requestConsolidation{value: fee}(requests);
+
+        assertEq(CONSOLIDATION_REQUEST_PREDEPLOY.balance, before + fee);
+    }
+
+    /// @dev The target is intentionally unconstrained, which is what lets a retiring pod's
+    ///      validators consolidate into a node-credentialled target.
+    function test_podLess_consolidationTargetMayBeOutsideTheNode() public {
+        address node = _newPodLessNode();
+        TestValidator memory src = _validatorOn(node, 8);
+        bytes memory foreignTarget = abi.encodePacked(bytes32(keccak256("foreign")), bytes16(uint128(9)));
+
+        IEigenPodTypes.ConsolidationRequest[] memory requests = _consolidation(src.pubkey, foreignTarget);
+        uint256 fee = IEtherFiNode(node).getConsolidationRequestFee();
+        uint256 before = CONSOLIDATION_REQUEST_PREDEPLOY.balance;
+
+        vm.deal(elExiter, fee);
+        vm.prank(elExiter);
+        etherFiNodesManager.requestConsolidation{value: fee}(requests);
+
+        assertEq(CONSOLIDATION_REQUEST_PREDEPLOY.balance, before + fee);
+    }
+
+    function test_podLess_consolidationRejectsInsufficientFee() public {
+        address node = _newPodLessNode();
+        TestValidator memory val = _validatorOn(node, 10);
+
+        IEigenPodTypes.ConsolidationRequest[] memory requests = _consolidation(val.pubkey, val.pubkey);
+        uint256 fee = IEtherFiNode(node).getConsolidationRequestFee();
+        vm.deal(elExiter, fee);
+
+        vm.expectRevert(IEtherFiNodesManager.InsufficientConsolidationFees.selector);
+        vm.prank(elExiter);
+        etherFiNodesManager.requestConsolidation{value: fee - 1}(requests);
+    }
+
+    /// @dev Source validators from two nodes cannot share a batch: the node calling the predeploy
+    ///      is only the withdrawal address for its own validators.
+    function test_podLess_consolidationRejectsSourcesFromAnotherNode() public {
+        TestValidator memory a = _validatorOn(_newPodLessNode(), 11);
+        TestValidator memory b = _validatorOn(_newPodLessNode(), 12);
+        assertTrue(a.etherFiNode != b.etherFiNode);
+
+        IEigenPodTypes.ConsolidationRequest[] memory requests = new IEigenPodTypes.ConsolidationRequest[](2);
+        requests[0] = IEigenPodTypes.ConsolidationRequest({srcPubkey: a.pubkey, targetPubkey: a.pubkey});
+        requests[1] = IEigenPodTypes.ConsolidationRequest({srcPubkey: b.pubkey, targetPubkey: b.pubkey});
+
+        uint256 fee = IEtherFiNode(a.etherFiNode).getConsolidationRequestFee() * 2;
+        vm.deal(elExiter, fee);
+
+        vm.expectRevert(IEtherFiNodesManager.MixedNodeRequest.selector);
+        vm.prank(elExiter);
+        etherFiNodesManager.requestConsolidation{value: fee}(requests);
+    }
+
     /// @dev A batch mixing validators from two different nodes must revert. The predeploy accepts
     ///      any pubkey from any caller and the consensus layer silently drops the ones whose source
     ///      withdrawal address is not the caller, so without this check the fee would be burned and
@@ -319,6 +508,68 @@ contract NonEigenPodCredentialsTest is PreludeTest {
     }
 
     //--------------------------------------------------------------------------------------
+    //-------------------------------  CALL FORWARDING  ------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    /// @dev Both eigenpod and housekeeping operations may forward, so the withdrawal-completion
+    ///      cron can batch across nodes in one transaction.
+    function test_forwarding_acceptsEigenpodAndHousekeepingRoles() public {
+        vm.prank(admin);
+        address node = stakingManager.instantiateEtherFiNode(true);
+        bytes4 selector = IEigenPod.activeValidatorCount.selector;
+
+        address[] memory nodes = new address[](1);
+        nodes[0] = node;
+        bytes[] memory data = new bytes[](1);
+        data[0] = abi.encodeWithSelector(selector);
+
+        // whitelist the selector for each caller independently
+        vm.startPrank(admin);
+        etherFiNodesManager.updateAllowedForwardedEigenpodCalls(callForwarder, selector, true);
+        etherFiNodesManager.updateAllowedForwardedEigenpodCalls(eigenlayerAdmin, selector, true);
+        vm.stopPrank();
+
+        vm.prank(callForwarder); // EIGENPOD_OPERATIONS_ROLE
+        etherFiNodesManager.forwardEigenPodCall(nodes, data);
+
+        vm.prank(eigenlayerAdmin); // HOUSEKEEPING_OPERATIONS_ROLE
+        etherFiNodesManager.forwardEigenPodCall(nodes, data);
+    }
+
+    function test_forwarding_rejectsCallerWithNeitherRole() public {
+        vm.prank(admin);
+        address node = stakingManager.instantiateEtherFiNode(true);
+
+        address[] memory nodes = new address[](1);
+        nodes[0] = node;
+        bytes[] memory data = new bytes[](1);
+        data[0] = abi.encodeWithSelector(IEigenPod.activeValidatorCount.selector);
+
+        vm.expectRevert(RoleRegistry.OnlyEigenpodOperations.selector);
+        vm.prank(makeAddr("rando"));
+        etherFiNodesManager.forwardEigenPodCall(nodes, data);
+
+        vm.expectRevert(RoleRegistry.OnlyEigenpodOperations.selector);
+        vm.prank(makeAddr("rando"));
+        etherFiNodesManager.forwardExternalCall(nodes, data, address(0x1234));
+    }
+
+    /// @dev Holding a role is not enough: the selector must still be whitelisted for that caller.
+    function test_forwarding_housekeepingStillNeedsTheSelectorWhitelisted() public {
+        vm.prank(admin);
+        address node = stakingManager.instantiateEtherFiNode(true);
+
+        address[] memory nodes = new address[](1);
+        nodes[0] = node;
+        bytes[] memory data = new bytes[](1);
+        data[0] = abi.encodeWithSelector(IEigenPod.activeValidatorCount.selector);
+
+        vm.expectRevert(IEtherFiNodesManager.ForwardedCallNotAllowed.selector);
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.forwardEigenPodCall(nodes, data);
+    }
+
+    //--------------------------------------------------------------------------------------
     //-------------------------------  POD RETIREMENT  -------------------------------------
     //--------------------------------------------------------------------------------------
 
@@ -341,6 +592,92 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         vm.expectRevert();
         vm.prank(address(etherFiNodesManager));
         IEtherFiNode(node).disablePod();
+    }
+
+    /// @dev The end state v1.14.0 enables: a retired pod still receives skimmed rewards and full
+    ///      exits at its withdrawal credential, and the owner sweeps it with no proofs, no
+    ///      checkpoints and no 14-day queue. Proves ETH reaches the LiquidityPool through our
+    ///      EtherFiNode, using a stub because the live EigenPod has no such selector yet.
+    function test_disabledPod_sweepsPodEthToLiquidityPool() public {
+        vm.prank(admin);
+        address node = stakingManager.instantiateEtherFiNode(true);
+        address pod = address(IEtherFiNode(node).getEigenPod());
+
+        vm.etch(pod, address(new DisabledPodStub()).code);
+        vm.deal(pod, 40 ether);
+
+        uint256 lpBefore = address(liquidityPool).balance;
+
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.withdrawDisabledPodETH(node);
+
+        assertEq(pod.balance, 0, "pod fully drained");
+        assertEq(address(liquidityPool).balance, lpBefore + 40 ether, "ETH landed in the pool");
+        assertEq(node.balance, 0, "nothing stranded on the node");
+    }
+
+    /// @dev A retired pod keeps receiving beacon-chain income, so the sweep must be repeatable.
+    function test_disabledPod_sweepIsRepeatable() public {
+        vm.prank(admin);
+        address node = stakingManager.instantiateEtherFiNode(true);
+        address pod = address(IEtherFiNode(node).getEigenPod());
+        vm.etch(pod, address(new DisabledPodStub()).code);
+
+        uint256 lpBefore = address(liquidityPool).balance;
+
+        vm.deal(pod, 1 ether);
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.withdrawDisabledPodETH(node);
+
+        vm.deal(pod, 32 ether); // a validator fully exits later
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.withdrawDisabledPodETH(node);
+
+        assertEq(address(liquidityPool).balance, lpBefore + 33 ether);
+    }
+
+    function test_disabledPod_sweepIsGatedAndValidated() public {
+        vm.prank(admin);
+        address node = stakingManager.instantiateEtherFiNode(true);
+        vm.etch(address(IEtherFiNode(node).getEigenPod()), address(new DisabledPodStub()).code);
+
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
+        vm.prank(makeAddr("rando"));
+        etherFiNodesManager.withdrawDisabledPodETH(node);
+
+        vm.expectRevert(IEtherFiNodesManager.UnknownNode.selector);
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.withdrawDisabledPodETH(address(0xdeadbeef));
+    }
+
+    /// @dev disablePod is called by the pod owner, which is the EtherFiNode. Mocked at the
+    ///      EigenPodManager so the manager -> node -> EPM path is exercised.
+    function test_disabledPod_retirementRoutesThroughTheNodeAsPodOwner() public {
+        vm.prank(admin);
+        address node = stakingManager.instantiateEtherFiNode(true);
+        address pod = address(IEtherFiNode(node).getEigenPod());
+
+        vm.mockCall(eigenPodManager, abi.encodeWithSignature("disablePod()"), "");
+
+        vm.expectEmit(true, true, false, true, address(etherFiNodesManager));
+        emit IEtherFiNodesManager.PodDisabled(node, pod);
+
+        vm.prank(admin); // OPERATION_TIMELOCK_ROLE
+        etherFiNodesManager.disablePod(node);
+
+        vm.clearMockedCalls();
+    }
+
+    function test_disabledPod_retirementIsTimelockGated() public {
+        vm.prank(admin);
+        address node = stakingManager.instantiateEtherFiNode(true);
+        vm.mockCall(eigenPodManager, abi.encodeWithSignature("disablePod()"), "");
+
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.disablePod(node);
+
+        vm.clearMockedCalls();
     }
 
     /// @dev A pod-less node has no pod to retire, so the sweep path reverts rather than

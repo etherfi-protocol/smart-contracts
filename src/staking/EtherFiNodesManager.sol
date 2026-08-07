@@ -286,19 +286,29 @@ contract EtherFiNodesManager is
 
         bytes32 pubKeyHash = calculateValidatorPubkeyHash(requests[0].pubkey);
         IEtherFiNode node = etherFiNodeFromPubkeyHash[pubKeyHash];
-        address target = withdrawalCredentialTarget(address(node));
+        // unvalidated: used only for the emitted event, and legacy nodes are not all backfilled
+        // into deployedEtherFiNodes, which these paths never required
+        address target = _credentialTarget(address(node));
 
-        // Every request must belong to the node resolved from requests[0]. With a pod, EigenLayer
-        // enforces this and reverts. Without one we call the predeploy directly, and it accepts any
-        // pubkey from any caller: the consensus layer silently drops requests whose source
-        // withdrawal address is not the caller, so an unchecked batch would burn the fee and emit
-        // events for exits that never happen.
-        for (uint256 i = 1; i < requests.length; i++) {
-            if (address(etherFiNodeFromPubkeyHash[calculateValidatorPubkeyHash(requests[i].pubkey)]) != address(node)) revert MixedNodeRequest();
+        // Pod-less only: the predeploy accepts any pubkey from any caller and the consensus layer
+        // silently drops requests whose source withdrawal address is not the caller, so an
+        // unchecked batch would burn the fee and emit events for exits that never happen. With a
+        // pod, EigenLayer already enforces pod membership and reverts, and it does so against the
+        // pod's own validator set rather than our pubkey mapping, which may not have every
+        // legacy validator linked.
+        if (target == address(node)) {
+            for (uint256 i = 1; i < requests.length; i++) {
+                if (address(etherFiNodeFromPubkeyHash[calculateValidatorPubkeyHash(requests[i].pubkey)]) != address(node)) revert MixedNodeRequest();
+            }
         }
 
-        // submitting an execution layer withdrawal request requires paying a fee per request
-        if (msg.value < node.getWithdrawalRequestFee() * requests.length) revert InsufficientWithdrawalFees();
+        // Pod-backed nodes read the fee straight off the pod, exactly as before, so this upgrade
+        // does not depend on the EtherFiNode beacon having been upgraded first. Only the pod-less
+        // path needs the node, and no pod-less node exists until one is deliberately created.
+        uint256 feePerRequest = target == address(node)
+            ? node.getWithdrawalRequestFee()
+            : IEigenPod(target).getWithdrawalRequestFee();
+        if (msg.value < feePerRequest * requests.length) revert InsufficientWithdrawalFees();
         node.requestExecutionLayerTriggeredWithdrawal{value: msg.value}(requests);
 
         for (uint256 i = 0; i < requests.length; i++) {
@@ -327,18 +337,23 @@ contract EtherFiNodesManager is
         // resolved from the source validator only; the target may live outside this node
         bytes32 pubKeyHash = calculateValidatorPubkeyHash(requests[0].srcPubkey);
         IEtherFiNode node = etherFiNodeFromPubkeyHash[pubKeyHash];
-        address target = withdrawalCredentialTarget(address(node));
+        // unvalidated: used only for the emitted event, and legacy nodes are not all backfilled
+        // into deployedEtherFiNodes, which these paths never required
+        address target = _credentialTarget(address(node));
 
-        // Every source validator must belong to the node resolved from requests[0]. See the same
-        // check in requestExecutionLayerTriggeredWithdrawal: the predeploy accepts any pubkey, so
-        // without this an unchecked batch would burn the fee on consolidations that never happen.
-        // The target is deliberately not constrained; it may live outside this node.
-        for (uint256 i = 1; i < requests.length; i++) {
-            if (address(etherFiNodeFromPubkeyHash[calculateValidatorPubkeyHash(requests[i].srcPubkey)]) != address(node)) revert MixedNodeRequest();
+        // Pod-less only, for the reason given in requestExecutionLayerTriggeredWithdrawal. The
+        // target is deliberately not constrained; it may live outside this node.
+        if (target == address(node)) {
+            for (uint256 i = 1; i < requests.length; i++) {
+                if (address(etherFiNodeFromPubkeyHash[calculateValidatorPubkeyHash(requests[i].srcPubkey)]) != address(node)) revert MixedNodeRequest();
+            }
         }
 
-        // submitting an execution layer consolidation request requires paying a fee per request
-        if (msg.value < node.getConsolidationRequestFee() * requests.length) revert InsufficientConsolidationFees();
+        // pod-backed reads the pod directly, as before; see requestExecutionLayerTriggeredWithdrawal
+        uint256 feePerRequest = target == address(node)
+            ? node.getConsolidationRequestFee()
+            : IEigenPod(target).getConsolidationRequestFee();
+        if (msg.value < feePerRequest * requests.length) revert InsufficientConsolidationFees();
         node.requestConsolidation{value: msg.value}(requests);
 
         for (uint256 i = 0; i < requests.length; ) {
@@ -455,7 +470,8 @@ contract EtherFiNodesManager is
      * @param target The target to forward the call to
      * @return returnData The return data from the call
      */
-    function forwardExternalCall(address[] calldata nodes, bytes[] calldata data, address target) external onlyEigenpodOperations whenNotPaused returns (bytes[] memory returnData) {
+    function forwardExternalCall(address[] calldata nodes, bytes[] calldata data, address target) external whenNotPaused returns (bytes[] memory returnData) {
+        _requireForwardingCaller();
         if (nodes.length != data.length) revert InvalidForwardedCall();
 
         returnData = new bytes[](nodes.length);
@@ -480,7 +496,8 @@ contract EtherFiNodesManager is
      * @return returnData The return data from the call
      * @dev This serves to allow us to support minor eigenlayer upgrades without needing to immediately upgrade our contracts.
      */
-    function forwardEigenPodCall(address[] calldata nodes, bytes[] calldata data) external onlyEigenpodOperations whenNotPaused returns (bytes[] memory returnData) {
+    function forwardEigenPodCall(address[] calldata nodes, bytes[] calldata data) external whenNotPaused returns (bytes[] memory returnData) {
+        _requireForwardingCaller();
         if (nodes.length != data.length) revert InvalidForwardedCall();
 
         returnData = new bytes[](nodes.length);
@@ -551,6 +568,17 @@ contract EtherFiNodesManager is
             }
         }
         return totalBeaconEth;
+    }
+
+    /**
+     * @notice Allow either eigenpod or housekeeping operations to forward calls
+     * @dev Housekeeping is accepted so the sweep and withdrawal-completion crons can batch across
+     *      nodes in one transaction. The per-caller selector whitelist still applies, so holding
+     *      either role on its own grants nothing.
+     */
+    function _requireForwardingCaller() internal view {
+        if (roleRegistry.hasRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), msg.sender)) return;
+        roleRegistry.onlyEigenpodOperations(msg.sender); // reverts OnlyEigenpodOperations otherwise
     }
 
     /**
@@ -631,6 +659,13 @@ contract EtherFiNodesManager is
      */
     function withdrawalCredentialTarget(address node) public view returns (address) {
         _validateNode(node);
+        return _credentialTarget(node);
+    }
+
+    /// @dev Unvalidated derivation, for callers that only need the target for an event. The
+    ///   validated `withdrawalCredentialTarget` is what the creation paths use, since that is
+    ///   where the target is baked into a deposit and must never be an arbitrary address.
+    function _credentialTarget(address node) internal view returns (address) {
         address pod = address(IEtherFiNode(node).getEigenPod());
         return pod == address(0) ? node : pod;
     }
