@@ -238,31 +238,35 @@ contract EtherFiNodesManagerTest is TestSetup {
         // Send ETH to node
         vm.deal(testNode, 1 ether);
 
+        address __s0 = managerInstance.etherfiNodeAddress(testLegacyId);
         vm.prank(eigenlayerAdmin);
-        managerInstance.sweepFunds(testLegacyId);
+        managerInstance.sweepFunds(__s0);
 
         // Check event was emitted (if balance > 0)
         // Note: This depends on node implementation
     }
 
     function test_sweepFunds_unauthorized() public {
+        address __s1 = managerInstance.etherfiNodeAddress(testLegacyId);
         vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
         vm.prank(bob);
-        managerInstance.sweepFunds(testLegacyId);
+        managerInstance.sweepFunds(__s1);
 
         // ADMIN_ROLE alone is not enough — sweepFunds requires EIGENLAYER_ADMIN_ROLE.
+        address __s2 = managerInstance.etherfiNodeAddress(testLegacyId);
         vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
         vm.prank(admin);
-        managerInstance.sweepFunds(testLegacyId);
+        managerInstance.sweepFunds(__s2);
     }
 
     function test_sweepFunds_whenPaused() public {
         vm.prank(admin);
         managerInstance.pause();
 
+        address __s3 = managerInstance.etherfiNodeAddress(testLegacyId);
         vm.expectRevert();
         vm.prank(eigenlayerAdmin);
-        managerInstance.sweepFunds(testLegacyId);
+        managerInstance.sweepFunds(__s3);
     }
 
     // ============================================
@@ -404,8 +408,9 @@ contract EtherFiNodesManagerTest is TestSetup {
             __deprecated_withdrawer: testNode
         });
         
+        address __node0 = managerInstance.etherfiNodeAddress(testLegacyId);
         vm.prank(admin);
-        managerInstance.queueWithdrawals(testLegacyId, params);
+        managerInstance.queueWithdrawals(__node0, params);
     }
     
     function test_completeQueuedWithdrawals_byAddress() public {
@@ -422,8 +427,9 @@ contract EtherFiNodesManagerTest is TestSetup {
         IERC20[][] memory tokens = new IERC20[][](0);
         bool[] memory receiveAsTokens = new bool[](0);
         
+        address __node1 = managerInstance.etherfiNodeAddress(testLegacyId);
         vm.prank(eigenlayerAdmin);
-        managerInstance.completeQueuedWithdrawals(testLegacyId, withdrawals, tokens, receiveAsTokens);
+        managerInstance.completeQueuedWithdrawals(__node1, withdrawals, tokens, receiveAsTokens);
     }
 
     // ============================================
@@ -939,9 +945,10 @@ contract EtherFiNodesManagerTest is TestSetup {
     function test_sweepFunds_blockedByPauseContractUntil() public {
         _grantNmPauseUntilRoles();
         _pauseUntil();
+        address __s4 = managerInstance.etherfiNodeAddress(testLegacyId);
         _expectPausedUntilRevert();
         vm.prank(eigenlayerAdmin);
-        managerInstance.sweepFunds(testLegacyId);
+        managerInstance.sweepFunds(__s4);
     }
 
     function test_createEigenPod_blockedByPauseContractUntil() public {
@@ -1014,13 +1021,6 @@ contract EtherFiNodesManagerTest is TestSetup {
         managerInstance.queueETHWithdrawal(testNode, 1 ether);
     }
 
-    function test_queueETHWithdrawal_byId_blockedByPauseContractUntil() public {
-        _grantNmPauseUntilRoles();
-        _pauseUntil();
-        _expectPausedUntilRevert();
-        vm.prank(admin);
-        managerInstance.queueETHWithdrawal(testLegacyId, 1 ether);
-    }
 
     function test_completeQueuedETHWithdrawals_byAddress_blockedByPauseContractUntil() public {
         _grantNmPauseUntilRoles();
@@ -1030,13 +1030,6 @@ contract EtherFiNodesManagerTest is TestSetup {
         managerInstance.completeQueuedETHWithdrawals(testNode, true);
     }
 
-    function test_completeQueuedETHWithdrawals_byId_blockedByPauseContractUntil() public {
-        _grantNmPauseUntilRoles();
-        _pauseUntil();
-        _expectPausedUntilRevert();
-        vm.prank(eigenlayerAdmin);
-        managerInstance.completeQueuedETHWithdrawals(testLegacyId, true);
-    }
 
     function test_queueWithdrawals_byAddress_blockedByPauseContractUntil() public {
         _grantNmPauseUntilRoles();
@@ -1048,15 +1041,6 @@ contract EtherFiNodesManagerTest is TestSetup {
         managerInstance.queueWithdrawals(testNode, params);
     }
 
-    function test_queueWithdrawals_byId_blockedByPauseContractUntil() public {
-        _grantNmPauseUntilRoles();
-        _pauseUntil();
-
-        IDelegationManager.QueuedWithdrawalParams[] memory params;
-        _expectPausedUntilRevert();
-        vm.prank(admin);
-        managerInstance.queueWithdrawals(testLegacyId, params);
-    }
 
     function test_completeQueuedWithdrawals_byAddress_blockedByPauseContractUntil() public {
         _grantNmPauseUntilRoles();
@@ -1070,17 +1054,6 @@ contract EtherFiNodesManagerTest is TestSetup {
         managerInstance.completeQueuedWithdrawals(testNode, withdrawals, tokens, receiveAsTokens);
     }
 
-    function test_completeQueuedWithdrawals_byId_blockedByPauseContractUntil() public {
-        _grantNmPauseUntilRoles();
-        _pauseUntil();
-
-        IDelegationManager.Withdrawal[] memory withdrawals;
-        IERC20[][] memory tokens;
-        bool[] memory receiveAsTokens;
-        _expectPausedUntilRevert();
-        vm.prank(eigenlayerAdmin);
-        managerInstance.completeQueuedWithdrawals(testLegacyId, withdrawals, tokens, receiveAsTokens);
-    }
 
     function test_requestExecutionLayerTriggeredWithdrawal_blockedByPauseContractUntil() public {
         _grantNmPauseUntilRoles();
@@ -1141,9 +1114,10 @@ contract EtherFiNodesManagerTest is TestSetup {
         _pauseUntil();
         vm.warp(block.timestamp + managerInstance.MAX_PAUSE_DURATION() + 1);
 
+        address __s5 = managerInstance.etherfiNodeAddress(testLegacyId);
         vm.deal(testNode, 1 ether);
         vm.prank(eigenlayerAdmin);
-        managerInstance.sweepFunds(testLegacyId);
+        managerInstance.sweepFunds(__s5);
     }
 
     /// @notice Check if EIP-4788 beacon roots contract is available and functional

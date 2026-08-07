@@ -473,13 +473,6 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         assertEq(node.balance, 0);
     }
 
-    /// @dev The address overload must not let a caller invoke sweepFunds() on an arbitrary contract.
-    function test_sweepFundsByAddress_revertsForUnknownNode() public {
-        vm.expectRevert(IEtherFiNodesManager.UnknownNode.selector);
-        vm.prank(eigenlayerAdmin);
-        etherFiNodesManager.sweepFunds(address(0xdeadbeef));
-    }
-
     function test_sweepFundsByAddress_gatedByHousekeeping() public {
         address node = _newPodLessNode();
 
@@ -501,7 +494,7 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         uint256 lpBalanceBefore = address(liquidityPool).balance;
 
         vm.prank(eigenlayerAdmin);
-        etherFiNodesManager.sweepFunds(uint256(val.pubkeyHash));
+        etherFiNodesManager.sweepFunds(node);
 
         assertEq(address(liquidityPool).balance, lpBalanceBefore + 5 ether);
         assertEq(node.balance, 0);

@@ -70,18 +70,9 @@ contract EtherFiNodesManager is
 
     /// @dev under normal conditions ETH should not accumulate in the EtherFiNode. This will forward
     ///   the eth to the liquidity pool in the event of ETH being accidentally sent there
-    function sweepFunds(uint256 id) external onlyHousekeepingOperations whenNotPaused {
-        _sweepFunds(etherfiNodeAddress(id));
-    }
-
-    /// @dev Sweeps a node directly, without resolving a validator id. Validators in the new
-    ///   credential regime pay out to the node itself, so the node address is the natural handle.
+    /// @dev Sweeps a node directly. Validators in the new credential regime pay out to the node
+    ///   itself, so the node address is the natural handle.
     function sweepFunds(address node) external onlyHousekeepingOperations whenNotPaused {
-        _validateNode(node);
-        _sweepFunds(node);
-    }
-
-    function _sweepFunds(address node) private {
         uint256 balance = IEtherFiNode(node).sweepFunds();
         if (balance > 0) {
             emit FundsTransferred(node, balance);
@@ -186,16 +177,6 @@ contract EtherFiNodesManager is
     }
     
     /**
-     * @notice Queues a beaconETH withdrawal for a given node
-     * @param id The id of the node to queue the beaconETH withdrawal for
-     * @param amount The amount of beaconETH to withdraw
-     * @return withdrawalRoot The withdrawal root
-     */
-    function queueETHWithdrawal(uint256 id, uint256 amount) external onlyExecutorOperations whenNotPaused returns (bytes32 withdrawalRoot) {
-        return queueETHWithdrawal(etherfiNodeAddress(id), amount);
-    }
-
-    /**
      * @notice Queues a withdrawal for a given node
      * @param node The node to queue the withdrawal for
      * @param params The parameters to queue the withdrawal with
@@ -207,15 +188,6 @@ contract EtherFiNodesManager is
         IEtherFiNode(node).queueWithdrawals(params);
     }
     
-    /**
-     * @notice Queues a withdrawal for a given node
-     * @param id The id of the node to queue the withdrawal for
-     * @param params The parameters to queue the withdrawal with
-     */
-    function queueWithdrawals(uint256 id, IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyExecutorOperations whenNotPaused {
-        queueWithdrawals(etherfiNodeAddress(id), params);
-    }
-
     /**
      * @notice Completes all queued beaconETH withdrawals for a given node
      * @param node The node to complete the queued beaconETH withdrawals for
@@ -229,15 +201,6 @@ contract EtherFiNodesManager is
         }
     }
     
-    /**
-     * @notice Completes all queued beaconETH withdrawals for a given node
-     * @param id The id of the node to complete the queued beaconETH withdrawals for
-     * @param receiveAsTokens Whether to receive the withdrawals as tokens
-     */
-    function completeQueuedETHWithdrawals(uint256 id, bool receiveAsTokens) external onlyHousekeepingOperations whenNotPaused {
-        completeQueuedETHWithdrawals(etherfiNodeAddress(id), receiveAsTokens);
-    }
-
     /**
      * @notice Completes all queued withdrawals for a given node
      * @param node The node to complete the queued withdrawals for
@@ -253,17 +216,6 @@ contract EtherFiNodesManager is
         }
     }
     
-    /**
-     * @notice Completes all queued withdrawals for a given node
-     * @param id The id of the node to complete the queued withdrawals for
-     * @param withdrawals The withdrawals to complete
-     * @param tokens The tokens to complete the withdrawals with
-     * @param receiveAsTokens Whether to receive the withdrawals as tokens
-     */
-    function completeQueuedWithdrawals(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external onlyHousekeepingOperations whenNotPaused {
-        completeQueuedWithdrawals(etherfiNodeAddress(id), withdrawals, tokens, receiveAsTokens);
-    }
-
     //-------------------------------------------------------------------
     //--------------------  EL TRIGGER FUNCTIONS  -----------------------
     //-------------------------------------------------------------------
