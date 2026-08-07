@@ -71,10 +71,20 @@ contract EtherFiNodesManager is
     /// @dev under normal conditions ETH should not accumulate in the EtherFiNode. This will forward
     ///   the eth to the liquidity pool in the event of ETH being accidentally sent there
     function sweepFunds(uint256 id) external onlyHousekeepingOperations whenNotPaused {
-        address nodeAddr = etherfiNodeAddress(id);
-        uint256 balance = IEtherFiNode(nodeAddr).sweepFunds();
-        if(balance > 0) {
-            emit FundsTransferred(nodeAddr, balance);
+        _sweepFunds(etherfiNodeAddress(id));
+    }
+
+    /// @dev Sweeps a node directly, without resolving a validator id. Validators in the new
+    ///   credential regime pay out to the node itself, so the node address is the natural handle.
+    function sweepFunds(address node) external onlyHousekeepingOperations whenNotPaused {
+        _validateNode(node);
+        _sweepFunds(node);
+    }
+
+    function _sweepFunds(address node) private {
+        uint256 balance = IEtherFiNode(node).sweepFunds();
+        if (balance > 0) {
+            emit FundsTransferred(node, balance);
         }
     }
 
@@ -284,7 +294,7 @@ contract EtherFiNodesManager is
         // withdrawal address is not the caller, so an unchecked batch would burn the fee and emit
         // events for exits that never happen.
         for (uint256 i = 1; i < requests.length; i++) {
-            if (etherFiNodeFromPubkeyHash[calculateValidatorPubkeyHash(requests[i].pubkey)] != node) revert MixedNodeRequest();
+            if (address(etherFiNodeFromPubkeyHash[calculateValidatorPubkeyHash(requests[i].pubkey)]) != address(node)) revert MixedNodeRequest();
         }
 
         // submitting an execution layer withdrawal request requires paying a fee per request
@@ -324,7 +334,7 @@ contract EtherFiNodesManager is
         // without this an unchecked batch would burn the fee on consolidations that never happen.
         // The target is deliberately not constrained; it may live outside this node.
         for (uint256 i = 1; i < requests.length; i++) {
-            if (etherFiNodeFromPubkeyHash[calculateValidatorPubkeyHash(requests[i].srcPubkey)] != node) revert MixedNodeRequest();
+            if (address(etherFiNodeFromPubkeyHash[calculateValidatorPubkeyHash(requests[i].srcPubkey)]) != address(node)) revert MixedNodeRequest();
         }
 
         // submitting an execution layer consolidation request requires paying a fee per request

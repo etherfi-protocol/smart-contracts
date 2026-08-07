@@ -21,6 +21,8 @@ interface IEtherFiNodesManager {
 
     // eigenlayer interactions
     function createEigenPod(address node) external returns (address);
+    function disablePod(address node) external;
+    function withdrawDisabledPodETH(address node) external;
     function getEigenPod(uint256 id) external view returns (address);
     function getEigenPod(address node) external view returns (address);
     function startCheckpoint(uint256 id) external;
@@ -38,7 +40,7 @@ interface IEtherFiNodesManager {
     function completeQueuedWithdrawals(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external;
     function completeQueuedWithdrawals(address node, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external;
     function sweepFunds(uint256 id) external;
-    //function sweepFunds(address node) external;
+    function sweepFunds(address node) external;
     function requestExecutionLayerTriggeredWithdrawal(IEigenPod.WithdrawalRequest[] calldata requests) external payable;
     function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable;
 

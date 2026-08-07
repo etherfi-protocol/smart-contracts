@@ -269,6 +269,36 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         etherFiNodesManager.requestExecutionLayerTriggeredWithdrawal{value: fee}(requests);
     }
 
+    /// @dev Sweeping by node address needs no validator id, which suits a pod-less node whose
+    ///      credential target is the node itself.
+    function test_podLess_sweepsByNodeAddress() public {
+        address node = _newPodLessNode();
+
+        vm.deal(node, 3 ether);
+        uint256 lpBalanceBefore = address(liquidityPool).balance;
+
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.sweepFunds(node);
+
+        assertEq(address(liquidityPool).balance, lpBalanceBefore + 3 ether);
+        assertEq(node.balance, 0);
+    }
+
+    /// @dev The address overload must not let a caller invoke sweepFunds() on an arbitrary contract.
+    function test_sweepFundsByAddress_revertsForUnknownNode() public {
+        vm.expectRevert(IEtherFiNodesManager.UnknownNode.selector);
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.sweepFunds(address(0xdeadbeef));
+    }
+
+    function test_sweepFundsByAddress_gatedByHousekeeping() public {
+        address node = _newPodLessNode();
+
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
+        vm.prank(makeAddr("rando"));
+        etherFiNodesManager.sweepFunds(node);
+    }
+
     /// @dev Beacon-chain rewards and exited principal arrive at the node, so the sweep is the only
     ///      revenue path for these validators.
     function test_podLess_sweepsNodeBalanceToLiquidityPool() public {
