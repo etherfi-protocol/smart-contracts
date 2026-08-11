@@ -574,14 +574,21 @@ contract NonEigenPodCredentialsTest is PreludeTest {
     function test_disablePod_revertsUntilEigenLayerV1_14_0() public {
         vm.prank(admin);
         address node = stakingManager.instantiateEtherFiNode(/*createEigenPod=*/ true);
+        IEigenPod pod = IEtherFiNode(node).getEigenPod();
 
-        (bool supported,) =
-            address(IEtherFiNode(node).getEigenPod()).staticcall(abi.encodeWithSignature("restakingDisabled()"));
+        (bool supported,) = address(pod).staticcall(abi.encodeWithSignature("restakingDisabled()"));
         if (supported) {
-            emit log("EigenLayer v1.14.0 is live: extend this test to cover the disablePod success path");
+            // EL v1.14.0 is live: a freshly created pod has no shares, checkpoints or queued
+            // withdrawals, so retirement through the manager succeeds and the pod reports it. Assert
+            // the real success path rather than returning green, so this test never passes vacuously.
+            vm.prank(admin); // OPERATION_TIMELOCK_ROLE
+            etherFiNodesManager.disablePod(node);
+            assertTrue(pod.restakingDisabled(), "pod should report retirement after disablePod");
             return;
         }
 
+        // Pre-v1.14: the EigenPodManager has no disablePod selector and no fallback, so the call
+        // reverts rather than silently succeeding.
         vm.expectRevert();
         vm.prank(address(etherFiNodesManager));
         IEtherFiNode(node).disablePod();
