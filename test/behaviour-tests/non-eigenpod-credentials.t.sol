@@ -704,4 +704,12 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         vm.prank(address(etherFiNodesManager));
         IEtherFiNode(node).withdrawDisabledPodETH();
     }
+
+    /// @dev sweepFunds(address) must validate the node like every other node-taking entrypoint, so a
+    ///      housekeeping caller cannot point it at an arbitrary contract and forge FundsTransferred.
+    function test_sweepFunds_revertsForUnknownNode() public {
+        vm.expectRevert(IEtherFiNodesManager.UnknownNode.selector);
+        vm.prank(eigenlayerAdmin); // HOUSEKEEPING_OPERATIONS_ROLE
+        etherFiNodesManager.sweepFunds(address(0xdeadbeef));
+    }
 }

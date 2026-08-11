@@ -73,6 +73,10 @@ contract EtherFiNodesManager is
     /// @dev Sweeps a node directly. Validators in the new credential regime pay out to the node
     ///   itself, so the node address is the natural handle.
     function sweepFunds(address node) external onlyHousekeepingOperations whenNotPaused {
+        // Validate like every other node-taking entrypoint. Without this, a housekeeping caller
+        // could pass an arbitrary contract, making the manager call into it and emit a forged
+        // FundsTransferred event that poisons off-chain accounting.
+        _validateNode(node);
         uint256 balance = IEtherFiNode(node).sweepFunds();
         if (balance > 0) {
             emit FundsTransferred(node, balance);
