@@ -591,14 +591,21 @@ contract NonEigenPodCredentialsTest is PreludeTest {
     function test_disablePod_revertsUntilEigenLayerV1_14_0() public {
         vm.prank(admin);
         address node = stakingManager.instantiateEtherFiNode(/*createEigenPod=*/ true);
+        IEigenPod pod = IEtherFiNode(node).getEigenPod();
 
-        (bool supported,) =
-            address(IEtherFiNode(node).getEigenPod()).staticcall(abi.encodeWithSignature("restakingDisabled()"));
+        (bool supported,) = address(pod).staticcall(abi.encodeWithSignature("restakingDisabled()"));
         if (supported) {
-            emit log("EigenLayer v1.14.0 is live: extend this test to cover the disablePod success path");
+            // EL v1.14.0 is live: a freshly created pod has no shares, checkpoints or queued
+            // withdrawals, so retirement through the manager succeeds and the pod reports it. Assert
+            // the real success path rather than returning green, so this test never passes vacuously.
+            vm.prank(admin); // OPERATION_TIMELOCK_ROLE
+            etherFiNodesManager.disablePod(node);
+            assertTrue(pod.restakingDisabled(), "pod should report retirement after disablePod");
             return;
         }
 
+        // Pre-v1.14: the EigenPodManager has no disablePod selector and no fallback, so the call
+        // reverts rather than silently succeeding.
         vm.expectRevert();
         vm.prank(address(etherFiNodesManager));
         IEtherFiNode(node).disablePod();
@@ -668,10 +675,32 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         address pod = address(IEtherFiNode(node).getEigenPod());
 
         vm.mockCall(eigenPodManager, abi.encodeWithSignature("disablePod()"), "");
+        // The manager now asserts the pod actually reports retirement before emitting PodDisabled,
+        // so the pod must report restakingDisabled() == true for the happy path.
+        vm.mockCall(pod, abi.encodeWithSignature("restakingDisabled()"), abi.encode(true));
 
         vm.expectEmit(true, true, false, true, address(etherFiNodesManager));
         emit IEtherFiNodesManager.PodDisabled(node, pod);
 
+        vm.prank(admin); // OPERATION_TIMELOCK_ROLE
+        etherFiNodesManager.disablePod(node);
+
+        vm.clearMockedCalls();
+    }
+
+    /// @dev Regression for the silent no-op: if the EtherFiNode beacon is stale, node.disablePod()
+    ///      is swallowed by the empty fallback and returns success. The manager must not emit a
+    ///      false PodDisabled — it reverts PodNotDisabled because the pod still reports restaking on.
+    function test_disablePod_revertsWhenPodNotActuallyDisabled() public {
+        vm.prank(admin);
+        address node = stakingManager.instantiateEtherFiNode(true);
+        address pod = address(IEtherFiNode(node).getEigenPod());
+
+        // Simulate a node/pod that accepts disablePod() (or swallows it) yet stays enabled.
+        vm.mockCall(eigenPodManager, abi.encodeWithSignature("disablePod()"), "");
+        vm.mockCall(pod, abi.encodeWithSignature("restakingDisabled()"), abi.encode(false));
+
+        vm.expectRevert(IEtherFiNodesManager.PodNotDisabled.selector);
         vm.prank(admin); // OPERATION_TIMELOCK_ROLE
         etherFiNodesManager.disablePod(node);
 
@@ -698,5 +727,13 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         vm.expectRevert();
         vm.prank(address(etherFiNodesManager));
         IEtherFiNode(node).withdrawDisabledPodETH();
+    }
+
+    /// @dev sweepFunds(address) must validate the node like every other node-taking entrypoint, so a
+    ///      housekeeping caller cannot point it at an arbitrary contract and forge FundsTransferred.
+    function test_sweepFunds_revertsForUnknownNode() public {
+        vm.expectRevert(IEtherFiNodesManager.UnknownNode.selector);
+        vm.prank(eigenlayerAdmin); // HOUSEKEEPING_OPERATIONS_ROLE
+        etherFiNodesManager.sweepFunds(address(0xdeadbeef));
     }
 }

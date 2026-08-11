@@ -73,6 +73,10 @@ contract EtherFiNodesManager is
     /// @dev Sweeps a node directly. Validators in the new credential regime pay out to the node
     ///   itself, so the node address is the natural handle.
     function sweepFunds(address node) external onlyHousekeepingOperations whenNotPaused {
+        // Validate like every other node-taking entrypoint. Without this, a housekeeping caller
+        // could pass an arbitrary contract, making the manager call into it and emit a forged
+        // FundsTransferred event that poisons off-chain accounting.
+        _validateNode(node);
         uint256 balance = IEtherFiNode(node).sweepFunds();
         if (balance > 0) {
             emit FundsTransferred(node, balance);
@@ -108,7 +112,9 @@ contract EtherFiNodesManager is
     function disablePod(address node) external onlyOperatingTimelock whenNotPaused {
         _validateNode(node);
         IEtherFiNode(node).disablePod();
-        emit PodDisabled(node, address(IEtherFiNode(node).getEigenPod()));
+        IEigenPod pod = IEtherFiNode(node).getEigenPod();
+        if (address(pod) == address(0) || !pod.restakingDisabled()) revert PodNotDisabled();
+        emit PodDisabled(node, address(pod));
     }
 
     /**
@@ -248,7 +254,7 @@ contract EtherFiNodesManager is
         // pod, EigenLayer already enforces pod membership and reverts, and it does so against the
         // pod's own validator set rather than our pubkey mapping, which may not have every
         // legacy validator linked.
-        if (target == address(node)) {
+        if (_requiresBatchMembershipCheck(address(node), target)) {
             for (uint256 i = 1; i < requests.length; i++) {
                 if (address(etherFiNodeFromPubkeyHash[calculateValidatorPubkeyHash(requests[i].pubkey)]) != address(node)) revert MixedNodeRequest();
             }
@@ -295,7 +301,7 @@ contract EtherFiNodesManager is
 
         // Pod-less only, for the reason given in requestExecutionLayerTriggeredWithdrawal. The
         // target is deliberately not constrained; it may live outside this node.
-        if (target == address(node)) {
+        if (_requiresBatchMembershipCheck(address(node), target)) {
             for (uint256 i = 1; i < requests.length; i++) {
                 if (address(etherFiNodeFromPubkeyHash[calculateValidatorPubkeyHash(requests[i].srcPubkey)]) != address(node)) revert MixedNodeRequest();
             }
@@ -631,6 +637,21 @@ contract EtherFiNodesManager is
     function _credentialTarget(address node) internal view returns (address) {
         address pod = address(IEtherFiNode(node).getEigenPod());
         return pod == address(0) ? node : pod;
+    }
+
+    /// @dev Whether a request batch must be checked for same-node membership. True for pod-less nodes
+    ///   (the node itself is the target) and for nodes whose pod has been retired: EigenLayer v1.14
+    ///   stops enforcing pod membership once restaking is disabled, so without this a mixed batch
+    ///   through a disabled pod would burn fees and emit phantom exit/consolidation events. The
+    ///   try/catch keeps pre-v1.14 pods, which have no `restakingDisabled()` selector, on the
+    ///   original pod-backed path where EigenLayer still enforces membership itself.
+    function _requiresBatchMembershipCheck(address node, address target) internal view returns (bool) {
+        if (target == node) return true;
+        try IEigenPod(target).restakingDisabled() returns (bool disabled) {
+            return disabled;
+        } catch {
+            return false;
+        }
     }
 
     function addressToWithdrawalCredentials(address addr) public pure returns (bytes memory) {
