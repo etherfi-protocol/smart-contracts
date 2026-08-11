@@ -141,4 +141,5 @@ interface IEtherFiNodesManager {
     error InsufficientWithdrawalFees();
     error InsufficientConsolidationFees();
     error MixedNodeRequest();
+    error PodRetired();
 }
