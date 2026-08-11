@@ -108,7 +108,14 @@ contract EtherFiNodesManager is
     function disablePod(address node) external onlyOperatingTimelock whenNotPaused {
         _validateNode(node);
         IEtherFiNode(node).disablePod();
-        emit PodDisabled(node, address(IEtherFiNode(node).getEigenPod()));
+        // Guard against a silent no-op. `disablePod()` returns nothing, so if the EtherFiNode beacon
+        // has not been upgraded yet the node's empty fallback swallows the call and returns success
+        // without ever reaching the pod. Assert the pod actually reports retirement, so a stale-beacon
+        // deployment reverts loudly here instead of emitting a false PodDisabled that would let us
+        // consolidate out of a still-live pod and cut its beacon-chain slashing factor.
+        IEigenPod pod = IEtherFiNode(node).getEigenPod();
+        if (address(pod) == address(0) || !pod.restakingDisabled()) revert PodNotDisabled();
+        emit PodDisabled(node, address(pod));
     }
 
     /**
