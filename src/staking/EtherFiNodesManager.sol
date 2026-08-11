@@ -617,7 +617,18 @@ contract EtherFiNodesManager is
      */
     function withdrawalCredentialTarget(address node) public view returns (address) {
         _validateNode(node);
-        return _credentialTarget(node);
+        address target = _credentialTarget(node);
+        // Refuse to bake credentials against a retired pod: a validator created here could never
+        // verify its credentials or checkpoint, so its 32 ETH would be stranded behind a dead pod.
+        // Only the creation paths call this validated resolver; the request paths use
+        // _credentialTarget directly, so validators already live on a since-retired pod are
+        // unaffected. try/catch leaves pre-v1.14 pods (no restakingDisabled() selector) as before.
+        if (target != node) {
+            try IEigenPod(target).restakingDisabled() returns (bool disabled) {
+                if (disabled) revert PodRetired();
+            } catch {}
+        }
+        return target;
     }
 
     /// @dev Unvalidated derivation, for callers that only need the target for an event. The

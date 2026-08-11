@@ -66,6 +66,23 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         etherFiNodesManager.withdrawalCredentialTarget(address(0xdeadbeef));
     }
 
+    /// @dev A retired pod is never a valid credential target: a new validator against it could never
+    ///      verify credentials or checkpoint, stranding its 32 ETH behind a dead pod. The validated
+    ///      resolver (used by all three creation paths) must reject it.
+    function test_credentialTarget_revertsForRetiredPod() public {
+        vm.prank(admin);
+        address node = stakingManager.instantiateEtherFiNode(true);
+        address pod = address(IEtherFiNode(node).getEigenPod());
+
+        // Simulate an EL v1.14 pod that has been retired.
+        vm.mockCall(pod, abi.encodeWithSignature("restakingDisabled()"), abi.encode(true));
+
+        vm.expectRevert(IEtherFiNodesManager.PodRetired.selector);
+        etherFiNodesManager.withdrawalCredentialTarget(node);
+
+        vm.clearMockedCalls();
+    }
+
     /// @dev The target is derived rather than stored, which is only safe because a node's pod is
     ///      fixed at instantiation. createEigenPod is callable solely by StakingManager, whose one
     ///      call site is inside instantiateEtherFiNode.
