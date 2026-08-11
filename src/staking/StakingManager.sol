@@ -207,8 +207,15 @@ contract StakingManager is
             IEtherFiNode etherFiNode = etherFiNodesManager.etherFiNodeFromPubkeyHash(pubkeyHash);
             if (address(etherFiNode) == address(0x0)) revert UnlinkedPubkey();
 
-            // verify deposit root
-            bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(etherFiNodesManager.withdrawalCredentialTarget(address(etherFiNode)));
+            // verify deposit root. Resolve the target directly rather than through
+            // withdrawalCredentialTarget so a top-up is never blocked if the pod was retired between
+            // creation and this confirmation: the credentials must match those baked at creation,
+            // which is the same pod/node address regardless of retirement (disablePod changes the
+            // pod's restaking status, not its address). The PodRetired guard belongs on initial
+            // creation only, which still goes through the checked resolver.
+            address credentialTarget = etherFiNodesManager.getEigenPod(address(etherFiNode));
+            if (credentialTarget == address(0)) credentialTarget = address(etherFiNode);
+            bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(credentialTarget);
             bytes32 computedDataRoot = generateDepositDataRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, remainingDeposit);
             if (computedDataRoot != depositData[i].depositDataRoot) revert IncorrectBeaconRoot();
 
