@@ -108,7 +108,9 @@ contract EtherFiNodesManager is
     function disablePod(address node) external onlyOperatingTimelock whenNotPaused {
         _validateNode(node);
         IEtherFiNode(node).disablePod();
-        emit PodDisabled(node, address(IEtherFiNode(node).getEigenPod()));
+        IEigenPod pod = IEtherFiNode(node).getEigenPod();
+        if (address(pod) == address(0) || !pod.restakingDisabled()) revert PodNotDisabled();
+        emit PodDisabled(node, address(pod));
     }
 
     /**

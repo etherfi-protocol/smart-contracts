@@ -651,10 +651,32 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         address pod = address(IEtherFiNode(node).getEigenPod());
 
         vm.mockCall(eigenPodManager, abi.encodeWithSignature("disablePod()"), "");
+        // The manager now asserts the pod actually reports retirement before emitting PodDisabled,
+        // so the pod must report restakingDisabled() == true for the happy path.
+        vm.mockCall(pod, abi.encodeWithSignature("restakingDisabled()"), abi.encode(true));
 
         vm.expectEmit(true, true, false, true, address(etherFiNodesManager));
         emit IEtherFiNodesManager.PodDisabled(node, pod);
 
+        vm.prank(admin); // OPERATION_TIMELOCK_ROLE
+        etherFiNodesManager.disablePod(node);
+
+        vm.clearMockedCalls();
+    }
+
+    /// @dev Regression for the silent no-op: if the EtherFiNode beacon is stale, node.disablePod()
+    ///      is swallowed by the empty fallback and returns success. The manager must not emit a
+    ///      false PodDisabled — it reverts PodNotDisabled because the pod still reports restaking on.
+    function test_disablePod_revertsWhenPodNotActuallyDisabled() public {
+        vm.prank(admin);
+        address node = stakingManager.instantiateEtherFiNode(true);
+        address pod = address(IEtherFiNode(node).getEigenPod());
+
+        // Simulate a node/pod that accepts disablePod() (or swallows it) yet stays enabled.
+        vm.mockCall(eigenPodManager, abi.encodeWithSignature("disablePod()"), "");
+        vm.mockCall(pod, abi.encodeWithSignature("restakingDisabled()"), abi.encode(false));
+
+        vm.expectRevert(IEtherFiNodesManager.PodNotDisabled.selector);
         vm.prank(admin); // OPERATION_TIMELOCK_ROLE
         etherFiNodesManager.disablePod(node);
 
