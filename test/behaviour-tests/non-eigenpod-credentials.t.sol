@@ -724,7 +724,7 @@ contract NonEigenPodCredentialsTest is PreludeTest {
     function test_withdrawDisabledPodETH_revertsForAPodLessNode() public {
         address node = _newPodLessNode();
 
-        vm.expectRevert();
+        vm.expectRevert(IEtherFiNode.NoEigenPod.selector);
         vm.prank(address(etherFiNodesManager));
         IEtherFiNode(node).withdrawDisabledPodETH();
     }

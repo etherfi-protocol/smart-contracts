@@ -298,7 +298,12 @@ contract EtherFiNode is IEtherFiNode {
      * @return balance The amount forwarded to the liquidity pool
      */
     function withdrawDisabledPodETH() external onlyEtherFiNodesManager returns (uint256 balance) {
-        getEigenPod().withdrawDisabledPodETH(address(this));
+        // A pod-less node has nothing to withdraw. The call already reverts (a void call to the
+        // zero address), but assert explicitly so the failure is a clear NoEigenPod rather than an
+        // opaque low-level revert.
+        IEigenPod pod = getEigenPod();
+        if (address(pod) == address(0)) revert NoEigenPod();
+        pod.withdrawDisabledPodETH(address(this));
         return _sweepToLiquidityPool();
     }
 
