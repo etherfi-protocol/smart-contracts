@@ -262,7 +262,15 @@ contract EtherFiNodesManager is
             }
         } else if (_podRestakingDisabled(target)) {
             for (uint256 i = 1; i < requests.length; i++) {
-                if (IEigenPod(target).validatorStatus(calculateValidatorPubkeyHash(requests[i].pubkey)) == IEigenPodTypes.VALIDATOR_STATUS.INACTIVE) revert MixedNodeRequest();
+                // A source belongs to this pod if EITHER it is linked to this node in our map OR it
+                // is in the pod's own validator set. INACTIVE means "never verified into EigenLayer",
+                // which includes legitimate same-pod validators whose credentials were never proven
+                // (and can no longer be, once the pod is disabled). Reject only pubkeys unknown to
+                // both — truly foreign sources.
+                bytes32 srcHash = calculateValidatorPubkeyHash(requests[i].pubkey);
+                bool linkedHere = address(etherFiNodeFromPubkeyHash[srcHash]) == address(node);
+                bool inPodSet = IEigenPod(target).validatorStatus(srcHash) != IEigenPodTypes.VALIDATOR_STATUS.INACTIVE;
+                if (!linkedHere && !inPodSet) revert MixedNodeRequest();
             }
         }
 
@@ -314,7 +322,12 @@ contract EtherFiNodesManager is
             }
         } else if (_podRestakingDisabled(target)) {
             for (uint256 i = 1; i < requests.length; i++) {
-                if (IEigenPod(target).validatorStatus(calculateValidatorPubkeyHash(requests[i].srcPubkey)) == IEigenPodTypes.VALIDATOR_STATUS.INACTIVE) revert MixedNodeRequest();
+                // Same-pod iff linked to this node in our map OR present in the pod's own validator
+                // set; see requestExecutionLayerTriggeredWithdrawal. Reject only truly foreign sources.
+                bytes32 srcHash = calculateValidatorPubkeyHash(requests[i].srcPubkey);
+                bool linkedHere = address(etherFiNodeFromPubkeyHash[srcHash]) == address(node);
+                bool inPodSet = IEigenPod(target).validatorStatus(srcHash) != IEigenPodTypes.VALIDATOR_STATUS.INACTIVE;
+                if (!linkedHere && !inPodSet) revert MixedNodeRequest();
             }
         }
 

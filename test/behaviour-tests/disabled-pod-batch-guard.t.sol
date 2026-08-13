@@ -93,6 +93,31 @@ contract DisabledPodBatchGuardTest is PreludeTest {
         etherFiNodesManager.requestConsolidation{value: fee * reqs.length}(reqs); // must NOT revert MixedNodeRequest
     }
 
+    /// @dev Source LINKED to this node in etherFiNodeFromPubkeyHash but INACTIVE in the pod (its
+    ///      credentials were never verified into EigenLayer, and can no longer be once the pod is
+    ///      disabled). It is still same-pod and must PASS — the pod-set-only check would have wrongly
+    ///      reverted it. Covers the union's map half.
+    function test_consolidation_disabledPod_acceptsLinkedButUnverifiedSource() public {
+        _setup();
+        bytes memory linkedUnverifiedPk = abi.encodePacked(bytes32(keccak256("linked")), bytes16(keccak256("linked2")));
+        // Link it to this node in the map, but do NOT force it active -> INACTIVE in the pod.
+        vm.prank(address(stakingManager));
+        etherFiNodesManager.linkPubkeyToNode(linkedUnverifiedPk, address(node0), 999_000_001);
+        assertEq(
+            uint256(pod0.validatorStatus(etherFiNodesManager.calculateValidatorPubkeyHash(linkedUnverifiedPk))),
+            uint256(IEigenPodTypes.VALIDATOR_STATUS.INACTIVE),
+            "linked source is INACTIVE in pod"
+        );
+
+        vm.mockCall(address(node0), abi.encodeWithSelector(IEtherFiNode.requestConsolidation.selector), "");
+        IEigenPodTypes.ConsolidationRequest[] memory reqs = _consolidationBatch(linkedUnverifiedPk);
+        uint256 fee = pod0.getConsolidationRequestFee();
+        vm.deal(admin, fee * reqs.length + 1 ether);
+
+        vm.prank(admin);
+        etherFiNodesManager.requestConsolidation{value: fee * reqs.length}(reqs); // must NOT revert MixedNodeRequest
+    }
+
     // --- requestExecutionLayerTriggeredWithdrawal ----------------------------------------------
 
     function test_withdrawal_disabledPod_rejectsForeignSource() public {
