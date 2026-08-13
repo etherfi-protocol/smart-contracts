@@ -248,15 +248,29 @@ contract EtherFiNodesManager is
         // into deployedEtherFiNodes, which these paths never required
         address target = _credentialTarget(address(node));
 
-        // Pod-less only: the predeploy accepts any pubkey from any caller and the consensus layer
-        // silently drops requests whose source withdrawal address is not the caller, so an
-        // unchecked batch would burn the fee and emit events for exits that never happen. With a
-        // pod, EigenLayer already enforces pod membership and reverts, and it does so against the
-        // pod's own validator set rather than our pubkey mapping, which may not have every
-        // legacy validator linked.
+        // Same-pod membership must hold, else the consensus layer silently drops requests whose
+        // withdrawal address is not the caller — burning the fee and emitting phantom exit events. A
+        // live pod enforces this itself, so we only cover the two cases EigenLayer does not:
+        //   - pod-less: check our pubkey map, which is complete for pod-less validators.
+        //   - disabled pod: EL v1.14 stops enforcing membership once restaking is disabled, so check
+        //     each source against the pod's own validator set. This covers legacy validators never
+        //     linked into etherFiNodeFromPubkeyHash — the migration case, where a map-based check
+        //     would wrongly reject a legitimate same-pod batch.
         if (target == address(node)) {
             for (uint256 i = 1; i < requests.length; i++) {
                 if (address(etherFiNodeFromPubkeyHash[calculateValidatorPubkeyHash(requests[i].pubkey)]) != address(node)) revert MixedNodeRequest();
+            }
+        } else if (_podRestakingDisabled(target)) {
+            for (uint256 i = 1; i < requests.length; i++) {
+                // A source belongs to this pod if EITHER it is linked to this node in our map OR it
+                // is in the pod's own validator set. INACTIVE means "never verified into EigenLayer",
+                // which includes legitimate same-pod validators whose credentials were never proven
+                // (and can no longer be, once the pod is disabled). Reject only pubkeys unknown to
+                // both — truly foreign sources.
+                bytes32 srcHash = calculateValidatorPubkeyHash(requests[i].pubkey);
+                bool linkedHere = address(etherFiNodeFromPubkeyHash[srcHash]) == address(node);
+                bool inPodSet = IEigenPod(target).validatorStatus(srcHash) != IEigenPodTypes.VALIDATOR_STATUS.INACTIVE;
+                if (!linkedHere && !inPodSet) revert MixedNodeRequest();
             }
         }
 
@@ -299,11 +313,21 @@ contract EtherFiNodesManager is
         // into deployedEtherFiNodes, which these paths never required
         address target = _credentialTarget(address(node));
 
-        // Pod-less only, for the reason given in requestExecutionLayerTriggeredWithdrawal. The
-        // target is deliberately not constrained; it may live outside this node.
+        // Same-pod source membership, for the reason given in requestExecutionLayerTriggeredWithdrawal.
+        // The consolidation TARGET is deliberately unconstrained (it may live outside this node);
+        // only the sources are checked.
         if (target == address(node)) {
             for (uint256 i = 1; i < requests.length; i++) {
                 if (address(etherFiNodeFromPubkeyHash[calculateValidatorPubkeyHash(requests[i].srcPubkey)]) != address(node)) revert MixedNodeRequest();
+            }
+        } else if (_podRestakingDisabled(target)) {
+            for (uint256 i = 1; i < requests.length; i++) {
+                // Same-pod iff linked to this node in our map OR present in the pod's own validator
+                // set; see requestExecutionLayerTriggeredWithdrawal. Reject only truly foreign sources.
+                bytes32 srcHash = calculateValidatorPubkeyHash(requests[i].srcPubkey);
+                bool linkedHere = address(etherFiNodeFromPubkeyHash[srcHash]) == address(node);
+                bool inPodSet = IEigenPod(target).validatorStatus(srcHash) != IEigenPodTypes.VALIDATOR_STATUS.INACTIVE;
+                if (!linkedHere && !inPodSet) revert MixedNodeRequest();
             }
         }
 
@@ -637,6 +661,17 @@ contract EtherFiNodesManager is
     function _credentialTarget(address node) internal view returns (address) {
         address pod = address(IEtherFiNode(node).getEigenPod());
         return pod == address(0) ? node : pod;
+    }
+
+    /// @dev True if the target pod has retired restaking (EigenLayer v1.14). The try/catch returns
+    ///   false for pre-v1.14 pods, which have no `restakingDisabled()` selector, keeping them on the
+    ///   live-pod path where EigenLayer still enforces batch membership itself.
+    function _podRestakingDisabled(address pod) internal view returns (bool) {
+        try IEigenPod(pod).restakingDisabled() returns (bool disabled) {
+            return disabled;
+        } catch {
+            return false;
+        }
     }
 
     function addressToWithdrawalCredentials(address addr) public pure returns (bytes memory) {
