@@ -271,6 +271,16 @@ contract EtherFiNode is IEtherFiNode {
      * @return The result of the call
      */
     function forwardExternalCall(address to, bytes calldata data) external onlyEtherFiNodesManager returns (bytes memory) {
+        // A node's pod is fixed at instantiation, and the credential resolver treats pod-or-no-pod as
+        // immutable. Block createPod()/stake() on the EigenPodManager from ever being forwarded here:
+        // otherwise a whitelisted forwarding entry could attach a pod to a funded pod-less node and
+        // silently flip its withdrawal-credential resolution from node to pod.
+        if (to == address(eigenPodManager) && data.length >= 4) {
+            bytes4 selector = bytes4(data[:4]);
+            if (selector == IEigenPodManager.createPod.selector || selector == IEigenPodManager.stake.selector) {
+                revert ForwardedCallNotAllowed();
+            }
+        }
         return LibCall.callContract(to, 0, data);
     }
 
