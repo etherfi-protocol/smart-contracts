@@ -100,5 +100,6 @@ interface IEtherFiNode {
     error NoCompleteableWithdrawals();
     error FeeQueryFailed();
     error PredeployFailed();
+    error NoEigenPod();
 
 }

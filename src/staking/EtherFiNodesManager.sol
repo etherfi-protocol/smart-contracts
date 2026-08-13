@@ -229,7 +229,7 @@ contract EtherFiNodesManager is
      * @notice Triggers EIP-7002 withdrawal requests, grouping by EigenPod automatically.
      * @dev associated etherFiNode is derived from pubkey in the request. Caller should ensure
      *      all provided validators share the same eigenpod
-     * @dev Access: only ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE, pausable, nonReentrant.
+     * @dev Access: only EXECUTOR_OPERATIONS_ROLE, pausable, nonReentrant.
      * @param requests Array of WithdrawalRequest:
      *        - pubkey: 48-byte BLS pubkey
      *        - amountGwei: 0 for full exit, >0 for partial to pod
@@ -291,7 +291,7 @@ contract EtherFiNodesManager is
 
     /**
      * @notice Triggers EIP-7251 consolidation requests for validators in the same EigenPod.
-     * @dev Access: only ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE, pausable, nonReentrant.
+     * @dev Access: only EXECUTOR_OPERATIONS_ROLE, pausable, nonReentrant.
      * @param requests Array of ConsolidationRequest:
      *        - srcPubkey: 48-byte BLS pubkey of source validator
      *        - targetPubkey: 48-byte BLS pubkey of target validator
