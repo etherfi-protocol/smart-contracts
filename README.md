@@ -49,6 +49,8 @@ certoraRun certora/conf/<contract-name>.conf # Formal verification
 
 ether.fi is open-source and licensed under the [MIT License](LICENSE).
 
+Third-party interfaces vendored under `src/interfaces/` keep the licenses of the projects they came from, as marked by the SPDX header in each file. That covers the EigenLayer interfaces (BUSL-1.1) and the deposit contract interfaces.
+
 ---
 
 <p align="center">Built with ❤️ by the ether.fi team</p>
