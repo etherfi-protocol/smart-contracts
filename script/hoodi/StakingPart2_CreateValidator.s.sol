@@ -71,12 +71,11 @@ contract StakingPart2 is Script {
         console.log("- EtherFi Node: %s", etherFiNode);
         console.log("- Validator pubkey: %s", vm.toString(pubkey));
         
-        // Get withdrawal credentials from EtherFi node's EigenPod
-        address eigenPod = address(IEtherFiNode(etherFiNode).getEigenPod());
-        console.log("EigenPod: %s", eigenPod);
-        bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod);
-        
-        console.log("- EigenPod: %s", eigenPod);
+        // Credentials point at the node's EigenPod, or the node itself when it has none
+        address credentialTarget = etherFiNodesManager.withdrawalCredentialTarget(etherFiNode);
+        bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(credentialTarget);
+
+        console.log("- Credential target: %s", credentialTarget);
         console.log("- Withdrawal credentials: %s", vm.toString(withdrawalCredentials));
         
         // Generate deposit data root
