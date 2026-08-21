@@ -196,6 +196,186 @@ contract MembershipManager is Initializable, OwnableUpgradeable, DeprecatedOZPau
     }
 
     //--------------------------------------------------------------------------------------
+    //--------------------------  DEPRECATION MIGRATION  -----------------------------------
+    //--------------------------------------------------------------------------------------
+
+    error LengthMismatch();
+    error NothingToSweep();
+    error ZeroRecipient();
+    error OnlySelf();
+    error LegacyPositionsOutstanding();
+    error EtherSweepFailed();
+    error WorthlessPosition();
+
+    event NftForceUnwrapped(address indexed holder, uint256 indexed tokenId, uint256 amountOfEEth);
+    event NftForceUnwrapSkipped(address indexed holder, uint256 indexed tokenId, bytes reason);
+    event ForceUnwrapHalted(uint256 stoppedAtIndex, uint256 batchLength);
+    event ForceUnwrapBatchResult(uint256 batchLength, uint256 unwrapped, uint256 skipped);
+    event UnbackedEEthSwept(address indexed recipient, uint256 amount);
+    event EtherSwept(address indexed recipient, uint256 amount);
+
+    /// @dev Gas kept in reserve per batch item so a starved item is reported as a skip rather than
+    ///      consuming the outer frame. Covers the burn, the eETH transfer, and the event.
+    uint256 private constant FORCE_UNWRAP_GAS_FLOOR = 400_000;
+
+    /// @notice Burns membership NFTs and pays each holder the eETH backing its position.
+    /// @param _holders The current holder of each token, in the same order as _tokenIds
+    /// @param _tokenIds The membership NFTs to unwrap
+    /// @dev Terminal migration step for deprecating this contract. MembershipNFT is ERC1155 with no
+    ///      owner index, so holders are supplied by the caller and verified here against
+    ///      balanceOfUser -- a wrong holder is skipped, never paid.
+    /// @dev Each item is isolated so one failure cannot block the batch: a blacklisted holder fails
+    ///      the eETH transfer, and a legacy row fails the version check. Every skip is emitted with
+    ///      its revert reason for off-chain retry.
+    /// @return unwrapped How many positions were burned and paid
+    /// @return skipped How many were skipped, each with a NftForceUnwrapSkipped event naming why
+    function forceUnwrapForEEth(address[] calldata _holders, uint256[] calldata _tokenIds)
+        external
+        onlyOperatingTimelock
+        returns (uint256 unwrapped, uint256 skipped)
+    {
+        if (_holders.length != _tokenIds.length) revert LengthMismatch();
+
+        uint256 i;
+        for (i = 0; i < _holders.length; i++) {
+            // Stop rather than revert: the items already unwrapped are valid work, and this call
+            // sits behind a timelock, so discarding them would cost another full delay to redo.
+            if (gasleft() < FORCE_UNWRAP_GAS_FLOOR) {
+                // Without this the truncation is invisible -- a batch stopped at item 5 of 50 looks
+                // exactly like a 5-item batch that ran to completion.
+                emit ForceUnwrapHalted(i, _holders.length);
+                break;
+            }
+
+            try this.forceUnwrapOne(_holders[i], _tokenIds[i]) {
+                unwrapped++;
+            } catch (bytes memory reason) {
+                skipped++;
+                emit NftForceUnwrapSkipped(_holders[i], _tokenIds[i], reason);
+            }
+        }
+
+        // Reported rather than enforced. An earlier version reverted when nothing was unwrapped, to
+        // catch a global precondition failing (eETH paused, this contract blacklisted). That was
+        // worse on both counts: the revert discarded the very skip events that say why, and it
+        // handed any holder a veto over a queued governance call -- transfer the NFT out before the
+        // timelock ETA, the item skips, and a single-item retry batch reverts, burning a full delay
+        // for the price of one ERC1155 transfer. Simulate the batch before queueing instead.
+        emit ForceUnwrapBatchResult(_holders.length, unwrapped, skipped);
+    }
+
+    /// @notice Burns one membership NFT and pays its holder the eETH backing it.
+    /// @dev External only so forceUnwrapForEEth can isolate each item behind try/catch; a revert
+    ///      here rolls back just this token. Restricted to self-calls, so the timelock gate on the
+    ///      batch entrypoint is the only way in.
+    function forceUnwrapOne(address _holder, uint256 _tokenId) external {
+        if (msg.sender != address(this)) revert OnlySelf();
+        if (membershipNFT.balanceOfUser(_holder, _tokenId) != 1) revert OnlyTokenOwner();
+        if (tokenData[_tokenId].version != 1) revert WrongVersion();
+
+        uint8 tier = tokenData[_tokenId].tier;
+        uint256 vaultShare = tokenData[_tokenId].vaultShare;
+
+        // Decrement the vault by this token's exact recorded share. _withdraw would instead
+        // round-trip share -> eth -> share, leaving a slice of the token's share stranded in
+        // tierVaults after the token row is deleted.
+        uint256 eEthShare = eEthShareForVaultShare(tier, vaultShare);
+        uint256 amount = liquidityPool.amountForShare(eEthShare);
+
+        // A position with recorded share that prices to nothing must not be destroyed for nothing.
+        // eEthShareForVaultShare returns 0 for any input once a tier's totalPooledEEthShares hits
+        // zero, and the burn below is unconditional, so without this the NFT is shredded and the
+        // row deleted while the holder is paid 0 -- emitted as a successful unwrap. The sibling
+        // voluntary path fails closed here via _withdraw's balance check; this one must too.
+        if (amount == 0 && vaultShare != 0) revert WorthlessPosition();
+
+        _decrementTierVaultV1(tier, eEthShare, vaultShare);
+        delete tokenData[_tokenId];
+
+        // Burns skip MembershipNFT._beforeTokenTransfer, so a transfer lock or an NFT-level
+        // blacklist entry does not block this. eETH's own blacklist still applies to the transfer
+        // below, which is why the caller isolates each item.
+        membershipNFT.burn(_holder, _tokenId, 1);
+
+        if (amount > 0) IERC20(address(eETH)).safeTransfer(_holder, amount);
+
+        emit NftForceUnwrapped(_holder, _tokenId, amount);
+    }
+
+    /// @notice eETH still owed to unburned membership positions, in eETH.
+    /// @dev Derived from the tier vaults rather than a running total, so it cannot drift from the
+    ///      accounting the payouts actually consume.
+    function outstandingEEthObligation() public view returns (uint256) {
+        uint256 shares;
+        for (uint256 t = 0; t < tierVaults.length; t++) {
+            // A tier with no vault shares left has no holder who can draw from it:
+            // eEthShareForVaultShare divides by totalVaultShares and every member share is zero,
+            // so whatever pooled dust remains is unclaimable. Counting it as owed would put a
+            // permanent floor under the obligation and make the residual unsweepable forever.
+            if (tierVaults[t].totalVaultShares == 0) continue;
+            shares += tierVaults[t].totalPooledEEthShares;
+        }
+        return liquidityPool.amountForShare(shares);
+    }
+
+    /// @notice eETH held by this contract beyond what unburned positions can claim.
+    function unbackedEEth() public view returns (uint256) {
+        uint256 balance = IERC20(address(eETH)).balanceOf(address(this));
+        uint256 owed = outstandingEEthObligation();
+        return balance > owed ? balance - owed : 0;
+    }
+
+    /// @notice Sweeps eETH that no membership position can claim.
+    /// @param _recipient Where to send it, normally the treasury
+    /// @return amount The eETH swept
+    /// @dev Only ever moves the surplus over outstandingEEthObligation(), so it cannot take eETH
+    ///      backing a position that has not been unwrapped yet. That bound is what makes this safe
+    ///      to hold behind governance rather than requiring every holder to be paid out first.
+    function sweepUnbackedEEth(address _recipient) external onlyOperatingTimelock returns (uint256) {
+        if (_recipient == address(0)) revert ZeroRecipient();
+
+        // outstandingEEthObligation() reads only the V1 tier vaults. V0 positions are permanently
+        // unredeemable, so today they are owed nothing and every tierDeposits entry is zero. This
+        // makes that assumption fail closed instead of silently treating V0 backing as surplus.
+        // Both legs are checked: `shares` is derived from `amounts` and floors to zero for small
+        // balances, so testing `shares` alone would pass a tier still holding V0 principal.
+        for (uint256 t = 0; t < tierDeposits.length; t++) {
+            if (tierDeposits[t].shares != 0 || tierDeposits[t].amounts != 0) revert LegacyPositionsOutstanding();
+        }
+
+        uint256 amount = unbackedEEth();
+        if (amount == 0) revert NothingToSweep();
+
+        IERC20(address(eETH)).safeTransfer(_recipient, amount);
+
+        emit UnbackedEEthSwept(_recipient, amount);
+        return amount;
+    }
+
+    /// @notice Sweeps the contract's ETH balance.
+    /// @param _recipient Where to send it, normally the treasury
+    /// @return amount The ETH swept
+    /// @dev No membership position is ever denominated in ETH -- the balance is accumulated burn
+    ///      fees, routed in by unwrapForEEthAndBurn, plus whatever `receive()` accepted. Without
+    ///      this the migration strands that ETH with no exit short of another UUPS upgrade, which
+    ///      is a higher-privilege and slower path than the sweep it should ship beside.
+    function sweepEther(address _recipient) external onlyOperatingTimelock returns (uint256) {
+        // Sweeping to self would succeed through receive(), leaving the balance untouched while
+        // emitting an EtherSwept event claiming it moved -- and that event is the migration's only
+        // audit trail.
+        if (_recipient == address(0) || _recipient == address(this)) revert ZeroRecipient();
+
+        uint256 amount = address(this).balance;
+        if (amount == 0) revert NothingToSweep();
+
+        (bool ok, ) = _recipient.call{value: amount}("");
+        if (!ok) revert EtherSweepFailed();
+
+        emit EtherSwept(_recipient, amount);
+        return amount;
+    }
+
+    //--------------------------------------------------------------------------------------
     //-------------------------------  INTERNAL FUNCTIONS   --------------------------------
     //--------------------------------------------------------------------------------------
     function _withdrawAndBurn(uint256 _tokenId) internal returns (uint256, uint256) {

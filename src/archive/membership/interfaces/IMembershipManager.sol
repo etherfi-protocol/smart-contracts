@@ -43,6 +43,14 @@ interface IMembershipManager {
 
     function claim(uint256 _tokenId) external;
 
+    // Deprecation migration
+    function forceUnwrapForEEth(address[] calldata _holders, uint256[] calldata _tokenIds) external returns (uint256 unwrapped, uint256 skipped);
+    function forceUnwrapOne(address _holder, uint256 _tokenId) external;
+    function sweepUnbackedEEth(address _recipient) external returns (uint256);
+    function sweepEther(address _recipient) external returns (uint256);
+    function outstandingEEthObligation() external view returns (uint256);
+    function unbackedEEth() external view returns (uint256);
+
     // Getter functions
     function tokenDeposits(uint256) external view returns (uint128, uint128);
     function tokenData(uint256) external view returns (uint96, uint40, uint40, uint32, uint32, uint8, uint8);
