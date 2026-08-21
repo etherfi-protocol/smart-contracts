@@ -71,15 +71,37 @@ def main() -> int:
         if runtime == 0:
             continue  # abstract or otherwise not deployable
 
-        override = overrides.get(name)
-        ceiling = runtime_limit * fail_pct / 100.0
-        note = ""
-        if override:
-            ceiling = float(override["max_runtime_bytes"])
-            note = override.get("reason", "budgeted")
-
-        over_runtime = runtime > ceiling
-        over_init = init > init_limit * fail_pct / 100.0
+        # Runtime and initcode are budgeted independently: a max_runtime_bytes override cannot
+        # clear an initcode failure, so each dimension carries its own ceiling and its own note.
+        override = overrides.get(name, {})
+        note = override.get("reason", "budgeted") if override else ""
+        dims = {
+            "runtime": {
+                "label": "runtime",
+                "size": runtime,
+                "limit": runtime_limit,
+                "ceiling": float(override.get("max_runtime_bytes", runtime_limit * fail_pct / 100.0)),
+                "override_key": "max_runtime_bytes",
+                "budgeted": "max_runtime_bytes" in override,
+            },
+            "init": {
+                "label": "initcode",
+                "size": init,
+                "limit": init_limit,
+                "ceiling": float(override.get("max_init_bytes", init_limit * fail_pct / 100.0)),
+                "override_key": "max_init_bytes",
+                "budgeted": "max_init_bytes" in override,
+            },
+        }
+        for d in dims.values():
+            d["pct"] = pct(d["size"], d["limit"])
+            d["headroom"] = d["limit"] - d["size"]
+            d["over"] = d["size"] > d["ceiling"]
+        failed_dims = [d for d in dims.values() if d["over"]]
+        # Warn per dimension, so initcode pressure surfaces the same way runtime does.
+        warned_dims = [
+            d for d in dims.values() if not d["over"] and d["pct"] >= warn_pct
+        ] if not failed_dims else []
 
         rows.append(
             {
@@ -87,18 +109,19 @@ def main() -> int:
                 "path": path,
                 "runtime": runtime,
                 "init": init,
-                "runtime_pct": pct(runtime, runtime_limit),
-                "init_pct": pct(init, init_limit),
-                "headroom": runtime_limit - runtime,
-                "failed": over_runtime or over_init,
-                "warned": not (over_runtime or over_init)
-                and pct(runtime, runtime_limit) >= warn_pct,
+                "runtime_pct": dims["runtime"]["pct"],
+                "init_pct": dims["init"]["pct"],
+                "headroom": dims["runtime"]["headroom"],
+                "failed": bool(failed_dims),
+                "warned": bool(warned_dims),
+                "failed_dims": failed_dims,
+                "warned_dims": warned_dims,
                 "note": note,
-                "ceiling": ceiling,
             }
         )
 
-    rows.sort(key=lambda r: -r["runtime_pct"])
+    # Sort by the tightest dimension, so an initcode-heavy contract is not buried.
+    rows.sort(key=lambda r: -max(r["runtime_pct"], r["init_pct"]))
     failures = [r for r in rows if r["failed"]]
     warnings = [r for r in rows if r["warned"]]
 
@@ -123,30 +146,35 @@ def main() -> int:
         lines.append(f"<sub>{len(rows) - 20} smaller contracts omitted.</sub>")
 
     if failures:
+        keys = set()
         lines += ["", "### Over budget", ""]
         for r in failures:
-            limit_note = (
-                f"budgeted ceiling {int(r['ceiling'])} bytes — {r['note']}"
-                if r["note"]
-                else f"{fail_pct}% of the limit is {int(r['ceiling'])} bytes"
-            )
-            lines.append(
-                f"- **{r['name']}** (`{r['path']}`): {r['runtime']} bytes runtime, "
-                f"{r['runtime_pct']:.1f}% of the limit. {limit_note}."
-            )
+            for d in r["failed_dims"]:
+                keys.add(d["override_key"])
+                limit_note = (
+                    f"budgeted ceiling {int(d['ceiling'])} bytes — {r['note']}"
+                    if d["budgeted"]
+                    else f"{fail_pct}% of the limit is {int(d['ceiling'])} bytes"
+                )
+                lines.append(
+                    f"- **{r['name']}** (`{r['path']}`): {d['size']} bytes {d['label']}, "
+                    f"{d['pct']:.1f}% of the {d['label']} limit. {limit_note}."
+                )
         lines += [
             "",
             "Either reclaim bytes, or record the decision by adding an entry to "
-            "`script/ci/contract-size-budget.json` with a `max_runtime_bytes` ceiling "
-            "and a reason.",
+            "`script/ci/contract-size-budget.json` with "
+            + " and ".join(f"`{k}`" for k in sorted(keys))
+            + " and a reason.",
         ]
     elif warnings:
         lines += ["", f"### Approaching the limit (over {warn_pct}%)", ""]
         for r in warnings:
-            lines.append(
-                f"- **{r['name']}**: {r['headroom']} bytes of headroom "
-                f"({r['runtime_pct']:.1f}% used)."
-            )
+            for d in r["warned_dims"]:
+                lines.append(
+                    f"- **{r['name']}**: {d['headroom']} bytes of {d['label']} headroom "
+                    f"({d['pct']:.1f}% used)."
+                )
 
     report = "\n".join(lines) + "\n"
     if args.report:
@@ -157,12 +185,17 @@ def main() -> int:
         print(f"FAIL: {len(failures)} contract(s) over budget.", file=sys.stderr)
         return 1
 
-    tightest = rows[0] if rows else None
-    if tightest:
+    if rows:
+        t = rows[0]
+        runtime_tighter = t["runtime_pct"] >= t["init_pct"]
+        label, used, spare = (
+            ("runtime", t["runtime_pct"], t["headroom"])
+            if runtime_tighter
+            else ("initcode", t["init_pct"], init_limit - t["init"])
+        )
         print(
             f"OK: {len(rows)} deployable contracts checked. "
-            f"Tightest is {tightest['name']} at {tightest['runtime_pct']:.1f}% "
-            f"({tightest['headroom']} bytes spare)."
+            f"Tightest is {t['name']} at {used:.1f}% of the {label} limit ({spare} bytes spare)."
         )
     return 0
 
