@@ -1,0 +1,22 @@
+{
+  "_comment": [
+    "Budget for the contract-size CI gate. See script/ci/check_contract_sizes.py.",
+    "Limits are the protocol constants: EIP-170 caps deployed runtime bytecode,",
+    "EIP-3860 caps initcode. fail_pct is the fraction of a limit a contract may reach",
+    "before CI fails, so the gate bites while there is still room to react rather than",
+    "at deploy time. warn_pct only annotates the report.",
+    "",
+    "Add an entry to `overrides` to accept a contract above fail_pct. Runtime and initcode",
+    "are budgeted separately: set max_runtime_bytes, max_init_bytes, or both, since raising",
+    "one does not affect the other. An override is a recorded decision, not an exemption --",
+    "the ceiling still binds, so the contract cannot grow further without another deliberate",
+    "change here. Keep the reason current and delete the entry once the bytes are reclaimed.",
+    "",
+    "  \"overrides\": { \"SomeContract\": { \"max_runtime_bytes\": 24300, \"reason\": \"...\" } }"
+  ],
+  "runtime_limit": 24576,
+  "init_limit": 49152,
+  "warn_pct": 90,
+  "fail_pct": 95,
+  "overrides": {}
+}
