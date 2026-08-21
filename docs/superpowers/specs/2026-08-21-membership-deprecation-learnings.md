@@ -36,7 +36,7 @@ supplies.
 | Decision | Why |
 |---|---|
 | Pay out in **eETH**, not a `WithdrawRequestNFT` | The queue route leaves every user a second action and the deprecation unfinished. eETH is the same underlying the NFT already represented, so it is an in-kind swap that completes in one transaction. |
-| **`onlyOperatingTimelock`**, not the multisig | This moves other people's assets without consent. It should carry the same delay as any irreversible governance action, and the delay gives holders a window to exit voluntarily first. |
+| Governance-gated, **not open to holders or the multisig** | This moves other people's assets without consent, so it sits behind role-gated governance either way. Which role is the row below. |
 | **Skip, don't revert**, per batch item | One blacklisted holder or one stale row would otherwise block a batch of 200. Each skip is emitted with its revert reason for targeted retry. |
 | **No burn fee, no unwrap penalty** | `burnFee` is already 0 on current state, and charging a forced exit is indefensible. The unwrap penalty exists to discourage voluntary early exit, which is not what this is. |
 | One **`recoverTokens(token, recipient)`** instead of separate eETH and ETH sweeps | Same entrypoint covers ETH (`address(0)`), eETH, and any stray ERC20. Fewer functions, one role check, one event. |
@@ -45,7 +45,7 @@ supplies.
 | **No new storage variables** | Only constants, errors, events, and functions were added, so the upgrade is layout-compatible. `forge inspect` reports the same 30 slots ending at `__gap_3`. |
 | **`forceUnwrapForEEth` on `onlyHousekeepingOperations`, sweeps on `onlyOperatingTimelock`** | The unwrap can only pay the verified holder of the token it burns, so a compromised hot key can force unwanted-but-fair exits and nothing worse. A sweep names an arbitrary recipient, so it keeps the delay. |
 | **`whenNotPaused` omitted** | A stuck contract should stay drainable by governance. The tradeoff: a pause triggered by an incident will not halt the migration. |
-| Too-large batch **reverts** rather than partially completing | The `gasleft() < 400_000` guard keeps the transaction atomic; the operator retries smaller. `break`-and-keep-progress would save gas but make "how far did it get" answerable only from events. At ~78k gas per token the floor carries ~5x headroom. |
+| Too-large batch **breaks and keeps its progress** | The `gasleft() < 400_000` guard stops the loop and emits `ForceUnwrapHalted`. An earlier version reverted to keep the call atomic, which threw away every item already unwrapped. At ~78k gas per token the floor carries ~5x headroom. |
 
 ## Resolved: V0 redemption
 
@@ -90,8 +90,8 @@ obligation and made the residual unsweepable forever. This is why the end-to-end
 nothing, so a batch stopped at item 5 of 50 was indistinguishable on-chain from a 5-item batch that
 ran to completion — contradicting the claim that events mark where to resume.
 
-**`sweepEther` rejects `address(this)`.** Sweeping to self succeeds through `receive()`, leaving the
-balance untouched while emitting an `EtherSwept` event claiming it moved. That event is the
+**`recoverTokens` rejects `address(this)`.** Sweeping to self succeeds through `receive()`, leaving the
+balance untouched while emitting a `TokensRecovered` event claiming it moved. That event is the
 migration's only audit trail.
 
 Independently confirmed as safe by multiple agents with their own arithmetic: the sweep bound cannot

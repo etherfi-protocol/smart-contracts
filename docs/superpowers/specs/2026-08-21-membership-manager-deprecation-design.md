@@ -140,10 +140,13 @@ function forceUnwrapOne(address _holder, uint256 _tokenId) external {
 }
 
 // What unburned positions can still claim. Derived from the tier vaults, so it cannot drift from
-// the accounting the payouts consume.
+// the accounting the payouts consume. Skips drained tiers, which no holder can draw from.
 function outstandingEEthObligation() public view returns (uint256) {
     uint256 shares;
-    for (uint256 t = 0; t < tierVaults.length; t++) shares += tierVaults[t].totalPooledEEthShares;
+    for (uint256 t = 0; t < tierVaults.length; t++) {
+        if (tierVaults[t].totalVaultShares == 0) continue;
+        shares += tierVaults[t].totalPooledEEthShares;
+    }
     return liquidityPool.amountForShare(shares);
 }
 
@@ -153,17 +156,35 @@ function unbackedEEth() public view returns (uint256) {
     return balance > owed ? balance - owed : 0;
 }
 
-// Moves only the surplus, so it can never take eETH backing a position that has not been unwrapped.
-function sweepUnbackedEEth(address _recipient) external onlyOperatingTimelock returns (uint256) {
-    if (_recipient == address(0)) revert ZeroRecipient();
+// The full balance for ETH and stray tokens; only the surplus for eETH.
+function recoverableAmount(address _token) public view returns (uint256) {
+    if (_token == address(0)) return address(this).balance;
+    if (_token == address(eETH)) return unbackedEEth();
+    return IERC20(_token).balanceOf(address(this));
+}
 
-    uint256 amount = unbackedEEth();
+// One entrypoint for ETH, eETH and stray tokens. Takes no amount: for eETH the recoverable figure
+// is the surplus, so this can never touch eETH backing an unburned position.
+function recoverTokens(address _token, address _recipient) external onlyOperatingTimelock returns (uint256 amount) {
+    if (_recipient == address(0) || _recipient == address(this)) revert ZeroRecipient();
+
+    if (_token == address(eETH)) {
+        for (uint256 t = 0; t < tierDeposits.length; t++) {
+            if (tierDeposits[t].shares != 0 || tierDeposits[t].amounts != 0) revert LegacyPositionsOutstanding();
+        }
+    }
+
+    amount = recoverableAmount(_token);
     if (amount == 0) revert NothingToSweep();
 
-    IERC20(address(eETH)).safeTransfer(_recipient, amount);
+    if (_token == address(0)) {
+        (bool ok, ) = _recipient.call{value: amount}("");
+        if (!ok) revert EtherSweepFailed();
+    } else {
+        IERC20(_token).safeTransfer(_recipient, amount);
+    }
 
-    emit UnbackedEEthSwept(_recipient, amount);
-    return amount;
+    emit TokensRecovered(_token, _recipient, amount);
 }
 ```
 
