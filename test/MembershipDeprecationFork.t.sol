@@ -170,7 +170,7 @@ contract MembershipDeprecationForkTest is Test {
         // Sweep whatever no position can claim.
         uint256 expectedSweep = mm.unbackedEEth();
         vm.prank(OPERATING_TIMELOCK);
-        uint256 swept = mm.sweepUnbackedEEth(TREASURY);
+        uint256 swept = mm.recoverTokens(EETH, TREASURY);
 
         emit log_named_uint("swept to treasury       ", swept);
         emit log_named_uint("MM eETH final           ", eETH.balanceOf(MM_PROXY));
@@ -244,10 +244,10 @@ contract MembershipDeprecationForkTest is Test {
         if (unbacked == 0) {
             vm.prank(OPERATING_TIMELOCK);
             vm.expectRevert(MembershipManager.NothingToSweep.selector);
-            mm.sweepUnbackedEEth(TREASURY);
+            mm.recoverTokens(EETH, TREASURY);
         } else {
             vm.prank(OPERATING_TIMELOCK);
-            uint256 swept = mm.sweepUnbackedEEth(TREASURY);
+            uint256 swept = mm.recoverTokens(EETH, TREASURY);
             assertEq(swept, unbacked, "swept only the unbacked slice");
             assertGe(eETH.balanceOf(MM_PROXY), mm.outstandingEEthObligation(), "obligation still covered");
         }
@@ -274,7 +274,7 @@ contract MembershipDeprecationForkTest is Test {
         assertGt(obligationMid, 0, "positions still outstanding at the sweep");
 
         vm.prank(OPERATING_TIMELOCK);
-        uint256 swept = mm.sweepUnbackedEEth(TREASURY);
+        uint256 swept = mm.recoverTokens(EETH, TREASURY);
         emit log_named_uint("swept mid-migration     ", swept);
 
         assertGe(
@@ -331,17 +331,17 @@ contract MembershipDeprecationForkTest is Test {
 
         vm.prank(HOUSEKEEPER);
         vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
-        mm.sweepUnbackedEEth(TREASURY);
+        mm.recoverTokens(EETH, TREASURY);
 
         vm.prank(HOUSEKEEPER);
         vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
-        mm.sweepEther(TREASURY);
+        mm.recoverTokens(address(0), TREASURY);
     }
 
     function test_sweep_revertsForNonTimelock() public {
         vm.prank(address(0xBAD));
         vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
-        mm.sweepUnbackedEEth(TREASURY);
+        mm.recoverTokens(EETH, TREASURY);
     }
 
     /// @notice forceUnwrapOne is external only so the batch can isolate items. Nobody else may
@@ -497,7 +497,7 @@ contract MembershipDeprecationForkTest is Test {
 
     /// @notice The contract holds ETH from accumulated burn fees with no other way out. Without a
     ///         sweep the migration strands it behind a UUPS upgrade.
-    function test_sweepEtherToTreasury() public {
+    function test_recoverEtherToTreasury() public {
         _assertTimelockAuthority();
 
         uint256 mmEth = address(mm).balance;
@@ -506,7 +506,7 @@ contract MembershipDeprecationForkTest is Test {
         uint256 treasuryBefore = TREASURY.balance;
 
         vm.prank(OPERATING_TIMELOCK);
-        uint256 swept = mm.sweepEther(TREASURY);
+        uint256 swept = mm.recoverTokens(address(0), TREASURY);
 
         assertEq(swept, mmEth, "swept the whole ETH balance");
         assertEq(TREASURY.balance, treasuryBefore + mmEth, "treasury received the ETH");
@@ -515,21 +515,21 @@ contract MembershipDeprecationForkTest is Test {
         // Second call has nothing to move.
         vm.prank(OPERATING_TIMELOCK);
         vm.expectRevert(MembershipManager.NothingToSweep.selector);
-        mm.sweepEther(TREASURY);
+        mm.recoverTokens(address(0), TREASURY);
     }
 
-    function test_sweepEther_revertsForNonTimelock() public {
+    function test_recoverEther_revertsForNonTimelock() public {
         vm.prank(address(0xBAD));
         vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
-        mm.sweepEther(TREASURY);
+        mm.recoverTokens(address(0), TREASURY);
     }
 
-    function test_sweepEther_rejectsZeroRecipient() public {
+    function test_recoverEther_rejectsZeroRecipient() public {
         _assertTimelockAuthority();
 
         vm.prank(OPERATING_TIMELOCK);
         vm.expectRevert(MembershipManager.ZeroRecipient.selector);
-        mm.sweepEther(address(0));
+        mm.recoverTokens(address(0), address(0));
     }
 
     /// @notice The eETH sweep must refuse to run if any V0 tier ever holds shares, since
@@ -553,7 +553,7 @@ contract MembershipDeprecationForkTest is Test {
 
         vm.prank(OPERATING_TIMELOCK);
         vm.expectRevert(MembershipManager.LegacyPositionsOutstanding.selector);
-        mm.sweepUnbackedEEth(TREASURY);
+        mm.recoverTokens(EETH, TREASURY);
     }
 
     function _firstLivePosition() internal view returns (uint256) {
@@ -603,6 +603,66 @@ contract MembershipDeprecationForkTest is Test {
         }
     }
 
+    /// @notice A stray ERC20 comes out in full, since no position has a claim on it.
+    function test_recoverStrayErc20InFull() public {
+        _assertTimelockAuthority();
+
+        // weETH is a real token the contract has no business holding.
+        address weETH = 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee;
+        uint256 amount = 5 ether;
+        deal(weETH, MM_PROXY, amount);
+
+        assertEq(mm.recoverableAmount(weETH), amount, "the whole balance is recoverable");
+
+        uint256 treasuryBefore = IERC20(weETH).balanceOf(TREASURY);
+
+        vm.prank(OPERATING_TIMELOCK);
+        uint256 recovered = mm.recoverTokens(weETH, TREASURY);
+
+        assertEq(recovered, amount, "recovered the full balance");
+        assertEq(IERC20(weETH).balanceOf(TREASURY), treasuryBefore + amount, "treasury received it");
+        assertEq(IERC20(weETH).balanceOf(MM_PROXY), 0, "nothing left behind");
+    }
+
+    /// @notice The single entrypoint must not turn eETH into a full-balance recovery. This is the
+    ///         property that a generic recoverERC20 would have destroyed: the caller names no
+    ///         amount, and for eETH the amount is the surplus, not the balance.
+    function test_recoverTokens_eEthStaysBoundedByTheObligation() public {
+        _assertTimelockAuthority();
+
+        uint256 balance = eETH.balanceOf(MM_PROXY);
+        uint256 obligation = mm.outstandingEEthObligation();
+        uint256 recoverable = mm.recoverableAmount(EETH);
+
+        assertGt(obligation, 0, "positions are still outstanding");
+        assertEq(recoverable, mm.unbackedEEth(), "eETH is quoted as the unbacked surplus");
+        assertLt(recoverable, balance / 100, "almost the whole balance is off limits");
+
+        vm.prank(OPERATING_TIMELOCK);
+        uint256 recovered = mm.recoverTokens(EETH, TREASURY);
+
+        assertEq(recovered, recoverable, "took only the surplus");
+        assertGe(
+            eETH.balanceOf(MM_PROXY) + 2,
+            mm.outstandingEEthObligation(),
+            "every outstanding position is still covered"
+        );
+    }
+
+    function test_recoverTokens_revertsForNonTimelock() public {
+        vm.prank(address(0xBAD));
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
+        mm.recoverTokens(EETH, TREASURY);
+    }
+
+    function test_recoverTokens_rejectsSelfRecipient() public {
+        _assertTimelockAuthority();
+
+        vm.prank(OPERATING_TIMELOCK);
+        vm.expectRevert(MembershipManager.ZeroRecipient.selector);
+        mm.recoverTokens(address(0), MM_PROXY);
+    }
+
     function test_lengthMismatchReverts() public {
         _assertTimelockAuthority();
 
@@ -619,7 +679,7 @@ contract MembershipDeprecationForkTest is Test {
 
         vm.prank(OPERATING_TIMELOCK);
         vm.expectRevert(MembershipManager.ZeroRecipient.selector);
-        mm.sweepUnbackedEEth(address(0));
+        mm.recoverTokens(EETH, address(0));
     }
 
     /// @notice Voluntary exit must keep working; the migration function is additive.

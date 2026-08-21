@@ -39,7 +39,8 @@ supplies.
 | **`onlyOperatingTimelock`**, not the multisig | This moves other people's assets without consent. It should carry the same delay as any irreversible governance action, and the delay gives holders a window to exit voluntarily first. |
 | **Skip, don't revert**, per batch item | One blacklisted holder or one stale row would otherwise block a batch of 200. Each skip is emitted with its revert reason for targeted retry. |
 | **No burn fee, no unwrap penalty** | `burnFee` is already 0 on current state, and charging a forced exit is indefensible. The unwrap penalty exists to discourage voluntary early exit, which is not what this is. |
-| Sweep bounded by **`outstandingEEthObligation()`** | An unconditional "send everything to treasury" steals from every holder not yet unwrapped. The bound makes the function safe to expose from day one rather than gating it on the migration finishing. |
+| One **`recoverTokens(token, recipient)`** instead of separate eETH and ETH sweeps | Same entrypoint covers ETH (`address(0)`), eETH, and any stray ERC20. Fewer functions, one role check, one event. |
+| `recoverTokens` takes **no amount parameter** | The amount is always `recoverableAmount(token)`. For a stray token that is the full balance; for eETH it is the surplus over `outstandingEEthObligation()`. A caller-named amount would put all 898 eETH of user backing one bad parameter away — which is exactly what a generic `recoverERC20(token, amount, to)` would have done. |
 | **Exact-share accounting**, bypassing `_withdraw` | `_withdraw` round-trips share → eth → share and leaves a slice of the token's share stranded in `tierVaults`. That is how the existing voluntary burn path grows dust; the migration adds none. |
 | **No new storage variables** | Only constants, errors, events, and functions were added, so the upgrade is layout-compatible. `forge inspect` reports the same 30 slots ending at `__gap_3`. |
 | **`forceUnwrapForEEth` on `onlyHousekeepingOperations`, sweeps on `onlyOperatingTimelock`** | The unwrap can only pay the verified holder of the token it burns, so a compromised hot key can force unwanted-but-fair exits and nothing worse. A sweep names an arbitrary recipient, so it keeps the delay. |
@@ -138,7 +139,7 @@ available, since the contract has no way to derive the holder itself.
 ## Contract sizes
 
 `forge build --sizes` against the EIP-170 24576-byte runtime limit: nothing deployable is over.
-`MembershipManager` is 18819 bytes with 5757 to spare. The two contracts that exceed the limit,
+`MembershipManager` is 18908 bytes with 5668 to spare. The two contracts that exceed the limit,
 `ProtocolInvariantsHandler` (29310) and `FrozenRateWithdrawalHandler` (28107), are invariant-test
 handlers under `test/` and are never deployed.
 

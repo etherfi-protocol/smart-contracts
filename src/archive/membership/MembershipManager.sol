@@ -211,8 +211,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, DeprecatedOZPau
     event NftForceUnwrapSkipped(address indexed holder, uint256 indexed tokenId, bytes reason);
     event ForceUnwrapHalted(uint256 stoppedAtIndex, uint256 batchLength);
     event ForceUnwrapBatchResult(uint256 batchLength, uint256 unwrapped, uint256 skipped);
-    event UnbackedEEthSwept(address indexed recipient, uint256 amount);
-    event EtherSwept(address indexed recipient, uint256 amount);
+    event TokensRecovered(address indexed token, address indexed recipient, uint256 amount);
 
     uint256 private constant FORCE_UNWRAP_GAS_FLOOR = 400_000;
 
@@ -298,46 +297,48 @@ contract MembershipManager is Initializable, OwnableUpgradeable, DeprecatedOZPau
         return balance > owed ? balance - owed : 0;
     }
 
-    /// @notice Sweeps eETH that no membership position can claim.
-    /// @param _recipient Where to send it, normally the treasury
-    /// @dev Moves only the surplus over outstandingEEthObligation(), so it cannot take eETH backing
-    ///      a position that has not been unwrapped yet. Both sides are share-denominated, so the
-    ///      bound holds across rebases.
-    function sweepUnbackedEEth(address _recipient) external onlyOperatingTimelock returns (uint256) {
-        if (_recipient == address(0)) revert ZeroRecipient();
-
-        // outstandingEEthObligation() covers V1 only. V0 is permanently unredeemable and every
-        // tierDeposits entry is zero; fail closed if that ever stops holding. `shares` is derived
-        // from `amounts` and floors to zero, so both legs are checked.
-        for (uint256 t = 0; t < tierDeposits.length; t++) {
-            if (tierDeposits[t].shares != 0 || tierDeposits[t].amounts != 0) revert LegacyPositionsOutstanding();
-        }
-
-        uint256 amount = unbackedEEth();
-        if (amount == 0) revert NothingToSweep();
-
-        IERC20(address(eETH)).safeTransfer(_recipient, amount);
-
-        emit UnbackedEEthSwept(_recipient, amount);
-        return amount;
+    /// @notice How much of a token this contract can hand out without shorting a live position.
+    /// @param _token The token to quote, or address(0) for ETH
+    function recoverableAmount(address _token) public view returns (uint256) {
+        if (_token == address(0)) return address(this).balance;
+        // eETH is the only asset any position has a claim on; everything else here is stray.
+        if (_token == address(eETH)) return unbackedEEth();
+        return IERC20(_token).balanceOf(address(this));
     }
 
-    /// @notice Sweeps the contract's ETH balance.
+    /// @notice Recovers ETH or any ERC20 held by this contract.
+    /// @param _token The token to recover, or address(0) for ETH
     /// @param _recipient Where to send it, normally the treasury
-    /// @dev No position is denominated in ETH; the balance is accumulated burn fees plus whatever
-    ///      receive() accepted. Without this the migration strands it behind a UUPS upgrade.
-    function sweepEther(address _recipient) external onlyOperatingTimelock returns (uint256) {
-        // Self would succeed through receive(), emitting an EtherSwept that never moved anything
+    /// @return amount The amount recovered
+    /// @dev Always moves recoverableAmount(_token), never a caller-chosen figure. That matters for
+    ///      eETH: the recoverable amount is the surplus over outstandingEEthObligation(), so this
+    ///      cannot take eETH backing a position that has not been unwrapped yet. Both sides of that
+    ///      bound are share-denominated, so it holds across rebases. Letting the caller name an
+    ///      amount would put the entire user balance one bad parameter away.
+    function recoverTokens(address _token, address _recipient) external onlyOperatingTimelock returns (uint256 amount) {
+        // Self would succeed through receive() and emit an event for a transfer that never happened
         if (_recipient == address(0) || _recipient == address(this)) revert ZeroRecipient();
 
-        uint256 amount = address(this).balance;
+        if (_token == address(eETH)) {
+            // outstandingEEthObligation() covers V1 only. V0 is permanently unredeemable and every
+            // tierDeposits entry is zero; fail closed if that ever stops holding. `shares` is
+            // derived from `amounts` and floors to zero, so both legs are checked.
+            for (uint256 t = 0; t < tierDeposits.length; t++) {
+                if (tierDeposits[t].shares != 0 || tierDeposits[t].amounts != 0) revert LegacyPositionsOutstanding();
+            }
+        }
+
+        amount = recoverableAmount(_token);
         if (amount == 0) revert NothingToSweep();
 
-        (bool ok, ) = _recipient.call{value: amount}("");
-        if (!ok) revert EtherSweepFailed();
+        if (_token == address(0)) {
+            (bool ok, ) = _recipient.call{value: amount}("");
+            if (!ok) revert EtherSweepFailed();
+        } else {
+            IERC20(_token).safeTransfer(_recipient, amount);
+        }
 
-        emit EtherSwept(_recipient, amount);
-        return amount;
+        emit TokensRecovered(_token, _recipient, amount);
     }
 
     //--------------------------------------------------------------------------------------
