@@ -895,8 +895,11 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.startPrank(user);
 
         // Normal user should fail for all eigenlayer functions
+        // Resolved before the expectRevert: etherfiNodeAddress is an external call and would
+        // otherwise absorb the expected revert.
+        address proofSubmitterNode = etherFiNodesManager.etherfiNodeAddress(nodeId);
         vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
-        etherFiNodesManager.setProofSubmitter(nodeId, address(0));
+        etherFiNodesManager.setProofSubmitter(proofSubmitterNode, address(0));
 
         vm.expectRevert(RoleRegistry.OnlyEigenpodOperations.selector);
         etherFiNodesManager.startCheckpoint(nodeId);
@@ -1368,9 +1371,11 @@ contract PreludeTest is Test, ArrayTestHelper {
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
         vm.stopPrank();
 
-        // Unauthorized caller -> revert
+        // Unauthorized caller -> revert. Node resolved first, since etherfiNodeAddress is an
+        // external call and would otherwise absorb the expected revert.
+        address linkedNode = etherFiNodesManager.etherfiNodeAddress(legacyIds[0]);
         vm.expectRevert();
-        etherFiNodesManager.setProofSubmitter(legacyIds[0], address(1));
+        etherFiNodesManager.setProofSubmitter(linkedNode, address(1));
     }
 
     function test_requestExecutionLayerTriggeredWithdrawal_requires_role_reverts() public {

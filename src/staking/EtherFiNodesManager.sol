@@ -70,8 +70,7 @@ contract EtherFiNodesManager is
 
     /// @dev under normal conditions ETH should not accumulate in the EtherFiNode. This will forward
     ///   the eth to the liquidity pool in the event of ETH being accidentally sent there
-    /// @dev Sweeps a node directly. Validators in the new credential regime pay out to the node
-    ///   itself, so the node address is the natural handle.
+    /// @dev Takes the node address: validators in the new regime pay out to the node itself.
     function sweepFunds(address node) external onlyHousekeepingOperations whenNotPaused {
         // unvalidated: legacy nodes are not all backfilled into deployedEtherFiNodes
         uint256 balance = IEtherFiNode(node).sweepFunds();
@@ -102,9 +101,9 @@ contract EtherFiNodesManager is
     /**
      * @notice Permanently retires a node's EigenPod, ending its restaking.
      * @param node The node whose pod to retire
-     * @dev Irreversible, so gated on the operating timelock. Requires every beacon share to be
-     *      queued and matured first. Retire the pod before consolidating its validators out,
-     *      otherwise the negative balance delta cuts the beacon chain slashing factor.
+     * @dev Irreversible. Requires every beacon share queued and matured first, and must run
+     *      before consolidating the pod's validators out, or the negative balance delta cuts the
+     *      beacon chain slashing factor.
      */
     function disablePod(address node) external onlyOperatingTimelock whenNotPaused {
         _validateNode(node);
@@ -241,30 +240,22 @@ contract EtherFiNodesManager is
 
         bytes32 pubKeyHash = calculateValidatorPubkeyHash(requests[0].pubkey);
         IEtherFiNode node = etherFiNodeFromPubkeyHash[pubKeyHash];
-        // unvalidated: used only for the emitted event, and legacy nodes are not all backfilled
-        // into deployedEtherFiNodes, which these paths never required
+        // unvalidated: legacy nodes are not all backfilled into deployedEtherFiNodes
         address target = _credentialTarget(address(node));
 
-        // Same-pod membership must hold, else the consensus layer silently drops requests whose
-        // withdrawal address is not the caller, burning the fee and emitting phantom exit events.
-        // A live pod enforces this per request via validatorStatus == ACTIVE (withdrawals only;
-        // requestConsolidation checks the target, not the source). That leaves two cases:
-        //   - pod-less: check our pubkey map, which is complete for pod-less validators.
-        //   - disabled pod: EL v1.14 stops enforcing membership once restaking is disabled, so check
-        //     each source against the pod's own validator set. This covers legacy validators never
-        //     linked into etherFiNodeFromPubkeyHash — the migration case, where a map-based check
-        //     would wrongly reject a legitimate same-pod batch.
+        // Mixed-target batches must be rejected: the consensus layer silently drops requests whose
+        // withdrawal address is not the caller, burning the fee and emitting phantom exits. A live
+        // pod already enforces this itself, leaving two gaps to cover here.
         if (target == address(node)) {
+            // Pod-less: our pubkey map is complete for these.
             for (uint256 i = 1; i < requests.length; i++) {
                 if (address(etherFiNodeFromPubkeyHash[calculateValidatorPubkeyHash(requests[i].pubkey)]) != address(node)) revert MixedNodeRequest();
             }
         } else if (_podRestakingDisabled(target)) {
+            // Disabled pod: EL v1.14 stops enforcing membership. Accept a source linked here OR
+            // present in the pod's own set, since legacy validators may be in neither our map nor
+            // provable into EigenLayer. Reject only pubkeys unknown to both.
             for (uint256 i = 1; i < requests.length; i++) {
-                // A source belongs to this pod if EITHER it is linked to this node in our map OR it
-                // is in the pod's own validator set. INACTIVE means "never verified into EigenLayer",
-                // which includes legitimate same-pod validators whose credentials were never proven
-                // (and can no longer be, once the pod is disabled). Reject only pubkeys unknown to
-                // both — truly foreign sources.
                 bytes32 srcHash = calculateValidatorPubkeyHash(requests[i].pubkey);
                 bool linkedHere = address(etherFiNodeFromPubkeyHash[srcHash]) == address(node);
                 bool inPodSet = IEigenPod(target).validatorStatus(srcHash) != IEigenPodTypes.VALIDATOR_STATUS.INACTIVE;
@@ -272,9 +263,8 @@ contract EtherFiNodesManager is
             }
         }
 
-        // Pod-backed nodes read the fee straight off the pod, exactly as before, so this upgrade
-        // does not depend on the EtherFiNode beacon having been upgraded first. Only the pod-less
-        // path needs the node, and no pod-less node exists until one is deliberately created.
+        // Pod-backed reads the fee off the pod as before, so this upgrade does not require the
+        // EtherFiNode beacon to be upgraded first.
         uint256 feePerRequest = target == address(node)
             ? node.getWithdrawalRequestFee()
             : IEigenPod(target).getWithdrawalRequestFee();
@@ -307,13 +297,11 @@ contract EtherFiNodesManager is
         // resolved from the source validator only; the target may live outside this node
         bytes32 pubKeyHash = calculateValidatorPubkeyHash(requests[0].srcPubkey);
         IEtherFiNode node = etherFiNodeFromPubkeyHash[pubKeyHash];
-        // unvalidated: used only for the emitted event, and legacy nodes are not all backfilled
-        // into deployedEtherFiNodes, which these paths never required
+        // unvalidated: legacy nodes are not all backfilled into deployedEtherFiNodes
         address target = _credentialTarget(address(node));
 
-        // Same-pod source membership, for the reason given in requestExecutionLayerTriggeredWithdrawal.
-        // The consolidation TARGET is deliberately unconstrained (it may live outside this node);
-        // only the sources are checked.
+        // Sources only, per requestExecutionLayerTriggeredWithdrawal. The target is deliberately
+        // unconstrained; it may live outside this node.
         if (target == address(node)) {
             for (uint256 i = 1; i < requests.length; i++) {
                 if (address(etherFiNodeFromPubkeyHash[calculateValidatorPubkeyHash(requests[i].srcPubkey)]) != address(node)) revert MixedNodeRequest();
@@ -426,18 +414,9 @@ contract EtherFiNodesManager is
      * @param node The node address to set the proof submitter for
      * @param proofSubmitter The address of the proof submitter
      */
-    function setProofSubmitter(address node, address proofSubmitter) public onlyOperatingMultisig whenNotPaused {
+    function setProofSubmitter(address node, address proofSubmitter) external onlyOperatingMultisig whenNotPaused {
         _validateNode(node);
         IEtherFiNode(node).setProofSubmitter(proofSubmitter);
-    }
-    
-    /**
-     * @notice Set the proof submitter for a specific node
-     * @param id The id of the node to set the proof submitter for
-     * @param proofSubmitter The address of the proof submitter
-     */
-    function setProofSubmitter(uint256 id, address proofSubmitter) external onlyOperatingMultisig whenNotPaused {
-        setProofSubmitter(etherfiNodeAddress(id), proofSubmitter);
     }
 
     //--------------------------------------------------------------------------------------

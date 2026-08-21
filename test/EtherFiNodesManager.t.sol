@@ -356,8 +356,11 @@ contract EtherFiNodesManagerTest is TestSetup {
     
     function test_setProofSubmitter_byId() public {
         address newSubmitter = address(0x123);
+        // Resolved outside the prank: etherfiNodeAddress is itself an external call and would
+        // otherwise consume it.
+        address node = managerInstance.etherfiNodeAddress(testLegacyId);
         vm.prank(owner);
-        managerInstance.setProofSubmitter(testLegacyId, newSubmitter);
+        managerInstance.setProofSubmitter(node, newSubmitter);
     }
     
     function test_setProofSubmitter_unauthorized() public {
@@ -1007,10 +1010,13 @@ contract EtherFiNodesManagerTest is TestSetup {
 
     function test_setProofSubmitter_byId_blockedByPauseContractUntil() public {
         _grantNmPauseUntilRoles();
+        // Resolved before the pause and the expectRevert: etherfiNodeAddress is an external call
+        // and would otherwise absorb the expected revert.
+        address node = managerInstance.etherfiNodeAddress(testLegacyId);
         _pauseUntil();
         _expectPausedUntilRevert();
         vm.prank(owner);
-        managerInstance.setProofSubmitter(testLegacyId, bob);
+        managerInstance.setProofSubmitter(node, bob);
     }
 
     function test_queueETHWithdrawal_byAddress_blockedByPauseContractUntil() public {

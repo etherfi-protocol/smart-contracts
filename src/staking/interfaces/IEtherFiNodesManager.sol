@@ -29,7 +29,6 @@ interface IEtherFiNodesManager {
     function startCheckpoint(address node) external;
     function verifyCheckpointProofs(uint256 id, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external;
     function verifyCheckpointProofs(address node, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external;
-    function setProofSubmitter(uint256 id, address newProofSubmitter) external;
     function setProofSubmitter(address node, address newProofSubmitter) external;
     function queueETHWithdrawal(address node, uint256 amount) external returns (bytes32 withdrawalRoot);
     function completeQueuedETHWithdrawals(address node, bool receiveAsTokens) external;
