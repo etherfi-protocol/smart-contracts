@@ -73,11 +73,7 @@ contract EtherFiNodesManager is
     /// @dev Sweeps a node directly. Validators in the new credential regime pay out to the node
     ///   itself, so the node address is the natural handle.
     function sweepFunds(address node) external onlyHousekeepingOperations whenNotPaused {
-        // Deliberately unvalidated: legacy nodes are not all backfilled into deployedEtherFiNodes,
-        // and this is the only path that moves stray ETH off a node, so it must reach any node the
-        // protocol owns. EtherFiNode.sweepFunds is onlyEtherFiNodesManager and takes no arguments,
-        // so the worst a bad address yields is a forged FundsTransferred event from a housekeeping
-        // caller — no funds move.
+        // unvalidated: legacy nodes are not all backfilled into deployedEtherFiNodes
         uint256 balance = IEtherFiNode(node).sweepFunds();
         if (balance > 0) {
             emit FundsTransferred(node, balance);
@@ -251,16 +247,8 @@ contract EtherFiNodesManager is
 
         // Same-pod membership must hold, else the consensus layer silently drops requests whose
         // withdrawal address is not the caller, burning the fee and emitting phantom exit events.
-        //
-        // For a LIVE pod this is enforced upstream, per request, by EigenPod.requestWithdrawal:
-        //     // Ensure validator has verified withdrawal credentials pointed at this pod
-        //     require(validatorStatus(pubkeyHash) == VALIDATOR_STATUS.ACTIVE, ValidatorNotActiveInPod());
-        // A foreign pubkey is INACTIVE in this pod, so the pod reverts before the predeploy is
-        // reached. Note this holds for withdrawals ONLY: EigenPod.requestConsolidation checks just
-        // `validatorStatus(targetPubkeyHash)` and never the source, so requestConsolidation below
-        // must not reuse this reasoning for its source check.
-        //
-        // That leaves the two cases upstream does not cover:
+        // A live pod enforces this per request via validatorStatus == ACTIVE (withdrawals only;
+        // requestConsolidation checks the target, not the source). That leaves two cases:
         //   - pod-less: check our pubkey map, which is complete for pod-less validators.
         //   - disabled pod: EL v1.14 stops enforcing membership once restaking is disabled, so check
         //     each source against the pod's own validator set. This covers legacy validators never
