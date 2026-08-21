@@ -219,13 +219,16 @@ contract MembershipManager is Initializable, OwnableUpgradeable, DeprecatedOZPau
     /// @notice Burns membership NFTs and pays each holder the eETH backing its position.
     /// @param _holders Current holder of each token, ordered to match _tokenIds
     /// @param _tokenIds The membership NFTs to unwrap
-    /// @dev Holders are caller-supplied because MembershipNFT is ERC1155 with no owner index; each
-    ///      is verified against balanceOfUser. Items are isolated, so a skip does not block the
-    ///      batch. Reports rather than reverts on an all-skip batch: reverting would discard the
-    ///      skip reasons and let a holder veto the call by moving the NFT before the timelock ETA.
+    /// @dev Holders are caller-supplied because MembershipNFT is ERC1155 with no owner index. Each
+    ///      pair is verified independently against balanceOfUser, so a misaligned list can only
+    ///      skip -- payment always goes to the verified holder of that exact token. That is also
+    ///      why this sits on a hot role while the sweeps stay on the timelock: this can only pay a
+    ///      rightful owner, whereas a sweep picks an arbitrary recipient.
+    /// @dev Items are isolated, so a skip does not block the batch, and an all-skip batch reports
+    ///      rather than reverting so the skip reasons survive.
     function forceUnwrapForEEth(address[] calldata _holders, uint256[] calldata _tokenIds)
         external
-        onlyOperatingTimelock
+        onlyHousekeepingOperations
         returns (uint256 unwrapped, uint256 skipped)
     {
         if (_holders.length != _tokenIds.length) revert LengthMismatch();

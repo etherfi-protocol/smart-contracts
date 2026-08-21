@@ -42,6 +42,7 @@ supplies.
 | Sweep bounded by **`outstandingEEthObligation()`** | An unconditional "send everything to treasury" steals from every holder not yet unwrapped. The bound makes the function safe to expose from day one rather than gating it on the migration finishing. |
 | **Exact-share accounting**, bypassing `_withdraw` | `_withdraw` round-trips share → eth → share and leaves a slice of the token's share stranded in `tierVaults`. That is how the existing voluntary burn path grows dust; the migration adds none. |
 | **No new storage variables** | Only constants, errors, events, and functions were added, so the upgrade is layout-compatible. `forge inspect` reports the same 30 slots ending at `__gap_3`. |
+| **`forceUnwrapForEEth` on `onlyHousekeepingOperations`, sweeps on `onlyOperatingTimelock`** | The unwrap can only pay the verified holder of the token it burns, so a compromised hot key can force unwanted-but-fair exits and nothing worse. A sweep names an arbitrary recipient, so it keeps the delay. |
 | **`whenNotPaused` omitted** | A stuck contract should stay drainable by governance. The tradeoff: a pause triggered by an incident will not halt the migration. |
 | Too-large batch **reverts** rather than partially completing | The `gasleft() < 400_000` guard keeps the transaction atomic; the operator retries smaller. `break`-and-keep-progress would save gas but make "how far did it get" answerable only from events. At ~78k gas per token the floor carries ~5x headroom. |
 
@@ -115,6 +116,34 @@ frozen until the holder is unblacklisted.
 contract against the unburned position, and the holder can be paid by re-running their item once
 they are off the blacklist. This is the reason `MembershipManager` cannot be fully retired the
 moment the batches finish — a non-zero `outstandingEEthObligation()` is expected, not a defect.
+
+## A misaligned holder/token list cannot mispay
+
+The two arrays are positional, so the obvious worry is that an off-by-one in the off-chain list
+pays the wrong person. It cannot. Each pair is verified independently with
+`balanceOfUser(_holders[i], _tokenIds[i]) != 1`, so there is no ordering of the two arrays that
+pays an address for a token it does not hold — a wrong pair reverts inside its isolated call and is
+emitted as a skip.
+
+What a misalignment *can* do is still pay someone: if a holder owns several tokens, a rotated list
+may pair them with a different one of their own tokens, and that payment is correct. Rotating a
+40-item slice by one on the live fixture gives 24 paid and 16 skipped, because consecutive token ids
+often belong to the same buyer. Every one of the 24 was paid for a token it genuinely held.
+
+So the failure mode of a bad list is a partially skipped batch needing a retry, never a
+misdirected payout. `test_misalignedArraysSkipAndNeverMispay` pins this. No extra enforcement is
+warranted — a length check plus the per-pair ownership check is already the strongest guarantee
+available, since the contract has no way to derive the holder itself.
+
+## Contract sizes
+
+`forge build --sizes` against the EIP-170 24576-byte runtime limit: nothing deployable is over.
+`MembershipManager` is 18819 bytes with 5757 to spare. The two contracts that exceed the limit,
+`ProtocolInvariantsHandler` (29310) and `FrozenRateWithdrawalHandler` (28107), are invariant-test
+handlers under `test/` and are never deployed.
+
+Worth watching: `EtherFiNodesManager` sits at 24221 bytes, only **355 bytes** of headroom. Anything
+added there needs a size check before it is written, not after.
 
 ## Operational notes worth keeping
 

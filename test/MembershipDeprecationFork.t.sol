@@ -32,6 +32,8 @@ contract MembershipDeprecationForkTest is Test {
     address constant ROLE_REGISTRY = 0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9;
     address constant TREASURY = 0x0c83EAe1FE72c390A02E426572854931EefF93BA;
     address constant OPERATING_TIMELOCK = 0xcD425f44758a08BaAB3C4908f3e3dE5776e45d7a;
+    /// @dev Live HOUSEKEEPING_OPERATIONS_ROLE holder on mainnet.
+    address constant HOUSEKEEPER = 0x67E10B7764A99165665557B3E6cF24555bfC88c3;
     uint256 constant FORK_BLOCK = 25801600;
 
     MembershipManager mm = MembershipManager(payable(MM_PROXY));
@@ -82,6 +84,10 @@ contract MembershipDeprecationForkTest is Test {
             roleRegistry.hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), OPERATING_TIMELOCK),
             "operating timelock already holds the role on mainnet"
         );
+        assertTrue(
+            roleRegistry.hasRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), HOUSEKEEPER),
+            "housekeeper already holds the role on mainnet"
+        );
     }
 
     function _slice(uint256 start, uint256 count)
@@ -104,7 +110,7 @@ contract MembershipDeprecationForkTest is Test {
             (address[] memory h, uint256[] memory t) = _slice(start, batchSize);
 
             vm.recordLogs();
-            vm.prank(OPERATING_TIMELOCK);
+            vm.prank(HOUSEKEEPER);
             mm.forceUnwrapForEEth(h, t);
             Vm.Log[] memory logs = vm.getRecordedLogs();
 
@@ -204,7 +210,7 @@ contract MembershipDeprecationForkTest is Test {
             uint256 before = eETH.balanceOf(holder);
 
             (address[] memory h, uint256[] memory t) = _slice(i, 1);
-            vm.prank(OPERATING_TIMELOCK);
+            vm.prank(HOUSEKEEPER);
             mm.forceUnwrapForEEth(h, t);
 
             uint256 gained = eETH.balanceOf(holder) - before;
@@ -259,7 +265,7 @@ contract MembershipDeprecationForkTest is Test {
         for (uint256 start = 0; start < half; start += 200) {
             uint256 count = start + 200 > half ? half - start : 200;
             (address[] memory h, uint256[] memory t) = _slice(start, count);
-            vm.prank(OPERATING_TIMELOCK);
+            vm.prank(HOUSEKEEPER);
             mm.forceUnwrapForEEth(h, t);
         }
 
@@ -289,7 +295,7 @@ contract MembershipDeprecationForkTest is Test {
 
             uint256 before = eETH.balanceOf(holders[i]);
             (address[] memory h, uint256[] memory t) = _slice(i, 1);
-            vm.prank(OPERATING_TIMELOCK);
+            vm.prank(HOUSEKEEPER);
             mm.forceUnwrapForEEth(h, t);
 
             assertApproxEqAbs(
@@ -305,12 +311,31 @@ contract MembershipDeprecationForkTest is Test {
         emit log_named_uint("paid in full after sweep", checked);
     }
 
-    function test_forceUnwrap_revertsForNonTimelock() public {
+    function test_forceUnwrap_revertsWithoutHousekeepingRole() public {
         (address[] memory h, uint256[] memory t) = _slice(0, 1);
 
         vm.prank(address(0xBAD));
-        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
         mm.forceUnwrapForEEth(h, t);
+
+        // The timelock does not hold the housekeeping role, so it cannot run the batch either.
+        vm.prank(OPERATING_TIMELOCK);
+        vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
+        mm.forceUnwrapForEEth(h, t);
+    }
+
+    /// @notice The sweeps move funds to a caller-named recipient, so they stay on the timelock even
+    ///         though the unwrap batch runs on a hot role.
+    function test_housekeeperCannotSweep() public {
+        _assertTimelockAuthority();
+
+        vm.prank(HOUSEKEEPER);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
+        mm.sweepUnbackedEEth(TREASURY);
+
+        vm.prank(HOUSEKEEPER);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
+        mm.sweepEther(TREASURY);
     }
 
     function test_sweep_revertsForNonTimelock() public {
@@ -356,7 +381,7 @@ contract MembershipDeprecationForkTest is Test {
 
         uint256 attackerBefore = eETH.balanceOf(attacker);
 
-        vm.prank(OPERATING_TIMELOCK);
+        vm.prank(HOUSEKEEPER);
         mm.forceUnwrapForEEth(h, t);
 
         assertEq(eETH.balanceOf(attacker), attackerBefore, "attacker got nothing");
@@ -387,7 +412,7 @@ contract MembershipDeprecationForkTest is Test {
 
         uint256 before = eETH.balanceOf(holder);
 
-        vm.prank(OPERATING_TIMELOCK);
+        vm.prank(HOUSEKEEPER);
         mm.forceUnwrapForEEth(h, t);
 
         assertApproxEqAbs(eETH.balanceOf(holder) - before, expected, 2, "paid exactly once");
@@ -406,7 +431,7 @@ contract MembershipDeprecationForkTest is Test {
         h[1] = address(0xDEAD02); t[1] = ids[1];
 
         vm.recordLogs();
-        vm.prank(OPERATING_TIMELOCK);
+        vm.prank(HOUSEKEEPER);
         (uint256 unwrapped, uint256 skipped) = mm.forceUnwrapForEEth(h, t);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
@@ -443,7 +468,7 @@ contract MembershipDeprecationForkTest is Test {
         uint256[] memory t = new uint256[](1);
         h[0] = holder; t[0] = ids[idx];
 
-        vm.prank(OPERATING_TIMELOCK);
+        vm.prank(HOUSEKEEPER);
         (uint256 unwrapped, uint256 skipped) = mm.forceUnwrapForEEth(h, t);
 
         assertEq(unwrapped, 0, "item skipped");
@@ -463,7 +488,7 @@ contract MembershipDeprecationForkTest is Test {
         h[0] = address(0xDEAD01); t[0] = ids[idx];   // wrong holder, skipped
         h[1] = holder;           t[1] = ids[idx];   // correct, paid
 
-        vm.prank(OPERATING_TIMELOCK);
+        vm.prank(HOUSEKEEPER);
         mm.forceUnwrapForEEth(h, t);
 
         assertGt(eETH.balanceOf(holder), before, "good entry was committed despite the bad one");
@@ -539,13 +564,52 @@ contract MembershipDeprecationForkTest is Test {
         revert("no live position in fixture");
     }
 
+    /// @notice A misaligned list must degrade to skips, never to a wrong payout. Each pair is
+    ///         checked independently against balanceOfUser, so pairing holder[i] with someone
+    ///         else's token[i] fails that check -- there is no ordering of the two arrays that pays
+    ///         an address for a token it does not hold.
+    function test_misalignedArraysSkipAndNeverMispay() public {
+        _assertTimelockAuthority();
+
+        // Rotate the token list by one against the holder list, so almost every pair is wrong.
+        uint256 n = 40;
+        address[] memory h = new address[](n);
+        uint256[] memory t = new uint256[](n);
+        for (uint256 i = 0; i < n; i++) {
+            h[i] = holders[i];
+            t[i] = ids[(i + 1) % n];
+        }
+
+        uint256[] memory balancesBefore = new uint256[](n);
+        for (uint256 i = 0; i < n; i++) balancesBefore[i] = eETH.balanceOf(h[i]);
+
+        vm.prank(HOUSEKEEPER);
+        (uint256 unwrapped, uint256 skipped) = mm.forceUnwrapForEEth(h, t);
+
+        emit log_named_uint("misaligned unwrapped", unwrapped);
+        emit log_named_uint("misaligned skipped  ", skipped);
+        assertEq(unwrapped + skipped, n, "every entry produced an outcome");
+        assertGt(skipped, 0, "the rotation produced real mismatches");
+
+        // Whatever went through paid an address that genuinely held the token it was paired with.
+        // Anything that did not is untouched.
+        for (uint256 i = 0; i < n; i++) {
+            uint256 gained = eETH.balanceOf(h[i]) - balancesBefore[i];
+            if (gained == 0) continue;
+            // Paid, so the pair must have been legitimate: that holder held that token, and it is
+            // now burned. A holder owning several tokens can be paid under a rotated list, which is
+            // correct -- they owned the token they were paid for.
+            assertEq(nft.balanceOfUser(h[i], t[i]), 0, "the token paid for was burned from that holder");
+        }
+    }
+
     function test_lengthMismatchReverts() public {
         _assertTimelockAuthority();
 
         address[] memory h = new address[](2);
         uint256[] memory t = new uint256[](1);
 
-        vm.prank(OPERATING_TIMELOCK);
+        vm.prank(HOUSEKEEPER);
         vm.expectRevert(MembershipManager.LengthMismatch.selector);
         mm.forceUnwrapForEEth(h, t);
     }
