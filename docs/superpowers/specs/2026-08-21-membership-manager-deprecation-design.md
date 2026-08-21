@@ -4,13 +4,14 @@ Implemented and verified end to end on an anvil mainnet fork pinned to block 258
 force-withdraw the outstanding NFTs into eETH, and stop new NFTs being created.
 
 Code: `src/archive/membership/MembershipManager.sol` (additive only — no storage variables, so the
-upgrade is layout-compatible; `forge inspect` reports the same 30 slots ending at `__gap_3`).
-Tests: `test/MembershipDeprecationFork.t.sol`, 12 passing.
+upgrade is layout-compatible; `forge inspect` reports the same 30 slots ending at `__gap_3`, and the
+implementation is 18908 bytes, 5668 under the EIP-170 limit).
+Tests: `test/MembershipDeprecationFork.t.sol`, 25 passing.
 Holder fixture: `test/fixtures/membership-holders.json`.
 
 ## Result of the full run
 
-All 1594 outstanding positions unwrapped, zero skipped, then the surplus swept to treasury.
+All 1594 outstanding positions unwrapped, zero skipped, then the surplus recovered to treasury.
 
 | | eETH |
 |---|---|
@@ -18,10 +19,13 @@ All 1594 outstanding positions unwrapped, zero skipped, then the surplus swept t
 | `outstandingEEthObligation()` before | 896.482217982642727563 |
 | `unbackedEEth()` before | 1.876626483489984581 |
 | Obligation after draining all 1594 | 0.000000000000017294 |
-| Swept to treasury | 1.876626483489986337 |
+| Recovered to treasury | 1.876626483489986337 |
 | MM balance final | 0.000000000000017295 |
 
 Total gas for the 1594 unwraps was 124.6M, about 78k per token.
+
+Numbers above predate the `outstandingEEthObligation()` change that skips fully drained tiers, so
+the terminal 17294 wei is now recoverable rather than stranded.
 
 ## New deposits are already impossible — build nothing
 
@@ -90,33 +94,39 @@ argues against reverting on anything holder-shaped.
 
 ## The implementation
 
-One admin entrypoint, skip-don't-revert on anything unhealthy, and an event per outcome so the
-off-chain runner can retry precisely.
-
-Five additions, no new storage. Shapes below; the authoritative source is
-`src/archive/membership/MembershipManager.sol`.
+Two entrypoints — a batch unwrap and a single recovery function — plus three views. No new storage.
+Shapes below; the authoritative source is `src/archive/membership/MembershipManager.sol`.
 
 ```solidity
-// Batch entrypoint. Isolates each item so one bad holder cannot block the batch, and refuses to
-// continue on a starved frame so "skipped" always means a real per-item failure.
+// Batch entrypoint. Isolates each item so one bad holder cannot block the batch, breaks rather than
+// reverting on a starved frame so completed work survives, and reports counts instead of reverting
+// when nothing succeeded.
 function forceUnwrapForEEth(address[] calldata _holders, uint256[] calldata _tokenIds)
     external
-    onlyOperatingTimelock
+    onlyHousekeepingOperations
+    returns (uint256 unwrapped, uint256 skipped)
 {
     if (_holders.length != _tokenIds.length) revert LengthMismatch();
 
     for (uint256 i = 0; i < _holders.length; i++) {
-        if (gasleft() < FORCE_UNWRAP_GAS_FLOOR) revert InsufficientGas();
+        if (gasleft() < FORCE_UNWRAP_GAS_FLOOR) {
+            emit ForceUnwrapHalted(i, _holders.length);
+            break;
+        }
 
-        try this.forceUnwrapOne(_holders[i], _tokenIds[i]) {}
-        catch (bytes memory reason) {
+        try this.forceUnwrapOne(_holders[i], _tokenIds[i]) {
+            unwrapped++;
+        } catch (bytes memory reason) {
+            skipped++;
             emit NftForceUnwrapSkipped(_holders[i], _tokenIds[i], reason);
         }
     }
+
+    emit ForceUnwrapBatchResult(_holders.length, unwrapped, skipped);
 }
 
-// External only so the batch can isolate it behind try/catch. Self-call only, so the timelock gate
-// on the batch is the only way in. All state writes precede both external calls.
+// External only so the batch can isolate it behind try/catch. Self-call only, so the role gate on
+// the batch is the only way in. All state writes precede both external calls.
 function forceUnwrapOne(address _holder, uint256 _tokenId) external {
     if (msg.sender != address(this)) revert OnlySelf();
     if (membershipNFT.balanceOfUser(_holder, _tokenId) != 1) revert OnlyTokenOwner();
@@ -129,6 +139,9 @@ function forceUnwrapOne(address _holder, uint256 _tokenId) external {
     // slice of the token's share in tierVaults after the row is deleted.
     uint256 eEthShare = eEthShareForVaultShare(tier, vaultShare);
     uint256 amount = liquidityPool.amountForShare(eEthShare);
+
+    // The burn below is unconditional, so fail closed rather than destroy a position for nothing
+    if (amount == 0 && vaultShare != 0) revert WorthlessPosition();
 
     _decrementTierVaultV1(tier, eEthShare, vaultShare);
     delete tokenData[_tokenId];
@@ -194,18 +207,24 @@ Deliberate choices:
   which leaves every user with a second action to take and leaves the deprecation unfinished. eETH
   is the same underlying asset the NFT already represented, so this is an in-kind swap that
   completes in one transaction.
-- **`onlyOperatingTimelock`, not the multisig.** This moves other people's assets without consent.
-  It should carry the same delay as any irreversible governance action, and the delay gives holders
-  a window to exit voluntarily first.
+- **Unwrap on `onlyHousekeepingOperations`, recovery on `onlyOperatingTimelock`.** The unwrap can
+  only pay the verified holder of the token it burns, so a compromised hot key can force
+  unwanted-but-fair exits and nothing worse — it does not need a delay. `recoverTokens` names an
+  arbitrary recipient, so it keeps one.
+- **One `recoverTokens`, and it takes no amount.** ETH, eETH and stray ERC20s share an entrypoint,
+  and the amount is always `recoverableAmount(token)`. For eETH that is the surplus over
+  `outstandingEEthObligation()`, so the call cannot take eETH backing a position that has not been
+  unwrapped. A caller-named amount — what a generic `recoverERC20(token, amount, to)` would take —
+  would put the entire user balance one bad parameter away.
 - **No burn fee.** `_withdrawAndBurn` charges `burnFee` unless the waiver period is met. Charging a
   forced exit is indefensible; drop the fee rather than reproduce that branch.
 - **No `_applyUnwrapPenalty`.** Tier points are being deleted along with the token. The penalty
   exists to discourage voluntary early unwrapping, which is not what this is.
 - **`whenNotPaused` omitted deliberately.** A paused contract should still be drainable by
   governance; add it only if the pause semantics are meant to freeze migration too.
-- **Sweep bounded by the obligation, not "send everything".** An unconditional treasury sweep would
-  take eETH backing every position not yet unwrapped. Bounding it means the function is safe to ship
-  alongside the migration rather than gated on the migration finishing.
+- **An all-skip batch reports, it does not revert.** Reverting would discard the skip reasons and
+  hand any holder a veto over a queued call by moving the NFT first. Detect a global precondition
+  failure by simulating before queueing.
 
 ## Security analysis of the change
 
@@ -262,22 +281,28 @@ ever be claimed and the sweep bound is sound. Not a standing risk.
 
 **A blacklisted holder's eETH stays in the contract.** The eETH transfer reverts, the item is
 skipped, and because the position was never unwrapped its share still counts toward the obligation
-— so the sweep cannot take it either. Funds are safe but frozen until the holder is unblacklisted.
-This is the open question below, not a bug.
+— so `recoverTokens` cannot take it either. Funds are safe but frozen until the holder is
+unblacklisted. **Decision: leave as is.** A non-zero `outstandingEEthObligation()` after the batches
+finish is therefore expected, not a defect, and the contract cannot be fully retired at that point.
 
 **`whenNotPaused` is deliberately omitted.** `unwrapForEEthAndBurn` has it, so a pause stops
 voluntary exits while governance can still migrate. That is the intent — a stuck contract should
 stay drainable — but it does mean a pause triggered by an incident will not halt the migration. Add
 the modifier if pause is meant to freeze governance too.
 
-**A too-large batch reverts rather than partially completing.** The `gasleft() < 400_000` guard
-reverts the whole call, so the operator loses that transaction's work and retries smaller. The
-alternative — `break` and keep progress — saves gas but makes "how far did it get" answerable only
-from events. At ~78k gas per token the 400k floor carries roughly 5x headroom.
+**A too-large batch stops early rather than reverting.** The `gasleft() < 400_000` guard `break`s and
+emits `ForceUnwrapHalted`, keeping every item already unwrapped; the operator resumes from the
+events. An earlier version reverted to keep the call atomic, which threw that work away. At ~78k gas
+per token the 400k floor carries roughly 5x headroom.
 
-**The sweep cannot zero the balance exactly.** Transferring N wei of a share-denominated token
+**Recovery cannot zero the eETH balance exactly.** Transferring N wei of a share-denominated token
 credits N-1, so a wei of rounding residue stays behind and `unbackedEEth()` settles at 1–2 wei
 rather than 0. Harmless; the test asserts the bound instead of equality.
+
+**A holder can keep their position alive indefinitely.** Moving the NFT before a batch executes makes
+that item skip, repeatably. ERC1155 has no owner index, so a forced payout has to name a holder;
+closing this properly means burning unconditionally into a `claimable[tokenId]` mapping the holder
+pulls later, which is a larger redesign than this migration warrants. Costs a retry, nothing more.
 
 ## Rollout
 
@@ -286,12 +311,18 @@ rather than 0. Harmless; the test asserts the bound instead of equality.
 2. Index `TransferSingle`/`TransferBatch` from the NFT to build the live `(holder, tokenId)` set.
    Cross-check each against `balanceOfUser` and `tokenData[id].vaultShare > 0` at build time — a
    stale list generated against an old block will skip tokens that moved.
-3. Upgrade `MembershipManager` with `forceUnwrapForEEth`.
-4. Run in batches. Size them against the block gas limit and EIP-7825; the try/catch and the eETH
-   transfer make per-item cost well above a bare loop iteration. Re-run against skip events.
-5. Reconcile: MM's eETH balance and every `tierVaults[i].totalPooledEEthShares` should reach zero,
-   or explain the residual. Non-zero remainder means tokens the list missed.
-6. Only then retire the contracts. Sweep any eETH dust left from rounding.
+3. Upgrade `MembershipManager`. Grant `HOUSEKEEPING_OPERATIONS_ROLE` to whoever runs the batches if
+   they do not already hold it; `recoverTokens` needs the operating timelock separately.
+4. Run in batches from the housekeeping key. Size them against the block gas limit and EIP-7825; the
+   try/catch and the eETH transfer make per-item cost well above a bare loop iteration (~78k
+   measured). Simulate first — an all-skip batch reports success rather than reverting, so a global
+   precondition failure such as a paused eETH is only visible in the returned counts. Re-run against
+   `NftForceUnwrapSkipped` and `ForceUnwrapHalted` events.
+5. Reconcile: `outstandingEEthObligation()` should reach zero, or the residual should be explained by
+   holders who were skipped (blacklisted, or who moved their NFT). Anything else means the list
+   missed tokens.
+6. Recover to treasury with `recoverTokens`: eETH first, then `address(0)` for the ETH balance, then
+   any stray token. Only then retire the contracts.
 
 ## Live-state scan
 
