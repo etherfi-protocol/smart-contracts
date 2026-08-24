@@ -470,6 +470,36 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         IEtherFiNode(node).requestConsolidation{value: fee}(requests);
     }
 
+    /// @dev Pins the premise behind skipping the mixed-batch guard on a live pod: the pod rejects a
+    ///      source it has not proven. IEigenPod's docstring lists that check under "NOT checked by
+    ///      the pod", so assert the deployed behaviour rather than trusting the comment.
+    function test_livePod_rejectsAForeignSourceInABatch() public {
+        bytes[] memory pubkeys = new bytes[](1);
+        uint256[] memory legacyIds = new uint256[](1);
+        pubkeys[0] = PK_16171;
+        legacyIds[0] = 51715;
+        vm.prank(elExiter);
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
+
+        (, IEigenPod pod) = _resolvePod(pubkeys[0]);
+
+        // A validator on another node, so unknown to this pod
+        vm.prank(admin);
+        TestValidator memory foreign = _validatorOn(stakingManager.instantiateEtherFiNode(true), 14);
+
+        IEigenPodTypes.WithdrawalRequest[] memory requests = new IEigenPodTypes.WithdrawalRequest[](2);
+        requests[0] = IEigenPodTypes.WithdrawalRequest({pubkey: pubkeys[0], amountGwei: 0});
+        requests[1] = IEigenPodTypes.WithdrawalRequest({pubkey: foreign.pubkey, amountGwei: 0});
+
+        _setExitRateLimit(10_000 ether, 10_000 ether);
+        uint256 fee = pod.getWithdrawalRequestFee() * 2;
+        vm.deal(elExiter, fee);
+
+        vm.expectRevert(IEigenPodErrors.ValidatorNotActiveInPod.selector);
+        vm.prank(elExiter);
+        etherFiNodesManager.requestExecutionLayerTriggeredWithdrawal{value: fee}(requests);
+    }
+
     /// @dev Guards the ABI parity indexers rely on: a rename or type change on either side
     ///      diverges the selectors and fails here.
     function test_requestEvents_topicsMatchEigenPod() public pure {
