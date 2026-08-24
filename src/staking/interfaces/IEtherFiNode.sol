@@ -89,23 +89,12 @@ interface IEtherFiNode {
     event QueuedRestakingWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, bytes32[] withdrawalRoots);
     event FundsTransferred(address indexed recipient, uint256 amount);
 
-    /// @dev The four events below are emitted only when this node is itself the validators'
-    ///      withdrawal-credential target, meaning it has no EigenPod and calls the EIP-7002/7251
-    ///      predeploys directly. Names and signatures match `IEigenPodEvents` exactly, so the
-    ///      topics are identical to what an EigenPod writes and consumers that follow the
-    ///      credential target address decode both without a second code path. A pod-backed node
-    ///      emits nothing here because the pod already logs the request itself.
-
-    /// @notice Emitted when a withdrawal request with amountGwei == 0 is accepted by the predeploy
+    /// @dev Emitted only by a pod-less node, which is itself the credential target and calls the
+    ///      EIP-7002/7251 predeploys directly. A pod-backed node stays silent: its pod logs these.
+    ///      Signatures match IEigenPodEvents, so topic0 is identical and pod decoders work as-is.
     event ExitRequested(bytes32 indexed validatorPubkeyHash);
-
-    /// @notice Emitted when a partial withdrawal request is accepted by the predeploy
     event WithdrawalRequested(bytes32 indexed validatorPubkeyHash, uint64 withdrawalAmountGwei);
-
-    /// @notice Emitted when a consolidation request with source == target is accepted by the predeploy
     event SwitchToCompoundingRequested(bytes32 indexed validatorPubkeyHash);
-
-    /// @notice Emitted when a consolidation request between two validators is accepted by the predeploy
     event ConsolidationRequested(bytes32 indexed sourcePubkeyHash, bytes32 indexed targetPubkeyHash);
 
     //--------------------------------------------------------------------------
@@ -120,5 +109,6 @@ interface IEtherFiNode {
     error FeeQueryFailed();
     error PredeployFailed();
     error NoEigenPod();
+    error InvalidPubKeyLength();
 
 }

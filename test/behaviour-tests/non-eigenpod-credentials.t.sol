@@ -263,7 +263,7 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         uint256 fee = IEtherFiNode(node).getWithdrawalRequestFee();
         uint256 predeployBalanceBefore = WITHDRAWAL_REQUEST_PREDEPLOY.balance;
 
-        // amountGwei == 0 is a full exit, which the pod would have logged as ExitRequested
+        // amountGwei == 0 is a full exit
         vm.expectEmit(true, false, false, true, node);
         emit IEtherFiNode.ExitRequested(val.pubkeyHash);
 
@@ -305,8 +305,7 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         uint256 fee = IEtherFiNode(node).getWithdrawalRequestFee();
         uint256 before = WITHDRAWAL_REQUEST_PREDEPLOY.balance;
 
-        // The node logs the partial amount, then the manager logs the request. Expectations are
-        // queued in emission order.
+        // Node logs first, then the manager; expectations are queued in emission order
         vm.expectEmit(true, false, false, true, node);
         emit IEtherFiNode.WithdrawalRequested(val.pubkeyHash, 1_000_000_000);
 
@@ -336,7 +335,7 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         uint256 fee = IEtherFiNode(node).getWithdrawalRequestFee();
         uint256 before = WITHDRAWAL_REQUEST_PREDEPLOY.balance;
 
-        // One log per request, so a batch stays attributable per validator
+        // One log per request
         vm.expectEmit(true, false, false, true, node);
         emit IEtherFiNode.ExitRequested(a.pubkeyHash);
         vm.expectEmit(true, false, false, true, node);
@@ -451,9 +450,28 @@ contract NonEigenPodCredentialsTest is PreludeTest {
     //---------------------------  REQUEST EVENT COMPATIBILITY  ----------------------------
     //--------------------------------------------------------------------------------------
 
-    /// @dev The node's request events must stay ABI-identical to the EigenPod ones so indexers can
-    ///      decode a pod-less node with the pod's existing ABI. Compile-time checked: if either side
-    ///      renames an event or changes a parameter type, these selectors diverge and this fails.
+    /// @dev A 47-byte source plus a 49-byte target still totals the 96 bytes EIP-7251 wants, so the
+    ///      predeploy accepts it and only the node's own check stops two bogus hashes being logged.
+    ///      Calls the node directly: the manager rejects these lengths before it ever gets here.
+    function test_podLess_consolidationRejectsWrongPubkeyLength() public {
+        address node = _newPodLessNode();
+
+        IEigenPodTypes.ConsolidationRequest[] memory requests = _consolidation(
+            abi.encodePacked(bytes32(keccak256("src")), bytes15(0)),   // 47 bytes
+            abi.encodePacked(bytes32(keccak256("tgt")), bytes17(0))    // 49 bytes
+        );
+        assertEq(requests[0].srcPubkey.length + requests[0].targetPubkey.length, 96);
+
+        uint256 fee = IEtherFiNode(node).getConsolidationRequestFee();
+        vm.deal(address(etherFiNodesManager), fee);
+
+        vm.expectRevert(IEtherFiNode.InvalidPubKeyLength.selector);
+        vm.prank(address(etherFiNodesManager));
+        IEtherFiNode(node).requestConsolidation{value: fee}(requests);
+    }
+
+    /// @dev Guards the ABI parity indexers rely on: a rename or type change on either side
+    ///      diverges the selectors and fails here.
     function test_requestEvents_topicsMatchEigenPod() public pure {
         assertEq(IEtherFiNode.ExitRequested.selector, IEigenPodEvents.ExitRequested.selector);
         assertEq(IEtherFiNode.WithdrawalRequested.selector, IEigenPodEvents.WithdrawalRequested.selector);
@@ -461,10 +479,8 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         assertEq(IEtherFiNode.ConsolidationRequested.selector, IEigenPodEvents.ConsolidationRequested.selector);
     }
 
-    /// @dev A pod-backed node must stay silent: the pod already logs the request, and a second copy
-    ///      from the node would double-count for anyone subscribed to the topic across all addresses.
-    /// @dev Uses a live mainnet validator rather than a fresh one, because a pod rejects a source it
-    ///      has not proven with ValidatorNotActiveInPod.
+    /// @dev A duplicate copy from the node would double-count for anyone subscribed to the topic
+    ///      across addresses. Uses a live validator: a pod rejects a source it has not proven.
     function test_podBacked_nodeDoesNotDuplicateThePodsRequestEvent() public {
         bytes[] memory pubkeys = new bytes[](1);
         uint256[] memory legacyIds = new uint256[](1);

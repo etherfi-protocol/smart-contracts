@@ -43,6 +43,7 @@ contract EtherFiNode is IEtherFiNode {
     /// @dev Suggested gas stipend for contract receiving ETH to perform a few
     /// storage reads and writes, but low enough to prevent griefing.
     uint256 internal constant GAS_STIPEND_NO_GRIEF = 100_000;
+    uint256 private constant VALIDATOR_PUBKEY_LENGTH = 48;
 
     //--------------------------------------------------------------------------------------
     //-----------------------------  CONSTRUCTOR  --------------------------------------------
@@ -138,8 +139,7 @@ contract EtherFiNode is IEtherFiNode {
         for (uint256 i = 0; i < requests.length; i++) {
             _callPredeploy(WITHDRAWAL_REQUEST_PREDEPLOY, abi.encodePacked(requests[i].pubkey, requests[i].amountGwei), fee);
 
-            // Stand in for the log the pod would have written, split on full vs partial the way
-            // EigenPod does. Emitted after the predeploy accepts the request, never before.
+            // Stands in for the log the pod would have written
             bytes32 pubkeyHash = _pubkeyHash(requests[i].pubkey);
             if (requests[i].amountGwei == 0) {
                 emit ExitRequested(pubkeyHash);
@@ -166,8 +166,7 @@ contract EtherFiNode is IEtherFiNode {
         for (uint256 i = 0; i < requests.length; i++) {
             _callPredeploy(CONSOLIDATION_REQUEST_PREDEPLOY, bytes.concat(requests[i].srcPubkey, requests[i].targetPubkey), fee);
 
-            // Stand in for the log the pod would have written, split on switch vs consolidation
-            // the way EigenPod does.
+            // Stands in for the log the pod would have written
             bytes32 srcPubkeyHash = _pubkeyHash(requests[i].srcPubkey);
             bytes32 targetPubkeyHash = _pubkeyHash(requests[i].targetPubkey);
             if (srcPubkeyHash == targetPubkeyHash) {
@@ -343,11 +342,11 @@ contract EtherFiNode is IEtherFiNode {
         return uint256(bytes32(result));
     }
 
-    /// @dev SSZ pubkey hash, matching EtherFiNodesManager.calculateValidatorPubkeyHash and the hash
-    ///      EigenPod indexes its request events by. Length is not re-checked here: the predeploy
-    ///      rejects calldata that is not exactly 56 (EIP-7002) or 96 (EIP-7251) bytes, so a
-    ///      malformed pubkey reverts in _callPredeploy before this runs.
+    /// @dev SSZ pubkey hash, matching EtherFiNodesManager.calculateValidatorPubkeyHash.
+    /// @dev The length check is load-bearing: EIP-7251 takes 96 bytes, which a 47-byte source and a
+    ///      49-byte target also satisfy, so the predeploy alone would not reject a malformed pair.
     function _pubkeyHash(bytes calldata pubkey) private pure returns (bytes32) {
+        if (pubkey.length != VALIDATOR_PUBKEY_LENGTH) revert InvalidPubKeyLength();
         return sha256(abi.encodePacked(pubkey, bytes16(0)));
     }
 
