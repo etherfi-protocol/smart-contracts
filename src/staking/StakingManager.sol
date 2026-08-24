@@ -213,9 +213,8 @@ contract StakingManager is
             // which is the same pod/node address regardless of retirement (disablePod changes the
             // pod's restaking status, not its address). The PodRetired guard belongs on initial
             // creation only, which still goes through the checked resolver.
-            // Read the node, not manager.getEigenPod, whose _validateNode would reject a legacy node
-            // missing from deployedEtherFiNodes and strand the 1 ETH leg. EtherFiAdmin resolves the
-            // same way and the two must agree, or the deposit roots disagree.
+            // Not manager.getEigenPod: its _validateNode rejects a legacy node missing from
+            // deployedEtherFiNodes, stranding the 1 ETH leg.
             address credentialTarget = address(IEtherFiNode(etherFiNode).getEigenPod());
             if (credentialTarget == address(0)) credentialTarget = address(etherFiNode);
             bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(credentialTarget);

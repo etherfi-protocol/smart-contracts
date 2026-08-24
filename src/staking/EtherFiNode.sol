@@ -139,7 +139,6 @@ contract EtherFiNode is IEtherFiNode {
         for (uint256 i = 0; i < requests.length; i++) {
             _callPredeploy(WITHDRAWAL_REQUEST_PREDEPLOY, abi.encodePacked(requests[i].pubkey, requests[i].amountGwei), fee);
 
-            // Stands in for the log the pod would have written
             bytes32 pubkeyHash = _pubkeyHash(requests[i].pubkey);
             if (requests[i].amountGwei == 0) {
                 emit ExitRequested(pubkeyHash);
@@ -166,7 +165,6 @@ contract EtherFiNode is IEtherFiNode {
         for (uint256 i = 0; i < requests.length; i++) {
             _callPredeploy(CONSOLIDATION_REQUEST_PREDEPLOY, bytes.concat(requests[i].srcPubkey, requests[i].targetPubkey), fee);
 
-            // Stands in for the log the pod would have written
             bytes32 srcPubkeyHash = _pubkeyHash(requests[i].srcPubkey);
             bytes32 targetPubkeyHash = _pubkeyHash(requests[i].targetPubkey);
             if (srcPubkeyHash == targetPubkeyHash) {
@@ -342,9 +340,8 @@ contract EtherFiNode is IEtherFiNode {
         return uint256(bytes32(result));
     }
 
-    /// @dev SSZ pubkey hash, matching EtherFiNodesManager.calculateValidatorPubkeyHash.
-    /// @dev The length check is load-bearing: EIP-7251 takes 96 bytes, which a 47-byte source and a
-    ///      49-byte target also satisfy, so the predeploy alone would not reject a malformed pair.
+    /// @dev EIP-7251 takes 96 bytes total, which a 47-byte source and 49-byte target also satisfy,
+    ///      so the predeploy alone cannot reject a malformed pair.
     function _pubkeyHash(bytes calldata pubkey) private pure returns (bytes32) {
         if (pubkey.length != VALIDATOR_PUBKEY_LENGTH) revert InvalidPubKeyLength();
         return sha256(abi.encodePacked(pubkey, bytes16(0)));

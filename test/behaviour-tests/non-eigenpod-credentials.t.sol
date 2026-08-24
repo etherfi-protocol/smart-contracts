@@ -305,7 +305,7 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         uint256 fee = IEtherFiNode(node).getWithdrawalRequestFee();
         uint256 before = WITHDRAWAL_REQUEST_PREDEPLOY.balance;
 
-        // Node logs first, then the manager; expectations are queued in emission order
+        // Queued in emission order: node, then manager
         vm.expectEmit(true, false, false, true, node);
         emit IEtherFiNode.WithdrawalRequested(val.pubkeyHash, 1_000_000_000);
 
@@ -450,9 +450,8 @@ contract NonEigenPodCredentialsTest is PreludeTest {
     //---------------------------  REQUEST EVENT COMPATIBILITY  ----------------------------
     //--------------------------------------------------------------------------------------
 
-    /// @dev A 47-byte source plus a 49-byte target still totals the 96 bytes EIP-7251 wants, so the
-    ///      predeploy accepts it and only the node's own check stops two bogus hashes being logged.
-    ///      Calls the node directly: the manager rejects these lengths before it ever gets here.
+    /// @dev 47 + 49 bytes satisfies EIP-7251's 96, so the predeploy accepts it and only the node's
+    ///      check stops two bogus hashes. Calls the node directly; the manager rejects these first.
     function test_podLess_consolidationRejectsWrongPubkeyLength() public {
         address node = _newPodLessNode();
 
@@ -470,9 +469,8 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         IEtherFiNode(node).requestConsolidation{value: fee}(requests);
     }
 
-    /// @dev Pins the premise behind skipping the mixed-batch guard on a live pod: the pod rejects a
-    ///      source it has not proven. IEigenPod's docstring lists that check under "NOT checked by
-    ///      the pod", so assert the deployed behaviour rather than trusting the comment.
+    /// @dev Pins why the mixed-batch guard is skipped on a live pod: the pod itself rejects a source
+    ///      it has not proven. Asserts deployed behaviour, which the interface docs contradict.
     function test_livePod_rejectsAForeignSourceInABatch() public {
         bytes[] memory pubkeys = new bytes[](1);
         uint256[] memory legacyIds = new uint256[](1);
@@ -509,8 +507,8 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         assertEq(IEtherFiNode.ConsolidationRequested.selector, IEigenPodEvents.ConsolidationRequested.selector);
     }
 
-    /// @dev A duplicate copy from the node would double-count for anyone subscribed to the topic
-    ///      across addresses. Uses a live validator: a pod rejects a source it has not proven.
+    /// @dev A second log would double-count for anyone subscribed by topic across addresses.
+    ///      Uses a live validator; a pod rejects a source it has not proven.
     function test_podBacked_nodeDoesNotDuplicateThePodsRequestEvent() public {
         bytes[] memory pubkeys = new bytes[](1);
         uint256[] memory legacyIds = new uint256[](1);

@@ -89,9 +89,8 @@ interface IEtherFiNode {
     event QueuedRestakingWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, bytes32[] withdrawalRoots);
     event FundsTransferred(address indexed recipient, uint256 amount);
 
-    /// @dev Emitted only by a pod-less node, which is itself the credential target and calls the
-    ///      EIP-7002/7251 predeploys directly. A pod-backed node stays silent: its pod logs these.
-    ///      Signatures match IEigenPodEvents, so topic0 is identical and pod decoders work as-is.
+    /// @dev Emitted only when the node is the credential target and calls the predeploys itself.
+    ///      A pod-backed node stays silent.
     event ExitRequested(bytes32 indexed validatorPubkeyHash);
     event WithdrawalRequested(bytes32 indexed validatorPubkeyHash, uint64 withdrawalAmountGwei);
     event SwitchToCompoundingRequested(bytes32 indexed validatorPubkeyHash);
