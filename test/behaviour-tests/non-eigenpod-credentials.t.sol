@@ -263,6 +263,10 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         uint256 fee = IEtherFiNode(node).getWithdrawalRequestFee();
         uint256 predeployBalanceBefore = WITHDRAWAL_REQUEST_PREDEPLOY.balance;
 
+        // amountGwei == 0 is a full exit, which the pod would have logged as ExitRequested
+        vm.expectEmit(true, false, false, true, node);
+        emit IEtherFiNode.ExitRequested(val.pubkeyHash);
+
         vm.deal(elExiter, fee);
         vm.prank(elExiter);
         etherFiNodesManager.requestExecutionLayerTriggeredWithdrawal{value: fee}(requests);
@@ -301,6 +305,11 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         uint256 fee = IEtherFiNode(node).getWithdrawalRequestFee();
         uint256 before = WITHDRAWAL_REQUEST_PREDEPLOY.balance;
 
+        // The node logs the partial amount, then the manager logs the request. Expectations are
+        // queued in emission order.
+        vm.expectEmit(true, false, false, true, node);
+        emit IEtherFiNode.WithdrawalRequested(val.pubkeyHash, 1_000_000_000);
+
         vm.expectEmit(true, true, false, true, address(etherFiNodesManager));
         emit IEtherFiNodesManager.ValidatorWithdrawalRequestSent(node, val.pubkeyHash, val.pubkey);
 
@@ -326,6 +335,12 @@ contract NonEigenPodCredentialsTest is PreludeTest {
 
         uint256 fee = IEtherFiNode(node).getWithdrawalRequestFee();
         uint256 before = WITHDRAWAL_REQUEST_PREDEPLOY.balance;
+
+        // One log per request, so a batch stays attributable per validator
+        vm.expectEmit(true, false, false, true, node);
+        emit IEtherFiNode.ExitRequested(a.pubkeyHash);
+        vm.expectEmit(true, false, false, true, node);
+        emit IEtherFiNode.ExitRequested(b.pubkeyHash);
 
         vm.deal(elExiter, fee * 2);
         vm.prank(elExiter);
@@ -365,6 +380,9 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         uint256 fee = IEtherFiNode(node).getConsolidationRequestFee();
         uint256 before = CONSOLIDATION_REQUEST_PREDEPLOY.balance;
 
+        vm.expectEmit(true, false, false, true, node);
+        emit IEtherFiNode.SwitchToCompoundingRequested(val.pubkeyHash);
+
         vm.expectEmit(true, true, false, true, address(etherFiNodesManager));
         emit IEtherFiNodesManager.ValidatorSwitchToCompoundingRequested(node, val.pubkeyHash, val.pubkey);
 
@@ -384,6 +402,9 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         IEigenPodTypes.ConsolidationRequest[] memory requests = _consolidation(src.pubkey, target.pubkey);
         uint256 fee = IEtherFiNode(node).getConsolidationRequestFee();
         uint256 before = CONSOLIDATION_REQUEST_PREDEPLOY.balance;
+
+        vm.expectEmit(true, true, false, true, node);
+        emit IEtherFiNode.ConsolidationRequested(src.pubkeyHash, target.pubkeyHash);
 
         vm.expectEmit(true, true, false, true, address(etherFiNodesManager));
         emit IEtherFiNodesManager.ValidatorConsolidationRequested(node, src.pubkeyHash, src.pubkey, target.pubkeyHash, target.pubkey);
@@ -424,6 +445,54 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         vm.expectRevert(IEtherFiNodesManager.InsufficientConsolidationFees.selector);
         vm.prank(elExiter);
         etherFiNodesManager.requestConsolidation{value: fee - 1}(requests);
+    }
+
+    //--------------------------------------------------------------------------------------
+    //---------------------------  REQUEST EVENT COMPATIBILITY  ----------------------------
+    //--------------------------------------------------------------------------------------
+
+    /// @dev The node's request events must stay ABI-identical to the EigenPod ones so indexers can
+    ///      decode a pod-less node with the pod's existing ABI. Compile-time checked: if either side
+    ///      renames an event or changes a parameter type, these selectors diverge and this fails.
+    function test_requestEvents_topicsMatchEigenPod() public pure {
+        assertEq(IEtherFiNode.ExitRequested.selector, IEigenPodEvents.ExitRequested.selector);
+        assertEq(IEtherFiNode.WithdrawalRequested.selector, IEigenPodEvents.WithdrawalRequested.selector);
+        assertEq(IEtherFiNode.SwitchToCompoundingRequested.selector, IEigenPodEvents.SwitchToCompoundingRequested.selector);
+        assertEq(IEtherFiNode.ConsolidationRequested.selector, IEigenPodEvents.ConsolidationRequested.selector);
+    }
+
+    /// @dev A pod-backed node must stay silent: the pod already logs the request, and a second copy
+    ///      from the node would double-count for anyone subscribed to the topic across all addresses.
+    /// @dev Uses a live mainnet validator rather than a fresh one, because a pod rejects a source it
+    ///      has not proven with ValidatorNotActiveInPod.
+    function test_podBacked_nodeDoesNotDuplicateThePodsRequestEvent() public {
+        bytes[] memory pubkeys = new bytes[](1);
+        uint256[] memory legacyIds = new uint256[](1);
+        pubkeys[0] = PK_16171;
+        legacyIds[0] = 51715;
+
+        vm.prank(elExiter);
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
+
+        (IEtherFiNode node, IEigenPod pod) = _resolvePod(pubkeys[0]);
+
+        IEigenPodTypes.ConsolidationRequest[] memory requests = _consolidation(pubkeys[0], pubkeys[0]);
+        uint256 fee = pod.getConsolidationRequestFee();
+
+        vm.recordLogs();
+        vm.deal(elExiter, fee);
+        vm.prank(elExiter);
+        etherFiNodesManager.requestConsolidation{value: fee}(requests);
+
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bool podLogged;
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics.length == 0) continue; // anonymous logs carry no topic0
+            if (logs[i].topics[0] != IEtherFiNode.SwitchToCompoundingRequested.selector) continue;
+            assertTrue(logs[i].emitter != address(node), "pod-backed node must not emit the pod's request event");
+            if (logs[i].emitter == address(pod)) podLogged = true;
+        }
+        assertTrue(podLogged, "expected the pod to log the switch request");
     }
 
     /// @dev Source validators from two nodes cannot share a batch: the node calling the predeploy
