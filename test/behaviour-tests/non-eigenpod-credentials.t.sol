@@ -498,6 +498,30 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         etherFiNodesManager.requestExecutionLayerTriggeredWithdrawal{value: fee}(requests);
     }
 
+    /// @dev A live pod constrains the consolidation TARGET to one it has proven, so a pod-backed node
+    ///      cannot consolidate into an outside validator. The pod-less path has no such constraint.
+    function test_livePod_rejectsAForeignConsolidationTarget() public {
+        bytes[] memory pubkeys = new bytes[](1);
+        uint256[] memory legacyIds = new uint256[](1);
+        pubkeys[0] = PK_16171;
+        legacyIds[0] = 51715;
+        vm.prank(elExiter);
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
+
+        (, IEigenPod pod) = _resolvePod(pubkeys[0]);
+
+        // Stands in for an attacker-owned validator: never proven into this pod
+        bytes memory foreignTarget = abi.encodePacked(bytes32(keccak256("attacker")), bytes16(uint128(1)));
+
+        IEigenPodTypes.ConsolidationRequest[] memory requests = _consolidation(pubkeys[0], foreignTarget);
+        uint256 fee = pod.getConsolidationRequestFee();
+        vm.deal(elExiter, fee);
+
+        vm.expectRevert(IEigenPodErrors.ValidatorNotActiveInPod.selector);
+        vm.prank(elExiter);
+        etherFiNodesManager.requestConsolidation{value: fee}(requests);
+    }
+
     /// @dev Guards the ABI parity indexers rely on: a rename or type change on either side
     ///      diverges the selectors and fails here.
     function test_requestEvents_topicsMatchEigenPod() public pure {
