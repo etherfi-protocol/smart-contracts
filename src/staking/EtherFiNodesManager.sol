@@ -382,8 +382,12 @@ contract EtherFiNodesManager is
      * @param validatorIds The legacy validator ids to link
      * @param pubkeys The pubkeys to link the validator ids to
      * @dev We can delete this method once we have linked all of our legacy validators
+     * @dev Multisig, not executor: this writes the map that requestConsolidation trusts to decide a
+     *      target is ours, and it cannot verify the pubkey belongs to the id. Sharing a role with
+     *      requestConsolidation would let one key add its own validator and then consolidate into
+     *      it, so the power to grow the trusted set is kept apart from the power to use it.
      */
-    function linkLegacyValidatorIds(uint256[] calldata validatorIds, bytes[] calldata pubkeys) external onlyExecutorOperations {
+    function linkLegacyValidatorIds(uint256[] calldata validatorIds, bytes[] calldata pubkeys) external onlyOperatingMultisig {
         if (validatorIds.length != pubkeys.length) revert LengthMismatch();
         for (uint256 i = 0; i < validatorIds.length; i++) {
 

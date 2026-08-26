@@ -66,6 +66,8 @@ contract ConsolidationThroughEOATest is Test {
 
         vm.startPrank(roleRegistry.owner());
         roleRegistry.grantRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), realElExiter);
+        // linkLegacyValidatorIds moved to OPERATION_MULTISIG_ROLE; linking is fixture setup here.
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), realElExiter);
 
         // Setup consolidation rate limiter bucket (required for new rate limiting)
         roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), roleRegistry.owner());

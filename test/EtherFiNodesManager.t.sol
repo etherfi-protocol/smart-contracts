@@ -50,11 +50,15 @@ contract EtherFiNodesManagerTest is TestSetup {
         roleRegistryInstance.grantRole(roleRegistryInstance.EIGENPOD_OPERATIONS_ROLE(), callForwarder);
         // ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE → EXECUTOR_OPERATIONS_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.EXECUTOR_OPERATIONS_ROLE(), elTriggerExit);
+        // linkLegacyValidatorIds moved to OPERATION_MULTISIG_ROLE; linking is fixture setup here.
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), elTriggerExit);
         // STAKING_MANAGER_NODE_CREATOR_ROLE → EXECUTOR_OPERATIONS_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.EXECUTOR_OPERATIONS_ROLE(), address(liquidityPoolInstance));
         // Existing tests prank the mainnet OPERATING_TIMELOCK to call
-        // instantiateEtherFiNode / linkLegacyValidatorIds (both EXECUTOR_OPERATIONS_ROLE-gated now).
+        // instantiateEtherFiNode (EXECUTOR_OPERATIONS_ROLE) and linkLegacyValidatorIds
+        // (OPERATION_MULTISIG_ROLE), so it needs both.
         roleRegistryInstance.grantRole(roleRegistryInstance.EXECUTOR_OPERATIONS_ROLE(), deployed.OPERATING_TIMELOCK());
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), deployed.OPERATING_TIMELOCK());
         // requestConsolidation is EXECUTOR_OPERATIONS_ROLE-gated and tests still prank admin.
         roleRegistryInstance.grantRole(roleRegistryInstance.EXECUTOR_OPERATIONS_ROLE(), admin);
         // PROTOCOL_PAUSER / PROTOCOL_UNPAUSER → OPERATION_MULTISIG_ROLE (onlyOperations)

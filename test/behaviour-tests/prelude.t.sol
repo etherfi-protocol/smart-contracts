@@ -374,7 +374,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         bytes memory signature = hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df";
 
         // need to link because this validator is already past this step from the old flow
-        vm.prank(elExiter);
+        vm.prank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(bidId), toArray_bytes(pubkey));
 
         vm.prank(admin);
@@ -411,7 +411,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         // link it to an arbitrary id
         uint256 legacyID = 10885;
         bytes memory pubkey = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
-        vm.prank(elExiter);
+        vm.prank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(legacyID), toArray_bytes(pubkey));
 
         // user with no role should not be able to forward calls
@@ -475,7 +475,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         // Setup: link to legacy ID
         uint256 legacyID = 10886;
         bytes memory pubkey = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
-        vm.prank(elExiter);
+        vm.prank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(legacyID), toArray_bytes(pubkey));
 
         // Setup: create two users with CALL_FORWARDER_ROLE
@@ -686,7 +686,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         uint256 legacyID = 10885;
 
         // force link this validator
-        vm.prank(elExiter);
+        vm.prank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(legacyID), toArray_bytes(validatorPubkey));
 
         // Set up rate limiter for the linked EtherFiNode proxy
@@ -760,7 +760,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         bytes32 pubkeyHash = etherFiNodesManager.calculateValidatorPubkeyHash(validatorPubkey);
         uint256 legacyID = 10885;
 
-        vm.prank(elExiter);
+        vm.prank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(legacyID), toArray_bytes(validatorPubkey));
 
         address nodeAddr = etherFiNodesManager.etherfiNodeAddress(uint256(pubkeyHash));
@@ -1094,23 +1094,42 @@ contract PreludeTest is Test, ArrayTestHelper {
         pubkeys[1] = vm.randomBytes(48);
         pubkeys[2] = vm.randomBytes(48);
 
-        // should fail if not admin
-        vm.expectRevert(RoleRegistry.OnlyExecutorOperations.selector);
+        // should fail if not the operating multisig
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
 
-        vm.prank(elExiter);
+        // Executor alone must NOT be able to link: it also holds
+        // requestConsolidation, and this map is what that guard trusts to decide
+        // a target is ours. A fresh address is used because the shared fixture
+        // actors hold several roles at once.
+        address executorOnly = address(0xE0E0);
+        // startPrank, not prank: the nested EXECUTOR_OPERATIONS_ROLE() read would
+        // consume a single-call prank and leave grantRole unauthorized.
+        vm.startPrank(roleRegistry.owner());
+        roleRegistry.grantRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), executorOnly);
+        vm.stopPrank();
+        assertFalse(
+            roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), executorOnly),
+            "fixture: executorOnly must not hold the multisig role"
+        );
+
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.prank(executorOnly);
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
+
+        vm.prank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
 
         // should fail if attempt to re-link already linked ids
         vm.expectRevert(IEtherFiNodesManager.AlreadyLinked.selector);
-        vm.prank(elExiter);
+        vm.prank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
 
         // should fail if attempt to link unknown node
         uint256 badId = 9999999;
         bytes memory badPubkey = vm.randomBytes(48);
         vm.expectRevert(IEtherFiNodesManager.UnknownNode.selector);
-        vm.prank(elExiter);
+        vm.prank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(badId), toArray_bytes(badPubkey));
 
     }
@@ -1234,7 +1253,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[1] = 51716;
         legacyIds[2] = 51717;
 
-        vm.startPrank(elExiter);
+        vm.startPrank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys); 
         vm.stopPrank();
         _setExitRateLimit(172800, 2);
@@ -1292,7 +1311,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[2] = 51717;
 
         // Link and init
-        vm.startPrank(elExiter);
+        vm.startPrank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
         vm.stopPrank();
         _setExitRateLimit(172800, 2);
@@ -1367,7 +1386,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[1] = 51716;
         legacyIds[2] = 51717;
 
-        vm.startPrank(elExiter);
+        vm.startPrank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
         vm.stopPrank();
 
@@ -1391,7 +1410,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[1] = 51716;
         legacyIds[2] = 51717;
 
-        vm.startPrank(elExiter);
+        vm.startPrank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys); 
         vm.stopPrank();
         _setExitRateLimit(172800, 2);
@@ -1514,7 +1533,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[0] = 51715;
         amounts[0] = 1_000_000_000; // 1 ETH partial exit
 
-        vm.prank(elExiter);
+        vm.prank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
 
         // Grant role to the triggering EOA
@@ -1702,7 +1721,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[1] = 51716;
         legacyIds[2] = 51717;
 
-        vm.prank(elExiter);
+        vm.prank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
 
         (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
@@ -1756,7 +1775,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         pubkeys[0] = PK_16171;
         legacyIds[0] = 51715;
 
-        vm.prank(elExiter);
+        vm.prank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
 
         (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
@@ -1775,7 +1794,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[0] = 51715;
         legacyIds[1] = 51716;
 
-        vm.startPrank(elExiter);
+        vm.startPrank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
         vm.stopPrank();
 
@@ -1828,7 +1847,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[1] = 51716;
         legacyIds[2] = 51717;
 
-        vm.startPrank(elExiter);
+        vm.startPrank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
         vm.stopPrank();
 
@@ -1875,7 +1894,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         pubkeys[0] = PK_16171;
         legacyIds[0] = 51715;
 
-        vm.startPrank(elExiter);
+        vm.startPrank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
         vm.stopPrank();
 
@@ -1912,7 +1931,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[0] = 51715;
         legacyIds[1] = 51716;
 
-        vm.startPrank(elExiter);
+        vm.startPrank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
         vm.stopPrank();
 
@@ -1966,7 +1985,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[1] = 51716;
         legacyIds[2] = 51717;
 
-        vm.startPrank(elExiter);
+        vm.startPrank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
         vm.stopPrank();
 

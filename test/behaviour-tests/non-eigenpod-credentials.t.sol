@@ -510,7 +510,7 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         uint256[] memory legacyIds = new uint256[](1);
         pubkeys[0] = PK_16171;
         legacyIds[0] = 51715;
-        vm.prank(elExiter);
+        vm.prank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
 
         (, IEigenPod pod) = _resolvePod(pubkeys[0]);
@@ -540,7 +540,7 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         uint256[] memory legacyIds = new uint256[](1);
         pubkeys[0] = PK_16171;
         legacyIds[0] = 51715;
-        vm.prank(elExiter);
+        vm.prank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
 
         (, IEigenPod pod) = _resolvePod(pubkeys[0]);
@@ -574,7 +574,7 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         pubkeys[0] = PK_16171;
         legacyIds[0] = 51715;
 
-        vm.prank(elExiter);
+        vm.prank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
 
         (IEtherFiNode node, IEigenPod pod) = _resolvePod(pubkeys[0]);
