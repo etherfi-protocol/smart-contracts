@@ -317,6 +317,23 @@ contract EtherFiNodesManager is
             }
         }
 
+        // The target decides where the source's balance ends up, and neither layer below us checks
+        // it: EIP-7251 only requires the target to hold 0x02 credentials, and a pod only vets the
+        // target when the pod is the caller. Without this, one key could move every pod-less
+        // validator's stake to a validator it owns. Runs unconditionally, on every request.
+        for (uint256 i = 0; i < requests.length; i++) {
+            bytes32 srcHash = calculateValidatorPubkeyHash(requests[i].srcPubkey);
+            bytes32 tgtHash = calculateValidatorPubkeyHash(requests[i].targetPubkey);
+            if (tgtHash == srcHash) continue; // switch to compounding: moves no value
+            if (address(etherFiNodeFromPubkeyHash[tgtHash]) != address(0)) continue; // one of ours
+            // Proven into the source's own pod, so EigenLayer merkle-verified its credentials.
+            // ACTIVE, not != INACTIVE: a WITHDRAWN target is dropped by the consensus layer, which
+            // would burn the fee and log a consolidation that never happens.
+            if (target != address(node)
+                && IEigenPod(target).validatorStatus(tgtHash) == IEigenPodTypes.VALIDATOR_STATUS.ACTIVE) continue;
+            revert UnknownConsolidationTarget();
+        }
+
         // pod-backed reads the pod directly, as before; see requestExecutionLayerTriggeredWithdrawal
         uint256 feePerRequest = target == address(node)
             ? node.getConsolidationRequestFee()

@@ -415,14 +415,48 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         assertEq(CONSOLIDATION_REQUEST_PREDEPLOY.balance, before + fee);
     }
 
-    /// @dev The target is intentionally unconstrained, which is what lets a retiring pod's
-    ///      validators consolidate into a node-credentialled target.
-    function test_podLess_consolidationTargetMayBeOutsideTheNode() public {
+    /// @dev The target may live on a different node, which is what lets a retiring pod's validators
+    ///      consolidate into a node-credentialled target. It must still be one of ours.
+    function test_podLess_consolidationTargetMayBeOnAnotherNode() public {
         address node = _newPodLessNode();
         TestValidator memory src = _validatorOn(node, 8);
-        bytes memory foreignTarget = abi.encodePacked(bytes32(keccak256("foreign")), bytes16(uint128(9)));
+        TestValidator memory target = _validatorOn(_newPodLessNode(), 9);
+        assertTrue(src.etherFiNode != target.etherFiNode);
 
-        IEigenPodTypes.ConsolidationRequest[] memory requests = _consolidation(src.pubkey, foreignTarget);
+        IEigenPodTypes.ConsolidationRequest[] memory requests = _consolidation(src.pubkey, target.pubkey);
+        uint256 fee = IEtherFiNode(node).getConsolidationRequestFee();
+        uint256 before = CONSOLIDATION_REQUEST_PREDEPLOY.balance;
+
+        vm.deal(elExiter, fee);
+        vm.prank(elExiter);
+        etherFiNodesManager.requestConsolidation{value: fee}(requests);
+
+        assertEq(CONSOLIDATION_REQUEST_PREDEPLOY.balance, before + fee);
+    }
+
+    /// @dev The theft path: the consensus layer only requires a 0x02 target, and a pod-less node
+    ///      calls the predeploy itself, so nothing below us checks who owns the target.
+    function test_podLess_consolidationRejectsTargetWeDoNotOwn() public {
+        address node = _newPodLessNode();
+        TestValidator memory src = _validatorOn(node, 20);
+        bytes memory attackerTarget = abi.encodePacked(bytes32(keccak256("attacker")), bytes16(uint128(21)));
+
+        IEigenPodTypes.ConsolidationRequest[] memory requests = _consolidation(src.pubkey, attackerTarget);
+        uint256 fee = IEtherFiNode(node).getConsolidationRequestFee();
+        vm.deal(elExiter, fee);
+
+        vm.expectRevert(IEtherFiNodesManager.UnknownConsolidationTarget.selector);
+        vm.prank(elExiter);
+        etherFiNodesManager.requestConsolidation{value: fee}(requests);
+    }
+
+    /// @dev A switch is exempt because it moves no value, so an unlinked legacy validator can still
+    ///      convert its own credentials to 0x02.
+    function test_podLess_switchIsExemptFromTheTargetCheck() public {
+        address node = _newPodLessNode();
+        TestValidator memory val = _validatorOn(node, 22);
+
+        IEigenPodTypes.ConsolidationRequest[] memory requests = _consolidation(val.pubkey, val.pubkey);
         uint256 fee = IEtherFiNode(node).getConsolidationRequestFee();
         uint256 before = CONSOLIDATION_REQUEST_PREDEPLOY.balance;
 
@@ -498,8 +532,9 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         etherFiNodesManager.requestExecutionLayerTriggeredWithdrawal{value: fee}(requests);
     }
 
-    /// @dev A live pod constrains the consolidation TARGET to one it has proven, so a pod-backed node
-    ///      cannot consolidate into an outside validator. The pod-less path has no such constraint.
+    /// @dev A foreign target is rejected on the pod-backed path too. The manager's guard fires first
+    ///      now; before it existed the pod itself reverted ValidatorNotActiveInPod here, which is why
+    ///      only pod-less nodes were exposed.
     function test_livePod_rejectsAForeignConsolidationTarget() public {
         bytes[] memory pubkeys = new bytes[](1);
         uint256[] memory legacyIds = new uint256[](1);
@@ -517,7 +552,7 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         uint256 fee = pod.getConsolidationRequestFee();
         vm.deal(elExiter, fee);
 
-        vm.expectRevert(IEigenPodErrors.ValidatorNotActiveInPod.selector);
+        vm.expectRevert(IEtherFiNodesManager.UnknownConsolidationTarget.selector);
         vm.prank(elExiter);
         etherFiNodesManager.requestConsolidation{value: fee}(requests);
     }
