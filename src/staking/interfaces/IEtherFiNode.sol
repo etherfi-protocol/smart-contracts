@@ -8,6 +8,10 @@ import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 
 interface IEtherFiNode {
 
+    /// @dev Immutable. Proves an address is one of our beacon proxies; a contract cannot read
+    ///      another's ERC-1967 beacon slot.
+    function etherFiNodesManager() external view returns (IEtherFiNodesManager);
+
     // eigenlayer
     function createEigenPod() external returns (address);
     function getEigenPod() external view returns (IEigenPod);

@@ -250,6 +250,15 @@ contract StakingManager is
             address node = nodes[i];
             if (deployedEtherFiNodes[node]) continue; // already linked
 
+            // _validateNode trusts this map, so don't take the caller's word for what a node is.
+            // try/catch so an EOA or a contract without the selector fails as InvalidEtherFiNode
+            // rather than an opaque empty revert.
+            try IEtherFiNode(node).etherFiNodesManager() returns (IEtherFiNodesManager m) {
+                if (address(m) != address(etherFiNodesManager)) revert InvalidEtherFiNode();
+            } catch {
+                revert InvalidEtherFiNode();
+            }
+
             deployedEtherFiNodes[node] = true;
             emit EtherFiNodeDeployed(node);
         }

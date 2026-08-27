@@ -226,6 +226,9 @@ contract EtherFiNodesManager is
      * @dev associated etherFiNode is derived from pubkey in the request. Caller should ensure
      *      all provided validators share the same eigenpod
      * @dev Access: only EXECUTOR_OPERATIONS_ROLE, pausable, nonReentrant.
+     * @dev Accepted (I-01): pod-less sources are authorized by the pubkey link alone, which exists
+     *      from the 1 ETH deposit. A pre-activation request succeeds here but consensus discards it,
+     *      after paying the fee and consuming rate limit. Callers must confirm activation.
      * @param requests Array of WithdrawalRequest:
      *        - pubkey: 48-byte BLS pubkey
      *        - amountGwei: 0 for full exit, >0 for partial to pod
@@ -562,6 +565,12 @@ contract EtherFiNodesManager is
      */
     function _validateNode(address node) internal view {
         if (!stakingManager.deployedEtherFiNodes(node)) revert UnknownNode();
+        // Independent of the map, so a bad backfill entry cannot make any contract a node.
+        try IEtherFiNode(node).etherFiNodesManager() returns (IEtherFiNodesManager m) {
+            if (address(m) != address(this)) revert UnknownNode();
+        } catch {
+            revert UnknownNode();
+        }
     }
 
     /**

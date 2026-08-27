@@ -188,6 +188,45 @@ at `b4a09680`: `test/integration-tests/Validator-Flows.t.sol` fails in `setUp`
 with `NotRegistered()`, and `test/LiquidityPool.t.sol` fails 16 of 119. Both are
 mainnet-state drift from forking at the latest block.
 
+## Accepted behaviour
+
+### I-01. Pod-less exit requests can be accepted before validator activation
+
+A pubkey is linked to its EtherFiNode as soon as the initial 1 ETH deposit is
+submitted, in `StakingManager.createBeaconValidators` via `linkPubkeyToNode`. On
+the pod-less path that link is the only evidence used to authorize a source
+pubkey in `requestExecutionLayerTriggeredWithdrawal`.
+
+The EigenPod path is stricter by accident of EigenLayer's design: the pod only
+accepts a source it has proven and marked `ACTIVE`, which cannot happen before
+the validator is funded and in the active set. The direct EIP-7002 path
+establishes neither. A request submitted between the 1 ETH deposit and
+activation therefore succeeds on the execution layer and is later discarded by
+consensus processing, because `process_withdrawal_request` requires the
+validator to be active and past `SHARD_COMMITTEE_PERIOD`.
+
+The transaction still:
+
+- pays the EIP-7002 fee, which the predeploy keeps
+- consumes `EXIT_REQUEST_LIMIT_ID` capacity
+- emits `ValidatorWithdrawalRequestSent` and `ExitRequested`
+
+So automation can believe an exit is underway when none will occur. The
+practical cost is a delayed emergency exit: the request has to be noticed,
+resubmitted, and rate-limit capacity has to refill first.
+
+**Accepted, not fixed.** The function is behind `EXECUTOR_OPERATIONS_ROLE`, so
+this needs a trusted caller submitting a request for a validator it has just
+created and not yet activated. Gating on-chain would need either an activation
+proof, which is the beacon-proof machinery this design deliberately leaves out
+of scope, or a delay after linking, which would block legitimate emergency
+exits for newly funded validators. Both cost more than the failure mode.
+
+Mitigation is on the caller: confirm the validator is `active_ongoing` on the
+beacon chain before requesting a pod-less exit, and treat
+`ValidatorWithdrawalRequestSent` as "requested", never as "exiting". Reconcile
+against beacon state rather than against our own events.
+
 ## Out of scope
 
 - Rate limiter re-sizing for drain volume (STAKE-1835), a parameter change that

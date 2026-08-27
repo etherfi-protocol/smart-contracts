@@ -552,6 +552,29 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         etherFiNodesManager.requestConsolidation{value: fee}(requests);
     }
 
+    /// @dev The backfill writes the map _validateNode trusts, so it must verify what a node is.
+    function test_backfill_rejectsAddressesThatAreNotOurNodes() public {
+        address multisig = roleRegistry.roleHolders(roleRegistry.OPERATION_MULTISIG_ROLE())[0];
+
+        address[] memory notANode = new address[](1);
+        notANode[0] = address(etherFiNodesManager); // a real contract, wrong kind
+        vm.expectRevert(IStakingManager.InvalidEtherFiNode.selector);
+        vm.prank(multisig);
+        stakingManager.backfillExistingEtherFiNodes(notANode);
+
+        // A codeless address is also rejected, by the same catch arm. Not asserted here: forge
+        // refuses to call an address absent from the forked state.
+
+        // A genuine beacon proxy passes
+        vm.prank(admin);
+        address realNode = stakingManager.instantiateEtherFiNode(false);
+        address[] memory good = new address[](1);
+        good[0] = realNode;
+        vm.prank(multisig);
+        stakingManager.backfillExistingEtherFiNodes(good); // already true, no-ops without reverting
+        assertTrue(stakingManager.deployedEtherFiNodes(realNode));
+    }
+
     /// @dev Guards the ABI parity indexers rely on: a rename or type change on either side
     ///      diverges the selectors and fails here.
     function test_requestEvents_topicsMatchEigenPod() public pure {
