@@ -1098,13 +1098,10 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
 
-        // Executor alone must NOT be able to link: it also holds
-        // requestConsolidation, and this map is what that guard trusts to decide
-        // a target is ours. A fresh address is used because the shared fixture
-        // actors hold several roles at once.
+        // Executor alone must NOT link: it also holds requestConsolidation. Fresh
+        // address because the shared fixture actors hold several roles at once.
         address executorOnly = address(0xE0E0);
-        // startPrank, not prank: the nested EXECUTOR_OPERATIONS_ROLE() read would
-        // consume a single-call prank and leave grantRole unauthorized.
+        // startPrank: a nested role-id read would consume a single-call prank.
         vm.startPrank(roleRegistry.owner());
         roleRegistry.grantRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), executorOnly);
         vm.stopPrank();

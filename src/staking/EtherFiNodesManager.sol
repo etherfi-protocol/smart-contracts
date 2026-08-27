@@ -317,18 +317,14 @@ contract EtherFiNodesManager is
             }
         }
 
-        // The target decides where the source's balance ends up, and neither layer below us checks
-        // it: EIP-7251 only requires the target to hold 0x02 credentials, and a pod only vets the
-        // target when the pod is the caller. Without this, one key could move every pod-less
-        // validator's stake to a validator it owns. Runs unconditionally, on every request.
+        // The target decides where the balance lands, and nothing below us checks it: EIP-7251 wants
+        // only 0x02 credentials, and a pod vets the target solely when the pod is the caller.
         for (uint256 i = 0; i < requests.length; i++) {
             bytes32 srcHash = calculateValidatorPubkeyHash(requests[i].srcPubkey);
             bytes32 tgtHash = calculateValidatorPubkeyHash(requests[i].targetPubkey);
             if (tgtHash == srcHash) continue; // switch to compounding: moves no value
             if (address(etherFiNodeFromPubkeyHash[tgtHash]) != address(0)) continue; // one of ours
-            // Proven into the source's own pod, so EigenLayer merkle-verified its credentials.
-            // ACTIVE, not != INACTIVE: a WITHDRAWN target is dropped by the consensus layer, which
-            // would burn the fee and log a consolidation that never happens.
+            // ACTIVE, not != INACTIVE: the CL drops a WITHDRAWN target, burning the fee.
             if (target != address(node)
                 && IEigenPod(target).validatorStatus(tgtHash) == IEigenPodTypes.VALIDATOR_STATUS.ACTIVE) continue;
             revert UnknownConsolidationTarget();
@@ -382,10 +378,9 @@ contract EtherFiNodesManager is
      * @param validatorIds The legacy validator ids to link
      * @param pubkeys The pubkeys to link the validator ids to
      * @dev We can delete this method once we have linked all of our legacy validators
-     * @dev Multisig, not executor: this writes the map that requestConsolidation trusts to decide a
-     *      target is ours, and it cannot verify the pubkey belongs to the id. Sharing a role with
-     *      requestConsolidation would let one key add its own validator and then consolidate into
-     *      it, so the power to grow the trusted set is kept apart from the power to use it.
+     * @dev Multisig, not executor: this writes the map requestConsolidation trusts to decide a target
+     *      is ours, so sharing that role would let one key link its own validator then consolidate
+     *      into it.
      */
     function linkLegacyValidatorIds(uint256[] calldata validatorIds, bytes[] calldata pubkeys) external onlyOperatingMultisig {
         if (validatorIds.length != pubkeys.length) revert LengthMismatch();

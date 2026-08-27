@@ -415,8 +415,7 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         assertEq(CONSOLIDATION_REQUEST_PREDEPLOY.balance, before + fee);
     }
 
-    /// @dev The target may live on a different node, which is what lets a retiring pod's validators
-    ///      consolidate into a node-credentialled target. It must still be one of ours.
+    /// @dev A target on another node is what lets a retiring pod migrate. It must still be ours.
     function test_podLess_consolidationTargetMayBeOnAnotherNode() public {
         address node = _newPodLessNode();
         TestValidator memory src = _validatorOn(node, 8);
@@ -434,8 +433,7 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         assertEq(CONSOLIDATION_REQUEST_PREDEPLOY.balance, before + fee);
     }
 
-    /// @dev The theft path: the consensus layer only requires a 0x02 target, and a pod-less node
-    ///      calls the predeploy itself, so nothing below us checks who owns the target.
+    /// @dev The theft path: nothing below us checks who owns the target.
     function test_podLess_consolidationRejectsTargetWeDoNotOwn() public {
         address node = _newPodLessNode();
         TestValidator memory src = _validatorOn(node, 20);
@@ -450,8 +448,7 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         etherFiNodesManager.requestConsolidation{value: fee}(requests);
     }
 
-    /// @dev A switch is exempt because it moves no value, so an unlinked legacy validator can still
-    ///      convert its own credentials to 0x02.
+    /// @dev Switches move no value, so an unlinked legacy validator can still convert to 0x02.
     function test_podLess_switchIsExemptFromTheTargetCheck() public {
         address node = _newPodLessNode();
         TestValidator memory val = _validatorOn(node, 22);
@@ -484,8 +481,8 @@ contract NonEigenPodCredentialsTest is PreludeTest {
     //---------------------------  REQUEST EVENT COMPATIBILITY  ----------------------------
     //--------------------------------------------------------------------------------------
 
-    /// @dev 47 + 49 bytes satisfies EIP-7251's 96, so the predeploy accepts it and only the node's
-    ///      check stops two bogus hashes. Calls the node directly; the manager rejects these first.
+    /// @dev 47 + 49 satisfies EIP-7251's 96 bytes, so only the node's own check stops two bogus
+    ///      hashes. Calls the node directly; the manager rejects these first.
     function test_podLess_consolidationRejectsWrongPubkeyLength() public {
         address node = _newPodLessNode();
 
@@ -503,8 +500,8 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         IEtherFiNode(node).requestConsolidation{value: fee}(requests);
     }
 
-    /// @dev Pins why the mixed-batch guard is skipped on a live pod: the pod itself rejects a source
-    ///      it has not proven. Asserts deployed behaviour, which the interface docs contradict.
+    /// @dev Pins why the source guard is skipped on a live pod: the pod rejects unproven sources.
+    ///      Asserts deployed behaviour, which the interface docs contradict.
     function test_livePod_rejectsAForeignSourceInABatch() public {
         bytes[] memory pubkeys = new bytes[](1);
         uint256[] memory legacyIds = new uint256[](1);
@@ -532,9 +529,7 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         etherFiNodesManager.requestExecutionLayerTriggeredWithdrawal{value: fee}(requests);
     }
 
-    /// @dev A foreign target is rejected on the pod-backed path too. The manager's guard fires first
-    ///      now; before it existed the pod itself reverted ValidatorNotActiveInPod here, which is why
-    ///      only pod-less nodes were exposed.
+    /// @dev Rejected on the pod-backed path too, by our guard now; the pod used to catch it.
     function test_livePod_rejectsAForeignConsolidationTarget() public {
         bytes[] memory pubkeys = new bytes[](1);
         uint256[] memory legacyIds = new uint256[](1);
@@ -566,8 +561,8 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         assertEq(IEtherFiNode.ConsolidationRequested.selector, IEigenPodEvents.ConsolidationRequested.selector);
     }
 
-    /// @dev A second log would double-count for anyone subscribed by topic across addresses.
-    ///      Uses a live validator; a pod rejects a source it has not proven.
+    /// @dev A second log would double-count for topic-wide subscribers. Live validator: a pod
+    ///      rejects unproven sources.
     function test_podBacked_nodeDoesNotDuplicateThePodsRequestEvent() public {
         bytes[] memory pubkeys = new bytes[](1);
         uint256[] memory legacyIds = new uint256[](1);
