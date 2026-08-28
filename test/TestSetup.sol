@@ -756,6 +756,14 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryInstance.grantRole(_operatingMultisigRole, alice);
         roleRegistryInstance.grantRole(_operatingMultisigRole, admin);
         roleRegistryInstance.grantRole(_operatingMultisigRole, _operatingTimelockAddr);
+
+        // The DepositAdapter mints weETH directly for the ETH/WETH paths: it credits the
+        // eETH shares to weETH via LiquidityPool.depositETHToRecipient, then claims them
+        // with WeETH.mintFor. Both calls are role-gated, so grant the adapter both roles.
+        roleRegistryInstance.grantRole(
+            liquidityPoolInstance.LIQUIDITY_POOL_DEPOSIT_ADAPTER_ROLE(), address(depositAdapterInstance)
+        );
+        roleRegistryInstance.grantRole(weEthInstance.WEETH_MINTER_ROLE(), address(depositAdapterInstance));
         vm.stopPrank();
 
         // The freshly-upgraded LP introduces `minWithdrawAmount`/`maxWithdrawAmount`
