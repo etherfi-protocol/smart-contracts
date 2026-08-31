@@ -270,11 +270,13 @@ contract EtherFiNodesManager is
 
         // Pod-backed reads the fee off the pod as before, so this upgrade does not require the
         // EtherFiNode beacon to be upgraded first.
-        uint256 feePerRequest = target == address(node)
+        // Total, not per-request: reusing the one slot keeps this function off the stack limit.
+        uint256 totalFee = requests.length * (target == address(node)
             ? node.getWithdrawalRequestFee()
-            : IEigenPod(target).getWithdrawalRequestFee();
-        if (msg.value < feePerRequest * requests.length) revert InsufficientWithdrawalFees();
-        node.requestExecutionLayerTriggeredWithdrawal{value: msg.value}(requests);
+            : IEigenPod(target).getWithdrawalRequestFee());
+        if (msg.value < totalFee) revert InsufficientWithdrawalFees();
+        node.requestExecutionLayerTriggeredWithdrawal{value: totalFee}(requests);
+        _refundSurplus(totalFee);
 
         for (uint256 i = 0; i < requests.length; i++) {
             bytes32 currentPubKeyHash = calculateValidatorPubkeyHash(requests[i].pubkey);
@@ -336,11 +338,12 @@ contract EtherFiNodesManager is
         }
 
         // pod-backed reads the pod directly, as before; see requestExecutionLayerTriggeredWithdrawal
-        uint256 feePerRequest = target == address(node)
+        uint256 totalFee = requests.length * (target == address(node)
             ? node.getConsolidationRequestFee()
-            : IEigenPod(target).getConsolidationRequestFee();
-        if (msg.value < feePerRequest * requests.length) revert InsufficientConsolidationFees();
-        node.requestConsolidation{value: msg.value}(requests);
+            : IEigenPod(target).getConsolidationRequestFee());
+        if (msg.value < totalFee) revert InsufficientConsolidationFees();
+        node.requestConsolidation{value: totalFee}(requests);
+        _refundSurplus(totalFee);
 
         for (uint256 i = 0; i < requests.length; ) {
             bytes32 srcPkHash = calculateValidatorPubkeyHash(requests[i].srcPubkey);
@@ -565,6 +568,19 @@ contract EtherFiNodesManager is
      * @notice Validate that the node exists and revert if not
      * @param node The node address to validate
      */
+    /**
+     * @notice Returns any msg.value above the fee actually spent to the caller.
+     * @dev Forwarding the whole msg.value left the surplus on the node, where a later sweep credited
+     *      the liquidity pool with ETH that was never counted as out-of-LP, understating
+     *      totalValueOutOfLp. Both callers are nonReentrant.
+     */
+    function _refundSurplus(uint256 spent) internal {
+        uint256 surplus = msg.value - spent;
+        if (surplus == 0) return;
+        (bool sent, ) = payable(msg.sender).call{value: surplus}("");
+        if (!sent) revert RefundFailed();
+    }
+
     function _validateNode(address node) internal view {
         if (!stakingManager.deployedEtherFiNodes(node)) revert UnknownNode();
         // Independent of the map, so a bad backfill entry cannot make any contract a node.

@@ -448,20 +448,25 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         etherFiNodesManager.requestConsolidation{value: fee}(requests);
     }
 
-    /// @dev Switches move no value, so an unlinked legacy validator can still convert to 0x02.
-    function test_podLess_switchIsExemptFromTheTargetCheck() public {
+    /// @dev Surplus must come back to the caller. Left on the node it would later be swept into the
+    ///      liquidity pool as ETH never counted as out-of-LP, understating totalValueOutOfLp.
+    function test_podLess_surplusFeeIsRefundedToTheCaller() public {
         address node = _newPodLessNode();
-        TestValidator memory val = _validatorOn(node, 22);
+        TestValidator memory src = _validatorOn(node, 22);
+        TestValidator memory target = _validatorOn(node, 23);
 
-        IEigenPodTypes.ConsolidationRequest[] memory requests = _consolidation(val.pubkey, val.pubkey);
+        IEigenPodTypes.ConsolidationRequest[] memory requests = _consolidation(src.pubkey, target.pubkey);
         uint256 fee = IEtherFiNode(node).getConsolidationRequestFee();
-        uint256 before = CONSOLIDATION_REQUEST_PREDEPLOY.balance;
+        uint256 surplus = 1 ether;
 
-        vm.deal(elExiter, fee);
+        vm.deal(elExiter, fee + surplus);
+        uint256 nodeBefore = node.balance;
+
         vm.prank(elExiter);
-        etherFiNodesManager.requestConsolidation{value: fee}(requests);
+        etherFiNodesManager.requestConsolidation{value: fee + surplus}(requests);
 
-        assertEq(CONSOLIDATION_REQUEST_PREDEPLOY.balance, before + fee);
+        assertEq(elExiter.balance, surplus, "surplus refunded to caller");
+        assertEq(node.balance, nodeBefore, "nothing stranded on the node");
     }
 
     function test_podLess_consolidationRejectsInsufficientFee() public {
