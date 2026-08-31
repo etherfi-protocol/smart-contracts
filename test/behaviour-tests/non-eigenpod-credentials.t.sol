@@ -370,9 +370,8 @@ contract NonEigenPodCredentialsTest is PreludeTest {
     //-------------------------------  CONSOLIDATION  --------------------------------------
     //--------------------------------------------------------------------------------------
 
-    /// @dev A pod-less validator already holds 0x02, and EIP-7251's switch path needs 0x01, so
-    ///      src == target could only burn the fee and emit success for a request the CL drops.
-    function test_podLess_switchIsRejected() public {
+    /// @dev src == target switches the validator's credentials from 0x01 to 0x02.
+    function test_podLess_switchToCompoundingReachesPredeploy() public {
         address node = _newPodLessNode();
         TestValidator memory val = _validatorOn(node, 5);
 
@@ -380,12 +379,17 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         uint256 fee = IEtherFiNode(node).getConsolidationRequestFee();
         uint256 before = CONSOLIDATION_REQUEST_PREDEPLOY.balance;
 
+        vm.expectEmit(true, false, false, true, node);
+        emit IEtherFiNode.SwitchToCompoundingRequested(val.pubkeyHash);
+
+        vm.expectEmit(true, true, false, true, address(etherFiNodesManager));
+        emit IEtherFiNodesManager.ValidatorSwitchToCompoundingRequested(node, val.pubkeyHash, val.pubkey);
+
         vm.deal(elExiter, fee);
-        vm.expectRevert(IEtherFiNode.SwitchNotNeeded.selector);
         vm.prank(elExiter);
         etherFiNodesManager.requestConsolidation{value: fee}(requests);
 
-        assertEq(CONSOLIDATION_REQUEST_PREDEPLOY.balance, before, "no fee may be burned");
+        assertEq(CONSOLIDATION_REQUEST_PREDEPLOY.balance, before + fee);
     }
 
     /// @dev A true consolidation between two validators sharing the node.
@@ -444,25 +448,20 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         etherFiNodesManager.requestConsolidation{value: fee}(requests);
     }
 
-    /// @dev Surplus must come back to the caller. Left on the node it would later be swept into the
-    ///      liquidity pool as ETH never counted as out-of-LP, understating totalValueOutOfLp.
-    function test_podLess_surplusFeeIsRefundedToTheCaller() public {
+    /// @dev Switches move no value, so an unlinked legacy validator can still convert to 0x02.
+    function test_podLess_switchIsExemptFromTheTargetCheck() public {
         address node = _newPodLessNode();
-        TestValidator memory src = _validatorOn(node, 22);
-        TestValidator memory target = _validatorOn(node, 23);
+        TestValidator memory val = _validatorOn(node, 22);
 
-        IEigenPodTypes.ConsolidationRequest[] memory requests = _consolidation(src.pubkey, target.pubkey);
+        IEigenPodTypes.ConsolidationRequest[] memory requests = _consolidation(val.pubkey, val.pubkey);
         uint256 fee = IEtherFiNode(node).getConsolidationRequestFee();
-        uint256 surplus = 1 ether;
+        uint256 before = CONSOLIDATION_REQUEST_PREDEPLOY.balance;
 
-        vm.deal(elExiter, fee + surplus);
-        uint256 nodeBefore = node.balance;
-
+        vm.deal(elExiter, fee);
         vm.prank(elExiter);
-        etherFiNodesManager.requestConsolidation{value: fee + surplus}(requests);
+        etherFiNodesManager.requestConsolidation{value: fee}(requests);
 
-        assertEq(elExiter.balance, surplus, "surplus refunded to caller");
-        assertEq(node.balance, nodeBefore, "nothing stranded on the node");
+        assertEq(CONSOLIDATION_REQUEST_PREDEPLOY.balance, before + fee);
     }
 
     function test_podLess_consolidationRejectsInsufficientFee() public {

@@ -227,25 +227,6 @@ beacon chain before requesting a pod-less exit, and treat
 `ValidatorWithdrawalRequestSent` as "requested", never as "exiting". Reconcile
 against beacon state rather than against our own events.
 
-### I-08. Exit rate limit debits requested gwei, not withdrawn gwei
-
-`EXIT_REQUEST_LIMIT_ID` is debited from the request: `amountGwei` for a partial
-exit, a flat `FULL_EXIT_GWEI` (2,048 ETH) for a full one. The beacon chain does
-not necessarily move that much. Consensus caps a partial payout at the
-validator's real excess, `min(balance - 32 ETH - pending, amount)`, so a request
-for 100 ETH can withdraw 5 ETH and still burn 100 ETH of limit. Full exits carry
-the mismatch in reverse: always 2,048 ETH of limit even for a 32 ETH validator.
-
-A misbehaving `EXECUTOR_OPERATIONS_ROLE` key could drain the exit bucket without
-moving equivalent ETH by requesting inflated partial amounts against validators
-with little excess.
-
-**Accepted, not fixed.** This is griefing by a trusted role, not theft. Charging
-actual withdrawn gwei is not possible at request time: the amount is decided by
-consensus later, and the execution layer never learns it. The bucket holds
-~61,440 ETH and refills in about a day, so the ceiling on the griefing is a
-delay measured in hours, against a role that can already request exits directly.
-
 ## Out of scope
 
 - Rate limiter re-sizing for drain volume (STAKE-1835), a parameter change that

@@ -163,16 +163,15 @@ contract EtherFiNode is IEtherFiNode {
         // No pod: this node is the validators' withdrawal address, so it must call the predeploy itself
         uint256 fee = _predeployFee(CONSOLIDATION_REQUEST_PREDEPLOY);
         for (uint256 i = 0; i < requests.length; i++) {
+            _callPredeploy(CONSOLIDATION_REQUEST_PREDEPLOY, bytes.concat(requests[i].srcPubkey, requests[i].targetPubkey), fee);
+
             bytes32 srcPubkeyHash = _pubkeyHash(requests[i].srcPubkey);
             bytes32 targetPubkeyHash = _pubkeyHash(requests[i].targetPubkey);
-            // A pod-less validator is created with 0x02 credentials, and EIP-7251's switch path
-            // requires 0x01, so src == target could only burn the fee and emit a success event for
-            // a request the consensus layer drops. It also escapes the rate limiter, which counts
-            // switches as zero gwei.
-            if (srcPubkeyHash == targetPubkeyHash) revert SwitchNotNeeded();
-
-            _callPredeploy(CONSOLIDATION_REQUEST_PREDEPLOY, bytes.concat(requests[i].srcPubkey, requests[i].targetPubkey), fee);
-            emit ConsolidationRequested(srcPubkeyHash, targetPubkeyHash);
+            if (srcPubkeyHash == targetPubkeyHash) {
+                emit SwitchToCompoundingRequested(srcPubkeyHash);
+            } else {
+                emit ConsolidationRequested(srcPubkeyHash, targetPubkeyHash);
+            }
         }
     }
 

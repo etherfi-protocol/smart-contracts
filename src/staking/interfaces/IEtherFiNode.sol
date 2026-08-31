@@ -113,6 +113,5 @@ interface IEtherFiNode {
     error PredeployFailed();
     error NoEigenPod();
     error InvalidPubKeyLength();
-    error SwitchNotNeeded();
 
 }
