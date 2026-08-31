@@ -72,7 +72,9 @@ contract EtherFiNodesManager is
     ///   the eth to the liquidity pool in the event of ETH being accidentally sent there
     /// @dev Takes the node address: validators in the new regime pay out to the node itself.
     function sweepFunds(address node) external onlyHousekeepingOperations whenNotPaused {
-        // unvalidated: legacy nodes are not all backfilled into deployedEtherFiNodes
+        // Validated: an unvalidated address let a housekeeping key emit FundsTransferred for a
+        // transfer that never happened. Legacy nodes are backfilled into deployedEtherFiNodes.
+        _validateNode(node);
         uint256 balance = IEtherFiNode(node).sweepFunds();
         if (balance > 0) {
             emit FundsTransferred(node, balance);
