@@ -370,8 +370,9 @@ contract NonEigenPodCredentialsTest is PreludeTest {
     //-------------------------------  CONSOLIDATION  --------------------------------------
     //--------------------------------------------------------------------------------------
 
-    /// @dev src == target switches the validator's credentials from 0x01 to 0x02.
-    function test_podLess_switchToCompoundingReachesPredeploy() public {
+    /// @dev A pod-less validator already holds 0x02, and EIP-7251's switch path needs 0x01, so
+    ///      src == target could only burn the fee and emit success for a request the CL drops.
+    function test_podLess_switchIsRejected() public {
         address node = _newPodLessNode();
         TestValidator memory val = _validatorOn(node, 5);
 
@@ -379,17 +380,12 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         uint256 fee = IEtherFiNode(node).getConsolidationRequestFee();
         uint256 before = CONSOLIDATION_REQUEST_PREDEPLOY.balance;
 
-        vm.expectEmit(true, false, false, true, node);
-        emit IEtherFiNode.SwitchToCompoundingRequested(val.pubkeyHash);
-
-        vm.expectEmit(true, true, false, true, address(etherFiNodesManager));
-        emit IEtherFiNodesManager.ValidatorSwitchToCompoundingRequested(node, val.pubkeyHash, val.pubkey);
-
         vm.deal(elExiter, fee);
+        vm.expectRevert(IEtherFiNode.SwitchNotNeeded.selector);
         vm.prank(elExiter);
         etherFiNodesManager.requestConsolidation{value: fee}(requests);
 
-        assertEq(CONSOLIDATION_REQUEST_PREDEPLOY.balance, before + fee);
+        assertEq(CONSOLIDATION_REQUEST_PREDEPLOY.balance, before, "no fee may be burned");
     }
 
     /// @dev A true consolidation between two validators sharing the node.
