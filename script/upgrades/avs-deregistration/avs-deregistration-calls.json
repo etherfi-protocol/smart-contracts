@@ -1,0 +1,1720 @@
+{
+ "blockNumber": 25875000,
+ "note": "Enumerated and fork-verified at the pinned block. One row per adminForwardCall, in execution order. gasUsed is real anvil tx gas measured in sequence.",
+ "calls": [
+  {
+   "operatorId": 1,
+   "avs": "0x870679e138bcdf293b7ff14dd44b70fc97e12fc0",
+   "avsName": "EigenDA",
+   "target": "0x0baac79acd45a023e19345c352d8a7a83c4e5656",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 433521
+  },
+  {
+   "operatorId": 1,
+   "avs": "0xd25c2c5802198cb8541987b73a8db4c9bcae5cc7",
+   "avsName": "WitnessChain",
+   "target": "0xd25c2c5802198cb8541987b73a8db4c9bcae5cc7",
+   "selector": "0xa364f4da",
+   "fnSig": "deregisterOperatorFromAVS(address)",
+   "args": "0x000000000000000000000000fb487f216ca24162119c0c6ae015d680d7569c2f",
+   "gasUsed": 102313
+  },
+  {
+   "operatorId": 1,
+   "avs": "0xe8e59c6c8b56f2c178f63bcfc4ce5e5e2359c8fc",
+   "avsName": "Hyperlane",
+   "target": "0x272cf0bb70d3b4f79414e0823b426d2eafd48910",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 177083
+  },
+  {
+   "operatorId": 1,
+   "avs": "0x23221c5bb90c7c57ecc1e75513e2e4257673f0ef",
+   "avsName": "eoracle",
+   "target": "0x757e6f572afd8e111bd913d35314b5472c051ca8",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 437451
+  },
+  {
+   "operatorId": 1,
+   "avs": "0x22cac0e6a1465f043428e8aef737b3cb09d0eeda",
+   "avsName": "Lagrange zkMapReduce (ZKMR)",
+   "target": "0x8dcdcc50cc00fe898b037bf61ccf3bf9ba46f15c",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 108837
+  },
+  {
+   "operatorId": 1,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000000a",
+   "gasUsed": 236502
+  },
+  {
+   "operatorId": 1,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x0000000000000000000000000000000000000000000000000000000000002105",
+   "gasUsed": 178822
+  },
+  {
+   "operatorId": 1,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000a4b1",
+   "gasUsed": 194318
+  },
+  {
+   "operatorId": 1,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0xaff5edb1",
+   "fnSig": "deregister()",
+   "args": "0x",
+   "gasUsed": 144663
+  },
+  {
+   "operatorId": 1,
+   "avs": "0x1f2c296448f692af840843d993ffc0546619dcdb",
+   "avsName": "AltLayer MACH (MachServiceManager A)",
+   "target": "0x118610d207a32f10f4f7c3a1fefac5b3327c2bad",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 453434
+  },
+  {
+   "operatorId": 1,
+   "avs": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "avsName": "UniFi AVS (Puffer)",
+   "target": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "selector": "0x389517e4",
+   "fnSig": "startDeregisterOperator()",
+   "args": "0x",
+   "gasUsed": 119421
+  },
+  {
+   "operatorId": 1,
+   "avs": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "avsName": "UniFi AVS (Puffer)",
+   "target": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "selector": "0xe3672163",
+   "fnSig": "finishDeregisterOperator()",
+   "args": "0x",
+   "gasUsed": 113245
+  },
+  {
+   "operatorId": 1,
+   "avs": "0xef2a435e5ee44b2041100ef8cbc8ae035166606c",
+   "avsName": "Aligned Layer",
+   "target": "0xa8cc0749b4409c3c47012323e625aecba92f64b9",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 433174
+  },
+  {
+   "operatorId": 1,
+   "avs": "0xb3e069fd6dda251acbde09eda547e0ab207016ee",
+   "avsName": "Othentic AvsGovernance",
+   "target": "0xb3e069fd6dda251acbde09eda547e0ab207016ee",
+   "selector": "0x0399f004",
+   "fnSig": "unregisterAsOperatorFromEigenLayer()",
+   "args": "0x",
+   "gasUsed": 99954
+  },
+  {
+   "operatorId": 1,
+   "avs": "0x9fc952bdcbb7daca7d420fa55b942405b073a89d",
+   "avsName": "Brevis (BrevisEigen A)",
+   "target": "0x434621cfd8bcdbe8839a33c85ae2b2893a4d596c",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000020001000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 605884
+  },
+  {
+   "operatorId": 1,
+   "avs": "0x0328635ba5ff28476118595234b5b7236b906c0b",
+   "avsName": "Brevis (BrevisEigen B)",
+   "target": "0x8b83b9808de79d5eee97417bb14f82c41bccd6f0",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 433535
+  },
+  {
+   "operatorId": 1,
+   "avs": "0x6201bc0a699e3b10f324204e6f8ecdd0983de227",
+   "avsName": "EthGas Vision",
+   "target": "0xff94c9859e4b15341c1ba3e80cf80044ca2c4e76",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 192587
+  },
+  {
+   "operatorId": 2,
+   "avs": "0x23221c5bb90c7c57ecc1e75513e2e4257673f0ef",
+   "avsName": "eoracle",
+   "target": "0x757e6f572afd8e111bd913d35314b5472c051ca8",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 437451
+  },
+  {
+   "operatorId": 2,
+   "avs": "0xd25c2c5802198cb8541987b73a8db4c9bcae5cc7",
+   "avsName": "WitnessChain",
+   "target": "0xd25c2c5802198cb8541987b73a8db4c9bcae5cc7",
+   "selector": "0xa364f4da",
+   "fnSig": "deregisterOperatorFromAVS(address)",
+   "args": "0x0000000000000000000000004bd479a34450d0cb1f5ef16a877bee47e1e4cdb9",
+   "gasUsed": 102313
+  },
+  {
+   "operatorId": 2,
+   "avs": "0xe8e59c6c8b56f2c178f63bcfc4ce5e5e2359c8fc",
+   "avsName": "Hyperlane",
+   "target": "0x272cf0bb70d3b4f79414e0823b426d2eafd48910",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 177083
+  },
+  {
+   "operatorId": 2,
+   "avs": "0x22cac0e6a1465f043428e8aef737b3cb09d0eeda",
+   "avsName": "Lagrange zkMapReduce (ZKMR)",
+   "target": "0x8dcdcc50cc00fe898b037bf61ccf3bf9ba46f15c",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 108837
+  },
+  {
+   "operatorId": 2,
+   "avs": "0x1f2c296448f692af840843d993ffc0546619dcdb",
+   "avsName": "AltLayer MACH (MachServiceManager A)",
+   "target": "0x118610d207a32f10f4f7c3a1fefac5b3327c2bad",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 453434
+  },
+  {
+   "operatorId": 2,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000000a",
+   "gasUsed": 251724
+  },
+  {
+   "operatorId": 2,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x0000000000000000000000000000000000000000000000000000000000002105",
+   "gasUsed": 229562
+  },
+  {
+   "operatorId": 2,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000a4b1",
+   "gasUsed": 204466
+  },
+  {
+   "operatorId": 2,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0xaff5edb1",
+   "fnSig": "deregister()",
+   "args": "0x",
+   "gasUsed": 144663
+  },
+  {
+   "operatorId": 2,
+   "avs": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "avsName": "UniFi AVS (Puffer)",
+   "target": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "selector": "0x389517e4",
+   "fnSig": "startDeregisterOperator()",
+   "args": "0x",
+   "gasUsed": 119421
+  },
+  {
+   "operatorId": 2,
+   "avs": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "avsName": "UniFi AVS (Puffer)",
+   "target": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "selector": "0xe3672163",
+   "fnSig": "finishDeregisterOperator()",
+   "args": "0x",
+   "gasUsed": 113245
+  },
+  {
+   "operatorId": 3,
+   "avs": "0x870679e138bcdf293b7ff14dd44b70fc97e12fc0",
+   "avsName": "EigenDA",
+   "target": "0x0baac79acd45a023e19345c352d8a7a83c4e5656",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000020001000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 674731
+  },
+  {
+   "operatorId": 3,
+   "avs": "0x71a77037870169d47aad6c2c9360861a4c0df2bf",
+   "avsName": "AltLayer MACH (MachServiceManager B)",
+   "target": "0x561be1ab42170a19f31645f774e6e3862b2139aa",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 435741
+  },
+  {
+   "operatorId": 3,
+   "avs": "0x6026b61bdd2252160691cb3f6005b6b72e0ec044",
+   "avsName": "AltLayer MACH (MachServiceManager C)",
+   "target": "0x6e32dd4169825337b54236b9355910b83e51e5a8",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 453412
+  },
+  {
+   "operatorId": 3,
+   "avs": "0x23221c5bb90c7c57ecc1e75513e2e4257673f0ef",
+   "avsName": "eoracle",
+   "target": "0x757e6f572afd8e111bd913d35314b5472c051ca8",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 437451
+  },
+  {
+   "operatorId": 3,
+   "avs": "0xd25c2c5802198cb8541987b73a8db4c9bcae5cc7",
+   "avsName": "WitnessChain",
+   "target": "0xd25c2c5802198cb8541987b73a8db4c9bcae5cc7",
+   "selector": "0xa364f4da",
+   "fnSig": "deregisterOperatorFromAVS(address)",
+   "args": "0x000000000000000000000000dcae4faf7c7d0f4a78abe147244c6e9d60cfd202",
+   "gasUsed": 102313
+  },
+  {
+   "operatorId": 3,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000000a",
+   "gasUsed": 213669
+  },
+  {
+   "operatorId": 3,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x0000000000000000000000000000000000000000000000000000000000002105",
+   "gasUsed": 201655
+  },
+  {
+   "operatorId": 3,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000a4b1",
+   "gasUsed": 171485
+  },
+  {
+   "operatorId": 3,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0xaff5edb1",
+   "fnSig": "deregister()",
+   "args": "0x",
+   "gasUsed": 144663
+  },
+  {
+   "operatorId": 3,
+   "avs": "0x22cac0e6a1465f043428e8aef737b3cb09d0eeda",
+   "avsName": "Lagrange zkMapReduce (ZKMR)",
+   "target": "0x8dcdcc50cc00fe898b037bf61ccf3bf9ba46f15c",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 108837
+  },
+  {
+   "operatorId": 3,
+   "avs": "0x1f2c296448f692af840843d993ffc0546619dcdb",
+   "avsName": "AltLayer MACH (MachServiceManager A)",
+   "target": "0x118610d207a32f10f4f7c3a1fefac5b3327c2bad",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 453434
+  },
+  {
+   "operatorId": 3,
+   "avs": "0xe5445838c475a2980e6a88054ff1514230b83aeb",
+   "avsName": "Automata MultiProver",
+   "target": "0x414696e4f7f06273973e89bfd3499e8666d63bd4",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 435638
+  },
+  {
+   "operatorId": 3,
+   "avs": "0xe8e59c6c8b56f2c178f63bcfc4ce5e5e2359c8fc",
+   "avsName": "Hyperlane",
+   "target": "0x272cf0bb70d3b4f79414e0823b426d2eafd48910",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 177083
+  },
+  {
+   "operatorId": 3,
+   "avs": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "avsName": "UniFi AVS (Puffer)",
+   "target": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "selector": "0x389517e4",
+   "fnSig": "startDeregisterOperator()",
+   "args": "0x",
+   "gasUsed": 119421
+  },
+  {
+   "operatorId": 3,
+   "avs": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "avsName": "UniFi AVS (Puffer)",
+   "target": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "selector": "0xe3672163",
+   "fnSig": "finishDeregisterOperator()",
+   "args": "0x",
+   "gasUsed": 113245
+  },
+  {
+   "operatorId": 3,
+   "avs": "0xef2a435e5ee44b2041100ef8cbc8ae035166606c",
+   "avsName": "Aligned Layer",
+   "target": "0xa8cc0749b4409c3c47012323e625aecba92f64b9",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 433174
+  },
+  {
+   "operatorId": 3,
+   "avs": "0xb3e069fd6dda251acbde09eda547e0ab207016ee",
+   "avsName": "Othentic AvsGovernance",
+   "target": "0xb3e069fd6dda251acbde09eda547e0ab207016ee",
+   "selector": "0x0399f004",
+   "fnSig": "unregisterAsOperatorFromEigenLayer()",
+   "args": "0x",
+   "gasUsed": 99954
+  },
+  {
+   "operatorId": 4,
+   "avs": "0x22cac0e6a1465f043428e8aef737b3cb09d0eeda",
+   "avsName": "Lagrange zkMapReduce (ZKMR)",
+   "target": "0x8dcdcc50cc00fe898b037bf61ccf3bf9ba46f15c",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 108837
+  },
+  {
+   "operatorId": 4,
+   "avs": "0xd25c2c5802198cb8541987b73a8db4c9bcae5cc7",
+   "avsName": "WitnessChain",
+   "target": "0xd25c2c5802198cb8541987b73a8db4c9bcae5cc7",
+   "selector": "0xa364f4da",
+   "fnSig": "deregisterOperatorFromAVS(address)",
+   "args": "0x000000000000000000000000ea50bb6735703422d2e053452f1f28bff17da51f",
+   "gasUsed": 102313
+  },
+  {
+   "operatorId": 4,
+   "avs": "0xe8e59c6c8b56f2c178f63bcfc4ce5e5e2359c8fc",
+   "avsName": "Hyperlane",
+   "target": "0x272cf0bb70d3b4f79414e0823b426d2eafd48910",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 177083
+  },
+  {
+   "operatorId": 4,
+   "avs": "0x23221c5bb90c7c57ecc1e75513e2e4257673f0ef",
+   "avsName": "eoracle",
+   "target": "0x757e6f572afd8e111bd913d35314b5472c051ca8",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 437451
+  },
+  {
+   "operatorId": 4,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000000a",
+   "gasUsed": 221280
+  },
+  {
+   "operatorId": 4,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x0000000000000000000000000000000000000000000000000000000000002105",
+   "gasUsed": 221951
+  },
+  {
+   "operatorId": 4,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000a4b1",
+   "gasUsed": 181633
+  },
+  {
+   "operatorId": 4,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0xaff5edb1",
+   "fnSig": "deregister()",
+   "args": "0x",
+   "gasUsed": 144663
+  },
+  {
+   "operatorId": 4,
+   "avs": "0x1f2c296448f692af840843d993ffc0546619dcdb",
+   "avsName": "AltLayer MACH (MachServiceManager A)",
+   "target": "0x118610d207a32f10f4f7c3a1fefac5b3327c2bad",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 453434
+  },
+  {
+   "operatorId": 4,
+   "avs": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "avsName": "UniFi AVS (Puffer)",
+   "target": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "selector": "0x389517e4",
+   "fnSig": "startDeregisterOperator()",
+   "args": "0x",
+   "gasUsed": 119421
+  },
+  {
+   "operatorId": 4,
+   "avs": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "avsName": "UniFi AVS (Puffer)",
+   "target": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "selector": "0xe3672163",
+   "fnSig": "finishDeregisterOperator()",
+   "args": "0x",
+   "gasUsed": 113245
+  },
+  {
+   "operatorId": 4,
+   "avs": "0xef2a435e5ee44b2041100ef8cbc8ae035166606c",
+   "avsName": "Aligned Layer",
+   "target": "0xa8cc0749b4409c3c47012323e625aecba92f64b9",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 433174
+  },
+  {
+   "operatorId": 4,
+   "avs": "0xb3e069fd6dda251acbde09eda547e0ab207016ee",
+   "avsName": "Othentic AvsGovernance",
+   "target": "0xb3e069fd6dda251acbde09eda547e0ab207016ee",
+   "selector": "0x0399f004",
+   "fnSig": "unregisterAsOperatorFromEigenLayer()",
+   "args": "0x",
+   "gasUsed": 99954
+  },
+  {
+   "operatorId": 4,
+   "avs": "0x6201bc0a699e3b10f324204e6f8ecdd0983de227",
+   "avsName": "EthGas Vision",
+   "target": "0xff94c9859e4b15341c1ba3e80cf80044ca2c4e76",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 192587
+  },
+  {
+   "operatorId": 5,
+   "avs": "0x870679e138bcdf293b7ff14dd44b70fc97e12fc0",
+   "avsName": "EigenDA",
+   "target": "0x0baac79acd45a023e19345c352d8a7a83c4e5656",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 433521
+  },
+  {
+   "operatorId": 5,
+   "avs": "0x23221c5bb90c7c57ecc1e75513e2e4257673f0ef",
+   "avsName": "eoracle",
+   "target": "0x757e6f572afd8e111bd913d35314b5472c051ca8",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 437451
+  },
+  {
+   "operatorId": 5,
+   "avs": "0xe8e59c6c8b56f2c178f63bcfc4ce5e5e2359c8fc",
+   "avsName": "Hyperlane",
+   "target": "0x272cf0bb70d3b4f79414e0823b426d2eafd48910",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 177083
+  },
+  {
+   "operatorId": 5,
+   "avs": "0xd25c2c5802198cb8541987b73a8db4c9bcae5cc7",
+   "avsName": "WitnessChain",
+   "target": "0xd25c2c5802198cb8541987b73a8db4c9bcae5cc7",
+   "selector": "0xa364f4da",
+   "fnSig": "deregisterOperatorFromAVS(address)",
+   "args": "0x00000000000000000000000017c5f0cc30bd57b308b7f62600b415fd1335e1fe",
+   "gasUsed": 102301
+  },
+  {
+   "operatorId": 5,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000000a",
+   "gasUsed": 216206
+  },
+  {
+   "operatorId": 5,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x0000000000000000000000000000000000000000000000000000000000002105",
+   "gasUsed": 237173
+  },
+  {
+   "operatorId": 5,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000a4b1",
+   "gasUsed": 196855
+  },
+  {
+   "operatorId": 5,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0xaff5edb1",
+   "fnSig": "deregister()",
+   "args": "0x",
+   "gasUsed": 144663
+  },
+  {
+   "operatorId": 5,
+   "avs": "0x22cac0e6a1465f043428e8aef737b3cb09d0eeda",
+   "avsName": "Lagrange zkMapReduce (ZKMR)",
+   "target": "0x8dcdcc50cc00fe898b037bf61ccf3bf9ba46f15c",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 108837
+  },
+  {
+   "operatorId": 5,
+   "avs": "0x1f2c296448f692af840843d993ffc0546619dcdb",
+   "avsName": "AltLayer MACH (MachServiceManager A)",
+   "target": "0x118610d207a32f10f4f7c3a1fefac5b3327c2bad",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 453434
+  },
+  {
+   "operatorId": 5,
+   "avs": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "avsName": "UniFi AVS (Puffer)",
+   "target": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "selector": "0x389517e4",
+   "fnSig": "startDeregisterOperator()",
+   "args": "0x",
+   "gasUsed": 119421
+  },
+  {
+   "operatorId": 5,
+   "avs": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "avsName": "UniFi AVS (Puffer)",
+   "target": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "selector": "0xe3672163",
+   "fnSig": "finishDeregisterOperator()",
+   "args": "0x",
+   "gasUsed": 113245
+  },
+  {
+   "operatorId": 6,
+   "avs": "0x23221c5bb90c7c57ecc1e75513e2e4257673f0ef",
+   "avsName": "eoracle",
+   "target": "0x757e6f572afd8e111bd913d35314b5472c051ca8",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 437451
+  },
+  {
+   "operatorId": 6,
+   "avs": "0xe8e59c6c8b56f2c178f63bcfc4ce5e5e2359c8fc",
+   "avsName": "Hyperlane",
+   "target": "0x272cf0bb70d3b4f79414e0823b426d2eafd48910",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 177083
+  },
+  {
+   "operatorId": 6,
+   "avs": "0x22cac0e6a1465f043428e8aef737b3cb09d0eeda",
+   "avsName": "Lagrange zkMapReduce (ZKMR)",
+   "target": "0x8dcdcc50cc00fe898b037bf61ccf3bf9ba46f15c",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 108837
+  },
+  {
+   "operatorId": 6,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000000a",
+   "gasUsed": 249187
+  },
+  {
+   "operatorId": 6,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x0000000000000000000000000000000000000000000000000000000000002105",
+   "gasUsed": 216877
+  },
+  {
+   "operatorId": 6,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000a4b1",
+   "gasUsed": 176559
+  },
+  {
+   "operatorId": 6,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0xaff5edb1",
+   "fnSig": "deregister()",
+   "args": "0x",
+   "gasUsed": 144663
+  },
+  {
+   "operatorId": 6,
+   "avs": "0xd25c2c5802198cb8541987b73a8db4c9bcae5cc7",
+   "avsName": "WitnessChain",
+   "target": "0xd25c2c5802198cb8541987b73a8db4c9bcae5cc7",
+   "selector": "0xa364f4da",
+   "fnSig": "deregisterOperatorFromAVS(address)",
+   "args": "0x000000000000000000000000e0156ef2905c2ea8b1f7571caee85fdf1657ab38",
+   "gasUsed": 102313
+  },
+  {
+   "operatorId": 6,
+   "avs": "0x1f2c296448f692af840843d993ffc0546619dcdb",
+   "avsName": "AltLayer MACH (MachServiceManager A)",
+   "target": "0x118610d207a32f10f4f7c3a1fefac5b3327c2bad",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 453434
+  },
+  {
+   "operatorId": 6,
+   "avs": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "avsName": "UniFi AVS (Puffer)",
+   "target": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "selector": "0x389517e4",
+   "fnSig": "startDeregisterOperator()",
+   "args": "0x",
+   "gasUsed": 119421
+  },
+  {
+   "operatorId": 6,
+   "avs": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "avsName": "UniFi AVS (Puffer)",
+   "target": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "selector": "0xe3672163",
+   "fnSig": "finishDeregisterOperator()",
+   "args": "0x",
+   "gasUsed": 113245
+  },
+  {
+   "operatorId": 6,
+   "avs": "0xb3e069fd6dda251acbde09eda547e0ab207016ee",
+   "avsName": "Othentic AvsGovernance",
+   "target": "0xb3e069fd6dda251acbde09eda547e0ab207016ee",
+   "selector": "0x0399f004",
+   "fnSig": "unregisterAsOperatorFromEigenLayer()",
+   "args": "0x",
+   "gasUsed": 99954
+  },
+  {
+   "operatorId": 6,
+   "avs": "0xef2a435e5ee44b2041100ef8cbc8ae035166606c",
+   "avsName": "Aligned Layer",
+   "target": "0xa8cc0749b4409c3c47012323e625aecba92f64b9",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 433174
+  },
+  {
+   "operatorId": 6,
+   "avs": "0x6201bc0a699e3b10f324204e6f8ecdd0983de227",
+   "avsName": "EthGas Vision",
+   "target": "0xff94c9859e4b15341c1ba3e80cf80044ca2c4e76",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 192587
+  },
+  {
+   "operatorId": 7,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000000a",
+   "gasUsed": 216206
+  },
+  {
+   "operatorId": 7,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x0000000000000000000000000000000000000000000000000000000000002105",
+   "gasUsed": 232373
+  },
+  {
+   "operatorId": 7,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000a4b1",
+   "gasUsed": 171485
+  },
+  {
+   "operatorId": 7,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0xaff5edb1",
+   "fnSig": "deregister()",
+   "args": "0x",
+   "gasUsed": 144663
+  },
+  {
+   "operatorId": 7,
+   "avs": "0x22cac0e6a1465f043428e8aef737b3cb09d0eeda",
+   "avsName": "Lagrange zkMapReduce (ZKMR)",
+   "target": "0x8dcdcc50cc00fe898b037bf61ccf3bf9ba46f15c",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 108837
+  },
+  {
+   "operatorId": 7,
+   "avs": "0x23221c5bb90c7c57ecc1e75513e2e4257673f0ef",
+   "avsName": "eoracle",
+   "target": "0x757e6f572afd8e111bd913d35314b5472c051ca8",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 437451
+  },
+  {
+   "operatorId": 7,
+   "avs": "0xe8e59c6c8b56f2c178f63bcfc4ce5e5e2359c8fc",
+   "avsName": "Hyperlane",
+   "target": "0x272cf0bb70d3b4f79414e0823b426d2eafd48910",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 177083
+  },
+  {
+   "operatorId": 7,
+   "avs": "0xd25c2c5802198cb8541987b73a8db4c9bcae5cc7",
+   "avsName": "WitnessChain",
+   "target": "0xd25c2c5802198cb8541987b73a8db4c9bcae5cc7",
+   "selector": "0xa364f4da",
+   "fnSig": "deregisterOperatorFromAVS(address)",
+   "args": "0x0000000000000000000000008e7e7176d3470c6c2efe71004f496a6ef422a56f",
+   "gasUsed": 102301
+  },
+  {
+   "operatorId": 7,
+   "avs": "0x1f2c296448f692af840843d993ffc0546619dcdb",
+   "avsName": "AltLayer MACH (MachServiceManager A)",
+   "target": "0x118610d207a32f10f4f7c3a1fefac5b3327c2bad",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 453434
+  },
+  {
+   "operatorId": 7,
+   "avs": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "avsName": "UniFi AVS (Puffer)",
+   "target": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "selector": "0x389517e4",
+   "fnSig": "startDeregisterOperator()",
+   "args": "0x",
+   "gasUsed": 119421
+  },
+  {
+   "operatorId": 7,
+   "avs": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "avsName": "UniFi AVS (Puffer)",
+   "target": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "selector": "0xe3672163",
+   "fnSig": "finishDeregisterOperator()",
+   "args": "0x",
+   "gasUsed": 113245
+  },
+  {
+   "operatorId": 8,
+   "avs": "0x870679e138bcdf293b7ff14dd44b70fc97e12fc0",
+   "avsName": "EigenDA",
+   "target": "0x0baac79acd45a023e19345c352d8a7a83c4e5656",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 433521
+  },
+  {
+   "operatorId": 8,
+   "avs": "0x23221c5bb90c7c57ecc1e75513e2e4257673f0ef",
+   "avsName": "eoracle",
+   "target": "0x757e6f572afd8e111bd913d35314b5472c051ca8",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 437451
+  },
+  {
+   "operatorId": 8,
+   "avs": "0xd25c2c5802198cb8541987b73a8db4c9bcae5cc7",
+   "avsName": "WitnessChain",
+   "target": "0xd25c2c5802198cb8541987b73a8db4c9bcae5cc7",
+   "selector": "0xa364f4da",
+   "fnSig": "deregisterOperatorFromAVS(address)",
+   "args": "0x0000000000000000000000005b9b3cf0202a1a3dc8f527257b7e6002d23d8c85",
+   "gasUsed": 102313
+  },
+  {
+   "operatorId": 8,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000000a",
+   "gasUsed": 208595
+  },
+  {
+   "operatorId": 8,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x0000000000000000000000000000000000000000000000000000000000002105",
+   "gasUsed": 196581
+  },
+  {
+   "operatorId": 8,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000a4b1",
+   "gasUsed": 199392
+  },
+  {
+   "operatorId": 8,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0xaff5edb1",
+   "fnSig": "deregister()",
+   "args": "0x",
+   "gasUsed": 144663
+  },
+  {
+   "operatorId": 8,
+   "avs": "0x22cac0e6a1465f043428e8aef737b3cb09d0eeda",
+   "avsName": "Lagrange zkMapReduce (ZKMR)",
+   "target": "0x8dcdcc50cc00fe898b037bf61ccf3bf9ba46f15c",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 108837
+  },
+  {
+   "operatorId": 8,
+   "avs": "0x1f2c296448f692af840843d993ffc0546619dcdb",
+   "avsName": "AltLayer MACH (MachServiceManager A)",
+   "target": "0x118610d207a32f10f4f7c3a1fefac5b3327c2bad",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 453434
+  },
+  {
+   "operatorId": 8,
+   "avs": "0xe5445838c475a2980e6a88054ff1514230b83aeb",
+   "avsName": "Automata MultiProver",
+   "target": "0x414696e4f7f06273973e89bfd3499e8666d63bd4",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 435638
+  },
+  {
+   "operatorId": 8,
+   "avs": "0xe8e59c6c8b56f2c178f63bcfc4ce5e5e2359c8fc",
+   "avsName": "Hyperlane",
+   "target": "0x272cf0bb70d3b4f79414e0823b426d2eafd48910",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 177083
+  },
+  {
+   "operatorId": 8,
+   "avs": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "avsName": "UniFi AVS (Puffer)",
+   "target": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "selector": "0x389517e4",
+   "fnSig": "startDeregisterOperator()",
+   "args": "0x",
+   "gasUsed": 119421
+  },
+  {
+   "operatorId": 8,
+   "avs": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "avsName": "UniFi AVS (Puffer)",
+   "target": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "selector": "0xe3672163",
+   "fnSig": "finishDeregisterOperator()",
+   "args": "0x",
+   "gasUsed": 113245
+  },
+  {
+   "operatorId": 8,
+   "avs": "0xef2a435e5ee44b2041100ef8cbc8ae035166606c",
+   "avsName": "Aligned Layer",
+   "target": "0xa8cc0749b4409c3c47012323e625aecba92f64b9",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 433174
+  },
+  {
+   "operatorId": 8,
+   "avs": "0xb3e069fd6dda251acbde09eda547e0ab207016ee",
+   "avsName": "Othentic AvsGovernance",
+   "target": "0xb3e069fd6dda251acbde09eda547e0ab207016ee",
+   "selector": "0x0399f004",
+   "fnSig": "unregisterAsOperatorFromEigenLayer()",
+   "args": "0x",
+   "gasUsed": 99954
+  },
+  {
+   "operatorId": 9,
+   "avs": "0xd25c2c5802198cb8541987b73a8db4c9bcae5cc7",
+   "avsName": "WitnessChain",
+   "target": "0xd25c2c5802198cb8541987b73a8db4c9bcae5cc7",
+   "selector": "0xa364f4da",
+   "fnSig": "deregisterOperatorFromAVS(address)",
+   "args": "0x000000000000000000000000d972a58b6a582954e578455e4752b12f2c8fcdbc",
+   "gasUsed": 102313
+  },
+  {
+   "operatorId": 9,
+   "avs": "0x23221c5bb90c7c57ecc1e75513e2e4257673f0ef",
+   "avsName": "eoracle",
+   "target": "0x757e6f572afd8e111bd913d35314b5472c051ca8",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 437451
+  },
+  {
+   "operatorId": 9,
+   "avs": "0xe8e59c6c8b56f2c178f63bcfc4ce5e5e2359c8fc",
+   "avsName": "Hyperlane",
+   "target": "0x272cf0bb70d3b4f79414e0823b426d2eafd48910",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 177083
+  },
+  {
+   "operatorId": 9,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000000a",
+   "gasUsed": 216206
+  },
+  {
+   "operatorId": 9,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x0000000000000000000000000000000000000000000000000000000000002105",
+   "gasUsed": 229562
+  },
+  {
+   "operatorId": 9,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000a4b1",
+   "gasUsed": 191781
+  },
+  {
+   "operatorId": 9,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0xaff5edb1",
+   "fnSig": "deregister()",
+   "args": "0x",
+   "gasUsed": 144663
+  },
+  {
+   "operatorId": 9,
+   "avs": "0x22cac0e6a1465f043428e8aef737b3cb09d0eeda",
+   "avsName": "Lagrange zkMapReduce (ZKMR)",
+   "target": "0x8dcdcc50cc00fe898b037bf61ccf3bf9ba46f15c",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 108837
+  },
+  {
+   "operatorId": 9,
+   "avs": "0x1f2c296448f692af840843d993ffc0546619dcdb",
+   "avsName": "AltLayer MACH (MachServiceManager A)",
+   "target": "0x118610d207a32f10f4f7c3a1fefac5b3327c2bad",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 453434
+  },
+  {
+   "operatorId": 9,
+   "avs": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "avsName": "UniFi AVS (Puffer)",
+   "target": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "selector": "0x389517e4",
+   "fnSig": "startDeregisterOperator()",
+   "args": "0x",
+   "gasUsed": 119421
+  },
+  {
+   "operatorId": 9,
+   "avs": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "avsName": "UniFi AVS (Puffer)",
+   "target": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "selector": "0xe3672163",
+   "fnSig": "finishDeregisterOperator()",
+   "args": "0x",
+   "gasUsed": 113245
+  },
+  {
+   "operatorId": 9,
+   "avs": "0x6201bc0a699e3b10f324204e6f8ecdd0983de227",
+   "avsName": "EthGas Vision",
+   "target": "0xff94c9859e4b15341c1ba3e80cf80044ca2c4e76",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 192587
+  },
+  {
+   "operatorId": 10,
+   "avs": "0x870679e138bcdf293b7ff14dd44b70fc97e12fc0",
+   "avsName": "EigenDA",
+   "target": "0x0baac79acd45a023e19345c352d8a7a83c4e5656",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 433521
+  },
+  {
+   "operatorId": 10,
+   "avs": "0x23221c5bb90c7c57ecc1e75513e2e4257673f0ef",
+   "avsName": "eoracle",
+   "target": "0x757e6f572afd8e111bd913d35314b5472c051ca8",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 437451
+  },
+  {
+   "operatorId": 10,
+   "avs": "0x22cac0e6a1465f043428e8aef737b3cb09d0eeda",
+   "avsName": "Lagrange zkMapReduce (ZKMR)",
+   "target": "0x8dcdcc50cc00fe898b037bf61ccf3bf9ba46f15c",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 108837
+  },
+  {
+   "operatorId": 10,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000000a",
+   "gasUsed": 223817
+  },
+  {
+   "operatorId": 10,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x0000000000000000000000000000000000000000000000000000000000002105",
+   "gasUsed": 211803
+  },
+  {
+   "operatorId": 10,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000a4b1",
+   "gasUsed": 179096
+  },
+  {
+   "operatorId": 10,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0xaff5edb1",
+   "fnSig": "deregister()",
+   "args": "0x",
+   "gasUsed": 144663
+  },
+  {
+   "operatorId": 10,
+   "avs": "0xe8e59c6c8b56f2c178f63bcfc4ce5e5e2359c8fc",
+   "avsName": "Hyperlane",
+   "target": "0x272cf0bb70d3b4f79414e0823b426d2eafd48910",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 177083
+  },
+  {
+   "operatorId": 10,
+   "avs": "0x1f2c296448f692af840843d993ffc0546619dcdb",
+   "avsName": "AltLayer MACH (MachServiceManager A)",
+   "target": "0x118610d207a32f10f4f7c3a1fefac5b3327c2bad",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 453434
+  },
+  {
+   "operatorId": 10,
+   "avs": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "avsName": "UniFi AVS (Puffer)",
+   "target": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "selector": "0x389517e4",
+   "fnSig": "startDeregisterOperator()",
+   "args": "0x",
+   "gasUsed": 119421
+  },
+  {
+   "operatorId": 10,
+   "avs": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "avsName": "UniFi AVS (Puffer)",
+   "target": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "selector": "0xe3672163",
+   "fnSig": "finishDeregisterOperator()",
+   "args": "0x",
+   "gasUsed": 113245
+  },
+  {
+   "operatorId": 10,
+   "avs": "0xd25c2c5802198cb8541987b73a8db4c9bcae5cc7",
+   "avsName": "WitnessChain",
+   "target": "0xd25c2c5802198cb8541987b73a8db4c9bcae5cc7",
+   "selector": "0xa364f4da",
+   "fnSig": "deregisterOperatorFromAVS(address)",
+   "args": "0x00000000000000000000000067943ae8e07bfc9f5c9a90d608f7923d9c21e051",
+   "gasUsed": 102313
+  },
+  {
+   "operatorId": 10,
+   "avs": "0xb3e069fd6dda251acbde09eda547e0ab207016ee",
+   "avsName": "Othentic AvsGovernance",
+   "target": "0xb3e069fd6dda251acbde09eda547e0ab207016ee",
+   "selector": "0x0399f004",
+   "fnSig": "unregisterAsOperatorFromEigenLayer()",
+   "args": "0x",
+   "gasUsed": 99954
+  },
+  {
+   "operatorId": 10,
+   "avs": "0xef2a435e5ee44b2041100ef8cbc8ae035166606c",
+   "avsName": "Aligned Layer",
+   "target": "0xa8cc0749b4409c3c47012323e625aecba92f64b9",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 433174
+  },
+  {
+   "operatorId": 10,
+   "avs": "0x6201bc0a699e3b10f324204e6f8ecdd0983de227",
+   "avsName": "EthGas Vision",
+   "target": "0xff94c9859e4b15341c1ba3e80cf80044ca2c4e76",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 192587
+  },
+  {
+   "operatorId": 11,
+   "avs": "0x870679e138bcdf293b7ff14dd44b70fc97e12fc0",
+   "avsName": "EigenDA",
+   "target": "0x0baac79acd45a023e19345c352d8a7a83c4e5656",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 433521
+  },
+  {
+   "operatorId": 11,
+   "avs": "0x23221c5bb90c7c57ecc1e75513e2e4257673f0ef",
+   "avsName": "eoracle",
+   "target": "0x757e6f572afd8e111bd913d35314b5472c051ca8",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 437451
+  },
+  {
+   "operatorId": 11,
+   "avs": "0xd25c2c5802198cb8541987b73a8db4c9bcae5cc7",
+   "avsName": "WitnessChain",
+   "target": "0xd25c2c5802198cb8541987b73a8db4c9bcae5cc7",
+   "selector": "0xa364f4da",
+   "fnSig": "deregisterOperatorFromAVS(address)",
+   "args": "0x0000000000000000000000005d4b5ef127c545e5bf8e247f9fcd4e75a0a366b4",
+   "gasUsed": 102313
+  },
+  {
+   "operatorId": 11,
+   "avs": "0x22cac0e6a1465f043428e8aef737b3cb09d0eeda",
+   "avsName": "Lagrange zkMapReduce (ZKMR)",
+   "target": "0x8dcdcc50cc00fe898b037bf61ccf3bf9ba46f15c",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 108837
+  },
+  {
+   "operatorId": 11,
+   "avs": "0xe8e59c6c8b56f2c178f63bcfc4ce5e5e2359c8fc",
+   "avsName": "Hyperlane",
+   "target": "0x272cf0bb70d3b4f79414e0823b426d2eafd48910",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 177083
+  },
+  {
+   "operatorId": 11,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000000a",
+   "gasUsed": 226354
+  },
+  {
+   "operatorId": 11,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x0000000000000000000000000000000000000000000000000000000000002105",
+   "gasUsed": 188970
+  },
+  {
+   "operatorId": 11,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000a4b1",
+   "gasUsed": 204466
+  },
+  {
+   "operatorId": 11,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0xaff5edb1",
+   "fnSig": "deregister()",
+   "args": "0x",
+   "gasUsed": 144663
+  },
+  {
+   "operatorId": 11,
+   "avs": "0x1f2c296448f692af840843d993ffc0546619dcdb",
+   "avsName": "AltLayer MACH (MachServiceManager A)",
+   "target": "0x118610d207a32f10f4f7c3a1fefac5b3327c2bad",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 453434
+  },
+  {
+   "operatorId": 11,
+   "avs": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "avsName": "UniFi AVS (Puffer)",
+   "target": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "selector": "0x389517e4",
+   "fnSig": "startDeregisterOperator()",
+   "args": "0x",
+   "gasUsed": 119421
+  },
+  {
+   "operatorId": 11,
+   "avs": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "avsName": "UniFi AVS (Puffer)",
+   "target": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "selector": "0xe3672163",
+   "fnSig": "finishDeregisterOperator()",
+   "args": "0x",
+   "gasUsed": 113245
+  },
+  {
+   "operatorId": 11,
+   "avs": "0xb3e069fd6dda251acbde09eda547e0ab207016ee",
+   "avsName": "Othentic AvsGovernance",
+   "target": "0xb3e069fd6dda251acbde09eda547e0ab207016ee",
+   "selector": "0x0399f004",
+   "fnSig": "unregisterAsOperatorFromEigenLayer()",
+   "args": "0x",
+   "gasUsed": 99954
+  },
+  {
+   "operatorId": 11,
+   "avs": "0xef2a435e5ee44b2041100ef8cbc8ae035166606c",
+   "avsName": "Aligned Layer",
+   "target": "0xa8cc0749b4409c3c47012323e625aecba92f64b9",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 433174
+  },
+  {
+   "operatorId": 11,
+   "avs": "0x6201bc0a699e3b10f324204e6f8ecdd0983de227",
+   "avsName": "EthGas Vision",
+   "target": "0xff94c9859e4b15341c1ba3e80cf80044ca2c4e76",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 192587
+  },
+  {
+   "operatorId": 12,
+   "avs": "0x870679e138bcdf293b7ff14dd44b70fc97e12fc0",
+   "avsName": "EigenDA",
+   "target": "0x0baac79acd45a023e19345c352d8a7a83c4e5656",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010100000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 433533
+  },
+  {
+   "operatorId": 12,
+   "avs": "0x23221c5bb90c7c57ecc1e75513e2e4257673f0ef",
+   "avsName": "eoracle",
+   "target": "0x757e6f572afd8e111bd913d35314b5472c051ca8",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 437451
+  },
+  {
+   "operatorId": 12,
+   "avs": "0x22cac0e6a1465f043428e8aef737b3cb09d0eeda",
+   "avsName": "Lagrange zkMapReduce (ZKMR)",
+   "target": "0x8dcdcc50cc00fe898b037bf61ccf3bf9ba46f15c",
+   "selector": "0x857dc190",
+   "fnSig": "deregisterOperator()",
+   "args": "0x",
+   "gasUsed": 108837
+  },
+  {
+   "operatorId": 12,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000000a",
+   "gasUsed": 195910
+  },
+  {
+   "operatorId": 12,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x0000000000000000000000000000000000000000000000000000000000002105",
+   "gasUsed": 221951
+  },
+  {
+   "operatorId": 12,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0x0512d04c",
+   "fnSig": "unsubscribe(uint32)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000a4b1",
+   "gasUsed": 184170
+  },
+  {
+   "operatorId": 12,
+   "avs": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "avsName": "Lagrange State Committee",
+   "target": "0x35f4f28a8d3ff20eed10e087e8f96ea2641e6aa2",
+   "selector": "0xaff5edb1",
+   "fnSig": "deregister()",
+   "args": "0x",
+   "gasUsed": 144663
+  },
+  {
+   "operatorId": 12,
+   "avs": "0xd25c2c5802198cb8541987b73a8db4c9bcae5cc7",
+   "avsName": "WitnessChain",
+   "target": "0xd25c2c5802198cb8541987b73a8db4c9bcae5cc7",
+   "selector": "0xa364f4da",
+   "fnSig": "deregisterOperatorFromAVS(address)",
+   "args": "0x0000000000000000000000001abdcdd0ec2523dd2c66b8c7d1c734f743e98b4a",
+   "gasUsed": 102313
+  },
+  {
+   "operatorId": 12,
+   "avs": "0x1f2c296448f692af840843d993ffc0546619dcdb",
+   "avsName": "AltLayer MACH (MachServiceManager A)",
+   "target": "0x118610d207a32f10f4f7c3a1fefac5b3327c2bad",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 453434
+  },
+  {
+   "operatorId": 12,
+   "avs": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "avsName": "UniFi AVS (Puffer)",
+   "target": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "selector": "0x389517e4",
+   "fnSig": "startDeregisterOperator()",
+   "args": "0x",
+   "gasUsed": 119421
+  },
+  {
+   "operatorId": 12,
+   "avs": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "avsName": "UniFi AVS (Puffer)",
+   "target": "0x2d86e90ed40a034c753931ee31b1bd5e1970113d",
+   "selector": "0xe3672163",
+   "fnSig": "finishDeregisterOperator()",
+   "args": "0x",
+   "gasUsed": 113245
+  },
+  {
+   "operatorId": 14,
+   "avs": "0x23221c5bb90c7c57ecc1e75513e2e4257673f0ef",
+   "avsName": "eoracle",
+   "target": "0x757e6f572afd8e111bd913d35314b5472c051ca8",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 437451
+  },
+  {
+   "operatorId": 15,
+   "avs": "0x23221c5bb90c7c57ecc1e75513e2e4257673f0ef",
+   "avsName": "eoracle",
+   "target": "0x757e6f572afd8e111bd913d35314b5472c051ca8",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 437451
+  },
+  {
+   "operatorId": 16,
+   "avs": "0x23221c5bb90c7c57ecc1e75513e2e4257673f0ef",
+   "avsName": "eoracle",
+   "target": "0x757e6f572afd8e111bd913d35314b5472c051ca8",
+   "selector": "0xca4f2d97",
+   "fnSig": "deregisterOperator(bytes)",
+   "args": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+   "gasUsed": 437451
+  }
+ ],
+ "blocked": [
+  {
+   "operatorId": 3,
+   "operatorAddr": "0xdcae4faf7c7d0f4a78abe147244c6e9d60cfd202",
+   "avs": "0xacb91045b8bba06f9026e1a30855b6c4a1c5bac6",
+   "avsName": "bare ServiceManager (aggregator 0x38f6001e)",
+   "reason": "onlyOwner (owner 0x38f6001e8ac11240f903cba56aff72a1425ae371). Its StakeRegistry 0x006124ae only exposes deregisterOperator(bytes32,bytes) onlyRegistryCoordinator. No operator-initiated path exists."
+  },
+  {
+   "operatorId": 4,
+   "operatorAddr": "0xea50bb6735703422d2e053452f1f28bff17da51f",
+   "avs": "0x1de75eaab2df55d467494a172652579e6fa4540e",
+   "avsName": "ARPA Network",
+   "reason": "NodeRegistry.nodeQuit() uses msg.sender as the node. The AvsOperator proxy is only the ARPA asset account; the node is a separate EOA. NodeRegistry.getNode(avsOperator) is empty, so nodeQuit() from the AvsOperator reverts NodeNotRegistered(). The ARPA node EOA for this operator is 0x961cAA85468805456DcaC0305C8a8FE009206e37; that key must call nodeQuit()."
+  },
+  {
+   "operatorId": 4,
+   "operatorAddr": "0xea50bb6735703422d2e053452f1f28bff17da51f",
+   "avs": "0xacb91045b8bba06f9026e1a30855b6c4a1c5bac6",
+   "avsName": "bare ServiceManager (aggregator 0x38f6001e)",
+   "reason": "onlyOwner (owner 0x38f6001e8ac11240f903cba56aff72a1425ae371). Its StakeRegistry 0x006124ae only exposes deregisterOperator(bytes32,bytes) onlyRegistryCoordinator. No operator-initiated path exists."
+  },
+  {
+   "operatorId": 8,
+   "operatorAddr": "0x5b9b3cf0202a1a3dc8f527257b7e6002d23d8c85",
+   "avs": "0xacb91045b8bba06f9026e1a30855b6c4a1c5bac6",
+   "avsName": "bare ServiceManager (aggregator 0x38f6001e)",
+   "reason": "onlyOwner (owner 0x38f6001e8ac11240f903cba56aff72a1425ae371). Its StakeRegistry 0x006124ae only exposes deregisterOperator(bytes32,bytes) onlyRegistryCoordinator. No operator-initiated path exists."
+  },
+  {
+   "operatorId": 10,
+   "operatorAddr": "0x67943ae8e07bfc9f5c9a90d608f7923d9c21e051",
+   "avs": "0xacb91045b8bba06f9026e1a30855b6c4a1c5bac6",
+   "avsName": "bare ServiceManager (aggregator 0x38f6001e)",
+   "reason": "onlyOwner (owner 0x38f6001e8ac11240f903cba56aff72a1425ae371). Its StakeRegistry 0x006124ae only exposes deregisterOperator(bytes32,bytes) onlyRegistryCoordinator. No operator-initiated path exists."
+  },
+  {
+   "operatorId": 11,
+   "operatorAddr": "0x5d4b5ef127c545e5bf8e247f9fcd4e75a0a366b4",
+   "avs": "0x1de75eaab2df55d467494a172652579e6fa4540e",
+   "avsName": "ARPA Network",
+   "reason": "NodeRegistry.nodeQuit() uses msg.sender as the node. The AvsOperator proxy is only the ARPA asset account; the node is a separate EOA. NodeRegistry.getNode(avsOperator) is empty, so nodeQuit() from the AvsOperator reverts NodeNotRegistered(). The ARPA node EOA for this operator is 0x13f24BECF6Ba32a84bc98FE7d516Af74753937E3; that key must call nodeQuit()."
+  }
+ ]
+}
