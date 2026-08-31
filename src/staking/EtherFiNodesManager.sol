@@ -224,9 +224,11 @@ contract EtherFiNodesManager is
     //--------------------  EL TRIGGER FUNCTIONS  -----------------------
     //-------------------------------------------------------------------
     /**
-     * @notice Triggers EIP-7002 withdrawal requests, grouping by EigenPod automatically.
-     * @dev associated etherFiNode is derived from pubkey in the request. Caller should ensure
-     *      all provided validators share the same eigenpod
+     * @notice Triggers EIP-7002 withdrawal requests for one credential target.
+     * @dev No grouping is performed. The node is resolved from requests[0] and the whole batch goes
+     *      to it, so every source must share that node. Batches are rejected, not split: pod-less
+     *      and retired-pod targets revert MixedNodeRequest, and a live pod enforces membership
+     *      itself by reverting ValidatorNotActiveInPod.
      * @dev Access: only EXECUTOR_OPERATIONS_ROLE, pausable, nonReentrant.
      * @dev Accepted (I-01): pod-less sources are authorized by the pubkey link alone, which exists
      *      from the 1 ETH deposit. A pre-activation request succeeds here but consensus discards it,
@@ -291,8 +293,11 @@ contract EtherFiNodesManager is
      *        - srcPubkey: 48-byte BLS pubkey of source validator
      *        - targetPubkey: 48-byte BLS pubkey of target validator
      *        - If srcPubkey == targetPubkey, this switches validator from 0x01 to 0x02 credentials
-     * @dev EigenLayer validates that validators belong to the pod automatically.
-     * @custom:fee Send EXACT ETH to cover consolidation fees.
+     * @dev Sources must share one node, resolved from requests[0]. EigenLayer enforces that only on
+     *      a live pod; a retired pod stops enforcing it (EL v1.14) and a pod-less node never did, so
+     *      both are covered by MixedNodeRequest here. Targets are checked separately: every target
+     *      that moves value must be one of ours, or UnknownConsolidationTarget.
+     * @custom:fee Send at least the fee; any surplus is refunded to the caller.
      */
     function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable nonReentrant onlyExecutorOperations whenNotPaused {
         if (requests.length == 0) revert EmptyConsolidationRequest();
