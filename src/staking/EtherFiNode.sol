@@ -304,11 +304,6 @@ contract EtherFiNode is IEtherFiNode {
     //-----------------------------  INTERNAL FUNCTIONS  -----------------------------------
     //--------------------------------------------------------------------------------------
     /**
-     * @notice Forwards the lesser of (node balance, liquidityPool.totalValueOutOfLp()) to the liquidity pool.
-     * @dev Shared by sweepFunds and completeQueued*Withdrawals.
-     * @return balance The balance of the node
-     */
-    /**
      * @notice Permanently retires this node's EigenPod, ending its restaking.
      * @dev Only the etherFi nodes manager can call this function. The node is the pod owner,
      *      which is who EigenLayer requires as the caller.
@@ -353,6 +348,11 @@ contract EtherFiNode is IEtherFiNode {
         if (!ok) revert PredeployFailed();
     }
 
+    /**
+     * @notice Forwards the lesser of (node balance, liquidityPool.totalValueOutOfLp()) to the liquidity pool.
+     * @dev Shared by sweepFunds and completeQueued*Withdrawals.
+     * @return balance The balance of the node
+     */
     function _sweepToLiquidityPool() private returns (uint256 balance) {
         uint256 contractBalance = address(this).balance;
         uint256 totalValueOutOfLp = liquidityPool.totalValueOutOfLp();

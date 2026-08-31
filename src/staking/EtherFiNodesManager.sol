@@ -647,11 +647,6 @@ contract EtherFiNodesManager is
     }
 
     /**
-     * @notice Converts a target address to 0x01 withdrawal credential format for a traditional 32eth validator
-     * @param addr The address to convert
-     * @return The withdrawal credential format
-     */
-    /**
      * @notice Returns the address a node's validators point their withdrawal credentials at.
      * @param node The node to resolve the credential target for
      * @dev The pod when the node has one, otherwise the node itself. A node's pod is created
@@ -694,6 +689,11 @@ contract EtherFiNodesManager is
         }
     }
 
+    /**
+     * @notice Converts a target address to 0x01 withdrawal credential format for a traditional 32eth validator
+     * @param addr The address to convert
+     * @return The withdrawal credential format
+     */
     function addressToWithdrawalCredentials(address addr) public pure returns (bytes memory) {
         return abi.encodePacked(bytes1(0x01), bytes11(0x0), addr);
     }
