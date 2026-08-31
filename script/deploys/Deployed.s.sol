@@ -54,6 +54,9 @@ contract Deployed {
     address public constant EARLY_ADOPTER_POOL = 0x7623e9DC0DA6FF821ddb9EbABA794054E078f8c4;
     address public constant CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR = 0x9A8c5046a290664Bf42D065d33512fe403484534;
     address public constant TREASURY = 0x0c83EAe1FE72c390A02E426572854931EefF93BA;
+    // Retired Treasury (src/archive/Treasury.sol). Ownable, owned by UPGRADE_TIMELOCK.
+    // Still holds ETH; drained to the LiquidityPool via withdraw(uint256,address).
+    address public constant TREASURY_LEGACY = 0x6329004E903B7F420245E7aF3f355186f2432466;
     address public constant WITHDRAW_REQUEST_NFT_BUYBACK_SAFE = 0x2f5301a3D59388c509C65f8698f521377D41Fd0F; // buyback wallet
 
     // role registry & multi-sig
