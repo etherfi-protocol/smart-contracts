@@ -8,6 +8,10 @@ import "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 
 interface IEtherFiNode {
 
+    /// @dev Immutable. Proves an address is one of our beacon proxies; a contract cannot read
+    ///      another's ERC-1967 beacon slot.
+    function etherFiNodesManager() external view returns (IEtherFiNodesManager);
+
     // eigenlayer
     function createEigenPod() external returns (address);
     function getEigenPod() external view returns (IEigenPod);
@@ -21,6 +25,10 @@ interface IEtherFiNode {
     function sweepFunds() external returns (uint256 balance);
     function requestExecutionLayerTriggeredWithdrawal(IEigenPod.WithdrawalRequest[] calldata requests) external payable;
     function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable;
+    function getWithdrawalRequestFee() external view returns (uint256);
+    function getConsolidationRequestFee() external view returns (uint256);
+    function disablePod() external;
+    function withdrawDisabledPodETH() external returns (uint256 balance);
 
 
     // call forwarding
@@ -85,6 +93,13 @@ interface IEtherFiNode {
     event QueuedRestakingWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, bytes32[] withdrawalRoots);
     event FundsTransferred(address indexed recipient, uint256 amount);
 
+    /// @dev Emitted only when the node is the credential target and calls the predeploys itself.
+    ///      A pod-backed node stays silent.
+    event ExitRequested(bytes32 indexed validatorPubkeyHash);
+    event WithdrawalRequested(bytes32 indexed validatorPubkeyHash, uint64 withdrawalAmountGwei);
+    event SwitchToCompoundingRequested(bytes32 indexed validatorPubkeyHash);
+    event ConsolidationRequested(bytes32 indexed sourcePubkeyHash, bytes32 indexed targetPubkeyHash);
+
     //--------------------------------------------------------------------------
     //-----------------------------  Errors  -----------------------------------
     //--------------------------------------------------------------------------
@@ -94,5 +109,9 @@ interface IEtherFiNode {
     error InvalidForwardedCall();
     error InvalidCaller();
     error NoCompleteableWithdrawals();
+    error FeeQueryFailed();
+    error PredeployFailed();
+    error NoEigenPod();
+    error InvalidPubKeyLength();
 
 }

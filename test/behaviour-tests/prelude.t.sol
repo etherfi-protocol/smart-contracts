@@ -249,10 +249,12 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // initial deposit
         address eigenPod = address(IEtherFiNode(params.etherFiNode).getEigenPod());
+        // The pod when the node has one, otherwise the node itself
+        address credTarget = etherFiNodesManager.withdrawalCredentialTarget(params.etherFiNode);
         bytes32 initialDepositRoot = depositDataRootGenerator.generateDepositDataRoot(
             pubkey,
             signature,
-            etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod),
+            etherFiNodesManager.addressToCompoundingWithdrawalCredentials(credTarget),
             1 ether
         );
         IStakingManager.DepositData memory initialDepositData = IStakingManager.DepositData({
@@ -277,7 +279,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         bytes32 confirmDepositRoot = depositDataRootGenerator.generateDepositDataRoot(
             pubkey,
             signature,
-            etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod),
+            etherFiNodesManager.addressToCompoundingWithdrawalCredentials(credTarget),
             confirmAmount
         );
         IStakingManager.DepositData memory confirmDepositData = IStakingManager.DepositData({
@@ -372,7 +374,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         bytes memory signature = hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df";
 
         // need to link because this validator is already past this step from the old flow
-        vm.prank(elExiter);
+        vm.prank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(bidId), toArray_bytes(pubkey));
 
         vm.prank(admin);
@@ -409,7 +411,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         // link it to an arbitrary id
         uint256 legacyID = 10885;
         bytes memory pubkey = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
-        vm.prank(elExiter);
+        vm.prank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(legacyID), toArray_bytes(pubkey));
 
         // user with no role should not be able to forward calls
@@ -473,7 +475,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         // Setup: link to legacy ID
         uint256 legacyID = 10886;
         bytes memory pubkey = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
-        vm.prank(elExiter);
+        vm.prank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(legacyID), toArray_bytes(pubkey));
 
         // Setup: create two users with CALL_FORWARDER_ROLE
@@ -684,7 +686,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         uint256 legacyID = 10885;
 
         // force link this validator
-        vm.prank(elExiter);
+        vm.prank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(legacyID), toArray_bytes(validatorPubkey));
 
         // Set up rate limiter for the linked EtherFiNode proxy
@@ -714,14 +716,16 @@ contract PreludeTest is Test, ArrayTestHelper {
             .with_key(etherFiNodeAddress)
             .checked_write_int(int256(10_000 ether));
 
+        address __node0 = _node(uint256(pubkeyHash));
         vm.prank(admin);
-        etherFiNodesManager.queueETHWithdrawal(uint256(pubkeyHash), 1 ether);
+        etherFiNodesManager.queueETHWithdrawal(__node0, 1 ether);
 
         uint256 startingBalance = address(liquidityPool).balance;
 
         vm.roll(block.number + (7200 * 15));
+        address __node1 = _node(uint256(pubkeyHash));
         vm.prank(eigenlayerAdmin);
-        etherFiNodesManager.completeQueuedETHWithdrawals(uint256(pubkeyHash), true);
+        etherFiNodesManager.completeQueuedETHWithdrawals(__node1, true);
 
         // liquidity pool should have received at least the withdrawal amount (may include additional execution layer rewards)
         assertGe(address(liquidityPool).balance, startingBalance + 1 ether);
@@ -734,18 +738,21 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // Random caller: revert.
         address rando = makeAddr("rando");
+        address __s0 = _node(nodeId);
         vm.prank(rando);
         vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
-        etherFiNodesManager.sweepFunds(nodeId);
+        etherFiNodesManager.sweepFunds(__s0);
 
         // ADMIN_ROLE alone (held by `admin`) no longer satisfies sweep.
+        address __s1 = _node(nodeId);
         vm.prank(admin);
         vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
-        etherFiNodesManager.sweepFunds(nodeId);
+        etherFiNodesManager.sweepFunds(__s1);
 
         // EIGENLAYER_ADMIN_ROLE can sweep (no-op when node has no balance).
+        address __s2 = _node(nodeId);
         vm.prank(eigenlayerAdmin);
-        etherFiNodesManager.sweepFunds(nodeId);
+        etherFiNodesManager.sweepFunds(__s2);
     }
 
     function test_completeQueuedWithdrawals_autoSweeps_to_LP() public {
@@ -753,7 +760,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         bytes32 pubkeyHash = etherFiNodesManager.calculateValidatorPubkeyHash(validatorPubkey);
         uint256 legacyID = 10885;
 
-        vm.prank(elExiter);
+        vm.prank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(legacyID), toArray_bytes(validatorPubkey));
 
         address nodeAddr = etherFiNodesManager.etherfiNodeAddress(uint256(pubkeyHash));
@@ -770,8 +777,9 @@ contract PreludeTest is Test, ArrayTestHelper {
             .with_key(nodeAddr)
             .checked_write_int(int256(10_000 ether));
 
+        address __node2 = _node(uint256(pubkeyHash));
         vm.prank(admin);
-        bytes32 root = etherFiNodesManager.queueETHWithdrawal(uint256(pubkeyHash), 1 ether);
+        bytes32 root = etherFiNodesManager.queueETHWithdrawal(__node2, 1 ether);
 
         // build the explicit Withdrawal struct that mirrors what the node queued
         IStrategy[] memory strategies = new IStrategy[](1);
@@ -806,8 +814,9 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.expectEmit(true, false, false, false, address(etherFiNodesManager));
         emit IEtherFiNodesManager.FundsTransferred(nodeAddr, 0);
 
+        address __node3 = _node(uint256(pubkeyHash));
         vm.prank(eigenlayerAdmin);
-        etherFiNodesManager.completeQueuedWithdrawals(uint256(pubkeyHash), withdrawals, tokens, receiveAsTokens);
+        etherFiNodesManager.completeQueuedWithdrawals(__node3, withdrawals, tokens, receiveAsTokens);
 
         // ETH should have flowed pod -> node -> LP (auto-sweep tail). Node ends with no residual.
         assertEq(nodeAddr.balance, nodeBefore, "node retains no residual after auto-sweep");
@@ -886,8 +895,11 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.startPrank(user);
 
         // Normal user should fail for all eigenlayer functions
+        // Resolved before the expectRevert: etherfiNodeAddress is an external call and would
+        // otherwise absorb the expected revert.
+        address proofSubmitterNode = etherFiNodesManager.etherfiNodeAddress(nodeId);
         vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
-        etherFiNodesManager.setProofSubmitter(nodeId, address(0));
+        etherFiNodesManager.setProofSubmitter(proofSubmitterNode, address(0));
 
         vm.expectRevert(RoleRegistry.OnlyEigenpodOperations.selector);
         etherFiNodesManager.startCheckpoint(nodeId);
@@ -900,24 +912,29 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.expectRevert(RoleRegistry.OnlyEigenpodOperations.selector);
         etherFiNodesManager.verifyCheckpointProofs(nodeId, containerProof, balanceProofs);
 
+        address __n0 = _node(nodeId);
         vm.expectRevert(RoleRegistry.OnlyExecutorOperations.selector);
-        etherFiNodesManager.queueETHWithdrawal(nodeId, 1 ether);
+        etherFiNodesManager.queueETHWithdrawal(__n0, 1 ether);
 
+        address __n1 = _node(nodeId);
         vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
-        etherFiNodesManager.completeQueuedETHWithdrawals(nodeId, true);
+        etherFiNodesManager.completeQueuedETHWithdrawals(__n1, true);
 
         IDelegationManager.QueuedWithdrawalParams[] memory params = new IDelegationManager.QueuedWithdrawalParams[](1);
+        address __n2 = _node(nodeId);
         vm.expectRevert(RoleRegistry.OnlyExecutorOperations.selector);
-        etherFiNodesManager.queueWithdrawals(nodeId, params);
+        etherFiNodesManager.queueWithdrawals(__n2, params);
 
         IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
         IERC20[][] memory tokens = new IERC20[][](1);
         bool[] memory receiveAsTokens = new bool[](1);
+        address __n3 = _node(nodeId);
         vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
-        etherFiNodesManager.completeQueuedWithdrawals(nodeId, withdrawals, tokens, receiveAsTokens);
+        etherFiNodesManager.completeQueuedWithdrawals(__n3, withdrawals, tokens, receiveAsTokens);
 
+        address __s3 = _node(nodeId);
         vm.expectRevert(RoleRegistry.OnlyHousekeepingOperations.selector);
-        etherFiNodesManager.sweepFunds(nodeId);
+        etherFiNodesManager.sweepFunds(__s3);
 
         // normal user should fail for all call forwarding
         address[] memory nodes = new address[](1);
@@ -1077,23 +1094,39 @@ contract PreludeTest is Test, ArrayTestHelper {
         pubkeys[1] = vm.randomBytes(48);
         pubkeys[2] = vm.randomBytes(48);
 
-        // should fail if not admin
-        vm.expectRevert(RoleRegistry.OnlyExecutorOperations.selector);
+        // should fail if not the operating multisig
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
 
-        vm.prank(elExiter);
+        // Executor alone must NOT link: it also holds requestConsolidation. Fresh
+        // address because the shared fixture actors hold several roles at once.
+        address executorOnly = address(0xE0E0);
+        // startPrank: a nested role-id read would consume a single-call prank.
+        vm.startPrank(roleRegistry.owner());
+        roleRegistry.grantRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), executorOnly);
+        vm.stopPrank();
+        assertFalse(
+            roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), executorOnly),
+            "fixture: executorOnly must not hold the multisig role"
+        );
+
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.prank(executorOnly);
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
+
+        vm.prank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
 
         // should fail if attempt to re-link already linked ids
         vm.expectRevert(IEtherFiNodesManager.AlreadyLinked.selector);
-        vm.prank(elExiter);
+        vm.prank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
 
         // should fail if attempt to link unknown node
         uint256 badId = 9999999;
         bytes memory badPubkey = vm.randomBytes(48);
         vm.expectRevert(IEtherFiNodesManager.UnknownNode.selector);
-        vm.prank(elExiter);
+        vm.prank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(badId), toArray_bytes(badPubkey));
 
     }
@@ -1116,14 +1149,16 @@ contract PreludeTest is Test, ArrayTestHelper {
         uint256 startingLPBalance = address(liquidityPool).balance;
 
         // should be able to withdraw arbitrary amounts not tied to any particular validator
+        address __node4 = _node(uint256(val1.pubkeyHash));
         vm.prank(admin);
-        etherFiNodesManager.queueETHWithdrawal(uint256(val1.pubkeyHash), 1234 ether);
+        etherFiNodesManager.queueETHWithdrawal(__node4, 1234 ether);
 
         // need to fast forward so that withdrawal is claimable
         vm.roll(block.number + (7200 * 15));
 
+        address __node5 = _node(uint256(val1.pubkeyHash));
         vm.prank(eigenlayerAdmin);
-        etherFiNodesManager.completeQueuedETHWithdrawals(uint256(val1.pubkeyHash), /*receiveAsTokens=*/ true);
+        etherFiNodesManager.completeQueuedETHWithdrawals(__node5, /*receiveAsTokens=*/ true);
 
         // liquidity pool should have received the withdrawal
         assertEq(address(liquidityPool).balance, startingLPBalance + 1234 ether);
@@ -1145,25 +1180,34 @@ contract PreludeTest is Test, ArrayTestHelper {
         TestValidator memory val = helper_createValidator(params);
 
         // queue up multiple withdrawals
+        address __node6 = _node(uint256(val.pubkeyHash));
         vm.prank(admin);
-        etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 1 ether);
+        etherFiNodesManager.queueETHWithdrawal(__node6, 1 ether);
+        address __node7 = _node(uint256(val.pubkeyHash));
         vm.prank(admin);
-        etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 1 ether);
+        etherFiNodesManager.queueETHWithdrawal(__node7, 1 ether);
+        address __node8 = _node(uint256(val.pubkeyHash));
         vm.prank(admin);
-        etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 1 ether);
+        etherFiNodesManager.queueETHWithdrawal(__node8, 1 ether);
 
         // need to fast forward so that withdrawal is claimable
         vm.roll(block.number + (7200 * 15));
 
         // all outstanding withdrawals should have been completed at once
         uint256 startingLPBalance = address(liquidityPool).balance;
+        address __node9 = _node(uint256(val.pubkeyHash));
         vm.prank(eigenlayerAdmin);
-        etherFiNodesManager.completeQueuedETHWithdrawals(uint256(val.pubkeyHash), /*receiveAsTokens=*/ true);
+        etherFiNodesManager.completeQueuedETHWithdrawals(__node9, /*receiveAsTokens=*/ true);
 
         assertEq(address(liquidityPool).balance, startingLPBalance + 3 ether);
     }
 
     // ---------- helpers specific to EL withdrawal tests ----------
+    /// @dev EtherFiNodesManager dropped its (uint256 id) overloads; resolve the node first.
+    function _node(uint256 id) internal view returns (address) {
+        return etherFiNodesManager.etherfiNodeAddress(id);
+    }
+
     function _setExitRateLimit(uint256 capacity, uint256 refillPerSecond) internal {
         // admin was already granted ETHERFI_NODES_MANAGER_ADMIN_ROLE in setUp()
         vm.startPrank(admin);
@@ -1206,7 +1250,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[1] = 51716;
         legacyIds[2] = 51717;
 
-        vm.startPrank(elExiter);
+        vm.startPrank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys); 
         vm.stopPrank();
         _setExitRateLimit(172800, 2);
@@ -1264,7 +1308,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[2] = 51717;
 
         // Link and init
-        vm.startPrank(elExiter);
+        vm.startPrank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
         vm.stopPrank();
         _setExitRateLimit(172800, 2);
@@ -1339,13 +1383,15 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[1] = 51716;
         legacyIds[2] = 51717;
 
-        vm.startPrank(elExiter);
+        vm.startPrank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
         vm.stopPrank();
 
-        // Unauthorized caller -> revert
+        // Unauthorized caller -> revert. Node resolved first, since etherfiNodeAddress is an
+        // external call and would otherwise absorb the expected revert.
+        address linkedNode = etherFiNodesManager.etherfiNodeAddress(legacyIds[0]);
         vm.expectRevert();
-        etherFiNodesManager.setProofSubmitter(legacyIds[0], address(1));
+        etherFiNodesManager.setProofSubmitter(linkedNode, address(1));
     }
 
     function test_requestExecutionLayerTriggeredWithdrawal_requires_role_reverts() public {
@@ -1361,7 +1407,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[1] = 51716;
         legacyIds[2] = 51717;
 
-        vm.startPrank(elExiter);
+        vm.startPrank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys); 
         vm.stopPrank();
         _setExitRateLimit(172800, 2);
@@ -1417,17 +1463,20 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.stopPrank();
 
         // First withdrawal within limit should succeed
+        address __node10 = _node(uint256(val.pubkeyHash));
         vm.prank(admin);
-        etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 5 ether);
+        etherFiNodesManager.queueETHWithdrawal(__node10, 5 ether);
 
         // Second withdrawal within limit should succeed
+        address __node11 = _node(uint256(val.pubkeyHash));
         vm.prank(admin);
-        etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 4 ether);
+        etherFiNodesManager.queueETHWithdrawal(__node11, 4 ether);
 
         // Third withdrawal exceeding limit should fail
+        address __node12 = _node(uint256(val.pubkeyHash));
         vm.expectRevert();
         vm.prank(admin);
-        etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 2 ether);
+        etherFiNodesManager.queueETHWithdrawal(__node12, 2 ether);
     }
 
     function test_queueWithdrawals_unrestaking_rate_limit() public {
@@ -1454,14 +1503,16 @@ contract PreludeTest is Test, ArrayTestHelper {
         params[0].__deprecated_withdrawer = address(0);
 
         // First withdrawal within limit should succeed
+        address __node13 = _node(uint256(val.pubkeyHash));
         vm.prank(admin);
-        etherFiNodesManager.queueWithdrawals(uint256(val.pubkeyHash), params);
+        etherFiNodesManager.queueWithdrawals(__node13, params);
 
         // Second withdrawal exceeding limit should fail (15 + 10 > 20)
         shares[0] = 10 ether;
+        address __node14 = _node(uint256(val.pubkeyHash));
         vm.expectRevert(abi.encodeWithSignature("LimitExceeded()"));
         vm.prank(admin);
-        etherFiNodesManager.queueWithdrawals(uint256(val.pubkeyHash), params);
+        etherFiNodesManager.queueWithdrawals(__node14, params);
     }
 
     function test_exitRequestsRateLimiting_partial_exit_success() public {
@@ -1479,7 +1530,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[0] = 51715;
         amounts[0] = 1_000_000_000; // 1 ETH partial exit
 
-        vm.prank(elExiter);
+        vm.prank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
 
         // Grant role to the triggering EOA
@@ -1538,21 +1589,24 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.stopPrank();
 
         // Test consuming within capacity - should succeed
+        address __node15 = _node(uint256(val.pubkeyHash));
         vm.prank(admin);
-        etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 30 ether);
+        etherFiNodesManager.queueETHWithdrawal(__node15, 30 ether);
         
         // Check remaining capacity is reduced
         (, uint64 remaining, , ) = rateLimiter.getLimit(limitId);
         assertEq(remaining, 20_000_000_000); // 50 - 30 = 20 ETH in gwei
         
         // Test consuming more than remaining capacity - should fail
+        address __node16 = _node(uint256(val.pubkeyHash));
         vm.expectRevert(abi.encodeWithSignature("LimitExceeded()"));
         vm.prank(admin);
-        etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 25 ether);
+        etherFiNodesManager.queueETHWithdrawal(__node16, 25 ether);
         
         // Test consuming exactly remaining capacity - should succeed
+        address __node17 = _node(uint256(val.pubkeyHash));
         vm.prank(admin);
-        etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 20 ether);
+        etherFiNodesManager.queueETHWithdrawal(__node17, 20 ether);
         
         // Verify capacity is now exhausted
         (, remaining, , ) = rateLimiter.getLimit(limitId);
@@ -1610,36 +1664,42 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.stopPrank();
 
         // Test multiple consumption attempts within capacity - all should succeed
+        address __node18 = _node(uint256(val1.pubkeyHash));
         vm.prank(admin);
-        etherFiNodesManager.queueETHWithdrawal(uint256(val1.pubkeyHash), 25 ether);
+        etherFiNodesManager.queueETHWithdrawal(__node18, 25 ether);
         
+        address __node19 = _node(uint256(val2.pubkeyHash));
         vm.prank(admin);
-        etherFiNodesManager.queueETHWithdrawal(uint256(val2.pubkeyHash), 30 ether);
+        etherFiNodesManager.queueETHWithdrawal(__node19, 30 ether);
         
+        address __node20 = _node(uint256(val3.pubkeyHash));
         vm.prank(admin);
-        etherFiNodesManager.queueETHWithdrawal(uint256(val3.pubkeyHash), 20 ether);
+        etherFiNodesManager.queueETHWithdrawal(__node20, 20 ether);
         
         // Check remaining capacity after multiple consumptions (100 - 25 - 30 - 20 = 25 ETH)
         (, uint64 remaining, , ) = rateLimiter.getLimit(limitId);
         assertEq(remaining, 25_000_000_000);
         
         // Test that unauthorized access is blocked by the access control
+        address __node21 = _node(uint256(val1.pubkeyHash));
         vm.expectRevert(RoleRegistry.OnlyExecutorOperations.selector);
         vm.prank(user);
-        etherFiNodesManager.queueETHWithdrawal(uint256(val1.pubkeyHash), 10 ether);
+        etherFiNodesManager.queueETHWithdrawal(__node21, 10 ether);
         
         // Verify remaining capacity is unchanged after failed attempt
         (, remaining, , ) = rateLimiter.getLimit(limitId);
         assertEq(remaining, 25_000_000_000);
         
         // Test final consumption that would exceed remaining capacity should fail
+        address __node22 = _node(uint256(val1.pubkeyHash));
         vm.expectRevert(abi.encodeWithSignature("LimitExceeded()"));
         vm.prank(admin);
-        etherFiNodesManager.queueETHWithdrawal(uint256(val1.pubkeyHash), 30 ether);
+        etherFiNodesManager.queueETHWithdrawal(__node22, 30 ether);
         
         // Test final consumption within remaining capacity should succeed
+        address __node23 = _node(uint256(val1.pubkeyHash));
         vm.prank(admin);
-        etherFiNodesManager.queueETHWithdrawal(uint256(val1.pubkeyHash), 25 ether);
+        etherFiNodesManager.queueETHWithdrawal(__node23, 25 ether);
         
         // Verify capacity is now exhausted
         (, remaining, , ) = rateLimiter.getLimit(limitId);
@@ -1658,7 +1718,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[1] = 51716;
         legacyIds[2] = 51717;
 
-        vm.prank(elExiter);
+        vm.prank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
 
         (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
@@ -1712,7 +1772,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         pubkeys[0] = PK_16171;
         legacyIds[0] = 51715;
 
-        vm.prank(elExiter);
+        vm.prank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
 
         (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
@@ -1731,7 +1791,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[0] = 51715;
         legacyIds[1] = 51716;
 
-        vm.startPrank(elExiter);
+        vm.startPrank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
         vm.stopPrank();
 
@@ -1784,7 +1844,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[1] = 51716;
         legacyIds[2] = 51717;
 
-        vm.startPrank(elExiter);
+        vm.startPrank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
         vm.stopPrank();
 
@@ -1831,7 +1891,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         pubkeys[0] = PK_16171;
         legacyIds[0] = 51715;
 
-        vm.startPrank(elExiter);
+        vm.startPrank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
         vm.stopPrank();
 
@@ -1868,7 +1928,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[0] = 51715;
         legacyIds[1] = 51716;
 
-        vm.startPrank(elExiter);
+        vm.startPrank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
         vm.stopPrank();
 
@@ -1922,7 +1982,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[1] = 51716;
         legacyIds[2] = 51717;
 
-        vm.startPrank(elExiter);
+        vm.startPrank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
         vm.stopPrank();
 

@@ -8,7 +8,7 @@ import {EtherFiRestaker} from "@etherfi/restaking/EtherFiRestaker.sol";
 import {EtherFiRewardsRouter} from "@etherfi/rewards/EtherFiRewardsRouter.sol";
 import {Liquifier} from "@etherfi/deposits/Liquifier.sol";
 import {WithdrawRequestNFT} from "@etherfi/withdrawals/WithdrawRequestNFT.sol";
-import {EtherFiViewer} from "@etherfi/helpers/EtherFiViewer.sol";
+import {EtherFiViewer} from "@etherfi/archive/EtherFiViewer.sol";
 import {Utils} from "@scripts/utils/utils.sol";
 
 /**

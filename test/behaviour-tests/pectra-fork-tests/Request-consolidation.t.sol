@@ -57,6 +57,9 @@ contract RequestConsolidationTest is TestSetup, Deployed {
         // RateLimiter mutators (createNewLimiter, updateConsumers) are now onlyAdmin → OPERATION_TIMELOCK_ROLE.
         roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), roleRegistry.owner());
         roleRegistry.grantRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), realElExiter);
+        // linkLegacyValidatorIds moved to OPERATION_MULTISIG_ROLE. Linking is only fixture setup in
+        // this file; PreludeTest.test_linkLegacyValidatorIds covers the role separation itself.
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), realElExiter);
         // ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE consolidated into EXECUTOR_OPERATIONS_ROLE.
         roleRegistry.grantRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), ETHERFI_OPERATING_ADMIN);
         vm.stopPrank();

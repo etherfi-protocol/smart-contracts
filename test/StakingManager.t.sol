@@ -3,6 +3,7 @@ pragma solidity ^0.8.13;
 
 import "@tests/TestSetup.sol";
 import "@etherfi/governance/interfaces/IRoleRegistry.sol";
+import "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 
 contract StakingManagerTest is TestSetup {
     event StakeDeposit(
@@ -1307,10 +1308,11 @@ contract StakingManagerTest is TestSetup {
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), alice);
         vm.stopPrank();
         
+        // Real beacon proxies: the backfill verifies the address is one of ours.
         address[] memory nodes = new address[](2);
-        nodes[0] = address(0x1111);
-        nodes[1] = address(0x2222);
-        
+        nodes[0] = _unrecordedNode();
+        nodes[1] = _unrecordedNode();
+
         vm.prank(alice);
         stakingManagerInstance.backfillExistingEtherFiNodes(nodes);
         
@@ -1324,14 +1326,33 @@ contract StakingManagerTest is TestSetup {
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), alice);
         vm.stopPrank();
         
+        address node = _unrecordedNode();
         address[] memory nodes = new address[](2);
-        nodes[0] = address(0x1111);
-        nodes[1] = address(0x1111); // duplicate
-        
+        nodes[0] = node;
+        nodes[1] = node; // duplicate
+
         vm.prank(alice);
         stakingManagerInstance.backfillExistingEtherFiNodes(nodes);
         
         assertTrue(stakingManagerInstance.deployedEtherFiNodes(nodes[0]));
+    }
+
+    /// @dev A real beacon proxy the backfill has not recorded yet.
+    function _unrecordedNode() internal returns (address) {
+        return address(new BeaconProxy(address(stakingManagerInstance.etherFiNodeBeacon()), ""));
+    }
+
+    /// @dev The backfill writes the map _validateNode trusts, so it must verify what a node is.
+    function test_backfillExistingEtherFiNodesRejectsNonNodes() public {
+        vm.startPrank(owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), alice);
+        vm.stopPrank();
+
+        address[] memory nodes = new address[](1);
+        nodes[0] = address(managerInstance); // a real contract, wrong kind
+        vm.expectRevert(IStakingManager.InvalidEtherFiNode.selector);
+        vm.prank(alice);
+        stakingManagerInstance.backfillExistingEtherFiNodes(nodes);
     }
 
     function test_backfillExistingEtherFiNodesFailsIfNotAdmin() public {
