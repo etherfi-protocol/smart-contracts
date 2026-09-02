@@ -881,9 +881,22 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         liquidityPoolInstance.deposit{value: 10 ether}();
         address lidoToken = address(etherFiRestakerInstance.lido()); // external call; fetch before expectRevert
         eETHInstance.approve(address(etherFiRedemptionManagerInstance), 1 ether);
+        vm.stopPrank();
+
+        // The watermark only blocks the redeem while it exceeds the restaker's stETH balance.
+        // That balance is a live mainnet position and its share of TVL drifts (it has since
+        // grown past the 20_00 bps set above), so derive the blocking bps from current state
+        // rather than assuming a fixed percentage still clears it.
+        uint256 stEthLiquidity = stEth.balanceOf(address(etherFiRestakerInstance));
+        uint256 blockingBps = (stEthLiquidity * 10_000) / liquidityPoolInstance.getTotalPooledEther() + 1;
+        assertLe(blockingBps, etherFiRedemptionManagerInstance.maxLowWatermarkInBpsOfTvl());
+        vm.prank(op_admin);
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(uint16(blockingBps), lidoToken);
+
+        vm.prank(user);
         vm.expectRevert(EtherFiRedemptionManager.ExceededRedeemable.selector);
         etherFiRedemptionManagerInstance.redeemEEth(1 ether, user, lidoToken);
-        vm.stopPrank();
+
         vm.startPrank(op_admin);
         etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(0, lidoToken);
         vm.stopPrank();
