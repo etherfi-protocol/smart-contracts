@@ -19,6 +19,9 @@ import {NodeOperatorManager} from "@etherfi/staking/NodeOperatorManager.sol";
 import {IEigenPodTypes} from "@etherfi/interfaces/eigenlayer-interfaces/IEigenPod.sol";
 import {depositDataRootGenerator} from "@etherfi/staking/libraries/DepositDataRootGenerator.sol";
 import {Treasury} from "@etherfi/archive/Treasury.sol";
+import {EtherFiAdmin} from "@etherfi/oracle/EtherFiAdmin.sol";
+import {EtherFiOracle} from "@etherfi/oracle/EtherFiOracle.sol";
+import {IEtherFiOracle} from "@etherfi/oracle/interfaces/IEtherFiOracle.sol";
 import {ContractCodeChecker} from "@scripts/ContractCodeChecker.sol";
 import {DeployNonEigenPodCreds} from "./deploy.s.sol";
 
@@ -32,7 +35,16 @@ import {DeployNonEigenPodCreds} from "./deploy.s.sol";
  *   1 StakingManager.upgradeTo
  *   2 EtherFiAdmin.upgradeTo
  *   3 StakingManager.upgradeEtherFiNode   (beacon; onlyUpgradeTimelock)
- *   4 Treasury(retired).withdraw          (Ownable; owner == UPGRADE_TIMELOCK)
+ *   4 Treasury(retired).withdraw          (Ownable; owner == UPGRADE_TIMELOCK) -> protocol treasury
+ *   5 L1SyncPool.setPeer(30183, linea)    (Ownable; owner == UPGRADE_TIMELOCK)
+ *   6 L1SyncPool.setPeer(30214, scroll)   (Ownable; owner == UPGRADE_TIMELOCK)
+ *
+ * Calls 5 and 6 restore the two native-minting L1 peers that were severed when Linea and Scroll
+ * were deprecated. With peers(30183) == peers(30214) == 0 the L1 receivers reject delivery, which
+ * strands 47.332464 ETH of already-bridged Linea ETH (LZ nonce 88, unclaimed on the LineaRollup)
+ * and blocks the Scroll sync pool from draining its 1.509283 ETH backlog. Restoring the peers is
+ * necessary but not sufficient: Linea needs an off-chain LayerZero replay and Scroll needs a
+ * separate Scroll-Safe setMinSyncAmount + sync(). Both follow the execute, not this batch.
  *
  * run() snapshots immutables, schedules, warps, executes, re-checks immutables, then exercises
  * the upgraded contracts on the fork: a pod-less validator spin-up, an EL-triggered exit request,
@@ -59,6 +71,28 @@ contract NonEigenPodCredsTransactions is DeployNonEigenPodCreds {
     /// @dev its balance; only the timelock can withdraw, so it can only grow. Re-check before hashing.
     uint256 constant TREASURY_LEGACY_SWEEP_AMOUNT = 9_712_223_546_514_004_611;
 
+    /// @dev native-minting L1 sync pool, owner() == UPGRADE_TIMELOCK
+    address constant L1_SYNC_POOL = 0xD789870beA40D056A4d26055d0bEFcC8755DA146;
+    uint32 constant LINEA_EID = 30183;
+    uint32 constant SCROLL_EID = 30214;
+    bytes32 constant LINEA_PEER = bytes32(uint256(uint160(0x823106E745A62D0C2FC4d27644c62aDE946D9CCa)));
+    bytes32 constant SCROLL_PEER = bytes32(uint256(uint160(0x750cf0fd3bc891D8D864B732BC4AD340096e5e68)));
+
+    address constant LZ_ENDPOINT = 0x1a44076050125825900e736c501f859c50fE728c;
+    address constant ETH_SENTINEL = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+    address constant LINEA_DUMMY = 0x61Ff310aC15a517A846DA08ac9f9abf2A0f9A2bf;
+    address constant SCROLL_DUMMY = 0x641B33A2e1e46F3af8f3f0F9249e9111F24A51B3;
+
+    /// @dev the unclaimed Linea sync, LZ nonce 88 — guid and message taken from the live PacketSent
+    bytes32 constant LINEA_GUID = 0x990ee723c8968f7398b05ebed7ee1d60d52cc1f9760231676fc5d0c1cb489777;
+    bytes constant LINEA_MSG =
+        hex"000000000000000000000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee00000000000000000000000000000000000000000000000290deb0e5561e73b50000000000000000000000000000000000000000000000025877837cb94dc3aa";
+    uint256 constant LINEA_STRANDED_AMOUNT = 47_332_463_632_749_327_285;
+
+    /// @dev Scroll's un-synced L2 backlog, delivered as LZ nonce 59 once the pool syncs
+    uint256 constant SCROLL_AMOUNT_IN = 1_509_283_457_496_881_804;
+    uint256 constant SCROLL_AMOUNT_OUT = 1_382_065_344_225_945_340;
+
     EtherFiTimelock constant upgradeTimelock = EtherFiTimelock(payable(UPGRADE_TIMELOCK));
     RoleRegistry constant roleRegistry = RoleRegistry(ROLE_REGISTRY);
     EtherFiNodesManager constant etherFiNodesManager = EtherFiNodesManager(payable(ETHERFI_NODES_MANAGER));
@@ -71,9 +105,15 @@ contract NonEigenPodCredsTransactions is DeployNonEigenPodCreds {
     /// @dev fixed, not block-derived, so the Safe tx hashes stay reproducible
     bytes32 constant TIMELOCK_SALT = keccak256("etherfi.non-eigenpod-creds.pr485");
 
+    /// @dev second batch, scheduled in the same Safe tx as the first: re-severs both peers once the
+    ///      stranded ETH has been recovered. predecessor is left empty, so nothing on-chain forces
+    ///      it to run after the restore — the operator sequences it.
+    bytes32 constant RESEVER_SALT = keccak256("etherfi.linea-scroll-peer-resever.pr662");
+
     ContractCodeChecker public contractCodeChecker;
 
     uint256 internal lpBalanceBefore;
+    uint256 internal treasuryBalanceBefore;
     ImmutableSnapshot internal preEnm;
     ImmutableSnapshot internal preStakingManager;
     ImmutableSnapshot internal preEtherFiAdmin;
@@ -84,27 +124,59 @@ contract NonEigenPodCredsTransactions is DeployNonEigenPodCreds {
         contractCodeChecker = new ContractCodeChecker();
 
         _snapshotImmutables();
+        verifyPeersSevered();
 
         (address[] memory targets, uint256[] memory values, bytes[] memory data) = _buildUpgradeBatch();
         _logUpgradeBatch(targets, values, data, TIMELOCK_SALT);
 
         lpBalanceBefore = LIQUIDITY_POOL.balance;
+        treasuryBalanceBefore = TREASURY.balance;
 
+        (address[] memory rTargets, uint256[] memory rValues, bytes[] memory rData) = _buildReseverBatch();
+        _logUpgradeBatch(rTargets, rValues, rData, RESEVER_SALT);
+
+        // Safe tx at nonce 181 is a MultiSend carrying both scheduleBatch calls
         vm.startPrank(ETHERFI_UPGRADE_ADMIN);
         upgradeTimelock.scheduleBatch(targets, values, data, bytes32(0), TIMELOCK_SALT, TIMELOCK_MIN_DELAY);
-        vm.warp(block.timestamp + TIMELOCK_MIN_DELAY + 1);
-        upgradeTimelock.executeBatch(targets, values, data, bytes32(0), TIMELOCK_SALT);
+        upgradeTimelock.scheduleBatch(rTargets, rValues, rData, bytes32(0), RESEVER_SALT, TIMELOCK_MIN_DELAY);
         vm.stopPrank();
+        console2.log("[OK] both batches scheduled in one Safe tx (nonce 181)");
 
-        console2.log("upgrade batch executed on fork");
+        vm.warp(block.timestamp + TIMELOCK_MIN_DELAY + 1);
+
+        // Safe tx at nonce 182
+        vm.prank(ETHERFI_UPGRADE_ADMIN);
+        upgradeTimelock.executeBatch(targets, values, data, bytes32(0), TIMELOCK_SALT);
+        console2.log("[OK] upgrade + peer restore executed (nonce 182)");
         console2.log("");
 
         verifyDeployedBytecode();
         verifyUpgrades();
         verifyImmutablesPreserved();
         verifyTreasurySweep();
+        verifyPeersRestored();
+
+        forkTestStrandedDeposits();
+        verifyReseverExecutable();
 
         forkTests();
+    }
+
+    /// @notice Safe tx at nonce 183. Runs after the stranded deposits have been recovered, and
+    ///         proves the re-sever batch is executable off the same 10-day delay rather than
+    ///         needing a second one. predecessor is empty, so ordering is the operator's job.
+    function verifyReseverExecutable() public {
+        (address[] memory t, uint256[] memory v, bytes[] memory d) = _buildReseverBatch();
+
+        bytes32 id = upgradeTimelock.hashOperationBatch(t, v, d, bytes32(0), RESEVER_SALT);
+        require(upgradeTimelock.isOperationReady(id), "resever batch not ready at execute time");
+
+        vm.prank(ETHERFI_UPGRADE_ADMIN);
+        upgradeTimelock.executeBatch(t, v, d, bytes32(0), RESEVER_SALT);
+
+        require(_syncPoolPeer(LINEA_EID) == bytes32(0), "linea peer not re-severed");
+        require(_syncPoolPeer(SCROLL_EID) == bytes32(0), "scroll peer not re-severed");
+        console2.log("[OK] peers re-severed (nonce 183); both back to 0x0");
     }
 
     // ------------------------------------------------------------------ batch
@@ -114,9 +186,9 @@ contract NonEigenPodCredsTransactions is DeployNonEigenPodCreds {
         pure
         returns (address[] memory targets, uint256[] memory values, bytes[] memory data)
     {
-        targets = new address[](5);
-        data = new bytes[](5);
-        values = new uint256[](5);
+        targets = new address[](7);
+        data = new bytes[](7);
+        values = new uint256[](7);
 
         targets[0] = ETHERFI_NODES_MANAGER;
         data[0] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, EXPECTED_ETHERFI_NODES_MANAGER_IMPL);
@@ -131,8 +203,33 @@ contract NonEigenPodCredsTransactions is DeployNonEigenPodCreds {
         targets[3] = STAKING_MANAGER;
         data[3] = abi.encodeWithSelector(StakingManager.upgradeEtherFiNode.selector, EXPECTED_ETHERFI_NODE_IMPL);
 
+        // Destination is the protocol treasury, not the LiquidityPool: this balance is Splitter
+        // revenue, so it is protocol income rather than staker funds.
         targets[4] = TREASURY_LEGACY;
-        data[4] = abi.encodeWithSelector(Treasury.withdraw.selector, TREASURY_LEGACY_SWEEP_AMOUNT, LIQUIDITY_POOL);
+        data[4] = abi.encodeWithSelector(Treasury.withdraw.selector, TREASURY_LEGACY_SWEEP_AMOUNT, TREASURY);
+
+        targets[5] = L1_SYNC_POOL;
+        data[5] = abi.encodeWithSignature("setPeer(uint32,bytes32)", LINEA_EID, LINEA_PEER);
+
+        targets[6] = L1_SYNC_POOL;
+        data[6] = abi.encodeWithSignature("setPeer(uint32,bytes32)", SCROLL_EID, SCROLL_PEER);
+    }
+
+    /// @notice the re-sever batch, scheduled alongside the upgrade batch and executed last
+    function _buildReseverBatch()
+        internal
+        pure
+        returns (address[] memory targets, uint256[] memory values, bytes[] memory data)
+    {
+        targets = new address[](2);
+        data = new bytes[](2);
+        values = new uint256[](2);
+
+        targets[0] = L1_SYNC_POOL;
+        data[0] = abi.encodeWithSignature("setPeer(uint32,bytes32)", LINEA_EID, bytes32(0));
+
+        targets[1] = L1_SYNC_POOL;
+        data[1] = abi.encodeWithSignature("setPeer(uint32,bytes32)", SCROLL_EID, bytes32(0));
     }
 
     function logUpgradeBatchCalldata() public view {
@@ -273,10 +370,60 @@ contract NonEigenPodCredsTransactions is DeployNonEigenPodCreds {
     function verifyTreasurySweep() public view {
         require(TREASURY_LEGACY.balance == 0, "legacy treasury not drained");
         require(
-            LIQUIDITY_POOL.balance == lpBalanceBefore + TREASURY_LEGACY_SWEEP_AMOUNT,
-            "liquidity pool did not receive the sweep"
+            TREASURY.balance == treasuryBalanceBefore + TREASURY_LEGACY_SWEEP_AMOUNT,
+            "protocol treasury did not receive the sweep"
         );
-        console2.log("[OK] treasury drained into the liquidity pool:", TREASURY_LEGACY_SWEEP_AMOUNT);
+        // staker-facing balance must be untouched: this is protocol revenue, not staker funds
+        require(LIQUIDITY_POOL.balance == lpBalanceBefore, "liquidity pool balance moved");
+        console2.log("[OK] legacy treasury drained into the protocol treasury:", TREASURY_LEGACY_SWEEP_AMOUNT);
+    }
+
+    // -------------------------------------------------------------- sync peers
+
+    function _syncPoolPeer(uint32 eid) internal view returns (bytes32) {
+        (bool ok, bytes memory ret) = L1_SYNC_POOL.staticcall(abi.encodeWithSignature("peers(uint32)", eid));
+        require(ok, "L1SyncPool.peers() reverted");
+        return abi.decode(ret, (bytes32));
+    }
+
+    function verifyPeersSevered() public view {
+        require(_syncPoolPeer(LINEA_EID) == bytes32(0), "linea peer already set");
+        require(_syncPoolPeer(SCROLL_EID) == bytes32(0), "scroll peer already set");
+        console2.log("[OK] both sync-pool peers severed before the batch");
+    }
+
+    function verifyPeersRestored() public view {
+        require(_syncPoolPeer(LINEA_EID) == LINEA_PEER, "linea peer not restored");
+        require(_syncPoolPeer(SCROLL_EID) == SCROLL_PEER, "scroll peer not restored");
+        console2.log("[OK] L1SyncPool peers restored for Linea 30183 and Scroll 30214");
+    }
+
+    /// @notice with the peers live, replay the two stranded native-minting deposits through the LZ
+    ///         endpoint and assert each dummy token mints the exact stranded amount. This is the
+    ///         end state the 47.33 + 1.51 ETH recovery depends on; the ETH legs settle afterwards
+    ///         over each canonical bridge.
+    function forkTestStrandedDeposits() public {
+        require(IERC20Supply(LINEA_DUMMY).totalSupply() == 0, "linea dummy already minted");
+        require(IERC20Supply(SCROLL_DUMMY).totalSupply() == 0, "scroll dummy already minted");
+
+        vm.prank(LZ_ENDPOINT);
+        ILayerZeroReceiver(L1_SYNC_POOL).lzReceive(
+            ILayerZeroReceiver.Origin(LINEA_EID, LINEA_PEER, 88), LINEA_GUID, LINEA_MSG, address(0), ""
+        );
+
+        vm.prank(LZ_ENDPOINT);
+        ILayerZeroReceiver(L1_SYNC_POOL).lzReceive(
+            ILayerZeroReceiver.Origin(SCROLL_EID, SCROLL_PEER, 59),
+            bytes32("scroll-backlog"),
+            abi.encode(ETH_SENTINEL, SCROLL_AMOUNT_IN, SCROLL_AMOUNT_OUT),
+            address(0),
+            ""
+        );
+
+        require(IERC20Supply(LINEA_DUMMY).totalSupply() == LINEA_STRANDED_AMOUNT, "linea dummy mismatch");
+        require(IERC20Supply(SCROLL_DUMMY).totalSupply() == SCROLL_AMOUNT_IN, "scroll dummy mismatch");
+        console2.log("[OK] linea stranded deposit credited: ", LINEA_STRANDED_AMOUNT);
+        console2.log("[OK] scroll backlog deposit credited: ", SCROLL_AMOUNT_IN);
     }
 
     // ---------------------------------------------------------------- fork tests
@@ -286,6 +433,7 @@ contract NonEigenPodCredsTransactions is DeployNonEigenPodCreds {
         (address node, bytes memory pubkey) = forkTestSpinUpPodlessValidator();
         forkTestElTriggeredExit(node, pubkey);
         forkTestEigenLayerWithdrawal();
+        // oracle report cycle lives in OracleReportCycle.s.sol
     }
 
     /// @dev granted outside the timelock batch so the proposal's calldata is unaffected
@@ -437,4 +585,20 @@ contract NonEigenPodCredsTransactions is DeployNonEigenPodCreds {
         require(etherFiAdminImpl == EXPECTED_ETHERFI_ADMIN_IMPL, "EtherFiAdmin impl address drifted");
         console2.log("[OK] CREATE2 addresses match the Safe calldata");
     }
+}
+
+interface ILayerZeroReceiver {
+    struct Origin {
+        uint32 srcEid;
+        bytes32 sender;
+        uint64 nonce;
+    }
+
+    function lzReceive(Origin calldata origin, bytes32 guid, bytes calldata message, address executor, bytes calldata extraData)
+        external
+        payable;
+}
+
+interface IERC20Supply {
+    function totalSupply() external view returns (uint256);
 }
