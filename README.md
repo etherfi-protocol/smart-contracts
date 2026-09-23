@@ -40,7 +40,9 @@ The protocol runs validators whose withdrawal credentials point at EigenLayer Ei
 | EtherFiRestaker | [`0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf`](https://etherscan.io/address/0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf) |
 | EtherFiOracle | [`0x57AaF0004C716388B21795431CD7D5f9D3Bb6a41`](https://etherscan.io/address/0x57AaF0004C716388B21795431CD7D5f9D3Bb6a41) |
 
-`script/deploys/Deployed.s.sol` lists every deployed contract, timelock, and Safe.
+See [Deployed Contracts](https://etherfi.gitbook.io/etherfi/developers/contracts-and-integrations/deployed-contracts)
+in the ether.fi docs for the full address list, including weETH on other chains.
+`script/deploys/Deployed.s.sol` lists every mainnet contract, timelock, and Safe.
 
 ## Architecture
 
