@@ -6,7 +6,7 @@ The protocol runs validators whose withdrawal credentials point at EigenLayer Ei
 
 [Docs](https://etherfi.gitbook.io/etherfi/) ·
 [Audits](audits/) ·
-[Deployed addresses](script/deploys/Deployed.s.sol) ·
+[Deployed addresses](https://etherfi.gitbook.io/etherfi/developers/contracts-and-integrations/deployed-contracts) ·
 [weETH cross-chain](https://github.com/etherfi-protocol/weETH-cross-chain/)
 
 ## Contracts
@@ -25,24 +25,8 @@ The protocol runs validators whose withdrawal credentials point at EigenLayer Ei
 
 `src/archive` holds retired contracts kept for storage-layout reference.
 
-### Key mainnet addresses
-
-| Contract | Address |
-|----------|---------|
-| LiquidityPool | [`0x308861A430be4cce5502d0A12724771Fc6DaF216`](https://etherscan.io/address/0x308861A430be4cce5502d0A12724771Fc6DaF216) |
-| eETH | [`0x35fA164735182de50811E8e2E824cFb9B6118ac2`](https://etherscan.io/address/0x35fA164735182de50811E8e2E824cFb9B6118ac2) |
-| weETH | [`0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee`](https://etherscan.io/address/0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee) |
-| EtherFiNodesManager | [`0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F`](https://etherscan.io/address/0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F) |
-| StakingManager | [`0x25e821b7197B146F7713C3b89B6A4D83516B912d`](https://etherscan.io/address/0x25e821b7197B146F7713C3b89B6A4D83516B912d) |
-| WithdrawRequestNFT | [`0x7d5706f6ef3F89B3951E23e557CDFBC3239D4E2c`](https://etherscan.io/address/0x7d5706f6ef3F89B3951E23e557CDFBC3239D4E2c) |
-| PriorityWithdrawalQueue | [`0x35e7D6feF6f72aDd3c3e39dEc6d9CCc29e3345FA`](https://etherscan.io/address/0x35e7D6feF6f72aDd3c3e39dEc6d9CCc29e3345FA) |
-| EtherFiRedemptionManager | [`0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0`](https://etherscan.io/address/0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0) |
-| EtherFiRestaker | [`0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf`](https://etherscan.io/address/0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf) |
-| EtherFiOracle | [`0x57AaF0004C716388B21795431CD7D5f9D3Bb6a41`](https://etherscan.io/address/0x57AaF0004C716388B21795431CD7D5f9D3Bb6a41) |
-
-See [Deployed Contracts](https://etherfi.gitbook.io/etherfi/developers/contracts-and-integrations/deployed-contracts)
-in the ether.fi docs for the full address list, including weETH on other chains.
-`script/deploys/Deployed.s.sol` lists every mainnet contract, timelock, and Safe.
+Contract addresses live in the ether.fi docs under
+[Deployed Contracts](https://etherfi.gitbook.io/etherfi/developers/contracts-and-integrations/deployed-contracts).
 
 ## Architecture
 
