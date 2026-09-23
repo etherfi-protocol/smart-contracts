@@ -1,4 +1,4 @@
-# Liquid Staking Protocol Contracts
+# ether.fi's Liquid Staking Protocol Contracts
 
 Solidity contracts behind ether.fi's liquid staking and native restaking on Ethereum mainnet.
 Users deposit ETH into the `LiquidityPool` and receive eETH, a rebasing token, or its
