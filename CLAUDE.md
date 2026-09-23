@@ -24,7 +24,7 @@ src/
   oracle/               # EtherFiOracle, EtherFiAdmin
   rewards/              # EtherFiRewardsRouter, CumulativeMerkleRewardsDistributor
   governance/           # RoleRegistry, EtherFiTimelock, Blacklister, rate-limiting/
-  helpers/              # AddressProvider, EtherFiViewer, EtherFiOperationParameters
+  helpers/              # AddressProvider, EtherFiViewer
   interfaces/eigenlayer-interfaces/ # EigenLayer interface definitions (no implementations)
   archive/              # Retired contracts kept for storage-layout reference
 test/

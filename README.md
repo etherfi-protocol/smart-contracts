@@ -21,7 +21,7 @@ The protocol runs validators whose withdrawal credentials point at EigenLayer Ei
 | Oracle | `src/oracle` | `EtherFiOracle`, `EtherFiAdmin` |
 | Rewards | `src/rewards` | `EtherFiRewardsRouter`, `CumulativeMerkleRewardsDistributor` |
 | Governance | `src/governance` | `RoleRegistry`, `EtherFiTimelock`, `Blacklister`, `RevokeAdmin`, rate limiting |
-| Helpers | `src/helpers` | `AddressProvider`, `EtherFiViewer`, `EtherFiOperationParameters` |
+| Helpers | `src/helpers` | `AddressProvider`, `EtherFiViewer` |
 
 `src/archive` holds retired contracts kept for storage-layout reference.
 
