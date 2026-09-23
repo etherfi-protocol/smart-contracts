@@ -1,15 +1,13 @@
 # ether.fi's Liquid Staking Protocol Contracts
 
-Solidity contracts behind ether.fi's liquid staking and native restaking on Ethereum mainnet.
-Users deposit ETH into the `LiquidityPool` and receive eETH, a rebasing token, or its
-non-rebasing wrapper weETH. The protocol runs validators through EigenLayer EigenPods, so
-staked ETH also earns restaking rewards.
+Solidity contracts behind ether.fi's liquid staking on Ethereum mainnet. Users deposit ETH
+into the `LiquidityPool` and receive eETH, a rebasing token, or its non-rebasing wrapper weETH.
+The protocol runs validators whose withdrawal credentials point at EigenLayer EigenPods.
 
 [Docs](https://etherfi.gitbook.io/etherfi/) ·
 [Audits](audits/) ·
 [Deployed addresses](script/deploys/Deployed.s.sol) ·
-[weETH cross-chain](https://github.com/etherfi-protocol/weETH-cross-chain/) ·
-[AVS operator](https://github.com/etherfi-protocol/etherfi-avs-operator)
+[weETH cross-chain](https://github.com/etherfi-protocol/weETH-cross-chain/)
 
 ## Contracts
 
@@ -17,7 +15,7 @@ staked ETH also earns restaking rewards.
 |--------|------|-----------|
 | Core | `src/core` | `LiquidityPool`, `EETH`, `WeETH` |
 | Staking | `src/staking` | `StakingManager`, `EtherFiNodesManager`, `EtherFiNode`, `AuctionManager`, `NodeOperatorManager` |
-| Restaking | `src/restaking` | `EtherFiRestaker` (stETH in EigenLayer), `RestakingRewardsRouter` |
+| Restaking | `src/restaking` | `EtherFiRestaker`, `RestakingRewardsRouter` |
 | Deposits | `src/deposits` | `DepositAdapter`, `Liquifier`, `LiquidRefer` |
 | Withdrawals | `src/withdrawals` | `WithdrawRequestNFT`, `PriorityWithdrawalQueue`, `EtherFiRedemptionManager`, `WeETHWithdrawAdapter` |
 | Oracle | `src/oracle` | `EtherFiOracle`, `EtherFiAdmin` |
