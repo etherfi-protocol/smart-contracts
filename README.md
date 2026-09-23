@@ -111,6 +111,10 @@ catches upgrades that would shift proxy storage.
 Report vulnerabilities through the ether.fi bug bounty program. Do not open public issues for
 security bugs.
 
-## License
+## 📄 License
 
-MIT. See the SPDX header in each source file.
+ether.fi is open-source and licensed under the [MIT License](LICENSE).
+
+---
+
+<p align="center">Built with ❤️ by the ether.fi team</p>
