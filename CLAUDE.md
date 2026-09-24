@@ -1,4 +1,4 @@
-# EtherFi Smart Contracts
+# ether.fi's Liquid Staking Protocol Contracts
 
 ## Build & Test
 
@@ -14,20 +14,26 @@ forge test --match-test <name> --fork-url $MAINNET_RPC_URL  # mainnet fork tests
 ## Project Layout
 
 ```
-src/                    # Core contracts
-  EtherFiNode.sol       # Per-validator-group contract, owns an EigenPod
-  EtherFiNodesManager.sol # Entry point for pod operations (0x8B71...6F)
-  LiquidityPool.sol     # Main ETH pool (0x3088...16)
-  EtherFiRestaker.sol   # Manages stETH restaking via EigenLayer (0x1B7a...Ff)
-  EtherFiRedemptionManager.sol # Instant redemptions with rate limiting (0xDadE...e0)
-  StakingManager.sol    # Validator lifecycle
-  WeETH.sol / EETH.sol  # Token contracts
-  eigenlayer-interfaces/ # EigenLayer interface definitions (no implementations)
+src/
+  core/                 # LiquidityPool (0x3088...16), EETH, WeETH
+  staking/              # StakingManager, EtherFiNodesManager (0x8B71...6F), EtherFiNode, AuctionManager
+  restaking/            # EtherFiRestaker (0x1B7a...Ff): stETH restaking via EigenLayer
+  deposits/             # DepositAdapter, Liquifier, LiquidRefer
+  withdrawals/          # WithdrawRequestNFT, PriorityWithdrawalQueue,
+                        # EtherFiRedemptionManager (0xDadE...e0), WeETHWithdrawAdapter
+  oracle/               # EtherFiOracle, EtherFiAdmin
+  rewards/              # EtherFiRewardsRouter, CumulativeMerkleRewardsDistributor
+  governance/           # RoleRegistry, EtherFiTimelock, Blacklister, rate-limiting/
+  helpers/              # AddressProvider, EtherFiViewer
+  interfaces/eigenlayer-interfaces/ # EigenLayer interface definitions (no implementations)
+  archive/              # Retired contracts kept for storage-layout reference
 test/
   TestSetup.sol         # Base test with initializeRealisticFork() / initializeTestingFork()
+  invariant/            # Stateful invariant fuzzing
   behaviour-tests/      # PreludeTest - validator lifecycle on mainnet fork
   integration-tests/    # Cross-contract integration tests on mainnet fork
   fork-tests/           # Additional fork-based tests
+certora/                # specs/ and config/ for formal verification
 script/
   operations/           # Operational tooling (Python + Solidity for Gnosis Safe txns)
   deploys/Deployed.s.sol # All mainnet deployed addresses as constants
