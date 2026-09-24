@@ -66,6 +66,18 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         vm.prank(roleRegistry.owner());
         stakingManager.upgradeTo(address(stakingManagerImpl));
 
+        // EtherFiNodesManager must be upgraded alongside StakingManager: the creation paths now
+        // resolve withdrawal credentials through EtherFiNodesManager.withdrawalCredentialTarget,
+        // a selector the deployed implementation does not have. Upgraded here, before the
+        // RoleRegistry swap, for the same `onlyProtocolUpgrader` reason as the contracts above.
+        EtherFiNodesManager etherFiNodesManagerImpl = new EtherFiNodesManager(
+            address(stakingManager),
+            address(roleRegistry),
+            address(etherFiNodesManager.rateLimiter())
+        );
+        vm.prank(roleRegistry.owner());
+        etherFiNodesManager.upgradeTo(address(etherFiNodesManagerImpl));
+
         // Wire LP immutables to real mainnet proxy addresses so calls into
         // eETH / withdrawRequestNFT / etc. land on live contracts.
         LiquidityPool liquidityPoolImpl = new LiquidityPool(

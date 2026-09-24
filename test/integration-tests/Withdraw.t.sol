@@ -81,28 +81,31 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
             vm.store(address(etherFiAdminInstance), bytes32(uint256(209)), bytes32(val));
         }
 
-        // Step B: unconditionally reset operator submissions by removing and re-adding each one.
-        // addCommitteeMember() resets CommitteeMemberState to
-        // (registered=true, enabled=true, lastReportRefSlot=0, numReports=0), clearing any stale
-        // submission from mainnet without adding new committee members.
-        address oracleOwner = roleRegistryInstance.owner();
-        // add/removeCommitteeMember now route through OPERATION_TIMELOCK_ROLE.
-        bytes32 opTimelockRole = roleRegistryInstance.OPERATION_TIMELOCK_ROLE();
-        address rrOwner = roleRegistryInstance.owner();
-        vm.prank(rrOwner);
-        roleRegistryInstance.grantRole(opTimelockRole, oracleOwner);
-        vm.startPrank(oracleOwner);
-        // Each add/remove now requires a _quorumSize that satisfies the strict-majority
-        // invariant for the resulting numActive. Compute fresh values so this works
-        // regardless of mainnet's current quorum.
-        uint32 active = etherFiOracleInstance.numActiveCommitteeMembers();
-        uint32 quorumAfterRemove = active > 1 ? (active - 1) / 2 + 1 : 1;
-        uint32 quorumAfterAdd = active / 2 + 1;
-        etherFiOracleInstance.removeCommitteeMember(AVS_OPERATOR_1, quorumAfterRemove);
-        etherFiOracleInstance.addCommitteeMember(AVS_OPERATOR_1, quorumAfterAdd);
-        etherFiOracleInstance.removeCommitteeMember(AVS_OPERATOR_2, quorumAfterRemove);
-        etherFiOracleInstance.addCommitteeMember(AVS_OPERATOR_2, quorumAfterAdd);
-        vm.stopPrank();
+        // Step B: make AVS_OPERATOR_1 and AVS_OPERATOR_2 the two signers that reach quorum.
+        // Mainnet's committee composition drifts: both operators have since been rotated off,
+        // so removeCommitteeMember reverts NotRegistered, and re-adding them leaves the
+        // strict-majority quorum above the two signers these tests prank as. Write the
+        // committee state directly so the setup does not depend on who is registered today.
+        _forceCommitteeMember(AVS_OPERATOR_1);
+        _forceCommitteeMember(AVS_OPERATOR_2);
+        _forceQuorumSize(2);
+    }
+
+    /// @dev Marks `_member` as a registered, enabled committee member with no prior submission.
+    ///      EtherFiOracle slot 251 holds `committeeMemberStates`; each entry packs
+    ///      registered (byte 0) + enabled (byte 1) + lastReportRefSlot + numReports.
+    function _forceCommitteeMember(address _member) internal {
+        bytes32 slot = keccak256(abi.encode(_member, uint256(251)));
+        vm.store(address(etherFiOracleInstance), slot, bytes32(uint256(0x0101)));
+    }
+
+    /// @dev Overwrites `quorumSize` (slot 253, offset 4) directly. setQuorumSize() would reject
+    ///      any value that breaks the strict-majority invariant against the live member count.
+    function _forceQuorumSize(uint32 _quorumSize) internal {
+        uint256 packed = uint256(vm.load(address(etherFiOracleInstance), bytes32(uint256(253))));
+        packed &= ~(uint256(type(uint32).max) << 32);
+        packed |= uint256(_quorumSize) << 32;
+        vm.store(address(etherFiOracleInstance), bytes32(uint256(253)), bytes32(packed));
     }
 
     /// @dev Mirrors EtherFiAdmin._validateReport's sum-of-requests sanity check.

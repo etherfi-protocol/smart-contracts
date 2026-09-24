@@ -70,11 +70,12 @@ contract EtherFiNodesManager is
 
     /// @dev under normal conditions ETH should not accumulate in the EtherFiNode. This will forward
     ///   the eth to the liquidity pool in the event of ETH being accidentally sent there
-    function sweepFunds(uint256 id) external onlyHousekeepingOperations whenNotPaused {
-        address nodeAddr = etherfiNodeAddress(id);
-        uint256 balance = IEtherFiNode(nodeAddr).sweepFunds();
-        if(balance > 0) {
-            emit FundsTransferred(nodeAddr, balance);
+    /// @dev Takes the node address: validators in the new regime pay out to the node itself.
+    function sweepFunds(address node) external onlyHousekeepingOperations whenNotPaused {
+        // unvalidated: legacy nodes are not all backfilled into deployedEtherFiNodes
+        uint256 balance = IEtherFiNode(node).sweepFunds();
+        if (balance > 0) {
+            emit FundsTransferred(node, balance);
         }
     }
 
@@ -95,6 +96,33 @@ contract EtherFiNodesManager is
         if (msg.sender != address(stakingManager)) revert InvalidCaller();
         if (!stakingManager.deployedEtherFiNodes(node)) revert UnknownNode();
         return IEtherFiNode(node).createEigenPod();
+    }
+
+    /**
+     * @notice Permanently retires a node's EigenPod, ending its restaking.
+     * @param node The node whose pod to retire
+     * @dev Irreversible. Requires every beacon share queued and matured first, and must run
+     *      before consolidating the pod's validators out, or the negative balance delta cuts the
+     *      beacon chain slashing factor.
+     */
+    function disablePod(address node) external onlyOperatingTimelock whenNotPaused {
+        _validateNode(node);
+        IEtherFiNode(node).disablePod();
+        IEigenPod pod = IEtherFiNode(node).getEigenPod();
+        if (address(pod) == address(0) || !pod.restakingDisabled()) revert PodNotDisabled();
+        emit PodDisabled(node, address(pod));
+    }
+
+    /**
+     * @notice Sweeps all remaining ETH out of a retired EigenPod to the liquidity pool.
+     * @param node The node whose retired pod to sweep
+     */
+    function withdrawDisabledPodETH(address node) external onlyHousekeepingOperations whenNotPaused {
+        _validateNode(node);
+        uint256 balance = IEtherFiNode(node).withdrawDisabledPodETH();
+        if (balance > 0) {
+            emit FundsTransferred(node, balance);
+        }
     }
 
     /**
@@ -151,16 +179,6 @@ contract EtherFiNodesManager is
     }
     
     /**
-     * @notice Queues a beaconETH withdrawal for a given node
-     * @param id The id of the node to queue the beaconETH withdrawal for
-     * @param amount The amount of beaconETH to withdraw
-     * @return withdrawalRoot The withdrawal root
-     */
-    function queueETHWithdrawal(uint256 id, uint256 amount) external onlyExecutorOperations whenNotPaused returns (bytes32 withdrawalRoot) {
-        return queueETHWithdrawal(etherfiNodeAddress(id), amount);
-    }
-
-    /**
      * @notice Queues a withdrawal for a given node
      * @param node The node to queue the withdrawal for
      * @param params The parameters to queue the withdrawal with
@@ -172,15 +190,6 @@ contract EtherFiNodesManager is
         IEtherFiNode(node).queueWithdrawals(params);
     }
     
-    /**
-     * @notice Queues a withdrawal for a given node
-     * @param id The id of the node to queue the withdrawal for
-     * @param params The parameters to queue the withdrawal with
-     */
-    function queueWithdrawals(uint256 id, IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyExecutorOperations whenNotPaused {
-        queueWithdrawals(etherfiNodeAddress(id), params);
-    }
-
     /**
      * @notice Completes all queued beaconETH withdrawals for a given node
      * @param node The node to complete the queued beaconETH withdrawals for
@@ -194,15 +203,6 @@ contract EtherFiNodesManager is
         }
     }
     
-    /**
-     * @notice Completes all queued beaconETH withdrawals for a given node
-     * @param id The id of the node to complete the queued beaconETH withdrawals for
-     * @param receiveAsTokens Whether to receive the withdrawals as tokens
-     */
-    function completeQueuedETHWithdrawals(uint256 id, bool receiveAsTokens) external onlyHousekeepingOperations whenNotPaused {
-        completeQueuedETHWithdrawals(etherfiNodeAddress(id), receiveAsTokens);
-    }
-
     /**
      * @notice Completes all queued withdrawals for a given node
      * @param node The node to complete the queued withdrawals for
@@ -218,25 +218,19 @@ contract EtherFiNodesManager is
         }
     }
     
-    /**
-     * @notice Completes all queued withdrawals for a given node
-     * @param id The id of the node to complete the queued withdrawals for
-     * @param withdrawals The withdrawals to complete
-     * @param tokens The tokens to complete the withdrawals with
-     * @param receiveAsTokens Whether to receive the withdrawals as tokens
-     */
-    function completeQueuedWithdrawals(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external onlyHousekeepingOperations whenNotPaused {
-        completeQueuedWithdrawals(etherfiNodeAddress(id), withdrawals, tokens, receiveAsTokens);
-    }
-
     //-------------------------------------------------------------------
     //--------------------  EL TRIGGER FUNCTIONS  -----------------------
     //-------------------------------------------------------------------
     /**
-     * @notice Triggers EIP-7002 withdrawal requests, grouping by EigenPod automatically.
-     * @dev associated etherFiNode is derived from pubkey in the request. Caller should ensure
-     *      all provided validators share the same eigenpod
-     * @dev Access: only ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE, pausable, nonReentrant.
+     * @notice Triggers EIP-7002 withdrawal requests for one credential target.
+     * @dev No grouping is performed. The node is resolved from requests[0] and the whole batch goes
+     *      to it, so every source must share that node. Batches are rejected, not split: pod-less
+     *      and retired-pod targets revert MixedNodeRequest, and a live pod enforces membership
+     *      itself by reverting ValidatorNotActiveInPod.
+     * @dev Access: only EXECUTOR_OPERATIONS_ROLE, pausable, nonReentrant.
+     * @dev Accepted (I-01): pod-less sources are authorized by the pubkey link alone, which exists
+     *      from the 1 ETH deposit. A pre-activation request succeeds here but consensus discards it,
+     *      after paying the fee and consuming rate limit. Callers must confirm activation.
      * @param requests Array of WithdrawalRequest:
      *        - pubkey: 48-byte BLS pubkey
      *        - amountGwei: 0 for full exit, >0 for partial to pod
@@ -251,27 +245,55 @@ contract EtherFiNodesManager is
 
         bytes32 pubKeyHash = calculateValidatorPubkeyHash(requests[0].pubkey);
         IEtherFiNode node = etherFiNodeFromPubkeyHash[pubKeyHash];
-        IEigenPod pod = node.getEigenPod();
+        // unvalidated: legacy nodes are not all backfilled into deployedEtherFiNodes
+        address target = _credentialTarget(address(node));
 
-        // submitting an execution layer withdrawal request requires paying a fee per request
-        if (msg.value < pod.getWithdrawalRequestFee() * requests.length) revert InsufficientWithdrawalFees();
+        // Mixed-target batches must be rejected: the consensus layer silently drops requests whose
+        // withdrawal address is not the caller, burning the fee and emitting phantom exits. A live
+        // pod already enforces this itself, leaving two gaps to cover here.
+        if (target == address(node)) {
+            // Pod-less: our pubkey map is complete for these.
+            for (uint256 i = 1; i < requests.length; i++) {
+                if (address(etherFiNodeFromPubkeyHash[calculateValidatorPubkeyHash(requests[i].pubkey)]) != address(node)) revert MixedNodeRequest();
+            }
+        } else if (_podRestakingDisabled(target)) {
+            // Disabled pod: EL v1.14 stops enforcing membership. Accept a source linked here OR
+            // present in the pod's own set, since legacy validators may be in neither our map nor
+            // provable into EigenLayer. Reject only pubkeys unknown to both.
+            for (uint256 i = 1; i < requests.length; i++) {
+                bytes32 srcHash = calculateValidatorPubkeyHash(requests[i].pubkey);
+                bool linkedHere = address(etherFiNodeFromPubkeyHash[srcHash]) == address(node);
+                bool inPodSet = IEigenPod(target).validatorStatus(srcHash) != IEigenPodTypes.VALIDATOR_STATUS.INACTIVE;
+                if (!linkedHere && !inPodSet) revert MixedNodeRequest();
+            }
+        }
+
+        // Pod-backed reads the fee off the pod as before, so this upgrade does not require the
+        // EtherFiNode beacon to be upgraded first.
+        uint256 feePerRequest = target == address(node)
+            ? node.getWithdrawalRequestFee()
+            : IEigenPod(target).getWithdrawalRequestFee();
+        if (msg.value < feePerRequest * requests.length) revert InsufficientWithdrawalFees();
         node.requestExecutionLayerTriggeredWithdrawal{value: msg.value}(requests);
 
         for (uint256 i = 0; i < requests.length; i++) {
             bytes32 currentPubKeyHash = calculateValidatorPubkeyHash(requests[i].pubkey);
-            emit ValidatorWithdrawalRequestSent(address(pod), currentPubKeyHash, requests[i].pubkey);
+            emit ValidatorWithdrawalRequestSent(target, currentPubKeyHash, requests[i].pubkey);
         }
     }
 
     /**
      * @notice Triggers EIP-7251 consolidation requests for validators in the same EigenPod.
-     * @dev Access: only ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE, pausable, nonReentrant.
+     * @dev Access: only EXECUTOR_OPERATIONS_ROLE, pausable, nonReentrant.
      * @param requests Array of ConsolidationRequest:
      *        - srcPubkey: 48-byte BLS pubkey of source validator
      *        - targetPubkey: 48-byte BLS pubkey of target validator
      *        - If srcPubkey == targetPubkey, this switches validator from 0x01 to 0x02 credentials
-     * @dev EigenLayer validates that validators belong to the pod automatically.
-     * @custom:fee Send EXACT ETH to cover consolidation fees.
+     * @dev Sources must share one node, resolved from requests[0]. EigenLayer enforces that only on
+     *      a live pod; a retired pod stops enforcing it (EL v1.14) and a pod-less node never did, so
+     *      both are covered by MixedNodeRequest here. Targets are checked separately: every target
+     *      that moves value must be one of ours, or UnknownConsolidationTarget.
+     * @custom:fee Send at least the fee; any surplus is refunded to the caller.
      */
     function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable nonReentrant onlyExecutorOperations whenNotPaused {
         if (requests.length == 0) revert EmptyConsolidationRequest();
@@ -280,13 +302,47 @@ contract EtherFiNodesManager is
         uint256 totalConsolidationGwei = _getTotalConsolidationGwei(requests);
         rateLimiter.consume(CONSOLIDATION_REQUEST_LIMIT_ID, SafeCast.toUint64(totalConsolidationGwei));
 
-        // eigenlayer will revert if all validators don't belong to the same pod
+        // resolved from the source validator only; the target may live outside this node
         bytes32 pubKeyHash = calculateValidatorPubkeyHash(requests[0].srcPubkey);
         IEtherFiNode node = etherFiNodeFromPubkeyHash[pubKeyHash];
-        IEigenPod pod = node.getEigenPod();
+        // unvalidated: legacy nodes are not all backfilled into deployedEtherFiNodes
+        address target = _credentialTarget(address(node));
 
-        // submitting an execution layer consolidation request requires paying a fee per request
-        if (msg.value < pod.getConsolidationRequestFee() * requests.length) revert InsufficientConsolidationFees();
+        // Sources only, per requestExecutionLayerTriggeredWithdrawal. The target is deliberately
+        // unconstrained; it may live outside this node.
+        if (target == address(node)) {
+            for (uint256 i = 1; i < requests.length; i++) {
+                if (address(etherFiNodeFromPubkeyHash[calculateValidatorPubkeyHash(requests[i].srcPubkey)]) != address(node)) revert MixedNodeRequest();
+            }
+        } else if (_podRestakingDisabled(target)) {
+            for (uint256 i = 1; i < requests.length; i++) {
+                // Same-pod iff linked to this node in our map OR present in the pod's own validator
+                // set; see requestExecutionLayerTriggeredWithdrawal. Reject only truly foreign sources.
+                bytes32 srcHash = calculateValidatorPubkeyHash(requests[i].srcPubkey);
+                bool linkedHere = address(etherFiNodeFromPubkeyHash[srcHash]) == address(node);
+                bool inPodSet = IEigenPod(target).validatorStatus(srcHash) != IEigenPodTypes.VALIDATOR_STATUS.INACTIVE;
+                if (!linkedHere && !inPodSet) revert MixedNodeRequest();
+            }
+        }
+
+        // The target decides where the balance lands, and nothing below us checks it: EIP-7251 wants
+        // only 0x02 credentials, and a pod vets the target solely when the pod is the caller.
+        for (uint256 i = 0; i < requests.length; i++) {
+            bytes32 srcHash = calculateValidatorPubkeyHash(requests[i].srcPubkey);
+            bytes32 tgtHash = calculateValidatorPubkeyHash(requests[i].targetPubkey);
+            if (tgtHash == srcHash) continue; // switch to compounding: moves no value
+            if (address(etherFiNodeFromPubkeyHash[tgtHash]) != address(0)) continue; // one of ours
+            // ACTIVE, not != INACTIVE: the CL drops a WITHDRAWN target, burning the fee.
+            if (target != address(node)
+                && IEigenPod(target).validatorStatus(tgtHash) == IEigenPodTypes.VALIDATOR_STATUS.ACTIVE) continue;
+            revert UnknownConsolidationTarget();
+        }
+
+        // pod-backed reads the pod directly, as before; see requestExecutionLayerTriggeredWithdrawal
+        uint256 feePerRequest = target == address(node)
+            ? node.getConsolidationRequestFee()
+            : IEigenPod(target).getConsolidationRequestFee();
+        if (msg.value < feePerRequest * requests.length) revert InsufficientConsolidationFees();
         node.requestConsolidation{value: msg.value}(requests);
 
         for (uint256 i = 0; i < requests.length; ) {
@@ -295,9 +351,9 @@ contract EtherFiNodesManager is
 
             // Emit appropriate event based on whether this is a switch or consolidation
             if (srcPkHash == targetPkHash) {
-                emit ValidatorSwitchToCompoundingRequested(address(pod), srcPkHash, requests[i].srcPubkey);
+                emit ValidatorSwitchToCompoundingRequested(target, srcPkHash, requests[i].srcPubkey);
             } else {
-                emit ValidatorConsolidationRequested(address(pod), srcPkHash, requests[i].srcPubkey, targetPkHash, requests[i].targetPubkey);
+                emit ValidatorConsolidationRequested(target, srcPkHash, requests[i].srcPubkey, targetPkHash, requests[i].targetPubkey);
             }
             unchecked { ++i; }
         }
@@ -330,8 +386,11 @@ contract EtherFiNodesManager is
      * @param validatorIds The legacy validator ids to link
      * @param pubkeys The pubkeys to link the validator ids to
      * @dev We can delete this method once we have linked all of our legacy validators
+     * @dev Multisig, not executor: this writes the map requestConsolidation trusts to decide a target
+     *      is ours, so sharing that role would let one key link its own validator then consolidate
+     *      into it.
      */
-    function linkLegacyValidatorIds(uint256[] calldata validatorIds, bytes[] calldata pubkeys) external onlyExecutorOperations {
+    function linkLegacyValidatorIds(uint256[] calldata validatorIds, bytes[] calldata pubkeys) external onlyOperatingMultisig {
         if (validatorIds.length != pubkeys.length) revert LengthMismatch();
         for (uint256 i = 0; i < validatorIds.length; i++) {
 
@@ -379,18 +438,9 @@ contract EtherFiNodesManager is
      * @param node The node address to set the proof submitter for
      * @param proofSubmitter The address of the proof submitter
      */
-    function setProofSubmitter(address node, address proofSubmitter) public onlyOperatingMultisig whenNotPaused {
+    function setProofSubmitter(address node, address proofSubmitter) external onlyOperatingMultisig whenNotPaused {
         _validateNode(node);
         IEtherFiNode(node).setProofSubmitter(proofSubmitter);
-    }
-    
-    /**
-     * @notice Set the proof submitter for a specific node
-     * @param id The id of the node to set the proof submitter for
-     * @param proofSubmitter The address of the proof submitter
-     */
-    function setProofSubmitter(uint256 id, address proofSubmitter) external onlyOperatingMultisig whenNotPaused {
-        setProofSubmitter(etherfiNodeAddress(id), proofSubmitter);
     }
 
     //--------------------------------------------------------------------------------------
@@ -403,7 +453,8 @@ contract EtherFiNodesManager is
      * @param target The target to forward the call to
      * @return returnData The return data from the call
      */
-    function forwardExternalCall(address[] calldata nodes, bytes[] calldata data, address target) external onlyEigenpodOperations whenNotPaused returns (bytes[] memory returnData) {
+    function forwardExternalCall(address[] calldata nodes, bytes[] calldata data, address target) external whenNotPaused returns (bytes[] memory returnData) {
+        _requireForwardingCaller();
         if (nodes.length != data.length) revert InvalidForwardedCall();
 
         returnData = new bytes[](nodes.length);
@@ -428,7 +479,8 @@ contract EtherFiNodesManager is
      * @return returnData The return data from the call
      * @dev This serves to allow us to support minor eigenlayer upgrades without needing to immediately upgrade our contracts.
      */
-    function forwardEigenPodCall(address[] calldata nodes, bytes[] calldata data) external onlyEigenpodOperations whenNotPaused returns (bytes[] memory returnData) {
+    function forwardEigenPodCall(address[] calldata nodes, bytes[] calldata data) external whenNotPaused returns (bytes[] memory returnData) {
+        _requireForwardingCaller();
         if (nodes.length != data.length) revert InvalidForwardedCall();
 
         returnData = new bytes[](nodes.length);
@@ -502,11 +554,28 @@ contract EtherFiNodesManager is
     }
 
     /**
+     * @notice Allow either eigenpod or housekeeping operations to forward calls
+     * @dev Housekeeping is accepted so the sweep and withdrawal-completion crons can batch across
+     *      nodes in one transaction. The per-caller selector whitelist still applies, so holding
+     *      either role on its own grants nothing.
+     */
+    function _requireForwardingCaller() internal view {
+        if (roleRegistry.hasRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), msg.sender)) return;
+        roleRegistry.onlyEigenpodOperations(msg.sender); // reverts OnlyEigenpodOperations otherwise
+    }
+
+    /**
      * @notice Validate that the node exists and revert if not
      * @param node The node address to validate
      */
     function _validateNode(address node) internal view {
         if (!stakingManager.deployedEtherFiNodes(node)) revert UnknownNode();
+        // Independent of the map, so a bad backfill entry cannot make any contract a node.
+        try IEtherFiNode(node).etherFiNodesManager() returns (IEtherFiNodesManager m) {
+            if (address(m) != address(this)) revert UnknownNode();
+        } catch {
+            revert UnknownNode();
+        }
     }
 
     /**
@@ -562,6 +631,49 @@ contract EtherFiNodesManager is
     function calculateValidatorPubkeyHash(bytes memory pubkey) public pure returns (bytes32) {
         if (pubkey.length != VALIDATOR_PUBKEY_LENGTH) revert InvalidPubKeyLength();
         return sha256(abi.encodePacked(pubkey, bytes16(0)));
+    }
+
+    /**
+     * @notice Returns the address a node's validators point their withdrawal credentials at.
+     * @param node The node to resolve the credential target for
+     * @dev The pod when the node has one, otherwise the node itself. A node's pod is created
+     *      only inside StakingManager.instantiateEtherFiNode and createPod() reverts on a
+     *      second call, so this never changes for a given node.
+     * @return The withdrawal credential target
+     */
+    function withdrawalCredentialTarget(address node) public view returns (address) {
+        _validateNode(node);
+        address target = _credentialTarget(node);
+        // Refuse to bake credentials against a retired pod: a validator created here could never
+        // verify its credentials or checkpoint, so its 32 ETH would be stranded behind a dead pod.
+        // Only the creation paths call this validated resolver; the request paths use
+        // _credentialTarget directly, so validators already live on a since-retired pod are
+        // unaffected. try/catch leaves pre-v1.14 pods (no restakingDisabled() selector) as before.
+        if (target != node) {
+            try IEigenPod(target).restakingDisabled() returns (bool disabled) {
+                if (disabled) revert PodRetired();
+            } catch {}
+        }
+        return target;
+    }
+
+    /// @dev Unvalidated derivation, for callers that only need the target for an event. The
+    ///   validated `withdrawalCredentialTarget` is what the creation paths use, since that is
+    ///   where the target is baked into a deposit and must never be an arbitrary address.
+    function _credentialTarget(address node) internal view returns (address) {
+        address pod = address(IEtherFiNode(node).getEigenPod());
+        return pod == address(0) ? node : pod;
+    }
+
+    /// @dev True if the target pod has retired restaking (EigenLayer v1.14). The try/catch returns
+    ///   false for pre-v1.14 pods, which have no `restakingDisabled()` selector, keeping them on the
+    ///   live-pod path where EigenLayer still enforces batch membership itself.
+    function _podRestakingDisabled(address pod) internal view returns (bool) {
+        try IEigenPod(pod).restakingDisabled() returns (bool disabled) {
+            return disabled;
+        } catch {
+            return false;
+        }
     }
 
     /**

@@ -19,6 +19,9 @@ contract MockEigenPodManagerBase is IEigenPodManager, MockShareManagerBase, Mock
      */
     function createPod() external virtual returns (address) {}
 
+    /// @notice Permanently retires the caller's EigenPod.
+    function disablePod() external virtual {}
+
     /**
      * @notice Stakes for a new beacon chain validator on the sender's EigenPod.
      * Also creates an EigenPod for the sender if they don't have one already.

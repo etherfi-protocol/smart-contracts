@@ -13,7 +13,7 @@ import {EtherFiRewardsRouter} from "@etherfi/rewards/EtherFiRewardsRouter.sol";
 import {Liquifier} from "@etherfi/deposits/Liquifier.sol";
 import {ILiquifier} from "@etherfi/deposits/interfaces/ILiquifier.sol";
 import {WithdrawRequestNFT} from "@etherfi/withdrawals/WithdrawRequestNFT.sol";
-import {EtherFiViewer} from "@etherfi/helpers/EtherFiViewer.sol";
+import {EtherFiViewer} from "@etherfi/archive/EtherFiViewer.sol";
 import {StakingManager} from "@etherfi/staking/StakingManager.sol";
 import {LiquidityPool} from "@etherfi/core/LiquidityPool.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
