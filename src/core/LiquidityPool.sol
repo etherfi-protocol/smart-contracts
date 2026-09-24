@@ -65,6 +65,11 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
     //--------------------------------------------------------------------------------------
     //---------------------------------  CONSTANTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
+    /// @dev Authority for {depositETHToRecipient}. Held by the DepositAdapter. Lets that
+    ///      contract choose which address the freshly minted eETH shares are credited to,
+    ///      the same trust the Liquifier already has via {depositToRecipient}.
+    bytes32 public constant LIQUIDITY_POOL_DEPOSIT_ADAPTER_ROLE = keccak256("LIQUIDITY_POOL_DEPOSIT_ADAPTER_ROLE");
+
     uint256 public constant SHARE_UNIT = 1e18;
 
     // Hard cap on how far a single rebase may INCREASE TVL (rewards), in bps of TVL.
@@ -228,6 +233,31 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
         emit Deposit(_recipient, _amount, SourceOfFunds.EETH, _referral);
 
         return _deposit(_recipient, 0, _amount);
+    }
+
+    /**
+     * @notice Deposit ETH into the Liquidity Pool, crediting the eETH shares to `_recipient`
+     * @param _recipient The address the eETH shares are minted to
+     * @param _referral The address of the referral
+     * @return uint256 The number of eETH shares minted
+     * @dev Payable sibling of {depositToRecipient}, restricted to holders of
+     *      LIQUIDITY_POOL_DEPOSIT_ADAPTER_ROLE. Exists so the DepositAdapter can credit the
+     *      shares straight to the weETH contract and then mint the matching weETH, instead
+     *      of taking the shares itself and wrapping them. Accounting is identical to
+     *      {deposit}: same `_deposit` body, same `_sharesForDepositAmount`, same
+     *      `nonDecreasingRate` guard. The only difference is which address the shares land on.
+     */
+    function depositETHToRecipient(address _recipient, address _referral) external payable nonReentrant whenNotPaused returns (uint256) {
+        roleRegistry.checkRoles(msg.sender, abi.encode(LIQUIDITY_POOL_DEPOSIT_ADAPTER_ROLE));
+        blacklister.nonBlacklisted(_recipient);
+
+        // Emits the caller, not `_recipient`, so the event is byte-for-byte what the
+        // adapter's old `deposit(_referral)` call produced. Indexers keyed on the adapter
+        // keep working. Depositor attribution is carried by the adapter's own
+        // `AdapterDeposit` event, as it already was.
+        emit Deposit(msg.sender, msg.value, SourceOfFunds.EETH, _referral);
+
+        return _deposit(_recipient, msg.value, 0);
     }
 
     /**

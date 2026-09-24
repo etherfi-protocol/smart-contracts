@@ -26,6 +26,7 @@ interface IWeETH is IERC20Upgradeable {
     function wrap(uint256 _eETHAmount) external returns (uint256);
     function wrapWithPermit(uint256 _eETHAmount, ILiquidityPool.PermitInput calldata _permit) external returns (uint256);
     function unwrap(uint256 _weETHAmount) external returns (uint256);
+    function mintFor(address _to, uint256 _shares) external returns (uint256);
     function permit(
         address owner,
         address spender,
