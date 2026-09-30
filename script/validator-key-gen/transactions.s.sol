@@ -314,9 +314,8 @@ contract ValidatorKeyGenTransactions is Script {
 
         vm.prank(operatingTimelock);
         etherFiNode = stakingManager.instantiateEtherFiNode(true /*createEigenPod*/);
-        address eigenPod = address(IEtherFiNode(etherFiNode).getEigenPod());
 
-        withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod);
+        withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(etherFiNodesManager.withdrawalCredentialTarget(etherFiNode));
         depositDataRoot = depositDataRootGenerator.generateDepositDataRoot(pubkey, signature, withdrawalCredentials, 1 ether);
         depositData = IStakingManager.DepositData({
             publicKey: pubkey, signature: signature, depositDataRoot: depositDataRoot, ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"

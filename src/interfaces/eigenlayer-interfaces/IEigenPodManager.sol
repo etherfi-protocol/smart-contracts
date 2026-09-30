@@ -105,6 +105,16 @@ interface IEigenPodManager is
     function createPod() external returns (address);
 
     /**
+     * @notice Permanently retires the caller's EigenPod. Callable by the pod owner.
+     * @dev Requires every beacon share to be queued for withdrawal and past
+     *      `minWithdrawalDelayBlocks`. Clears those queued withdrawals rather than completing
+     *      them; residual pod ETH is then swept with `IEigenPod.withdrawDisabledPodETH`.
+     * @dev Added in EigenLayer v1.14.0. Reverts on earlier implementations, which have no
+     *      matching selector and no fallback.
+     */
+    function disablePod() external;
+
+    /**
      * @notice Stakes for a new beacon chain validator on the sender's EigenPod.
      * Also creates an EigenPod for the sender if they don't have one already.
      * @param pubkey The 48 bytes public key of the beacon chain validator.

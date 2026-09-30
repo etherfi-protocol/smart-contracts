@@ -367,8 +367,13 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
         IStakingManager.DepositData[] memory depositData = new IStakingManager.DepositData[](_validatorIds.length);
 
         for (uint256 i = 0; i < _validatorIds.length; i++) {
-            address eigenPod = address(IEtherFiNode(etherFiNodesManager.etherfiNodeAddress(_validatorIds[i])).getEigenPod());
-            bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod);
+            // Must resolve pod-or-node exactly as StakingManager.confirmAndFundBeaconValidators
+            // does, or the deposit roots disagree. Raw, not withdrawalCredentialTarget, which
+            // would reject a legacy node missing from deployedEtherFiNodes.
+            address node = etherFiNodesManager.etherfiNodeAddress(_validatorIds[i]);
+            address credentialTarget = address(IEtherFiNode(node).getEigenPod());
+            if (credentialTarget == address(0)) credentialTarget = node;
+            bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(credentialTarget);
             bytes32 depositDataRoot = stakingManager.generateDepositDataRoot(_pubKeys[i], _signatures[i], withdrawalCredentials, remainingEthPerValidator);
 
             depositData[i] = IStakingManager.DepositData({

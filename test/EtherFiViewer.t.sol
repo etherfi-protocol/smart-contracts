@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
-import "@etherfi/helpers/EtherFiViewer.sol";
+import "@etherfi/archive/EtherFiViewer.sol";
 import "@etherfi/utils/UUPSProxy.sol";
 
 contract EtherFiViewerTest is Test  {

@@ -444,6 +444,15 @@ interface IEigenPod is IEigenPodErrors, IEigenPodEvents, ISemVerMixin {
     /// Consider overestimating the amount sent to ensure the fee does not update before your transaction.
     function getConsolidationRequestFee() external view returns (uint256);
 
+    /// @notice Whether restaking has been permanently disabled for this pod.
+    /// @dev Added in EigenLayer v1.14.0. Set by `disablePod`, never cleared.
+    function restakingDisabled() external view returns (bool);
+
+    /// @notice Withdraws all ETH held by a disabled pod to `recipient`.
+    /// @dev Added in EigenLayer v1.14.0. Callable only by the pod owner once
+    ///      `restakingDisabled` is true.
+    function withdrawDisabledPodETH(address recipient) external;
+
     /// @notice For each checkpoint, the total balance attributed to exited validators, in gwei
     ///
     /// NOTE that the values added to this mapping are NOT guaranteed to capture the entirety of a validator's

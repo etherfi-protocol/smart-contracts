@@ -20,7 +20,7 @@ import "@etherfi/staking/EtherFiNodesManager.sol";
 contract ValidatorLifecycleHandler is Test {
     EtherFiNodesManager internal immutable manager;
     address internal immutable stakingManagerAddr;
-    address internal immutable executorOps;   // linkLegacyValidatorIds caller (EXECUTOR_OPERATIONS_ROLE)
+    address internal immutable executorOps;   // linkLegacyValidatorIds caller (OPERATION_MULTISIG_ROLE)
 
     // ---- ghost state ----
     // first node each pubkey hash was linked to (0 = never linked)
@@ -117,7 +117,7 @@ contract ValidatorLifecycleHandler is Test {
     }
 
     /// Actively attempt to repoint an already-linked pubkey via the SECOND writer
-    /// to etherFiNodeFromPubkeyHash — linkLegacyValidatorIds (EXECUTOR_OPERATIONS_ROLE).
+    /// to etherFiNodeFromPubkeyHash — linkLegacyValidatorIds (OPERATION_MULTISIG_ROLE).
     /// We feed it a legacyId that a prior link already populated in
     /// DEPRECATED_etherfiNodeAddress (so the UnknownNode guard passes) paired with an
     /// already-linked pubkey. The call MUST revert AlreadyLinked and leave the link

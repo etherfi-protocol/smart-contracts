@@ -37,12 +37,12 @@ contract ValidatorLifecycleInvariantTest is TestSetup {
     function setUp() public {
         setUpTests();
 
-        // linkLegacyValidatorIds is onlyExecutorOperations; grant the role to a
+        // linkLegacyValidatorIds is onlyOperatingMultisig; grant the role to a
         // dedicated address the handler pranks for the legacy-path re-link attack.
-        // startPrank (not prank) so the nested EXECUTOR_OPERATIONS_ROLE() read doesn't
+        // startPrank (not prank) so the nested OPERATION_MULTISIG_ROLE() read doesn't
         // consume the prank before grantRole runs.
         vm.startPrank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(roleRegistryInstance.EXECUTOR_OPERATIONS_ROLE(), executorOps);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), executorOps);
         vm.stopPrank();
 
         handler = new ValidatorLifecycleHandler(managerInstance, address(stakingManagerInstance), executorOps);

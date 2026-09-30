@@ -109,4 +109,6 @@ contract MockEigenPodBase is IEigenPod {
     function requestWithdrawal(WithdrawalRequest[] calldata requests) external payable {}
     function getConsolidationRequestFee() external view returns (uint256){}
     function requestConsolidation(ConsolidationRequest[] calldata requests) external payable {}
+    function restakingDisabled() external virtual view returns (bool) {}
+    function withdrawDisabledPodETH(address recipient) external virtual {}
 }
