@@ -84,10 +84,10 @@ contract DepositAdapter is UUPSUpgradeable, DeprecatedOZOwnable, RolesLibrary, I
      * @return weEthAmount weETH received by the depositer
      */
     function depositETHForWeETH(address _referral) external payable nonBlacklisted returns (uint256) {
-        uint256 eETHShares = liquidityPool.deposit{value: msg.value}(_referral);
-        
+        uint256 eETHShares = liquidityPool.depositETHToRecipient{value: msg.value}(address(weETH), _referral);
+
         emit AdapterDeposit(msg.sender, msg.value, SourceOfFunds.ETH, _referral);
-        return _wrapAndReturn(eETHShares);
+        return weETH.mintFor(msg.sender, eETHShares);
     }
 
     /**
@@ -104,10 +104,10 @@ contract DepositAdapter is UUPSUpgradeable, DeprecatedOZOwnable, RolesLibrary, I
         IERC20(address(wETH)).safeTransferFrom(msg.sender, address(this), _amount);
         wETH.withdraw(_amount);
 
-        uint256 eETHShares = liquidityPool.deposit{value: _amount}(_referral);
-        
+        uint256 eETHShares = liquidityPool.depositETHToRecipient{value: _amount}(address(weETH), _referral);
+
         emit AdapterDeposit(msg.sender, _amount, SourceOfFunds.WETH, _referral);
-        return _wrapAndReturn(eETHShares);
+        return weETH.mintFor(msg.sender, eETHShares);
     }
 
     /**
@@ -173,9 +173,11 @@ contract DepositAdapter is UUPSUpgradeable, DeprecatedOZOwnable, RolesLibrary, I
      * @notice Sweep dust accumulated in the adapter to a recipient.
      * @param _token Address of the ERC20 to sweep
      * @param _to Recipient of the swept tokens
-     * @dev Each deposit strands 1-2 wei of eETH due to floor-rounding in both
-     *      amountForShare (shares -> ETH) and wrap (ETH -> shares). This function
-     *      lets operations recover the residual balance of any ERC20 left here.
+     * @dev stETH and wstETH deposits strand 1-2 wei of eETH each, from floor-rounding in
+     *      both amountForShare (shares -> ETH) and wrap (ETH -> shares). ETH and WETH
+     *      deposits no longer strand anything. This function lets operations recover the
+     *      residual balance of any ERC20 left here, including the balance accrued by ETH and
+     *      WETH deposits before that change.
      */
     function sweepDust(address _token, address _to) external onlyOperatingMultisig {
         if (_to == address(0)) revert InvalidRecipient();
@@ -200,6 +202,12 @@ contract DepositAdapter is UUPSUpgradeable, DeprecatedOZOwnable, RolesLibrary, I
      * @notice Wrap eETH shares and return weETH
      * @param _eEthShares Amount of eETH shares to wrap
      * @return weEthAmount weETH received by the depositer
+     * @dev Still used by the stETH and wstETH paths. Those route through
+     *      `Liquifier.depositWithERC20`, which hardcodes the Liquifier's caller as the eETH
+     *      recipient, so the adapter cannot redirect the shares to weETH without changing the
+     *      Liquifier as well. The ETH and WETH paths no longer come through here: they credit
+     *      the shares to weETH up front and mint against them, which avoids the
+     *      shares -> amount -> shares round trip and the 1-2 wei it strands.
      */
     function _wrapAndReturn(uint256 _eEthShares) internal returns (uint256) {
         uint256 eEthAmount = liquidityPool.amountForShare(_eEthShares);

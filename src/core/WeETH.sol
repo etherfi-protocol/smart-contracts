@@ -33,6 +33,16 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
     IBlacklister public immutable blacklister;
 
     //--------------------------------------------------------------------------------------
+    //---------------------------------  ROLES  --------------------------------------------
+    //--------------------------------------------------------------------------------------
+    /// @dev Authority for {mintFor}. Held by the DepositAdapter so ETH/WETH deposits can
+    ///      mint weETH in one step instead of round-tripping through {wrap}. The role is
+    ///      NOT a licence to inflate supply: {mintFor} routes through the same
+    ///      `_afterTokenTransfer` backing check as every other mint, so a holder can only
+    ///      mint against eETH shares that are already sitting in this contract.
+    bytes32 public constant WEETH_MINTER_ROLE = keccak256("WEETH_MINTER_ROLE");
+
+    //--------------------------------------------------------------------------------------
     //---------------------------------  ERRORS  ------------------------------------------
     //--------------------------------------------------------------------------------------
     error ZeroAmount();
@@ -115,6 +125,34 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
     {
         try eETH.permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} catch {}
         return wrap(_eETHAmount);
+    }
+
+    /**
+     * @notice Mints `_shares` weETH to `_to` against eETH shares already held by this contract
+     * @param _to the recipient of the newly minted weETH
+     * @param _shares the number of weETH to mint, denominated in eETH shares
+     * @return the amount of weETH minted, equal to `_shares`
+     * @dev Counterpart to {wrap} for callers that mint the backing eETH shares straight to
+     *      this contract rather than to themselves. {wrap} has to convert shares to an eETH
+     *      amount and back again, and both conversions floor, so it returns 1-2 wei fewer
+     *      weETH than the shares that were deposited. A caller that credits shares directly
+     *      has no such round trip and mints the exact share count.
+     *
+     *      Safety does not rest on the role alone. The mint runs through
+     *      `_afterTokenTransfer`, which reverts unless
+     *      `totalSupply <= eETH.shares(address(this))`. A role holder therefore cannot mint
+     *      weETH that is not already backed: calling this without having credited the shares
+     *      first reverts with {WeETHUnderbacked}. The role governs who may claim newly
+     *      credited backing, not how much weETH may exist.
+     */
+    function mintFor(address _to, uint256 _shares) external returns (uint256) {
+        roleRegistry.checkRoles(msg.sender, abi.encode(WEETH_MINTER_ROLE));
+        if (_shares == 0) revert ZeroAmount();
+        if (_to == address(0)) revert ZeroAddress();
+
+        _mint(_to, _shares);
+
+        return _shares;
     }
 
     /**

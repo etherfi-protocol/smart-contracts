@@ -71,6 +71,7 @@ interface ILiquidityPool {
     function deposit(address _referral) external payable returns (uint256);
     function deposit(address _user, address _referral) external payable returns (uint256);
     function depositToRecipient(address _recipient, uint256 _amount, address _referral) external returns (uint256);
+    function depositETHToRecipient(address _recipient, address _referral) external payable returns (uint256);
     function withdraw(address _recipient, uint256 _amount) external returns (uint256);
     function withdraw(uint256 _amount, uint256 _share) external;
     function burnEEthSharesForNonETHWithdrawal(uint256 _amountSharesToBurn, uint256 _withdrawalValueInETH) external;
