@@ -193,9 +193,6 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), unpauserAddr);
        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), pauseUntilDurationSetter);
        vm.stopPrank();
-       // warp past MAX_PAUSE_DURATION + PAUSER_UNTIL_COOLDOWN so the first-pause cooldown
-       // (which treats lastPauseTimestamp[pauser] = 0 as unix 0) is satisfied
-       if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
 
        uint256 maxDur = cumulativeMerkleRewardsDistributorInstance.MAX_PAUSE_DURATION();
        vm.prank(pauseUntilDurationSetter);

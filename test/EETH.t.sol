@@ -673,10 +673,6 @@ contract EETHTest is TestSetup {
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), unpauseUntilUnpauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), pauseUntilDurationSetter);
         vm.stopPrank();
-        // Foundry's default block.timestamp is too small — the cooldown check is
-        // `lastPauseTimestamp + MAX_PAUSE_DURATION + COOLDOWN > block.timestamp`,
-        // which fires on the very first call unless we warp forward past that sum.
-        if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
 
         // Resolve MAX_PAUSE_DURATION before the prank — otherwise the nested
         // staticcall consumes the prank and setPauseUntilDuration is called by
@@ -738,27 +734,19 @@ contract EETHTest is TestSetup {
         eETHInstance.pauseUntil();
     }
 
-    function test_EETH_pauseContractUntil_cooldownEnforced() public {
+    function test_EETH_pauseContractUntil_samePauserCanRepauseAfterUnpause() public {
         _grantPauseUntilRoles();
 
         vm.prank(pauseUntilPauser);
         eETHInstance.pauseUntil();
 
-        // Unpause and re-attempt before cooldown ends. Cooldown = MAX_PAUSE_DURATION + PAUSER_UNTIL_COOLDOWN.
         vm.prank(unpauseUntilUnpauser);
         eETHInstance.unpauseUntil();
 
-        // Warp past MAX_PAUSE_DURATION (so we are no longer pausedUntil) but not past the cooldown.
-        vm.warp(block.timestamp + eETHInstance.MAX_PAUSE_DURATION() + 1);
-
-        vm.prank(pauseUntilPauser);
-        vm.expectRevert(PausableUntil.PauserCooldownStillActive.selector);
-        eETHInstance.pauseUntil();
-
-        // After the cooldown window also passes, same pauser can re-pause.
-        vm.warp(block.timestamp + eETHInstance.PAUSER_UNTIL_COOLDOWN());
+        // No per-pauser cooldown: the same pauser can re-pause in the same block.
         vm.prank(pauseUntilPauser);
         eETHInstance.pauseUntil();
+        assertEq(_eETHPausedUntil(), block.timestamp + eETHInstance.MAX_PAUSE_DURATION());
     }
 
     // ---- pause-until blocks mint/burn ---------------------------------------
