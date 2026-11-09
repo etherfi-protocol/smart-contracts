@@ -187,10 +187,10 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
 
    function _grantPauseUntilRoles(address pauserAddr, address unpauserAddr) internal {
        vm.startPrank(owner);
-       // pauseContractUntil requires GUARDIAN_ROLE; unpauseContractUntil and
-       // setPauseUntilDuration require OPERATION_MULTISIG_ROLE.
+       // pauseContractUntil requires GUARDIAN_ROLE; unpauseContractUntil requires
+       // SUPER_GUARDIAN_ROLE; setPauseUntilDuration requires OPERATION_TIMELOCK_ROLE.
        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), pauserAddr);
-       roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), unpauserAddr);
+       roleRegistryInstance.grantRole(roleRegistryInstance.SUPER_GUARDIAN_ROLE(), unpauserAddr);
        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), pauseUntilDurationSetter);
        vm.stopPrank();
        // warp past MAX_PAUSE_DURATION + PAUSER_UNTIL_COOLDOWN so the first-pause cooldown
@@ -228,7 +228,7 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
        cumulativeMerkleRewardsDistributorInstance.pauseUntil();
 
        vm.prank(chad);
-       vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+       vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
        cumulativeMerkleRewardsDistributorInstance.unpauseUntil();
    }
 
