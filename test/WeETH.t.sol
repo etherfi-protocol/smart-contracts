@@ -512,7 +512,7 @@ contract WeETHTest is TestSetup {
         weEthInstance.pause();
 
         vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         weEthInstance.unpause();
 
         vm.prank(admin);
@@ -682,7 +682,7 @@ contract WeETHTest is TestSetup {
     function _grantPauseUntilRoles() internal {
         vm.startPrank(roleRegistryInstance.owner());
         roleRegistryInstance.grantRole(roleRegistryInstance.SUPER_GUARDIAN_ROLE(), pauseUntilPauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), unpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.SUPER_GUARDIAN_ROLE(), unpauseUntilUnpauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), pauseUntilDurationSetter);
         vm.stopPrank();
 
@@ -716,7 +716,7 @@ contract WeETHTest is TestSetup {
         weEthInstance.pauseUntil();
 
         vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         weEthInstance.unpauseUntil();
 
         vm.prank(unpauseUntilUnpauser);

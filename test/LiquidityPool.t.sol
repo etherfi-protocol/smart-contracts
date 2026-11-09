@@ -777,7 +777,7 @@ contract LiquidityPoolTest is TestSetup {
 
         assertTrue(liquidityPoolInstance.paused());
 
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         liquidityPoolInstance.unpause();
 
         vm.prank(admin);
@@ -1584,9 +1584,9 @@ contract LiquidityPoolTest is TestSetup {
 
     function _grantLpPauseUntilRoles() internal {
         vm.startPrank(roleRegistryInstance.owner());
-        // pauseContractUntil → GUARDIAN_ROLE; unpause + setPauseUntilDuration → OPERATION_MULTISIG_ROLE
+        // pauseContractUntil → GUARDIAN_ROLE; unpause → SUPER_GUARDIAN_ROLE; setPauseUntilDuration → OPERATION_TIMELOCK_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), lpPauseUntilPauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), lpUnpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.SUPER_GUARDIAN_ROLE(), lpUnpauseUntilUnpauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), lpPauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
@@ -1620,7 +1620,7 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.pauseUntil();
 
         vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         liquidityPoolInstance.unpauseUntil();
     }
 

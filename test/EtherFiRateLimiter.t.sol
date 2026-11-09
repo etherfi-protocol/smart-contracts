@@ -44,7 +44,7 @@ contract EtherFiRateLimiterTest is TestSetup {
         // (rate limiter modifiers use onlyAdmin = OPERATION_TIMELOCK_ROLE).
         roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), admin);
         roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), pauser);
-        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), unpauser);
+        roleRegistry.grantRole(roleRegistry.SUPER_GUARDIAN_ROLE(), unpauser);
         vm.stopPrank();
     }
 
@@ -165,7 +165,7 @@ contract EtherFiRateLimiterTest is TestSetup {
 
         // Should fail with unauthorized user
         vm.prank(unauthorizedUser);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         rateLimiter.unpause();
     }
 

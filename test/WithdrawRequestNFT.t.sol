@@ -799,7 +799,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Non-unpauser cannot unpause
         vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         withdrawRequestNFTInstance.unpause();
 
         // Unpauser can unpause
@@ -826,9 +826,9 @@ contract WithdrawRequestNFTTest is TestSetup {
 
     function _grantWrPauseUntilRoles() internal {
         vm.startPrank(roleRegistryInstance.owner());
-        // pauseContractUntil → GUARDIAN_ROLE; unpause + setPauseUntilDuration → OPERATION_MULTISIG_ROLE (onlyOperations)
+        // pauseContractUntil → GUARDIAN_ROLE; unpause → SUPER_GUARDIAN_ROLE; setPauseUntilDuration → OPERATION_TIMELOCK_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), wrPauseUntilPauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), wrUnpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.SUPER_GUARDIAN_ROLE(), wrUnpauseUntilUnpauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), wrPauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
@@ -862,7 +862,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         withdrawRequestNFTInstance.pauseUntil();
 
         vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         withdrawRequestNFTInstance.unpauseUntil();
     }
 
