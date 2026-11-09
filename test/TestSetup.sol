@@ -609,8 +609,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 roleRegistry: address(roleRegistryInstance),
                 priorityWithdrawalQueue: address(priorityQueueInstance),
                 blacklister: address(blacklisterInstance),
-                etherFiAdminContract: address(etherFiAdminInstance),
-                membershipManager: address(membershipManagerV1Instance)
+                etherFiAdminContract: address(etherFiAdminInstance)
             })
         ));
         vm.prank(roleRegistryInstance.owner());
@@ -1135,8 +1134,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 roleRegistry: address(0x0),
                 priorityWithdrawalQueue: address(0x0),
                 blacklister: address(0x0),
-                etherFiAdminContract: address(0x0),
-                membershipManager: address(0x0)
+                etherFiAdminContract: address(0x0)
             })
         );
 
@@ -1312,8 +1310,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 roleRegistry: address(roleRegistryInstance),
                 priorityWithdrawalQueue: address(priorityQueueProxy),
                 blacklister: address(blacklisterInstance),
-                etherFiAdminContract: address(etherFiAdminProxy),
-                membershipManager: address(membershipManagerProxy)
+                etherFiAdminContract: address(etherFiAdminProxy)
             })
         );
         liquidityPoolInstance.upgradeTo(address(liquidityPoolImplementation));
@@ -2294,8 +2291,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 roleRegistry: address(roleRegistryInstance),
                 priorityWithdrawalQueue: address(priorityQueueInstance),
                 blacklister: address(blacklisterInstance),
-                etherFiAdminContract: address(etherFiAdminInstance),
-                membershipManager: address(membershipManagerInstance)
+                etherFiAdminContract: address(etherFiAdminInstance)
             })
         ));
         vm.startPrank(roleRegistryInstance.owner());

@@ -63,8 +63,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
                 roleRegistry: address(roleRegistryInstance),
                 priorityWithdrawalQueue: address(priorityQueue),
                 blacklister: address(blacklisterInstance),
-                etherFiAdminContract: address(etherFiAdminInstance),
-                membershipManager: address(membershipManagerInstance)
+                etherFiAdminContract: address(etherFiAdminInstance)
             })
         );
         liquidityPoolInstance.upgradeTo(address(newLpImpl));

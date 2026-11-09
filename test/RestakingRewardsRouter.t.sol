@@ -62,8 +62,7 @@ contract RestakingRewardsRouterTest is Test {
                 roleRegistry: address(roleRegistry),
                 priorityWithdrawalQueue: address(0),
                 blacklister: address(0),
-                etherFiAdminContract: address(0),
-                membershipManager: address(0)
+                etherFiAdminContract: address(0)
             })
         );
         liquidityPoolProxy = new UUPSProxy(address(liquidityPoolImpl), "");
