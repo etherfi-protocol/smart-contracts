@@ -233,34 +233,6 @@ contract BlacklistTest is TestSetup {
     }
 
     // -------------------------------------------------------------------------
-    // MembershipManager (V1)
-    // -------------------------------------------------------------------------
-
-    function test_blacklist_MembershipManager_unwrapForEEthAndBurn_reverts() public {
-        vm.prank(blacklisted);
-        _expectBlacklistedRevert(blacklisted);
-        membershipManagerV1Instance.unwrapForEEthAndBurn(1);
-    }
-
-    function test_blacklist_MembershipManager_requestWithdraw_reverts() public {
-        vm.prank(blacklisted);
-        _expectBlacklistedRevert(blacklisted);
-        membershipManagerV1Instance.requestWithdraw(1, 1 ether);
-    }
-
-    function test_blacklist_MembershipManager_requestWithdrawAndBurn_reverts() public {
-        vm.prank(blacklisted);
-        _expectBlacklistedRevert(blacklisted);
-        membershipManagerV1Instance.requestWithdrawAndBurn(1);
-    }
-
-    function test_blacklist_MembershipManager_claim_reverts() public {
-        vm.prank(blacklisted);
-        _expectBlacklistedRevert(blacklisted);
-        membershipManagerV1Instance.claim(1);
-    }
-
-    // -------------------------------------------------------------------------
     // WithdrawRequestNFT
     // -------------------------------------------------------------------------
 

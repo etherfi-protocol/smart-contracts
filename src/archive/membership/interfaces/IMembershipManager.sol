@@ -38,10 +38,8 @@ interface IMembershipManager {
     }
 
     // State-changing functions
-    function requestWithdraw(uint256 _tokenId, uint256 _amount) external returns (uint256);
-    function requestWithdrawAndBurn(uint256 _tokenId) external returns (uint256);
-
-    function claim(uint256 _tokenId) external;
+    function forceExit(uint256[] calldata _tokenIds, address[] calldata _owners) external;
+    function sweepRemainingFunds(address _recipient) external;
 
     // Getter functions
     function tokenDeposits(uint256) external view returns (uint128, uint128);
