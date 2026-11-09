@@ -717,6 +717,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         bytes32 _upgradeTimelockRole = roleRegistryInstance.UPGRADE_TIMELOCK_ROLE();
         bytes32 _housekeepingRole = roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE();
         bytes32 _guardianRole = roleRegistryInstance.GUARDIAN_ROLE();
+        bytes32 _superGuardianRole = roleRegistryInstance.SUPER_GUARDIAN_ROLE();
         address _roleRegOwner = roleRegistryInstance.owner();
         address _operatingTimelockAddr = deployed.OPERATING_TIMELOCK();
         vm.startPrank(_roleRegOwner);
@@ -756,6 +757,10 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryInstance.grantRole(_operatingMultisigRole, alice);
         roleRegistryInstance.grantRole(_operatingMultisigRole, admin);
         roleRegistryInstance.grantRole(_operatingMultisigRole, _operatingTimelockAddr);
+        // unpause()/unpauseUntil() are gated by SUPER_GUARDIAN; mirror the addresses tests unpause as.
+        roleRegistryInstance.grantRole(_superGuardianRole, owner);
+        roleRegistryInstance.grantRole(_superGuardianRole, alice);
+        roleRegistryInstance.grantRole(_superGuardianRole, admin);
         vm.stopPrank();
 
         // The freshly-upgraded LP introduces `minWithdrawAmount`/`maxWithdrawAmount`
@@ -844,6 +849,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), owner);
         roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), alice);
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.SUPER_GUARDIAN_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.SUPER_GUARDIAN_ROLE(), alice);
         vm.stopPrank();
 
         vm.startPrank(owner);
@@ -1445,6 +1452,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // NODE_OPERATOR_MANAGER_ADMIN_ROLE consolidated into OPERATION_MULTISIG_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), owner);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), alice);
+        // unpause()/unpauseUntil() are gated by SUPER_GUARDIAN; mirror the addresses tests unpause as.
+        roleRegistryInstance.grantRole(roleRegistryInstance.SUPER_GUARDIAN_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.SUPER_GUARDIAN_ROLE(), alice);
         vm.stopPrank();
 
         // LiquidityPool no longer starts paused at deploy (pause state moved to the namespaced
@@ -1603,6 +1613,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), address(etherFiAdminInstance));
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), admin);
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), address(etherFiAdminInstance));
+        roleRegistryInstance.grantRole(roleRegistryInstance.SUPER_GUARDIAN_ROLE(), admin);
 
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), alice);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), owner);

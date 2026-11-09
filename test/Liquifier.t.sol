@@ -561,9 +561,9 @@ contract LiquifierTest is TestSetup {
 
     function _grantLiqPauseUntilRoles() internal {
         vm.startPrank(roleRegistryInstance.owner());
-        // pauseContractUntil → GUARDIAN_ROLE; unpause + setPauseUntilDuration → OPERATION_MULTISIG_ROLE (onlyAdmin).
+        // pauseContractUntil → GUARDIAN_ROLE; unpause → SUPER_GUARDIAN_ROLE; setPauseUntilDuration → OPERATION_TIMELOCK_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), liqPauseUntilPauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), liqUnpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.SUPER_GUARDIAN_ROLE(), liqUnpauseUntilUnpauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), liqPauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
@@ -606,7 +606,7 @@ contract LiquifierTest is TestSetup {
         liquifierInstance.pauseUntil();
 
         vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         liquifierInstance.unpauseUntil();
     }
 

@@ -233,7 +233,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     }
     
     function test_unPauseContract_unauthorized() public {
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         vm.prank(bob);
         managerInstance.unpause();
     }
@@ -839,9 +839,9 @@ contract EtherFiNodesManagerTest is TestSetup {
         vm.startPrank(roleRegistryInstance.owner());
         RoleRegistry newImpl = new RoleRegistry(address(0xdead));
         roleRegistryInstance.upgradeTo(address(newImpl));
-        // pauseContractUntil → GUARDIAN_ROLE; unpause + setPauseUntilDuration → OPERATION_MULTISIG_ROLE
+        // pauseContractUntil → GUARDIAN_ROLE; unpause → SUPER_GUARDIAN_ROLE; setPauseUntilDuration → OPERATION_TIMELOCK_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), nmPauseUntilPauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), nmUnpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.SUPER_GUARDIAN_ROLE(), nmUnpauseUntilUnpauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), nmPauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
@@ -884,7 +884,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         _pauseUntil();
 
         vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         managerInstance.unpauseUntil();
     }
 

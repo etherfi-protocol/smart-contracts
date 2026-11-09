@@ -58,9 +58,9 @@ abstract contract PausableUntil is Pausable {
 
     /**
      * @notice Lift a timed pause early
-     * @dev gated to the operating multisig
+     * @dev gated to the super guardian
      */
-    function unpauseUntil() external onlyOperatingMultisig {
+    function unpauseUntil() external onlySuperGuardian {
         _requirePausedUntil();
         PausableUntilStorage storage $ = _getPausableUntilStorage();
         $.pausedUntil = 0;
