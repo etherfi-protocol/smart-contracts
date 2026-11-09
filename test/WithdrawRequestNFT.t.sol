@@ -799,7 +799,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Non-unpauser cannot unpause
         vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         withdrawRequestNFTInstance.unpause();
 
         // Unpauser can unpause
@@ -826,9 +826,9 @@ contract WithdrawRequestNFTTest is TestSetup {
 
     function _grantWrPauseUntilRoles() internal {
         vm.startPrank(roleRegistryInstance.owner());
-        // pauseContractUntil → GUARDIAN_ROLE; unpause + setPauseUntilDuration → OPERATION_MULTISIG_ROLE (onlyOperations)
+        // pauseContractUntil → GUARDIAN_ROLE; unpause → SUPER_GUARDIAN_ROLE; setPauseUntilDuration → OPERATION_TIMELOCK_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), wrPauseUntilPauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), wrUnpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.SUPER_GUARDIAN_ROLE(), wrUnpauseUntilUnpauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), wrPauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
@@ -862,7 +862,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         withdrawRequestNFTInstance.pauseUntil();
 
         vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         withdrawRequestNFTInstance.unpauseUntil();
     }
 
@@ -1359,20 +1359,13 @@ contract WithdrawRequestNFTTest is TestSetup {
     }
 
     function test_liquidityPool_withdraw_revertsForOtherCallersWhenLpPaused() public {
-        // Pause the LP, then assert that the two non-permissionless callers (membershipManager and
-        // etherFiRedemptionManager) still revert at the pause gate. The pause check sits between the
-        // caller-allowlist require and the eETH-balance check, so no LP funding is needed.
+        // Pause the LP, then assert that the only non-permissionless caller (etherFiRedemptionManager)
+        // still reverts at the pause gate. The pause check sits between the caller-allowlist require
+        // and the eETH-balance check, so no LP funding is needed.
         vm.prank(admin);
         liquidityPoolInstance.pause();
 
-        address membershipMgr = address(liquidityPoolInstance.membershipManager());
         address redemptionMgr = address(liquidityPoolInstance.etherFiRedemptionManager());
-
-        if (membershipMgr != address(0)) {
-            vm.prank(membershipMgr);
-            vm.expectRevert(Pausable.ContractPaused.selector);
-            liquidityPoolInstance.withdraw(bob, 1 ether);
-        }
 
         if (redemptionMgr != address(0)) {
             vm.prank(redemptionMgr);
@@ -1447,16 +1440,7 @@ contract WithdrawRequestNFTTest is TestSetup {
     function test_liquidityPool_withdraw_revertsForGatedCallersWhenLpPausedUntil() public {
         uint256 lpPausedUntil = _pauseLpUntil();
 
-        address membershipMgr = address(liquidityPoolInstance.membershipManager());
         address redemptionMgr = address(liquidityPoolInstance.etherFiRedemptionManager());
-
-        if (membershipMgr != address(0)) {
-            vm.prank(membershipMgr);
-            vm.expectRevert(
-                abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, lpPausedUntil)
-            );
-            liquidityPoolInstance.withdraw(bob, 1 ether);
-        }
 
         if (redemptionMgr != address(0)) {
             vm.prank(redemptionMgr);

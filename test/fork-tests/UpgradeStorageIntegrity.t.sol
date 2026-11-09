@@ -233,8 +233,7 @@ contract UpgradeStorageIntegrityTest is Test, SecurityUpgradesConstants {
                 roleRegistry: ROLE_REGISTRY,
                 priorityWithdrawalQueue: PRIORITY_WITHDRAWAL_QUEUE,
                 blacklister: address(blacklisterInstance),
-                etherFiAdminContract: ETHERFI_ADMIN,
-                membershipManager: MEMBERSHIP_MANAGER
+                etherFiAdminContract: ETHERFI_ADMIN
             })
         ));
         address newWRN = address(new WithdrawRequestNFT(LIQUIDITY_POOL, ROLE_REGISTRY, address(blacklisterInstance), ETHERFI_ADMIN));
@@ -422,8 +421,7 @@ contract UpgradeStorageIntegrityTest is Test, SecurityUpgradesConstants {
                 roleRegistry: ROLE_REGISTRY,
                 priorityWithdrawalQueue: PRIORITY_WITHDRAWAL_QUEUE,
                 blacklister: address(blacklisterInstance),
-                etherFiAdminContract: ETHERFI_ADMIN,
-                membershipManager: MEMBERSHIP_MANAGER
+                etherFiAdminContract: ETHERFI_ADMIN
             })
         ));
         address newWRN = address(new WithdrawRequestNFT(LIQUIDITY_POOL, ROLE_REGISTRY, address(blacklisterInstance), ETHERFI_ADMIN));

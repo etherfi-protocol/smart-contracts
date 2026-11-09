@@ -49,13 +49,7 @@ contract ValidatorStateMachineInvariantTest is TestSetup, Deployed {
             roleRegistry: address(roleRegistryInstance),
             priorityWithdrawalQueue: address(priorityQueueInstance),
             blacklister: address(blacklisterInstance),
-            etherFiAdminContract: address(etherFiAdminInstance),
-            // Use the REAL deployed membership manager, not the V0-typed
-            // `membershipManagerInstance` which is never populated on a realistic
-            // fork (only `membershipManagerV1Instance` is, from deployed.MEMBERSHIP_MANAGER()).
-            // Passing address(0) here would diverge the immutable from the production
-            // bootstrap and mis-auth any membership-routed LP path.
-            membershipManager: MEMBERSHIP_MANAGER
+            etherFiAdminContract: address(etherFiAdminInstance)
         }));
         address lpOwner = roleRegistryInstance.owner();
         vm.prank(lpOwner);

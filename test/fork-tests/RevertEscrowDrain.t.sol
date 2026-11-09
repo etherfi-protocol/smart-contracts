@@ -66,8 +66,7 @@ contract RevertEscrowDrainTest is Test, Deployed {
                 roleRegistry: ROLE_REGISTRY,
                 priorityWithdrawalQueue: PRIORITY_WITHDRAWAL_QUEUE,
                 blacklister: address(blacklister),
-                etherFiAdminContract: ETHERFI_ADMIN,
-                membershipManager: MEMBERSHIP_MANAGER
+                etherFiAdminContract: ETHERFI_ADMIN
             })
         ));
         address newWRN = address(new WithdrawRequestNFT(LIQUIDITY_POOL, ROLE_REGISTRY, address(blacklister), ETHERFI_ADMIN));

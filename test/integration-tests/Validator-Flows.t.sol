@@ -32,8 +32,7 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
             roleRegistry: address(roleRegistryInstance),
             priorityWithdrawalQueue: address(priorityQueueInstance),
             blacklister: address(blacklisterInstance),
-            etherFiAdminContract: address(etherFiAdminInstance),
-            membershipManager: address(membershipManagerInstance)
+            etherFiAdminContract: address(etherFiAdminInstance)
         }));
         address lpOwner = roleRegistryInstance.owner();
         vm.prank(lpOwner);

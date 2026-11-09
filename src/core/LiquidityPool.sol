@@ -60,7 +60,6 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
     IPriorityWithdrawalQueue public immutable priorityWithdrawalQueue;
     IBlacklister public immutable blacklister;
     address public immutable etherFiAdminContract;
-    address public immutable membershipManager;
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  CONSTANTS  ---------------------------------------
@@ -124,7 +123,6 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
         priorityWithdrawalQueue = IPriorityWithdrawalQueue(_constructorAddresses.priorityWithdrawalQueue);
         blacklister = IBlacklister(_constructorAddresses.blacklister);
         etherFiAdminContract = _constructorAddresses.etherFiAdminContract;
-        membershipManager = _constructorAddresses.membershipManager;
         _disableInitializers();
     }
 
@@ -230,22 +228,6 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
         return _deposit(_recipient, 0, _amount);
     }
 
-    /**
-     * @notice Deposit ETH into the Liquidity Pool
-     * @param _user The address of the user
-     * @param _referral The address of the referral
-     * @return uint256 The amount of eETH minted to the caller
-     * @dev Used by ether.fan staking flow
-     */
-    function deposit(address _user, address _referral) external payable nonReentrant whenNotPaused returns (uint256) {
-        if (msg.sender != address(membershipManager)) revert IncorrectCaller();
-        blacklister.nonBlacklisted(_user);
-
-        emit Deposit(msg.sender, msg.value, SourceOfFunds.ETHER_FAN, _referral);
-
-        return _deposit(msg.sender, msg.value, 0);
-    }
-
     //--------------------------------------------------------------------------------------
     //----------------------------  WITHDRAW FUNCTIONS  -------------------------------------
     //--------------------------------------------------------------------------------------
@@ -254,14 +236,12 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
      * @param _recipient The address of the recipient
      * @param _amount The amount of ETH to withdraw
      * @return uint256 The amount of eETH burned
-     * @dev Only callable by the membership manager or the etherFi redemption manager
-     * Live rate withdraw for membershipManager and etherFiRedemptionManager.
+     * @dev Only callable by the etherFi redemption manager
+     * Live rate withdraw for etherFiRedemptionManager.
      * Burns shares at the live rate and pays ETH from the LP to `_recipient`.
      */
     function withdraw(address _recipient, uint256 _amount) external nonReentrant whenNotPaused nonDecreasingRate returns (uint256) {
-        if (msg.sender != address(membershipManager) && msg.sender != address(etherFiRedemptionManager)) {
-            revert IncorrectCaller();
-        }
+        if (msg.sender != address(etherFiRedemptionManager)) revert IncorrectCaller();
         uint256 share = sharesForWithdrawalAmount(_amount);
         if (eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
         if (_amount > type(uint128).max || _amount == 0 || share == 0) revert InvalidAmount();
@@ -335,21 +315,6 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
         return requestWithdraw(_owner, _amount);
     }
 
-    /**
-     * @notice request withdraw of some or all of the eETH backing a MembershipNFT and receive a WithdrawRequestNFT
-     * @param recipient The address of the recipient
-     * @param amount The amount of ETH to withdraw
-     * @param fee The fee amount not used anymore, only kept to maintain compatibility with existing code
-     * @return uint256 The requestId of the WithdrawRequestNFT
-     * @dev Transfers the amount of eETH from MembershipManager to the WithdrawRequestNFT contract & mints an NFT to the recipient
-     */
-    function requestMembershipNFTWithdraw(address recipient, uint256 amount, uint256 fee) public nonReentrant whenNotPaused returns (uint256) {
-        if (msg.sender != address(membershipManager)) revert IncorrectCaller();
-        uint256 share = sharesForAmount(amount);
-        if (amount > type(uint96).max || amount == 0 || share == 0) revert InvalidAmount();
-
-        return _requestWithdraw(recipient, amount, share, SourceOfFunds.ETHER_FAN);
-    }
 
 
     //--------------------------------------------------------------------------------------
@@ -597,7 +562,7 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
     }
 
     /**
-     * @notice Shared tail for requestWithdraw / requestMembershipNFTWithdraw: moves `amount` eETH
+     * @notice Tail of requestWithdraw: moves `amount` eETH
      * @param recipient The address of the recipient
      * @param amount The amount of eETH to move
      * @param share The share of eETH to move

@@ -512,7 +512,7 @@ contract WeETHTest is TestSetup {
         weEthInstance.pause();
 
         vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         weEthInstance.unpause();
 
         vm.prank(admin);
@@ -682,13 +682,9 @@ contract WeETHTest is TestSetup {
     function _grantPauseUntilRoles() internal {
         vm.startPrank(roleRegistryInstance.owner());
         roleRegistryInstance.grantRole(roleRegistryInstance.SUPER_GUARDIAN_ROLE(), pauseUntilPauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), unpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.SUPER_GUARDIAN_ROLE(), unpauseUntilUnpauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), pauseUntilDurationSetter);
         vm.stopPrank();
-        // Foundry's default block.timestamp is too small to clear the cooldown
-        // check on the very first pause (lastPauseTimestamp[0] = 0 ⇒ trips
-        // 0 + MAX_PAUSE_DURATION + PAUSER_UNTIL_COOLDOWN > block.timestamp).
-        if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
 
         // Resolve before prank — nested staticcall otherwise consumes the prank.
         uint256 maxDuration = weEthInstance.MAX_PAUSE_DURATION();
@@ -720,7 +716,7 @@ contract WeETHTest is TestSetup {
         weEthInstance.pauseUntil();
 
         vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         weEthInstance.unpauseUntil();
 
         vm.prank(unpauseUntilUnpauser);
@@ -747,7 +743,7 @@ contract WeETHTest is TestSetup {
         weEthInstance.pauseUntil();
     }
 
-    function test_WeETH_pauseContractUntil_cooldownEnforced() public {
+    function test_WeETH_pauseContractUntil_samePauserCanRepauseAfterUnpause() public {
         _grantPauseUntilRoles();
 
         vm.prank(pauseUntilPauser);
@@ -756,15 +752,10 @@ contract WeETHTest is TestSetup {
         vm.prank(unpauseUntilUnpauser);
         weEthInstance.unpauseUntil();
 
-        // Past MAX_PAUSE_DURATION but inside cooldown window — should still revert.
-        vm.warp(block.timestamp + weEthInstance.MAX_PAUSE_DURATION() + 1);
-        vm.prank(pauseUntilPauser);
-        vm.expectRevert(PausableUntil.PauserCooldownStillActive.selector);
-        weEthInstance.pauseUntil();
-
-        vm.warp(block.timestamp + weEthInstance.PAUSER_UNTIL_COOLDOWN());
+        // No per-pauser cooldown: the same pauser can re-pause in the same block.
         vm.prank(pauseUntilPauser);
         weEthInstance.pauseUntil();
+        assertEq(_weETHPausedUntil(), block.timestamp + weEthInstance.MAX_PAUSE_DURATION());
     }
 
     // ---- pause-until blocks every token movement ----------------------------

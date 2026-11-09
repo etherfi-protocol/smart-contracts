@@ -265,8 +265,7 @@ contract PriorityQueueTransactions is Script, Utils {
                 roleRegistry: ROLE_REGISTRY,
                 priorityWithdrawalQueue: priorityWithdrawalQueueProxy,
                 blacklister: address(0),
-                etherFiAdminContract: address(0),
-                membershipManager: address(0)
+                etherFiAdminContract: address(0)
             })
         );
         // blacklister immutable added to PWQ; placeholder address(0) here mirrors the

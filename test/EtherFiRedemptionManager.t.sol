@@ -389,9 +389,10 @@ contract EtherFiRedemptionManagerTest is TestSetup {
     function testFuzz_role_management(address admin, address pauser, address unpauser, address user) public {
         address owner = roleRegistryInstance.owner();
         // ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE → OPERATION_TIMELOCK_ROLE.
-        // PROTOCOL_PAUSER / PROTOCOL_UNPAUSER → OPERATION_MULTISIG_ROLE.
+        // PROTOCOL_PAUSER → OPERATION_MULTISIG_ROLE; PROTOCOL_UNPAUSER → SUPER_GUARDIAN_ROLE.
         bytes32 ADMIN_ROLE = roleRegistryInstance.OPERATION_TIMELOCK_ROLE();
         bytes32 PAUSER_ROLE = roleRegistryInstance.OPERATION_MULTISIG_ROLE();
+        bytes32 UNPAUSER_ROLE = roleRegistryInstance.SUPER_GUARDIAN_ROLE();
 
         vm.assume(admin != address(0) && admin != owner);
         vm.assume(pauser != address(0) && pauser != owner && pauser != admin);
@@ -404,7 +405,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         vm.prank(owner);
         roleRegistryInstance.grantRole(PAUSER_ROLE, pauser);
         vm.prank(owner);
-        roleRegistryInstance.grantRole(PAUSER_ROLE, unpauser);
+        roleRegistryInstance.grantRole(UNPAUSER_ROLE, unpauser);
 
         // Admin performs admin-only actions
         vm.startPrank(admin);
@@ -1849,9 +1850,9 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
     function _grantRmPauseUntilRoles() internal {
         vm.startPrank(roleRegistryInstance.owner());
-        // pauseContractUntil → GUARDIAN_ROLE; unpause + setPauseUntilDuration → OPERATION_MULTISIG_ROLE
+        // pauseContractUntil → GUARDIAN_ROLE; unpause → SUPER_GUARDIAN_ROLE; setPauseUntilDuration → OPERATION_TIMELOCK_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), rmPauseUntilPauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), rmUnpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.SUPER_GUARDIAN_ROLE(), rmUnpauseUntilUnpauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), rmPauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
@@ -1905,7 +1906,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         etherFiRedemptionManagerInstance.pauseUntil();
 
         vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         etherFiRedemptionManagerInstance.unpauseUntil();
     }
 

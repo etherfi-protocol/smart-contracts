@@ -6,7 +6,7 @@ import "@tests/TestSetup.sol";
 import "@etherfi/governance/utils/PausableUntil.sol";
 
 contract PausableUntilHarness is PausableUntil {
-    // These unit tests exercise the internal pause-until mechanics (cooldowns, expiry,
+    // These unit tests exercise the internal pause-until mechanics (expiry,
     // storage isolation) independent of role gating. `pauseUntil` is virtual in the base
     // (eETH/weETH override its gating), so we override it ungated here. `unpauseUntil` and
     // `setPauseUntilDuration` are intentionally non-virtual, so we expose ungated test-only
@@ -42,9 +42,6 @@ contract PausableUntilTest is Test {
 
     function setUp() public {
         harness = new PausableUntilHarness(address(0));
-        // warp past MAX_PAUSE_DURATION + PAUSER_UNTIL_COOLDOWN so the initial cooldown check
-        // (which treats lastPauseTimestamp[pauser] = 0 as literally "last paused at unix 0")
-        // does not block the first pause in tests. On mainnet this is a non-issue.
         vm.warp(1_700_000_000);
         harness.harnessSetPauseUntilDuration(harness.MAX_PAUSE_DURATION());
     }
@@ -70,7 +67,6 @@ contract PausableUntilTest is Test {
     function test_constants() public view {
         assertEq(harness.MIN_PAUSE_DURATION(), 8 hours);
         assertEq(harness.MAX_PAUSE_DURATION(), 30 days);
-        assertEq(harness.PAUSER_UNTIL_COOLDOWN(), 7 days);
     }
 
     // --------------------------------------------------------
@@ -147,7 +143,6 @@ contract PausableUntilTest is Test {
         harness.pauseUntil();
 
         assertEq(harness.pausedUntil(), expectedUntil);
-        assertEq(harness.lastPauseTimestamp(pauserA), block.timestamp);
     }
 
     function test_pauseUntil_blocksGatedFunction() public {
@@ -168,30 +163,17 @@ contract PausableUntilTest is Test {
         harness.pauseUntil();
     }
 
-    function test_pauseUntil_canPauseAgainAfterExpiryPlusCooldown() public {
+    function test_pauseUntil_samePauserCanPauseAgainRightAfterExpiry() public {
         vm.prank(pauserA);
         harness.pauseUntil();
-        uint256 firstPauseStart = block.timestamp;
+        uint256 until = harness.pausedUntil();
 
-        // jump to exactly MAX + COOLDOWN after original pause — boundary condition
-        vm.warp(firstPauseStart + harness.MAX_PAUSE_DURATION() + harness.PAUSER_UNTIL_COOLDOWN() + 1);
+        // first second after expiry — no per-pauser cooldown applies
+        vm.warp(until + 1);
 
         vm.prank(pauserA);
-        harness.pauseUntil(); // should succeed
+        harness.pauseUntil();
         assertEq(harness.pausedUntil(), block.timestamp + harness.MAX_PAUSE_DURATION());
-    }
-
-    function test_pauseUntil_revertsIfPauserInCooldown() public {
-        vm.prank(pauserA);
-        harness.pauseUntil();
-        uint256 firstPauseStart = block.timestamp;
-
-        // expire the pause but not the cooldown: warp just past pause expiry
-        vm.warp(firstPauseStart + harness.MAX_PAUSE_DURATION() + 1);
-
-        vm.prank(pauserA);
-        vm.expectRevert(PausableUntil.PauserCooldownStillActive.selector);
-        harness.pauseUntil();
     }
 
     function test_pauseUntil_differentPauser_canPauseAfterExpiry() public {
@@ -202,11 +184,8 @@ contract PausableUntilTest is Test {
         vm.warp(firstPauseStart + harness.MAX_PAUSE_DURATION() + 1);
 
         vm.prank(pauserB);
-        harness.pauseUntil(); // pauserB has no cooldown
+        harness.pauseUntil();
         assertEq(harness.pausedUntil(), block.timestamp + harness.MAX_PAUSE_DURATION());
-        assertEq(harness.lastPauseTimestamp(pauserB), block.timestamp);
-        // pauserA's cooldown is still tracked independently
-        assertEq(harness.lastPauseTimestamp(pauserA), firstPauseStart);
     }
 
     // --------------------------------------------------------
@@ -242,29 +221,15 @@ contract PausableUntilTest is Test {
         harness.harnessUnpauseUntil();
     }
 
-    function test_unpauseUntil_doesNotClearPauserCooldown() public {
+    function test_unpauseUntil_samePauserCanPauseImmediately() public {
         vm.prank(pauserA);
         harness.pauseUntil();
-        uint256 pauseStart = block.timestamp;
-
         harness.harnessUnpauseUntil();
 
-        // pauserA's cooldown remains — early unpause should NOT let them re-pause
-        vm.warp(pauseStart + 1);
-        vm.prank(pauserA);
-        vm.expectRevert(PausableUntil.PauserCooldownStillActive.selector);
-        harness.pauseUntil();
-
-        // one second before cooldown ends — still reverts (strict >)
-        vm.warp(pauseStart + harness.MAX_PAUSE_DURATION() + harness.PAUSER_UNTIL_COOLDOWN() - 1);
-        vm.prank(pauserA);
-        vm.expectRevert(PausableUntil.PauserCooldownStillActive.selector);
-        harness.pauseUntil();
-
-        // at exactly MAX + COOLDOWN: cooldown ends (strict >) — succeeds
-        vm.warp(pauseStart + harness.MAX_PAUSE_DURATION() + harness.PAUSER_UNTIL_COOLDOWN());
+        // early unpause lets the same pauser re-pause in the same block
         vm.prank(pauserA);
         harness.pauseUntil();
+        assertEq(harness.pausedUntil(), block.timestamp + harness.MAX_PAUSE_DURATION());
     }
 
     function test_unpauseUntil_newPauserCanPauseImmediately() public {
@@ -272,7 +237,6 @@ contract PausableUntilTest is Test {
         harness.pauseUntil();
         harness.harnessUnpauseUntil();
 
-        // pauserB hasn't paused before, so no cooldown applies
         vm.prank(pauserB);
         harness.pauseUntil();
         assertGt(harness.pausedUntil(), 0);
@@ -326,56 +290,24 @@ contract PausableUntilTest is Test {
         assertTrue(harness.gated());
     }
 
-    function testFuzz_cooldown_enforcesMinInterval(uint256 jitter) public {
-        uint256 maxDur = harness.MAX_PAUSE_DURATION();
-        uint256 cooldown = harness.PAUSER_UNTIL_COOLDOWN();
-        uint256 required = maxDur + cooldown;
-
+    function testFuzz_samePauser_revertsWhilePausedThenRepausesAfterExpiry(uint256 jitter) public {
         vm.prank(pauserA);
         harness.pauseUntil();
         uint256 pauseStart = block.timestamp;
         uint256 pausedUntilVal = harness.pausedUntil();
 
-        // any time strictly before pauseStart + required must revert for pauserA
-        jitter = bound(jitter, 1, required - 1);
+        // any time up to and including pausedUntil, re-pausing hits _requireNotPausedUntil
+        jitter = bound(jitter, 1, 2 * harness.MAX_PAUSE_DURATION());
         vm.warp(pauseStart + jitter);
 
-        if (jitter <= maxDur) {
+        if (pauseStart + jitter <= pausedUntilVal) {
             vm.expectRevert(abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, pausedUntilVal));
+            vm.prank(pauserA);
+            harness.pauseUntil();
         } else {
-            vm.expectRevert(PausableUntil.PauserCooldownStillActive.selector);
+            vm.prank(pauserA);
+            harness.pauseUntil();
+            assertEq(harness.pausedUntil(), block.timestamp + harness.MAX_PAUSE_DURATION());
         }
-        vm.prank(pauserA);
-        harness.pauseUntil();
-    }
-
-    function testFuzz_cooldown_allowsAfterRequiredInterval(uint256 extra) public {
-        vm.prank(pauserA);
-        harness.pauseUntil();
-        uint256 pauseStart = block.timestamp;
-        uint256 required = harness.MAX_PAUSE_DURATION() + harness.PAUSER_UNTIL_COOLDOWN();
-
-        // at or after pauseStart + required, cooldown has ended (strict >)
-        extra = bound(extra, 0, 365 days);
-        vm.warp(pauseStart + required + extra);
-        vm.prank(pauserA);
-        harness.pauseUntil();
-        assertEq(harness.lastPauseTimestamp(pauserA), block.timestamp);
-    }
-
-    function testFuzz_secondPauser_independentCooldown(uint256 delay) public {
-        vm.prank(pauserA);
-        harness.pauseUntil();
-        uint256 firstStart = block.timestamp;
-
-        // wait for pause-until to lift, then a different pauser pauses
-        delay = bound(delay, harness.MAX_PAUSE_DURATION() + 1, harness.MAX_PAUSE_DURATION() + 365 days);
-        vm.warp(firstStart + delay);
-
-        vm.prank(pauserB);
-        harness.pauseUntil();
-        assertEq(harness.lastPauseTimestamp(pauserB), block.timestamp);
-        // pauserA's cooldown is unchanged
-        assertEq(harness.lastPauseTimestamp(pauserA), firstStart);
     }
 }

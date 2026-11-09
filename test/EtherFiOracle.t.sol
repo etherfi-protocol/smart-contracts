@@ -415,6 +415,99 @@ contract EtherFiOracleTest is TestSetup {
         etherFiOracleInstance.submitReport(reportAtPeriod2A);
     }
 
+    // --------------------------------------------------------
+    //  pauseContractUntil / unpauseContractUntil
+    // --------------------------------------------------------
+
+    bytes32 constant PAUSABLE_UNTIL_SLOT =
+        0x2c7e4bc092c2002f0baaf2f47367bc442b098266b43d189dafe4cb25f1e1fea2;
+
+    address pauseUntilPauser = makeAddr("pauseUntilPauser");
+    address unpauseUntilUnpauser = makeAddr("unpauseUntilUnpauser");
+    address pauseUntilDurationSetter = makeAddr("pauseUntilDurationSetter");
+
+    function _grantPauseUntilRoles() internal {
+        vm.startPrank(owner);
+        // pauseContractUntil → GUARDIAN_ROLE; unpause → SUPER_GUARDIAN_ROLE; setPauseUntilDuration → OPERATION_TIMELOCK_ROLE
+        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), pauseUntilPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.SUPER_GUARDIAN_ROLE(), unpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), pauseUntilDurationSetter);
+        vm.stopPrank();
+
+        uint256 maxDur = etherFiOracleInstance.MAX_PAUSE_DURATION();
+        vm.prank(pauseUntilDurationSetter);
+        etherFiOracleInstance.setPauseUntilDuration(maxDur);
+    }
+
+    function _oraclePausedUntil() internal view returns (uint256) {
+        return uint256(vm.load(address(etherFiOracleInstance), PAUSABLE_UNTIL_SLOT));
+    }
+
+    function test_pauseContractUntil_requiresRole() public {
+        _grantPauseUntilRoles();
+
+        vm.prank(chad);
+        vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
+        etherFiOracleInstance.pauseUntil();
+
+        vm.prank(pauseUntilPauser);
+        etherFiOracleInstance.pauseUntil();
+        assertEq(_oraclePausedUntil(), block.timestamp + etherFiOracleInstance.MAX_PAUSE_DURATION());
+    }
+
+    function test_submitReport_blockedByPauseContractUntil() public {
+        _moveClock(1024 + 2 * slotsPerEpoch);
+        _grantPauseUntilRoles();
+
+        vm.prank(pauseUntilPauser);
+        etherFiOracleInstance.pauseUntil();
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _oraclePausedUntil()));
+        etherFiOracleInstance.submitReport(reportAtPeriod2A);
+    }
+
+    function test_submitReport_unblockedAfterUnpauseContractUntil() public {
+        _moveClock(1024 + 2 * slotsPerEpoch);
+        _grantPauseUntilRoles();
+
+        vm.prank(pauseUntilPauser);
+        etherFiOracleInstance.pauseUntil();
+
+        vm.prank(unpauseUntilUnpauser);
+        etherFiOracleInstance.unpauseUntil();
+        assertEq(_oraclePausedUntil(), 0);
+
+        vm.prank(alice);
+        etherFiOracleInstance.submitReport(reportAtPeriod2A);
+    }
+
+    function test_unpauseContractUntil_requiresRole() public {
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        etherFiOracleInstance.pauseUntil();
+
+        vm.prank(chad);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
+        etherFiOracleInstance.unpauseUntil();
+    }
+
+    function test_unpauseContractUntil_revertsIfNotPaused() public {
+        _grantPauseUntilRoles();
+        vm.prank(unpauseUntilUnpauser);
+        vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
+        etherFiOracleInstance.unpauseUntil();
+    }
+
+    function test_setPauseUntilDuration_requiresRole() public {
+        _grantPauseUntilRoles();
+        uint256 maxDur = etherFiOracleInstance.MAX_PAUSE_DURATION();
+
+        vm.prank(pauseUntilPauser);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
+        etherFiOracleInstance.setPauseUntilDuration(maxDur);
+    }
+
     function test_set_quorum_size() public {
         vm.startPrank(owner);
 

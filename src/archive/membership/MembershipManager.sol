@@ -105,89 +105,51 @@ contract MembershipManager is Initializable, OwnableUpgradeable, DeprecatedOZPau
     error InvalidAmount();
     error InsufficientBalance();
 
-    function unwrapForEEthAndBurn(uint256 _tokenId) external whenNotPaused nonBlacklisted {
-        _requireTokenOwner(_tokenId);
-
-        uint40 loyaltyPoints = membershipNFT.loyaltyPointsOf(_tokenId);
-        (uint256 totalBalance, uint256 feeAmount) = _withdrawAndBurn(_tokenId);
-
-        // transfer 'eEthShares' of eETH to the owner
-        IERC20(address(eETH)).safeTransfer(msg.sender, totalBalance - feeAmount);
-
-        if (feeAmount > 0) {
-            liquidityPool.withdraw(address(this), feeAmount);
-        }
-
-        emit NftUnwrappedForEEth(msg.sender, _tokenId, totalBalance - feeAmount, loyaltyPoints, feeAmount);
-    }
-
     error ExceededMaxWithdrawal();
     error TierLimitExceeded();
     error OutOfBound();
     error WrongTokenMinted();
     error UnexpectedTier();
     error OnlyTokenOwner();
+    error LengthMismatch();
+    error TierVaultsNotEmpty();
+    error AddressZero();
+    error SendFail();
 
-    /// @notice Requests exchange of membership points tokens for ETH.
-    /// @dev decrements the amount of eETH backing the membership NFT and calls requestWithdraw on the liquidity pool
-    /// @param _tokenId The ID of the membership NFT.
-    /// @param _amount The amount of membership tokens to exchange.
-    /// @return uint256 ID of the withdraw request NFT
-    function requestWithdraw(uint256 _tokenId, uint256 _amount) external whenNotPaused nonBlacklisted returns (uint256) {
-        _requireTokenOwner(_tokenId);
+    event NftForceExited(address indexed _owner, uint256 indexed _tokenId, uint256 _amountOfEEth, uint256 _feeAmount);
+    event RemainingFundsSwept(address indexed _recipient, uint256 _eEthAmount, uint256 _ethAmount);
 
-        // prevent transfers for several blocks after a withdrawal to prevent frontrunning
-        membershipNFT.incrementLock(_tokenId, withdrawalLockBlocks);
-
-        claim(_tokenId);
-        if (!membershipNFT.isWithdrawable(_tokenId, _amount)) revert ExceededMaxWithdrawal();
-
-        uint256 prevAmount = ethAmountForVaultShare(tokenData[_tokenId].tier, tokenData[_tokenId].vaultShare);
-        _updateAllTimeHighDepositOf(_tokenId);
-        _withdraw(_tokenId, _amount);
-        _applyUnwrapPenalty(_tokenId, prevAmount, _amount);
-
-        // send EETH to recipient before requesting withdraw?
-        IERC20(address(eETH)).safeIncreaseAllowance(address(liquidityPool), _amount);
-        uint256 withdrawTokenId = liquidityPool.requestMembershipNFTWithdraw(address(msg.sender), _amount, uint64(0));
-
-        _emitNftUpdateEvent(_tokenId);
-        return withdrawTokenId;
-    }
-
-    /// @notice request to withdraw the entire balance of this NFT and burn it
-    /// @dev burns the NFT and calls requestWithdraw on the liquidity pool
-    /// @param _tokenId ID of the membership NFT to liquidate
-    /// @return uint256 ID of the withdraw request NFT
-    function requestWithdrawAndBurn(uint256 _tokenId) external whenNotPaused nonBlacklisted returns (uint256) {
-        _requireTokenOwner(_tokenId);
-
-        (uint256 totalBalance, uint256 feeAmount) = _withdrawAndBurn(_tokenId);
-
-        IERC20(address(eETH)).safeIncreaseAllowance(address(liquidityPool), totalBalance);
-        uint256 withdrawTokenId = liquidityPool.requestMembershipNFTWithdraw(msg.sender, totalBalance, feeAmount);
-        
-        return withdrawTokenId;
-    }
-
-    /// @notice Claims {points, staking rewards} and update the tier, if needed.
-    /// @param _tokenId The ID of the membership NFT.
-    /// @dev This function allows users to claim the rewards + a new tier, if eligible.
-    function claim(uint256 _tokenId) public whenNotPaused nonBlacklisted {
-        _claimPoints(_tokenId);
-
-        uint8 oldTier = tokenData[_tokenId].tier;
-        uint8 newTier = membershipNFT.claimableTier(_tokenId);
-        if (oldTier != newTier) {
-            _claimTier(_tokenId, oldTier, newTier);
-        }
-        _emitNftUpdateEvent(_tokenId);
-    }
-
-    function claimBatch(uint256[] calldata _tokenIds) public whenNotPaused {
+    /// @notice Force-exits membership NFTs during the membership wind-down.
+    /// @dev Burns each NFT from its owner and transfers the eETH backing it, minus the burn fee, to that owner.
+    ///      The fee stays in this contract as eETH and leaves through {sweepRemainingFunds}.
+    ///      The fee is capped at the NFT's value so every NFT can exit.
+    /// @param _tokenIds The IDs of the membership NFTs to exit.
+    /// @param _owners The current owner of each NFT, in the same order as `_tokenIds`.
+    function forceExit(uint256[] calldata _tokenIds, address[] calldata _owners) external onlyOperatingMultisig {
+        if (_tokenIds.length != _owners.length) revert LengthMismatch();
         for (uint256 i = 0; i < _tokenIds.length; i++) {
-            claim(_tokenIds[i]);
+            _forceExit(_tokenIds[i], _owners[i]);
         }
+    }
+
+    /// @notice Sends the eETH and ETH left in this contract to `_recipient` once every NFT has exited.
+    /// @dev Reverts while any tier vault still has vault shares, i.e. while any membership NFT remains.
+    /// @param _recipient The address that receives the remaining funds.
+    function sweepRemainingFunds(address _recipient) external onlyOperatingMultisig {
+        if (_recipient == address(0)) revert AddressZero();
+        for (uint256 i = 0; i < tierVaults.length; i++) {
+            if (tierVaults[i].totalVaultShares != 0) revert TierVaultsNotEmpty();
+        }
+
+        uint256 eEthAmount = eETH.balanceOf(address(this));
+        uint256 ethAmount = address(this).balance;
+        if (eEthAmount > 0) IERC20(address(eETH)).safeTransfer(_recipient, eEthAmount);
+        if (ethAmount > 0) {
+            (bool sent, ) = _recipient.call{value: ethAmount}("");
+            if (!sent) revert SendFail();
+        }
+
+        emit RemainingFundsSwept(_recipient, eEthAmount, ethAmount);
     }
 
     /// @dev set how many blocks a token is locked from trading for after withdrawing
@@ -198,81 +160,28 @@ contract MembershipManager is Initializable, OwnableUpgradeable, DeprecatedOZPau
     //--------------------------------------------------------------------------------------
     //-------------------------------  INTERNAL FUNCTIONS   --------------------------------
     //--------------------------------------------------------------------------------------
-    function _withdrawAndBurn(uint256 _tokenId) internal returns (uint256, uint256) {
-        if (tokenData[_tokenId].version != 1) revert WrongVersion();
+    function _forceExit(uint256 _tokenId, address _owner) internal {
+        if (membershipNFT.balanceOfUser(_owner, _tokenId) != 1) revert OnlyTokenOwner();
+        TokenData memory token = tokenData[_tokenId];
+        if (token.version != 1) revert WrongVersion();
 
-        uint8 tier = tokenData[_tokenId].tier;
-        uint256 vaultShare = tokenData[_tokenId].vaultShare;
-        uint256 ethAmount = ethAmountForVaultShare(tier, vaultShare);
-        uint256 feeAmount = hasMetBurnFeeWaiverPeriod(_tokenId) ? 0 : uint256(burnFee) * FEE_UNIT;
-        if (ethAmount < feeAmount) revert InsufficientBalance();
+        uint256 eEthShare = eEthShareForVaultShare(token.tier, token.vaultShare);
+        uint256 ethAmount = liquidityPool.amountForShare(eEthShare);
+        uint256 feeAmount = hasMetBurnFeeWaiverPeriod(_tokenId) ? 0 : _min(uint256(burnFee) * FEE_UNIT, ethAmount);
 
-        _withdraw(_tokenId, ethAmount);
+        _decrementTierVaultV1(token.tier, eEthShare, token.vaultShare);
         delete tokenData[_tokenId];
+        membershipNFT.burn(_owner, _tokenId, 1);
 
-        membershipNFT.burn(msg.sender, _tokenId, 1);
+        if (ethAmount > feeAmount) IERC20(address(eETH)).safeTransfer(_owner, ethAmount - feeAmount);
 
-        _emitNftUpdateEvent(_tokenId);
-
-        return (ethAmount, feeAmount);
-    }
-
-    function _withdraw(uint256 _tokenId, uint256 _amount) internal {
-        if (membershipNFT.valueOf(_tokenId) < _amount) revert InsufficientBalance();
-        if (tokenData[_tokenId].version != 1) revert WrongVersion();
-
-        uint8 tier = tokenData[_tokenId].tier;
-        uint256 vaultShare = vaultShareForEthAmount(tier, _amount);
-        uint256 eEthShare = liquidityPool.sharesForAmount(_amount);
-
-        _decrementTierVaultV1(tier, eEthShare, vaultShare);
-        _decrementTokenVaultShareV1(_tokenId, vaultShare);        
+        emit NftForceExited(_owner, _tokenId, ethAmount - feeAmount, feeAmount);
     }
 
     // V1
-    function _decrementTokenVaultShareV1(uint256 _tokenId, uint256 _share) internal {
-        tokenData[_tokenId].vaultShare -= uint96(_share);
-    }
-
-    function _incrementTierVaultV1(uint8 _tier, uint256 _eEthShare, uint256 _vaultShare) internal {
-        tierVaults[_tier].totalVaultShares += uint128(_vaultShare);
-        tierVaults[_tier].totalPooledEEthShares += uint128(_eEthShare);
-    }
-
     function _decrementTierVaultV1(uint8 _tier, uint256 _eEthShare, uint256 _vaultShare) internal {
         tierVaults[_tier].totalVaultShares -= uint128(_vaultShare);
         tierVaults[_tier].totalPooledEEthShares -= uint128(_eEthShare);
-    }
-
-    function _claimTier(uint256 _tokenId) internal {
-        uint8 oldTier = tokenData[_tokenId].tier;
-        uint8 newTier = membershipNFT.claimableTier(_tokenId);
-        _claimTier(_tokenId, oldTier, newTier);
-    }
-
-    function _claimTier(uint256 _tokenId, uint8 _curTier, uint8 _newTier) internal {
-        if (tokenData[_tokenId].tier != _curTier) revert UnexpectedTier();
-        if (_curTier == _newTier) {
-            return;
-        }
-        
-        uint256 prevVaultShare = tokenData[_tokenId].vaultShare;
-        uint256 eEthShare = eEthShareForVaultShare(_curTier, prevVaultShare);
-        uint256 newVaultShare = vaultShareForEEthShare(_newTier, eEthShare);
-
-        _decrementTierVaultV1(_curTier, eEthShare, prevVaultShare);
-        _incrementTierVaultV1(_newTier, eEthShare, newVaultShare);
-        tokenData[_tokenId].vaultShare = uint96(newVaultShare);
-        tokenData[_tokenId].tier = _newTier;
-    }
-
-    /// @notice Claims the accrued membership {loyalty, tier} points.
-    /// @param _tokenId The ID of the membership NFT.
-    function _claimPoints(uint256 _tokenId) internal {
-        TokenData storage token = tokenData[_tokenId];
-        token.baseLoyaltyPoints = membershipNFT.loyaltyPointsOf(_tokenId);
-        token.baseTierPoints = membershipNFT.tierPointsOf(_tokenId);
-        token.prevPointsAccrualTimestamp = uint32(block.timestamp);
     }
 
     function eEthShareForVaultShare(uint8 _tier, uint256 _vaultShare) public view returns (uint256) {
@@ -314,51 +223,8 @@ contract MembershipManager is Initializable, OwnableUpgradeable, DeprecatedOZPau
         return stakingPeriod >= burnFeeWaiverPeriodInDays;
     }
 
-    function _updateAllTimeHighDepositOf(uint256 _tokenId) internal {
-        allTimeHighDepositAmount[_tokenId] = membershipNFT.allTimeHighDepositOf(_tokenId);
-    }
-
-    function _requireTokenOwner(uint256 _tokenId) internal view {
-        if (membershipNFT.balanceOfUser(msg.sender, _tokenId) != 1) revert OnlyTokenOwner();
-    }
-
     function _min(uint256 _a, uint256 _b) internal pure returns (uint256) {
         return (_a > _b) ? _b : _a;
-    }
-
-    function _max(uint256 _a, uint256 _b) internal pure returns (uint256) {
-        return (_a > _b) ? _a : _b;
-    }
-
-    /// @notice Applies the unwrap penalty.
-    /// @dev Always lose at least a tier, possibly more depending on percentage of deposit withdrawn
-    /// @param _tokenId The ID of the membership NFT.
-    /// @param _prevAmount The amount of ETH that the NFT was holding
-    /// @param _withdrawalAmount The amount of ETH that is being withdrawn
-    function _applyUnwrapPenalty(uint256 _tokenId, uint256 _prevAmount, uint256 _withdrawalAmount) internal {
-        TokenData storage token = tokenData[_tokenId];
-        uint8 prevTier = token.tier > 0 ? token.tier - 1 : 0;
-        uint40 curTierPoints = token.baseTierPoints;
-
-        // point deduction if we kick back to start of previous tier
-        uint40 degradeTierPenalty = curTierPoints - tierData[prevTier].requiredTierPoints;
-
-        // point deduction if scaled proportional to withdrawal amount
-        uint256 ratio = (BASIS_POINTS_DENOMINATOR * _withdrawalAmount) / _prevAmount;
-        uint40 scaledTierPointsPenalty = uint40((ratio * curTierPoints) / BASIS_POINTS_DENOMINATOR);
-
-        uint40 penalty = uint40(_max(degradeTierPenalty, scaledTierPointsPenalty));
-
-        token.baseTierPoints -= penalty;
-        _claimTier(_tokenId);
-    }
-
-    function _emitNftUpdateEvent(uint256 _tokenId) internal {
-        uint128 amount = uint128(membershipNFT.valueOf(_tokenId));
-        TokenData memory token = tokenData[_tokenId];
-        emit NftUpdated(_tokenId, amount, 0,
-                        token.baseLoyaltyPoints, token.baseTierPoints, token.tier,
-                        token.prevTopUpTimestamp, token.vaultShare);
     }
 
     // Finds the corresponding for the tier points
@@ -399,12 +265,4 @@ contract MembershipManager is Initializable, OwnableUpgradeable, DeprecatedOZPau
         return _getImplementation();
     }
 
-    //--------------------------------------------------------------------------------------
-    //------------------------------------  MODIFIER  --------------------------------------
-    //--------------------------------------------------------------------------------------
-
-    modifier nonBlacklisted() {
-        blacklister.nonBlacklisted(msg.sender);
-        _;
-    }
 }

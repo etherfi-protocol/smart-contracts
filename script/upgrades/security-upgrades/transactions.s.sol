@@ -560,8 +560,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
                 roleRegistry: ROLE_REGISTRY,
                 priorityWithdrawalQueue: PRIORITY_WITHDRAWAL_QUEUE,
                 blacklister: blacklisterProxy,
-                etherFiAdminContract: ETHERFI_ADMIN,
-                membershipManager: MEMBERSHIP_MANAGER
+                etherFiAdminContract: ETHERFI_ADMIN
             })
         );
         codeChecker.assertByteCodeMatch(liquidityPoolImpl, address(fresh2));
@@ -1492,7 +1491,6 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(address(lp.priorityWithdrawalQueue())  == PRIORITY_WITHDRAWAL_QUEUE,  "LP.priorityWithdrawalQueue");
         require(address(lp.blacklister())              == blacklisterProxy,           "LP.blacklister");
         require(lp.etherFiAdminContract()              == ETHERFI_ADMIN,              "LP.etherFiAdminContract");
-        require(lp.membershipManager()                 == MEMBERSHIP_MANAGER,         "LP.membershipManager");
 
         WeETHToken w = WeETHToken(WEETH);
         require(address(w.eETH())          == EETH,            "WeETH.eETH");

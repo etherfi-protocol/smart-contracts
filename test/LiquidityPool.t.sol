@@ -42,8 +42,7 @@ contract LiquidityPoolTest is TestSetup {
             roleRegistry: address(roleRegistryInstance),
             priorityWithdrawalQueue: pwq,
             blacklister: blacklister,
-            etherFiAdminContract: address(etherFiAdminInstance),
-            membershipManager: address(membershipManagerInstance)
+            etherFiAdminContract: address(etherFiAdminInstance)
         });
     }
 
@@ -777,7 +776,7 @@ contract LiquidityPoolTest is TestSetup {
 
         assertTrue(liquidityPoolInstance.paused());
 
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         liquidityPoolInstance.unpause();
 
         vm.prank(admin);
@@ -810,25 +809,6 @@ contract LiquidityPoolTest is TestSetup {
         uint256 shares = liquidityPoolInstance.deposit{value: 5 ether}(bob);
         assertGt(shares, 0);
         assertEq(eETHInstance.balanceOf(alice), 5 ether);
-        vm.stopPrank();
-    }
-
-    function test_DepositFromMembershipManager() public {
-        vm.deal(address(membershipManagerInstance), 10 ether);
-        
-        vm.startPrank(address(membershipManagerInstance));
-        uint256 shares = liquidityPoolInstance.deposit{value: 5 ether}(alice, bob);
-        assertGt(shares, 0);
-        assertEq(eETHInstance.balanceOf(address(membershipManagerInstance)), 5 ether);
-        vm.stopPrank();
-    }
-
-    function test_DepositFromMembershipManagerFailsIfNotMembershipManager() public {
-        vm.deal(alice, 10 ether);
-
-        vm.startPrank(alice);
-        vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
-        liquidityPoolInstance.deposit{value: 5 ether}(alice, bob);
         vm.stopPrank();
     }
 
@@ -896,22 +876,6 @@ contract LiquidityPoolTest is TestSetup {
         }
     }
 
-    function test_WithdrawByMembershipManager() public {
-        vm.deal(address(membershipManagerInstance), 10 ether);
-        vm.startPrank(address(membershipManagerInstance));
-        liquidityPoolInstance.deposit{value: 10 ether}(address(membershipManagerInstance), address(0));
-        vm.stopPrank();
-
-        // Need to ensure liquidity pool has ETH balance
-        vm.deal(address(liquidityPoolInstance), 10 ether);
-        uint256 aliceBalanceBefore = alice.balance;
-        vm.startPrank(address(membershipManagerInstance));
-        uint256 shares = liquidityPoolInstance.withdraw(alice, 5 ether);
-        assertGt(shares, 0);
-        assertEq(alice.balance, aliceBalanceBefore + 5 ether);
-        vm.stopPrank();
-    }
-
     function test_WithdrawByEtherFiRedemptionManager() public {
         // First need to deposit via liquifier
         vm.startPrank(address(liquifierInstance));
@@ -932,12 +896,12 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_WithdrawFailsIfInsufficientLiquidity() public {
-        vm.deal(address(membershipManagerInstance), 10 ether);
-        vm.startPrank(address(membershipManagerInstance));
-        liquidityPoolInstance.deposit{value: 10 ether}(address(membershipManagerInstance), address(0));
+        vm.deal(address(etherFiRedemptionManagerInstance), 10 ether);
+        vm.startPrank(address(etherFiRedemptionManagerInstance));
+        liquidityPoolInstance.deposit{value: 10 ether}();
         vm.stopPrank();
 
-        vm.startPrank(address(membershipManagerInstance));
+        vm.startPrank(address(etherFiRedemptionManagerInstance));
         vm.expectRevert(LiquidityPool.InsufficientLiquidity.selector);
         liquidityPoolInstance.withdraw(alice, 20 ether);
         vm.stopPrank();
@@ -982,14 +946,9 @@ contract LiquidityPoolTest is TestSetup {
 
     function test_WithdrawFailsWhenPaused() public {
         // Permissionless claim paths (withdrawRequestNFT, priorityWithdrawalQueue) bypass the LP pause.
-        // Only the gated callers (membershipManager, etherFiRedemptionManager) must still revert at the pause gate.
+        // Only the gated caller (etherFiRedemptionManager) must still revert at the pause gate.
         vm.prank(admin);
         liquidityPoolInstance.pause();
-
-        vm.startPrank(address(membershipManagerInstance));
-        vm.expectRevert(Pausable.ContractPaused.selector);
-        liquidityPoolInstance.withdraw(alice, 1 ether);
-        vm.stopPrank();
 
         vm.startPrank(address(etherFiRedemptionManagerInstance));
         vm.expectRevert(Pausable.ContractPaused.selector);
@@ -1018,37 +977,27 @@ contract LiquidityPoolTest is TestSetup {
         assertGe(alice.balance, aliceBalBefore + 5 ether - 1 wei);
     }
 
-    // ============ Request Membership NFT Withdraw Tests ============
+    // ============ Former MembershipManager paths ============
 
-    function test_RequestMembershipNFTWithdraw() public {
-        // First deposit ETH to membership manager via the deposit function
+    function test_membershipManagerEntryPointsRemoved() public {
         vm.deal(address(membershipManagerInstance), 10 ether);
         vm.startPrank(address(membershipManagerInstance));
-        liquidityPoolInstance.deposit{value: 10 ether}(address(membershipManagerInstance), address(0));
-        // Get actual eETH balance (should be 10 ether if pool was empty)
-        uint256 eethBalance = eETHInstance.balanceOf(address(membershipManagerInstance));
-        // Use a portion of the balance
-        uint256 withdrawAmount = eethBalance > 5 ether ? 5 ether : eethBalance / 2;
-        if (withdrawAmount > 0 && eethBalance >= withdrawAmount) {
-            eETHInstance.approve(address(liquidityPoolInstance), type(uint256).max);
-            uint256 reqId = liquidityPoolInstance.requestMembershipNFTWithdraw(alice, withdrawAmount, 0.1 ether);
-            assertGt(reqId, 0);
-        }
-        vm.stopPrank();
-    }
 
-    function test_RequestMembershipNFTWithdrawFailsIfNotMembershipManager() public {
-        vm.deal(alice, 10 ether);
-        vm.startPrank(alice);
+        (bool depositOk, ) = address(liquidityPoolInstance).call{value: 1 ether}(
+            abi.encodeWithSignature("deposit(address,address)", alice, bob)
+        );
+        assertFalse(depositOk, "deposit(address,address) must not exist");
+
+        (bool requestOk, ) = address(liquidityPoolInstance).call(
+            abi.encodeWithSignature("requestMembershipNFTWithdraw(address,uint256,uint256)", alice, 1 ether, 0)
+        );
+        assertFalse(requestOk, "requestMembershipNFTWithdraw must not exist");
+
+        (bool getterOk, ) = address(liquidityPoolInstance).staticcall(abi.encodeWithSignature("membershipManager()"));
+        assertFalse(getterOk, "membershipManager() must not exist");
+
         vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
-        liquidityPoolInstance.requestMembershipNFTWithdraw(alice, 5 ether, 0.1 ether);
-        vm.stopPrank();
-    }
-
-    function test_RequestMembershipNFTWithdrawFailsWithZeroAmount() public {
-        vm.startPrank(address(membershipManagerInstance));
-        vm.expectRevert(LiquidityPool.InvalidAmount.selector);
-        liquidityPoolInstance.requestMembershipNFTWithdraw(alice, 0, 0.1 ether);
+        liquidityPoolInstance.withdraw(alice, 1 ether);
         vm.stopPrank();
     }
 
@@ -1584,9 +1533,9 @@ contract LiquidityPoolTest is TestSetup {
 
     function _grantLpPauseUntilRoles() internal {
         vm.startPrank(roleRegistryInstance.owner());
-        // pauseContractUntil → GUARDIAN_ROLE; unpause + setPauseUntilDuration → OPERATION_MULTISIG_ROLE
+        // pauseContractUntil → GUARDIAN_ROLE; unpause → SUPER_GUARDIAN_ROLE; setPauseUntilDuration → OPERATION_TIMELOCK_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), lpPauseUntilPauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), lpUnpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.SUPER_GUARDIAN_ROLE(), lpUnpauseUntilUnpauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), lpPauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
@@ -1620,7 +1569,7 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.pauseUntil();
 
         vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         liquidityPoolInstance.unpauseUntil();
     }
 
@@ -1725,7 +1674,7 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_withdraw_blockedByPauseContractUntil() public {
-        // Gated callers (membershipManager, etherFiRedemptionManager) must revert under pauseContractUntil.
+        // The gated caller (etherFiRedemptionManager) must revert under pauseContractUntil.
         // Permissionless claim paths (withdrawRequestNFT, priorityWithdrawalQueue) bypass this gate — see
         // test_withdraw_byWithdrawRequestNFT_succeedsUnderPauseContractUntil below.
         vm.deal(bob, 1 ether);
@@ -1737,12 +1686,6 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.pauseUntil();
 
         vm.prank(address(etherFiRedemptionManagerInstance));
-        vm.expectRevert(
-            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
-        );
-        liquidityPoolInstance.withdraw(bob, 1 ether);
-
-        vm.prank(address(membershipManagerInstance));
         vm.expectRevert(
             abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
         );
@@ -1822,18 +1765,6 @@ contract LiquidityPoolTest is TestSetup {
             abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
         );
         liquidityPoolInstance.requestWithdrawWithPermit(bob, 1 ether, emptyPermit);
-    }
-
-    function test_requestMembershipNFTWithdraw_blockedByPauseContractUntil() public {
-        _grantLpPauseUntilRoles();
-        vm.prank(lpPauseUntilPauser);
-        liquidityPoolInstance.pauseUntil();
-
-        vm.prank(address(membershipManagerInstance));
-        vm.expectRevert(
-            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
-        );
-        liquidityPoolInstance.requestMembershipNFTWithdraw(bob, 1 ether, 0);
     }
 
     function test_batchRegister_blockedByPauseContractUntil() public {
@@ -2097,45 +2028,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.stopPrank();
     }
 
-    /// @dev MembershipManager-originated withdrawals (`requestMembershipNFTWithdraw`)
-    ///      go through a dedicated LP entry point and must NOT be subject to the
-    ///      user-facing MIN/MAX cap — otherwise membership-burn flows break for
-    ///      tiny dust balances or whales above the cap. These tests pin the
-    ///      exemption: identical amounts that would revert via `requestWithdraw`
-    ///      must succeed via `requestMembershipNFTWithdraw`.
-    function test_requestMembershipNFTWithdraw_belowMin_succeeds() public {
-        // Seed the MembershipManager with eETH.
-        vm.deal(address(membershipManagerInstance), 1 ether);
-        vm.startPrank(address(membershipManagerInstance));
-        liquidityPoolInstance.deposit{value: 1 ether}(address(membershipManagerInstance), address(0));
-
-        uint256 dust = liquidityPoolInstance.minWithdrawAmount() - 1; // below user cap
-        eETHInstance.approve(address(liquidityPoolInstance), dust);
-        uint256 reqId = liquidityPoolInstance.requestMembershipNFTWithdraw(alice, dust, 0);
-        vm.stopPrank();
-
-        WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(reqId);
-        assertEq(request.amountOfEEth, dust, "membership-burn dust withdraw should bypass MIN cap");
-    }
-
-    function test_requestMembershipNFTWithdraw_aboveMax_succeeds() public {
-        uint256 large = liquidityPoolInstance.maxWithdrawAmount() + 1 ether; // above user cap
-
-        // Seed the MembershipManager with enough eETH to cover the large request.
-        vm.deal(address(membershipManagerInstance), large + 1 ether);
-        vm.startPrank(address(membershipManagerInstance));
-        liquidityPoolInstance.deposit{value: large + 1 ether}(address(membershipManagerInstance), address(0));
-
-        eETHInstance.approve(address(liquidityPoolInstance), large);
-        uint256 reqId = liquidityPoolInstance.requestMembershipNFTWithdraw(alice, large, 0);
-        vm.stopPrank();
-
-        WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(reqId);
-        assertEq(request.amountOfEEth, large, "membership-burn whale withdraw should bypass MAX cap");
-    }
-
-    /// @dev Contrast with `requestMembershipNFTWithdraw`, which accepts both dust
-    ///      and whale amounts unchanged. Via the user-facing `requestWithdraw`:
+    /// @dev Via the user-facing `requestWithdraw`:
     ///        - dust (< MIN) reverts with InvalidWithdrawalAmount
     ///        - large (> MAX) still reverts with InvalidWithdrawalAmount
     function test_requestWithdraw_userFlow_dustRevertsWithInvalidWithdrawalAmount_largeRevertsWithInvalidWithdrawalAmount() public {
