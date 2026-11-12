@@ -139,10 +139,7 @@ contract DeployReauditFixes is Utils {
         // 7. EtherFiViewer Implementation
         {
             string memory contractName = "EtherFiViewer";
-            bytes memory constructorArgs = abi.encode(
-                EIGENLAYER_POD_MANAGER,
-                EIGENLAYER_DELEGATION_MANAGER
-            );
+            bytes memory constructorArgs = "";
             bytes memory bytecode = abi.encodePacked(
                 type(EtherFiViewer).creationCode,
                 constructorArgs

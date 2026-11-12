@@ -23,6 +23,27 @@ contract TnftTest is TestSetup {
         TNFTInstance.mint(address(alice), 1);
     }
 
+    function test_TransferRequiresExactlyOneAssociatedValidator() public {
+        uint256 tokenId = 10_001;
+        address receiver = address(0xBEEF);
+        vm.prank(address(stakingManagerInstance));
+        TNFTInstance.mint(alice, tokenId);
+
+        bytes memory query = abi.encodeWithSignature("numAssociatedValidators(uint256)", tokenId);
+        for (uint256 count = 0; count <= 2; count += 2) {
+            vm.mockCall(address(managerInstance), query, abi.encode(count));
+            vm.prank(alice);
+            vm.expectRevert(bytes("numAssociatedValidators != 1"));
+            TNFTInstance.transferFrom(alice, receiver, tokenId);
+            assertEq(TNFTInstance.ownerOf(tokenId), alice);
+        }
+
+        vm.mockCall(address(managerInstance), query, abi.encode(uint256(1)));
+        vm.prank(alice);
+        TNFTInstance.transferFrom(alice, receiver, tokenId);
+        assertEq(TNFTInstance.ownerOf(tokenId), receiver);
+    }
+
     /*
     function test_Mint() public {
         startHoax(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);

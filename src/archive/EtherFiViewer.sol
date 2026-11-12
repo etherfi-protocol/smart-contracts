@@ -12,19 +12,25 @@ import "@etherfi/interfaces/eigenlayer-interfaces/IDelegationManager.sol";
 
 import "@etherfi/helpers/AddressProvider.sol";
 
-contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+interface ILegacyViewerNodesManager {
+    function delegationManager() external view returns (IDelegationManager);
+    function eigenPodManager() external view returns (IEigenPodManager);
+    function getUnusedWithdrawalSafesLength() external view returns (uint256);
+    function unusedWithdrawalSafes(uint256 index) external view returns (address);
+}
 
+interface ILegacyViewerNode {
+    function eigenPod() external view returns (address);
+    function isRestakingEnabled() external view returns (bool);
+    function withdrawableBalanceInExecutionLayer() external view returns (uint256);
+    function numAssociatedValidators() external view returns (uint256);
+    function version() external view returns (uint256);
+}
+
+contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     AddressProvider addressProvider;
     IEtherFiNodesManager nodesManager;
-
-    address public immutable eigenPodManager;
-    address public immutable delegationManager;
-
-    constructor(address _eigenPodManager, address _delegationManager) {
-        eigenPodManager = _eigenPodManager;
-        delegationManager = _delegationManager;
-    }
 
     function initialize(address _addressProvider) external initializer {
         __Ownable_init();
@@ -36,11 +42,11 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function _getDelegationManager() internal view returns (IDelegationManager) {
-        return IDelegationManager(delegationManager);
+        return ILegacyViewerNodesManager(address(nodesManager)).delegationManager();
     }
 
     function _getEigenPodManager() internal view returns (IEigenPodManager) {
-        return IEigenPodManager(eigenPodManager);
+        return ILegacyViewerNodesManager(address(nodesManager)).eigenPodManager();
     }
 
     function _getEtherFiNode(uint256 _validatorId) internal view returns (IEtherFiNode) {
@@ -48,7 +54,14 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function _getEigenPod(uint256 _validatorId) internal view returns (IEigenPod) {
-        return IEigenPod(_getEtherFiNode(_validatorId).getEigenPod());
+        return IEigenPod(ILegacyViewerNode(address(_getEtherFiNode(_validatorId))).eigenPod());
+    }
+
+    function EigenPod_hasRestaked(uint256[] memory _validatorIds) external view returns (bool[] memory _hasRestaked) {
+        _hasRestaked = new bool[](_validatorIds.length);
+        for (uint256 i = 0; i < _validatorIds.length; i++) {
+            _hasRestaked[i] = ILegacyViewerNode(address(_getEtherFiNode(_validatorIds[i]))).isRestakingEnabled();
+        }
     }
 
     function EigenPod_withdrawableRestakedExecutionLayerGwei(uint256[] memory _validatorIds) external view returns (uint256[] memory _withdrawableRestakedExecutionLayerGwei) {
@@ -58,12 +71,12 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
     }
 
-    function EigenPod_validatorPubkeyHashToInfo(uint256[] memory _validatorIds, bytes32[][] memory _validatorPubkeyHashes) external view returns (IEigenPod.ValidatorInfo[][] memory _validatorInfos) {
+    function EigenPod_validatorPubkeyHashToInfo(uint256[] memory _validatorIds, bytes[][] memory _validatorPubkeys) external view returns (IEigenPod.ValidatorInfo[][] memory _validatorInfos) {
         _validatorInfos = new IEigenPod.ValidatorInfo[][](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
-            _validatorInfos[i] = new IEigenPod.ValidatorInfo[](_validatorPubkeyHashes[i].length);
-            for (uint256 j = 0; j < _validatorPubkeyHashes[i].length; j++) {
-                _validatorInfos[i][j] = _getEigenPod(_validatorIds[i]).validatorPubkeyHashToInfo(_validatorPubkeyHashes[i][j]);
+            _validatorInfos[i] = new IEigenPod.ValidatorInfo[](_validatorPubkeys[i].length);
+            for (uint256 j = 0; j < _validatorPubkeys[i].length; j++) {
+                _validatorInfos[i][j] = _getEigenPod(_validatorIds[i]).validatorPubkeyToInfo(_validatorPubkeys[i][j]);
             }
         }
     }
@@ -110,6 +123,55 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             _etherFiNodeAddresses[i] = address(_getEtherFiNode(_validatorIds[i]));
+        }
+    }
+
+    function EtherFiNodesManager_splitBalanceInExecutionLayer(uint256[] memory _validatorIds) external view returns (uint256[] memory _withdrawalSafe, uint256[] memory _eigenPod, uint256[] memory _delayedWithdrawalRouter) {
+        _withdrawalSafe = new uint256[](_validatorIds.length);
+        _eigenPod = new uint256[](_validatorIds.length);
+        _delayedWithdrawalRouter = new uint256[](_validatorIds.length);
+        for (uint256 i = 0; i < _validatorIds.length; i++) {
+            _withdrawalSafe[i] = address(_getEtherFiNode(_validatorIds[i])).balance;
+            _eigenPod[i] = address(_getEigenPod(_validatorIds[i])).balance;
+            _delayedWithdrawalRouter[i] = 0;
+        }
+    }
+
+    function EtherFiNodesManager_withdrawableBalanceInExecutionLayer(uint256[] memory _validatorIds) external view returns (uint256[] memory _withdrawableBalance) {
+        _withdrawableBalance = new uint256[](_validatorIds.length);
+        for (uint256 i = 0; i < _validatorIds.length; i++) {
+            _withdrawableBalance[i] = ILegacyViewerNode(address(_getEtherFiNode(_validatorIds[i]))).withdrawableBalanceInExecutionLayer();
+        }
+    }
+
+    function EtherFiNodesManager_aggregatedBalanceOfUnusedSafes() external view returns (uint256 total) {
+        ILegacyViewerNodesManager manager = ILegacyViewerNodesManager(address(nodesManager));
+        uint256 n = manager.getUnusedWithdrawalSafesLength();
+        for (uint256 i = 0; i < n; i++) {
+            address safe = manager.unusedWithdrawalSafes(i);
+            address eigenpod = ILegacyViewerNode(safe).eigenPod();
+            total += safe.balance + eigenpod.balance;
+        }
+    }
+
+    function EtherFiNode_withdrawableBalanceInExecutionLayer(address[] memory _etherFiNodes) external view returns (uint256[] memory _withdrawableBalance) {
+        _withdrawableBalance = new uint256[](_etherFiNodes.length);
+        for (uint256 i = 0; i < _etherFiNodes.length; i++) {
+            _withdrawableBalance[i] = ILegacyViewerNode(_etherFiNodes[i]).withdrawableBalanceInExecutionLayer();
+        }
+    }
+
+    function EtherFiNode_numAssociatedValidators(address[] memory _etherFiNodes) external view returns (uint256[] memory _numAssociatedValidators) {
+        _numAssociatedValidators = new uint256[](_etherFiNodes.length);
+        for (uint256 i = 0; i < _etherFiNodes.length; i++) {
+            _numAssociatedValidators[i] = ILegacyViewerNode(_etherFiNodes[i]).numAssociatedValidators();
+        }
+    }
+
+    function EtherFiNode_version(address[] memory _etherFiNodes) external view returns (uint256[] memory _versions) {
+        _versions = new uint256[](_etherFiNodes.length);
+        for (uint256 i = 0; i < _etherFiNodes.length; i++) {
+            _versions[i] = ILegacyViewerNode(_etherFiNodes[i]).version();
         }
     }
 
