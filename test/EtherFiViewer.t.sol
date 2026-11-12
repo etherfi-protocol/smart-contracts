@@ -10,13 +10,11 @@ import "@etherfi/utils/UUPSProxy.sol";
 contract EtherFiViewerTest is Test  {
 
     EtherFiViewer public etherFiViewer;
-    address public eigenPodManager = address(0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338);
-    address public delegationManager = address(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
 
     function setUp() public {
         vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
 
-        etherFiViewer = EtherFiViewer(address(new UUPSProxy(address(new EtherFiViewer(eigenPodManager, delegationManager)), "")));
+        etherFiViewer = EtherFiViewer(address(new UUPSProxy(address(new EtherFiViewer()), "")));
         etherFiViewer.initialize(address(0x8487c5F8550E3C3e7734Fe7DCF77DB2B72E4A848));
     }
 
@@ -41,6 +39,7 @@ contract EtherFiViewerTest is Test  {
         validatorIds[0] = 25678;
         validatorIds[1] = 29208;
 
+        vm.expectRevert();
         etherFiViewer.EigenPodManager_podOwnerDepositShares(validatorIds);
     }
 

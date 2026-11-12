@@ -5,8 +5,9 @@ import "@openzeppelin-upgradeable/contracts/token/ERC721/ERC721Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
-import "@etherfi/staking/interfaces/IEtherFiNodesManager.sol";
-
+interface ILegacyTNFTNodesManager {
+    function numAssociatedValidators(uint256 validatorId) external view returns (uint256);
+}
 
 contract TNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
     //--------------------------------------------------------------------------------------
@@ -60,6 +61,12 @@ contract TNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
         _burn(_validatorId);
     }
 
+
+    function _transfer(address from, address to, uint256 tokenId) internal virtual override {
+        uint256 numAssociatedValidators = ILegacyTNFTNodesManager(etherFiNodesManagerAddress).numAssociatedValidators(tokenId);
+        require(numAssociatedValidators == 1, "numAssociatedValidators != 1");
+        super._transfer(from, to, tokenId);
+    }
 
     //--------------------------------------------------------------------------------------
     //-------------------------------  INTERNAL FUNCTIONS   --------------------------------
