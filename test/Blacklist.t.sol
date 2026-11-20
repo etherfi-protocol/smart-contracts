@@ -60,12 +60,14 @@ contract BlacklistTest is TestSetup {
 
     function test_blacklist_user_is_blacklisted() public {
         assertTrue(blacklisterInstance.blacklistedUntil(blacklisted) > block.timestamp);
+        assertTrue(blacklisterInstance.isBlacklisted(blacklisted));
     }
 
     function test_blacklist_unblacklist_clears_flag() public {
         vm.prank(owner);
         blacklisterInstance.unblacklistUser(blacklisted);
         assertFalse(blacklisterInstance.blacklistedUntil(blacklisted) > block.timestamp);
+        assertFalse(blacklisterInstance.isBlacklisted(blacklisted));
     }
 
     function test_blacklist_requires_role() public {
@@ -283,6 +285,23 @@ contract BlacklistTest is TestSetup {
         bytes32 role = roleRegistryInstance.GUARDIAN_ROLE();
         vm.prank(owner);
         roleRegistryInstance.grantRole(role, who);
+    }
+
+    function test_isBlacklisted_followsTheWindow() public {
+        _grantBlacklistUntilRoleTo(owner);
+
+        uint256 t0 = block.timestamp;
+        assertFalse(blacklisterInstance.isBlacklisted(tempBlacklisted));
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUserUntil(tempBlacklisted);
+        assertTrue(blacklisterInstance.isBlacklisted(tempBlacklisted));
+
+        // Same strict `>` as nonBlacklisted: one second before the end it still holds, at the end it lifts.
+        vm.warp(t0 + 3 days - 1);
+        assertTrue(blacklisterInstance.isBlacklisted(tempBlacklisted));
+        vm.warp(t0 + 3 days);
+        assertFalse(blacklisterInstance.isBlacklisted(tempBlacklisted));
     }
 
     function test_blacklistUserUntil_default_sets_three_days_window() public {

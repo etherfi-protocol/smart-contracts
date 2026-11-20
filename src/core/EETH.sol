@@ -339,7 +339,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
      */
     function seizeBlacklistedFunds(address user, address recipient) external onlyUpgradeTimelock returns (uint256 seizedShares) {
         if (recipient == address(0)) revert AddressZero();
-        if (blacklister.blacklistedUntil(user) <= block.timestamp) revert UserNotBlacklisted(user);
+        if (!blacklister.isBlacklisted(user)) revert UserNotBlacklisted(user);
         blacklister.nonBlacklisted(recipient);
 
         seizedShares = shares[user];

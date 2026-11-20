@@ -118,12 +118,21 @@ contract Blacklister is Initializable, UUPSUpgradeable, RolesLibrary {
     //-----------------------------------  GETTERS  ----------------------------------------
     //--------------------------------------------------------------------------------------
     /**
+     * @notice Check if a user is blacklisted
+     * @param user The address of the user to check
+     * @return True while the user's blacklist has not expired
+     */
+    function isBlacklisted(address user) public view returns (bool) {
+        return blacklistedUntil[user] > block.timestamp;
+    }
+
+    /**
      * @notice Check if a user is not blacklisted
      * @param user The address of the user to check
      * @dev reverts with BlacklistedUser if the user is blacklisted
      */
     function nonBlacklisted(address user) external view {
-        if (blacklistedUntil[user] > block.timestamp) revert BlacklistedUser(user);
+        if (isBlacklisted(user)) revert BlacklistedUser(user);
     }
 
     /**
