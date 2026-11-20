@@ -675,6 +675,94 @@ contract WeETHTest is TestSetup {
     bytes32 constant PAUSABLE_UNTIL_SLOT =
         0x2c7e4bc092c2002f0baaf2f47367bc442b098266b43d189dafe4cb25f1e1fea2;
 
+    // ---- seizeBlacklistedFunds -----------------------------------------------
+
+    address seizeRecipient = makeAddr("seizeRecipient");
+
+    function test_WeETH_seizeBlacklistedFunds_movesEntireBalance() public {
+        _aliceWithWeEth(1 ether);
+        uint256 aliceBalance = weEthInstance.balanceOf(alice);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(alice);
+
+        vm.prank(owner);
+        uint256 seized = weEthInstance.seizeBlacklistedFunds(alice, seizeRecipient);
+
+        assertEq(seized, aliceBalance);
+        assertEq(weEthInstance.balanceOf(alice), 0);
+        assertEq(weEthInstance.balanceOf(seizeRecipient), aliceBalance);
+    }
+
+    function test_WeETH_seizeBlacklistedFunds_worksWhilePaused() public {
+        _aliceWithWeEth(1 ether);
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(alice);
+
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseUntil();
+        vm.prank(admin);
+        weEthInstance.pause();
+
+        vm.prank(owner);
+        weEthInstance.seizeBlacklistedFunds(alice, seizeRecipient);
+        assertEq(weEthInstance.balanceOf(alice), 0);
+    }
+
+    function test_WeETH_seizeBlacklistedFunds_keepsGatesOnOtherTransfers() public {
+        // The seizure skips the transfer hook's checks through a transient flag. The flag
+        // must be cleared before the call returns: in the same transaction, a blacklisted
+        // sender's normal transfer still reverts.
+        _aliceWithWeEth(1 ether);
+        vm.prank(alice);
+        weEthInstance.transfer(bob, 0.5 ether);
+
+        vm.startPrank(owner);
+        blacklisterInstance.blacklistUser(alice);
+        blacklisterInstance.blacklistUser(bob);
+        weEthInstance.seizeBlacklistedFunds(alice, seizeRecipient);
+        vm.stopPrank();
+
+        vm.prank(bob);
+        _expectBlacklistedRevert(bob);
+        weEthInstance.transfer(seizeRecipient, 0.1 ether);
+    }
+
+    function test_WeETH_seizeBlacklistedFunds_requiresUpgradeTimelock() public {
+        _aliceWithWeEth(1 ether);
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(alice);
+
+        vm.prank(admin);
+        vm.expectRevert(RoleRegistry.OnlyUpgradeTimelock.selector);
+        weEthInstance.seizeBlacklistedFunds(alice, seizeRecipient);
+    }
+
+    function test_WeETH_seizeBlacklistedFunds_revertsWhenUserNotBlacklisted() public {
+        _aliceWithWeEth(1 ether);
+
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(WeETH.UserNotBlacklisted.selector, alice));
+        weEthInstance.seizeBlacklistedFunds(alice, seizeRecipient);
+    }
+
+    function test_WeETH_seizeBlacklistedFunds_revertsForBadRecipient() public {
+        _aliceWithWeEth(1 ether);
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(alice);
+
+        vm.prank(owner);
+        vm.expectRevert(WeETH.ZeroAddress.selector);
+        weEthInstance.seizeBlacklistedFunds(alice, address(0));
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(seizeRecipient);
+        vm.prank(owner);
+        _expectBlacklistedRevert(seizeRecipient);
+        weEthInstance.seizeBlacklistedFunds(alice, seizeRecipient);
+    }
+
     address pauseUntilPauser = makeAddr("pauseUntilPauser");
     address unpauseUntilUnpauser = makeAddr("unpauseUntilUnpauser");
     address pauseUntilDurationSetter = makeAddr("pauseUntilDurationSetter");

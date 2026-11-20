@@ -648,6 +648,85 @@ contract EETHTest is TestSetup {
         assertEq(eETHInstance.balanceOf(bob), 0.5 ether);
     }
 
+    // ---- seizeBlacklistedFunds -----------------------------------------------
+
+    address seizeRecipient = makeAddr("seizeRecipient");
+
+    function test_EETH_seizeBlacklistedFunds_movesEntireBalance() public {
+        _aliceWithEEth(1 ether);
+        uint256 aliceShares = eETHInstance.shares(alice);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(alice);
+
+        vm.prank(owner);
+        uint256 seized = eETHInstance.seizeBlacklistedFunds(alice, seizeRecipient);
+
+        assertEq(seized, aliceShares);
+        assertEq(eETHInstance.shares(alice), 0);
+        assertEq(eETHInstance.shares(seizeRecipient), aliceShares);
+        assertEq(eETHInstance.balanceOf(seizeRecipient), 1 ether);
+    }
+
+    function test_EETH_seizeBlacklistedFunds_worksWhilePaused() public {
+        _aliceWithEEth(1 ether);
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(alice);
+
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        eETHInstance.pauseUntil();
+        vm.prank(admin);
+        eETHInstance.pause();
+
+        vm.prank(owner);
+        eETHInstance.seizeBlacklistedFunds(alice, seizeRecipient);
+        assertEq(eETHInstance.shares(alice), 0);
+    }
+
+    function test_EETH_seizeBlacklistedFunds_requiresUpgradeTimelock() public {
+        _aliceWithEEth(1 ether);
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(alice);
+
+        vm.prank(admin);
+        vm.expectRevert(RoleRegistry.OnlyUpgradeTimelock.selector);
+        eETHInstance.seizeBlacklistedFunds(alice, seizeRecipient);
+    }
+
+    function test_EETH_seizeBlacklistedFunds_revertsWhenUserNotBlacklisted() public {
+        _aliceWithEEth(1 ether);
+
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(EETH.UserNotBlacklisted.selector, alice));
+        eETHInstance.seizeBlacklistedFunds(alice, seizeRecipient);
+
+        // an expired blacklist no longer allows a seizure
+        vm.prank(owner);
+        blacklisterInstance.setBlacklistUntil(alice, 1 days);
+        vm.warp(block.timestamp + 1 days);
+
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(EETH.UserNotBlacklisted.selector, alice));
+        eETHInstance.seizeBlacklistedFunds(alice, seizeRecipient);
+    }
+
+    function test_EETH_seizeBlacklistedFunds_revertsForBadRecipient() public {
+        _aliceWithEEth(1 ether);
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(alice);
+
+        vm.prank(owner);
+        vm.expectRevert(EETH.AddressZero.selector);
+        eETHInstance.seizeBlacklistedFunds(alice, address(0));
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(seizeRecipient);
+        vm.prank(owner);
+        _expectBlacklistedRevert(seizeRecipient);
+        eETHInstance.seizeBlacklistedFunds(alice, seizeRecipient);
+    }
+
     // -------------------------------------------------------------------------
     // pauseContractUntil / unpauseContractUntil
     //

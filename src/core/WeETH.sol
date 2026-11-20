@@ -39,6 +39,20 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
     error ZeroAddress();
     error CannotRecoverEETH();
     error WeETHUnderbacked(uint256 weETHSupply, uint256 proxyShares);
+    error UserNotBlacklisted(address user);
+
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  EVENTS  -------------------------------------------
+    //--------------------------------------------------------------------------------------
+    event BlacklistedFundsSeized(address indexed user, address indexed recipient, uint256 amount);
+
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  CONSTANTS  ----------------------------------------
+    //--------------------------------------------------------------------------------------
+    /// @dev Transient slot set only for the duration of {seizeBlacklistedFunds}, so the seizure's
+    ///      transfer skips the pause and blacklist checks in {_beforeTokenTransfer}.
+    ///      keccak256("weETH.seizeBlacklistedFunds.transient")
+    bytes32 private constant SEIZING_SLOT = 0xf2adfe42afe4b6935c5e57066a025145a0749ac763fb6990067d89fc03144ce0;
 
     //--------------------------------------------------------------------------------------
     //----------------------------------  CONSTRUCTOR  -------------------------------------
@@ -178,6 +192,28 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
         _recoverERC721(token, to, tokenId);
     }
 
+    /**
+     * @notice Seizes the entire weETH balance of a blacklisted address
+     * @param user The blacklisted address to seize from
+     * @param recipient The address that receives the seized weETH
+     * @return amount The weETH moved to the recipient
+     * @dev Only callable by the upgrade timelock, and only while `user` is blacklisted.
+     *      The pause and blacklist checks in {_beforeTokenTransfer} are skipped for this
+     *      one transfer only; the recipient must not be blacklisted.
+     */
+    function seizeBlacklistedFunds(address user, address recipient) external onlyUpgradeTimelock returns (uint256 amount) {
+        if (recipient == address(0)) revert ZeroAddress();
+        if (blacklister.blacklistedUntil(user) <= block.timestamp) revert UserNotBlacklisted(user);
+        blacklister.nonBlacklisted(recipient);
+
+        amount = balanceOf(user);
+        assembly { tstore(SEIZING_SLOT, 1) }
+        _transfer(user, recipient, amount);
+        assembly { tstore(SEIZING_SLOT, 0) }
+
+        emit BlacklistedFundsSeized(user, recipient, amount);
+    }
+
     //--------------------------------------------------------------------------------------
     //-------------------------------  INTERNAL FUNCTIONS  ---------------------------------
     //--------------------------------------------------------------------------------------
@@ -190,12 +226,19 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
      * Only callable when the from is not blacklisted
      * Only callable when the to is not blacklisted
      * Only callable when the sender is not blacklisted
+     * Skipped only while {seizeBlacklistedFunds} moves a blacklisted balance (SEIZING_SLOT is set)
      */
     function _beforeTokenTransfer(
         address from,
         address to,
         uint256 amount
-    ) internal virtual override whenNotPaused {
+    ) internal virtual override {
+        uint256 seizing;
+        assembly { seizing := tload(SEIZING_SLOT) }
+        if (seizing == 1) return;
+
+        _requireNotPaused();
+        _requireNotPausedUntil();
         blacklister.nonBlacklisted(from);
         blacklister.nonBlacklisted(to);
         blacklister.nonBlacklisted(msg.sender);

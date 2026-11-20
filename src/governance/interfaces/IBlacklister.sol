@@ -5,4 +5,5 @@ interface IBlacklister {
     function blacklistUser(address user) external;
     function unblacklistUser(address user) external;
     function nonBlacklisted(address user) external view;
+    function blacklistedUntil(address user) external view returns (uint256);
 }
