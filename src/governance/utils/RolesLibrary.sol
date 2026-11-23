@@ -103,4 +103,16 @@ abstract contract RolesLibrary {
         roleRegistry.onlyEigenpodOperations(msg.sender);
         _;
     }
+
+    /**
+     * @notice Gates a rate-limit change by its direction
+     * @dev Tightening is instant for the operating multisig; loosening needs the operating timelock.
+     *      Each role can only move a limit its own way. An unchanged value counts as tightening.
+     *      Reverts with OnlyOperatingTimelock or OnlyOperatingMultisig.
+     * @param loosens Whether the change lets more value through
+     */
+    function _onlyLimitChange(bool loosens) internal view {
+        if (loosens) roleRegistry.onlyOperatingTimelock(msg.sender);
+        else roleRegistry.onlyOperatingMultisig(msg.sender);
+    }
 }

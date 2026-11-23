@@ -40,8 +40,9 @@ contract EtherFiRateLimiterTest is TestSetup {
         roleRegistry = roleRegistryInstance;
 
         vm.startPrank(owner);
-        // pauser / unpauser roles consolidated into OPERATION_MULTISIG_ROLE
-        // (rate limiter modifiers use onlyAdmin = OPERATION_TIMELOCK_ROLE).
+        // pauser / unpauser roles consolidated into OPERATION_MULTISIG_ROLE.
+        // Limit setters are direction-gated: raising needs OPERATION_TIMELOCK_ROLE (admin),
+        // lowering needs OPERATION_MULTISIG_ROLE (pauser).
         roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), admin);
         roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), pauser);
         roleRegistry.grantRole(roleRegistry.SUPER_GUARDIAN_ROLE(), unpauser);
@@ -127,14 +128,155 @@ contract EtherFiRateLimiterTest is TestSetup {
         vm.prank(admin);
         rateLimiter.createNewLimiter(LIMIT_ID_1, DEFAULT_CAPACITY, DEFAULT_REFILL_RATE);
 
-        // Should succeed with admin
-        vm.prank(admin);
+        // Lowering remaining is a tightening: the operating multisig does it
+        vm.prank(pauser);
         rateLimiter.setRemaining(LIMIT_ID_1, DEFAULT_CAPACITY / 2);
 
         // Should fail with unauthorized user
         vm.prank(unauthorizedUser);
-        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         rateLimiter.setRemaining(LIMIT_ID_1, DEFAULT_CAPACITY / 4);
+    }
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------- Asymmetric limit changes ---------------------------------
+    //--------------------------------------------------------------------------------------
+    // Raising a limit needs the operating timelock; lowering it is instant for the
+    // operating multisig. Each role can only move a limit its own way.
+
+    // One role each, so a call from the wrong role for its direction really reverts.
+    address limitLoosener = makeAddr("limitLoosener");
+    address limitTightener = makeAddr("limitTightener");
+
+    function _createDefaultLimit() internal {
+        vm.startPrank(owner);
+        roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), limitLoosener);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), limitTightener);
+        vm.stopPrank();
+
+        vm.prank(admin);
+        rateLimiter.createNewLimiter(LIMIT_ID_1, DEFAULT_CAPACITY, DEFAULT_REFILL_RATE);
+    }
+
+    function test_setCapacity_multisigLowers_timelockRaises() public {
+        _createDefaultLimit();
+
+        vm.prank(limitTightener);
+        rateLimiter.setCapacity(LIMIT_ID_1, DEFAULT_CAPACITY / 2);
+        (uint64 capacity,,,) = rateLimiter.getLimit(LIMIT_ID_1);
+        assertEq(capacity, DEFAULT_CAPACITY / 2);
+
+        vm.prank(limitLoosener);
+        rateLimiter.setCapacity(LIMIT_ID_1, DEFAULT_CAPACITY);
+        (capacity,,,) = rateLimiter.getLimit(LIMIT_ID_1);
+        assertEq(capacity, DEFAULT_CAPACITY);
+    }
+
+    function test_setCapacity_wrongRoleForDirectionReverts() public {
+        _createDefaultLimit();
+
+        vm.prank(limitTightener);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
+        rateLimiter.setCapacity(LIMIT_ID_1, DEFAULT_CAPACITY + 1);
+
+        vm.prank(limitLoosener);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        rateLimiter.setCapacity(LIMIT_ID_1, DEFAULT_CAPACITY - 1);
+    }
+
+    function test_setCapacity_sameValueIsMultisig() public {
+        _createDefaultLimit();
+
+        vm.prank(limitLoosener);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        rateLimiter.setCapacity(LIMIT_ID_1, DEFAULT_CAPACITY);
+
+        vm.prank(limitTightener);
+        rateLimiter.setCapacity(LIMIT_ID_1, DEFAULT_CAPACITY);
+    }
+
+    function test_setRefillRate_multisigLowers_timelockRaises() public {
+        _createDefaultLimit();
+
+        vm.prank(limitTightener);
+        rateLimiter.setRefillRate(LIMIT_ID_1, DEFAULT_REFILL_RATE / 2);
+        (,, uint64 refillRate,) = rateLimiter.getLimit(LIMIT_ID_1);
+        assertEq(refillRate, DEFAULT_REFILL_RATE / 2);
+
+        vm.prank(limitLoosener);
+        rateLimiter.setRefillRate(LIMIT_ID_1, DEFAULT_REFILL_RATE);
+        (,, refillRate,) = rateLimiter.getLimit(LIMIT_ID_1);
+        assertEq(refillRate, DEFAULT_REFILL_RATE);
+    }
+
+    function test_setRefillRate_wrongRoleForDirectionReverts() public {
+        _createDefaultLimit();
+
+        vm.prank(limitTightener);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
+        rateLimiter.setRefillRate(LIMIT_ID_1, DEFAULT_REFILL_RATE + 1);
+
+        vm.prank(limitLoosener);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        rateLimiter.setRefillRate(LIMIT_ID_1, DEFAULT_REFILL_RATE - 1);
+    }
+
+    function test_setRemaining_multisigLowers_timelockRaises() public {
+        _createDefaultLimit();
+
+        vm.prank(limitTightener);
+        rateLimiter.setRemaining(LIMIT_ID_1, DEFAULT_CAPACITY / 4);
+        (, uint64 remaining,,) = rateLimiter.getLimit(LIMIT_ID_1);
+        assertEq(remaining, DEFAULT_CAPACITY / 4);
+
+        vm.prank(limitLoosener);
+        rateLimiter.setRemaining(LIMIT_ID_1, DEFAULT_CAPACITY / 2);
+        (, remaining,,) = rateLimiter.getLimit(LIMIT_ID_1);
+        assertEq(remaining, DEFAULT_CAPACITY / 2);
+    }
+
+    function test_setRemaining_wrongRoleForDirectionReverts() public {
+        _createDefaultLimit();
+        vm.prank(limitTightener);
+        rateLimiter.setRemaining(LIMIT_ID_1, DEFAULT_CAPACITY / 2);
+
+        vm.prank(limitTightener);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
+        rateLimiter.setRemaining(LIMIT_ID_1, DEFAULT_CAPACITY);
+
+        vm.prank(limitLoosener);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        rateLimiter.setRemaining(LIMIT_ID_1, DEFAULT_CAPACITY / 4);
+    }
+
+    function test_setRemaining_judgedOnClampedValue() public {
+        // The bucket is full, so asking for more than capacity clamps to capacity: no change,
+        // which is not a loosening and stays with the multisig.
+        _createDefaultLimit();
+
+        vm.prank(limitLoosener);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        rateLimiter.setRemaining(LIMIT_ID_1, DEFAULT_CAPACITY * 2);
+
+        vm.prank(limitTightener);
+        rateLimiter.setRemaining(LIMIT_ID_1, DEFAULT_CAPACITY * 2);
+        (, uint64 remaining,,) = rateLimiter.getLimit(LIMIT_ID_1);
+        assertEq(remaining, DEFAULT_CAPACITY);
+    }
+
+    function test_setRemaining_judgedAgainstRefilledRemaining() public {
+        // After draining and waiting, the refill already due must not count as an increase:
+        // setting remaining to the refilled value is not a loosening.
+        _createDefaultLimit();
+        vm.prank(limitTightener);
+        rateLimiter.setRemaining(LIMIT_ID_1, 0);
+
+        vm.warp(block.timestamp + 10);
+        uint64 refilled = rateLimiter.consumable(LIMIT_ID_1);
+        assertGt(refilled, 0);
+
+        vm.prank(limitTightener);
+        rateLimiter.setRemaining(LIMIT_ID_1, refilled);
     }
 
     function test_onlyPauserCanPause() public {

@@ -68,8 +68,10 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     /// @notice Updates the capacity of an existing rate limit
     /// @param id The rate limit identifier
     /// @param capacity The new maximum capacity in gwei
-    function setCapacity(bytes32 id, uint64 capacity) external onlyOperatingTimelock {
+    /// @dev Lowering is instant for the operating multisig; raising needs the operating timelock
+    function setCapacity(bytes32 id, uint64 capacity) external {
         if (!limitExists(id)) revert UnknownLimit();
+        _onlyLimitChange(capacity > limits[id].capacity);
 
         BucketLimiter.setCapacity(limits[id], capacity);
         emit CapacityUpdated(id, capacity);
@@ -78,8 +80,10 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     /// @notice Updates the refill rate of an existing rate limit
     /// @param id The rate limit identifier
     /// @param refillRate The new refill rate per second in gwei
-    function setRefillRate(bytes32 id, uint64 refillRate) external onlyOperatingTimelock {
+    /// @dev Lowering is instant for the operating multisig; raising needs the operating timelock
+    function setRefillRate(bytes32 id, uint64 refillRate) external {
         if (!limitExists(id)) revert UnknownLimit();
+        _onlyLimitChange(refillRate > limits[id].refillRate);
 
         BucketLimiter.setRefillRate(limits[id], refillRate);
         emit RefillRateUpdated(id, refillRate);
@@ -88,8 +92,15 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     /// @notice Updates the remaining capacity of an existing rate limit
     /// @param id The rate limit identifier
     /// @param remaining The new remaining capacity in gwei
-    function setRemaining(bytes32 id, uint64 remaining) external onlyOperatingTimelock {
+    /// @dev Lowering is instant for the operating multisig; raising needs the operating timelock.
+    ///      Compared against the refilled remaining, with the new value clamped to capacity as the
+    ///      library does, so a refill already due is not counted as an increase.
+    function setRemaining(bytes32 id, uint64 remaining) external {
         if (!limitExists(id)) revert UnknownLimit();
+        BucketLimiter.Limit storage limit = limits[id];
+        BucketLimiter.refill(limit);
+        uint64 clamped = remaining > limit.capacity ? limit.capacity : remaining;
+        _onlyLimitChange(clamped > limit.remaining);
 
         BucketLimiter.setRemaining(limits[id], remaining);
         emit RemainingUpdated(id, remaining);
