@@ -407,13 +407,19 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         vm.prank(owner);
         roleRegistryInstance.grantRole(UNPAUSER_ROLE, unpauser);
 
-        // Admin performs admin-only actions
+        // Admin (operating timelock) loosens limits and sets fees
         vm.startPrank(admin);
+        etherFiRedemptionManagerInstance.setCapacity(1_000_000 ether, ETH_ADDRESS);
+        etherFiRedemptionManagerInstance.setRefillRatePerSecond(1_000 ether, ETH_ADDRESS);
+        etherFiRedemptionManagerInstance.setExitFeeSplitToTreasuryInBps(1e4, ETH_ADDRESS);
+        etherFiRedemptionManagerInstance.setExitFeeBasisPoints(1e2, ETH_ADDRESS);
+        vm.stopPrank();
+
+        // Pauser (operating multisig) tightens limits instantly
+        vm.startPrank(pauser);
         etherFiRedemptionManagerInstance.setCapacity(10 ether, ETH_ADDRESS);
         etherFiRedemptionManagerInstance.setRefillRatePerSecond(0.001 ether, ETH_ADDRESS);
-        etherFiRedemptionManagerInstance.setExitFeeSplitToTreasuryInBps(1e4, ETH_ADDRESS);
         etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(1e2, ETH_ADDRESS);
-        etherFiRedemptionManagerInstance.setExitFeeBasisPoints(1e2, ETH_ADDRESS);
         vm.stopPrank();
 
         // Pauser pauses the contract
@@ -432,11 +438,83 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         vm.prank(owner);
         roleRegistryInstance.revokeRole(ADMIN_ROLE, admin);
 
-        // Admin attempts admin-only actions after role revocation
+        // Admin can no longer loosen a limit after role revocation
         vm.startPrank(admin);
         vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
-        etherFiRedemptionManagerInstance.setCapacity(10 ether, ETH_ADDRESS);
+        etherFiRedemptionManagerInstance.setCapacity(20 ether, ETH_ADDRESS);
         vm.stopPrank();
+    }
+
+    // ---- asymmetric limit changes ------------------------------------------------------
+    // Raising capacity or refill, or lowering the low watermark, loosens the limit and needs the
+    // operating timelock. The opposite direction is instant for the operating multisig.
+
+    address limitLoosener = makeAddr("limitLoosener");
+    address limitTightener = makeAddr("limitTightener");
+
+    function _grantLimitRoles() internal {
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), limitLoosener);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), limitTightener);
+        vm.stopPrank();
+    }
+
+    function test_setCapacity_isDirectionGated() public {
+        _grantLimitRoles();
+        vm.prank(limitLoosener);
+        etherFiRedemptionManagerInstance.setCapacity(100 ether, ETH_ADDRESS);
+
+        vm.prank(limitTightener);
+        etherFiRedemptionManagerInstance.setCapacity(50 ether, ETH_ADDRESS);
+
+        vm.prank(limitTightener);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
+        etherFiRedemptionManagerInstance.setCapacity(60 ether, ETH_ADDRESS);
+
+        vm.prank(limitLoosener);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        etherFiRedemptionManagerInstance.setCapacity(40 ether, ETH_ADDRESS);
+
+        // same value is not a loosening
+        vm.prank(limitLoosener);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        etherFiRedemptionManagerInstance.setCapacity(50 ether, ETH_ADDRESS);
+    }
+
+    function test_setRefillRatePerSecond_isDirectionGated() public {
+        _grantLimitRoles();
+        vm.prank(limitLoosener);
+        etherFiRedemptionManagerInstance.setRefillRatePerSecond(1 ether, ETH_ADDRESS);
+
+        vm.prank(limitTightener);
+        etherFiRedemptionManagerInstance.setRefillRatePerSecond(0.5 ether, ETH_ADDRESS);
+
+        vm.prank(limitTightener);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
+        etherFiRedemptionManagerInstance.setRefillRatePerSecond(0.6 ether, ETH_ADDRESS);
+
+        vm.prank(limitLoosener);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        etherFiRedemptionManagerInstance.setRefillRatePerSecond(0.4 ether, ETH_ADDRESS);
+    }
+
+    function test_setLowWatermarkInBpsOfTvl_isDirectionGated() public {
+        _grantLimitRoles();
+
+        // raising the watermark keeps more ETH in reserve: a tightening
+        vm.prank(limitTightener);
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(200, ETH_ADDRESS);
+
+        vm.prank(limitTightener);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(100, ETH_ADDRESS);
+
+        vm.prank(limitLoosener);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(300, ETH_ADDRESS);
+
+        vm.prank(limitLoosener);
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(100, ETH_ADDRESS);
     }
 
     function test_mainnet_redeem_eEth() public {

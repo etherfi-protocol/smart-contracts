@@ -213,10 +213,12 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
      * @notice Sets the maximum size of the bucket that can be consumed in a given time period.
      * @param capacity The capacity of the bucket.
      * @param token The token to set the capacity for
+     * @dev Lowering is instant for the operating multisig; raising needs the operating timelock
      */
-    function setCapacity(uint256 capacity, address token) external onlyOperatingTimelock {
+    function setCapacity(uint256 capacity, address token) external {
         // max capacity = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether, which is practically enough
         uint64 bucketUnit = _convertToBucketUnit(capacity, Math.Rounding.Down);
+        _onlyLimitChange(bucketUnit > tokenToRedemptionInfo[token].limit.capacity);
         BucketLimiter.setCapacity(tokenToRedemptionInfo[token].limit, bucketUnit);
     }
 
@@ -224,10 +226,12 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
      * @notice Sets the rate at which the bucket is refilled per second.
      * @param refillRate The rate at which the bucket is refilled per second.
      * @param token The token to set the refill rate for
+     * @dev Lowering is instant for the operating multisig; raising needs the operating timelock
      */
-    function setRefillRatePerSecond(uint256 refillRate, address token) external onlyOperatingTimelock {
+    function setRefillRatePerSecond(uint256 refillRate, address token) external {
         // max refillRate = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether per second, which is practically enough
         uint64 bucketUnit = _convertToBucketUnit(refillRate, Math.Rounding.Down);
+        _onlyLimitChange(bucketUnit > tokenToRedemptionInfo[token].limit.refillRate);
         BucketLimiter.setRefillRate(tokenToRedemptionInfo[token].limit, bucketUnit);
     }
 
@@ -245,9 +249,12 @@ contract EtherFiRedemptionManager is Initializable, DeprecatedOZPausable, Pausab
      * @notice Sets the low watermark in basis points of the total value of the liquidity pool.
      * @param _lowWatermarkInBpsOfTvl The low watermark in basis points of the total value of the liquidity pool.
      * @param token The token to set the low watermark for (ETH or stETH).
+     * @dev Raising is instant for the operating multisig; lowering needs the operating timelock
      */
-    function setLowWatermarkInBpsOfTvl(uint16 _lowWatermarkInBpsOfTvl, address token) external onlyOperatingTimelock {
+    function setLowWatermarkInBpsOfTvl(uint16 _lowWatermarkInBpsOfTvl, address token) external {
         if (_lowWatermarkInBpsOfTvl > maxLowWatermarkInBpsOfTvl) revert ExceedsMaxLowWatermark();
+        // a lower watermark keeps less ETH in reserve, so lowering it is the loosening direction
+        _onlyLimitChange(_lowWatermarkInBpsOfTvl < tokenToRedemptionInfo[token].lowWatermarkInBpsOfTvl);
         tokenToRedemptionInfo[token].lowWatermarkInBpsOfTvl = _lowWatermarkInBpsOfTvl;
     }
 
