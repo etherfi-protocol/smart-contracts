@@ -219,7 +219,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     }
     
     function test_pauseContract_unauthorized() public {
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         vm.prank(bob);
         managerInstance.pause();
     }

@@ -499,7 +499,7 @@ contract WeETHTest is TestSetup {
     function test_WeETH_pause_requiresPauserRole() public {
         // pause() / unpause() are gated by onlyAdmin (OPERATION_MULTISIG_ROLE).
         vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         weEthInstance.pause();
 
         vm.prank(admin);

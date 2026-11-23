@@ -768,7 +768,7 @@ contract LiquidityPoolTest is TestSetup {
 
     function test_Upgrade2_49_pause_unpause() public {
         // only protocol pauser can pause or unpause
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         liquidityPoolInstance.pause();
 
         vm.prank(admin);

@@ -467,7 +467,7 @@ contract LiquifierTest is TestSetup {
 
         // bob has no pauser role
         vm.startPrank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         liquifierInstance.pause();
         vm.stopPrank();
 

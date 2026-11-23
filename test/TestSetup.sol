@@ -1411,6 +1411,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), address(alice));
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), address(etherFiAdminInstance));
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), address(admin));
+        // pause() is gated by SUPER_GUARDIAN; alice pauses WithdrawRequestNFT just below.
+        roleRegistryInstance.grantRole(roleRegistryInstance.SUPER_GUARDIAN_ROLE(), address(alice));
 
         vm.stopPrank();
         vm.startPrank(alice);

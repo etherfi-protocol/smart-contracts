@@ -389,9 +389,9 @@ contract EtherFiRedemptionManagerTest is TestSetup {
     function testFuzz_role_management(address admin, address pauser, address unpauser, address user) public {
         address owner = roleRegistryInstance.owner();
         // ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE → OPERATION_TIMELOCK_ROLE.
-        // PROTOCOL_PAUSER → OPERATION_MULTISIG_ROLE; PROTOCOL_UNPAUSER → SUPER_GUARDIAN_ROLE.
+        // PROTOCOL_PAUSER and PROTOCOL_UNPAUSER → SUPER_GUARDIAN_ROLE.
         bytes32 ADMIN_ROLE = roleRegistryInstance.OPERATION_TIMELOCK_ROLE();
-        bytes32 PAUSER_ROLE = roleRegistryInstance.OPERATION_MULTISIG_ROLE();
+        bytes32 PAUSER_ROLE = roleRegistryInstance.SUPER_GUARDIAN_ROLE();
         bytes32 UNPAUSER_ROLE = roleRegistryInstance.SUPER_GUARDIAN_ROLE();
 
         vm.assume(admin != address(0) && admin != owner);
@@ -1319,7 +1319,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         vm.stopPrank();
 
         // Pause the contract — PROTOCOL_PAUSER consolidated into OPERATION_MULTISIG_ROLE.
-        bytes32 PAUSER_ROLE = roleRegistryInstance.OPERATION_MULTISIG_ROLE();
+        bytes32 PAUSER_ROLE = roleRegistryInstance.SUPER_GUARDIAN_ROLE();
         address pauser = vm.addr(2000);
         vm.prank(roleRegistryInstance.owner());
         roleRegistryInstance.grantRole(PAUSER_ROLE, pauser);

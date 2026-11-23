@@ -486,7 +486,7 @@ contract EETHTest is TestSetup {
     function test_EETH_pause_requiresPauserRole() public {
         // pause() is now onlyAdmin -> OPERATION_MULTISIG_ROLE.
         vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         eETHInstance.pause();
 
         // `admin` holds OPERATION_MULTISIG_ROLE from setUpTests.

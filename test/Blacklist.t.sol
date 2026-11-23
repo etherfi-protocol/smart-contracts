@@ -73,7 +73,7 @@ contract BlacklistTest is TestSetup {
     function test_blacklist_requires_role() public {
         address rando = vm.addr(0xBEEF);
         vm.prank(rando);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         blacklisterInstance.blacklistUser(rando);
     }
 
@@ -370,7 +370,7 @@ contract BlacklistTest is TestSetup {
     function test_blacklistUserUntil_custom_requires_BLACKLISTER_ROLE() public {
         address rando = vm.addr(0xB16B00B5);
         vm.prank(rando);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         blacklisterInstance.setBlacklistUntil(tempBlacklisted, 1 days);
     }
 

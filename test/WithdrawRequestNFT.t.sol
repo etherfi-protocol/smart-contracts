@@ -769,7 +769,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Non-pauser cannot pause
         vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         withdrawRequestNFTInstance.pause();
 
         // Pauser can pause

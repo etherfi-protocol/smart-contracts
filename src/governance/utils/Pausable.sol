@@ -9,9 +9,8 @@ import "@etherfi/governance/utils/RolesLibrary.sol";
  *         `PausableUpgradeable`. Holds the paused flag in namespaced storage so it never
  *         collides with the inheriting contract's linear storage, and exposes a single
  *         `whenNotPaused` modifier as the only pause primitive contracts need to use.
- * @dev    Pause is gated by the operating multisig and unpause by the super guardian, both via
- *         {RolesLibrary}. The modifier is `virtual` so {PausableUntil} can extend it to also
- *         enforce the timed pause.
+ * @dev    Pause and unpause are both gated by the super guardian via {RolesLibrary}. The
+ *         modifier is `virtual` so {PausableUntil} can extend it to also enforce the timed pause.
  */
 abstract contract Pausable is RolesLibrary {
     //--------------------------------------------------------------------------------------
@@ -48,9 +47,9 @@ abstract contract Pausable is RolesLibrary {
     //--------------------------------------------------------------------------------------
     /**
      * @notice Pause the contract indefinitely
-     * @dev only callable by the operating multisig
+     * @dev only callable by the super guardian
      */
-    function pause() external onlyOperatingMultisig {
+    function pause() external onlySuperGuardian {
         PausableStorage storage $ = _getPausableStorage();
         if ($.paused) revert AlreadyPaused();
         $.paused = true;

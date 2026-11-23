@@ -147,8 +147,8 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
 
    function test_pausing() public {
     vm.prank(chad);
-    // pause() is onlyAdmin → OPERATION_MULTISIG_ROLE → reverts with OnlyOperatingMultisig.
-    vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+    // pause() is gated by SUPER_GUARDIAN_ROLE → reverts with OnlySuperGuardian.
+    vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
     cumulativeMerkleRewardsDistributorInstance.pause();
     vm.startPrank(admin);
     cumulativeMerkleRewardsDistributorInstance.pause();
