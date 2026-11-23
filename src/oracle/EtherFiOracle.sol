@@ -6,11 +6,11 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@etherfi/oracle/interfaces/IEtherFiOracle.sol";
 import "@etherfi/oracle/interfaces/IEtherFiAdmin.sol";
 import "@etherfi/governance/utils/RolesLibrary.sol";
-import "@etherfi/governance/utils/Pausable.sol";
+import "@etherfi/governance/utils/PausableUntil.sol";
 import "@etherfi/governance/utils/DeprecatedOZOwnable.sol";
 import "@etherfi/governance/utils/DeprecatedOZPausable.sol";
 
-contract EtherFiOracle is Initializable, DeprecatedOZOwnable, DeprecatedOZPausable, UUPSUpgradeable, IEtherFiOracle, Pausable {
+contract EtherFiOracle is Initializable, DeprecatedOZOwnable, DeprecatedOZPausable, UUPSUpgradeable, IEtherFiOracle, PausableUntil {
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------

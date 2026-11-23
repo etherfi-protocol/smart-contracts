@@ -66,6 +66,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
     event TransferShares( address indexed from, address indexed to, uint256 sharesValue);
+    event BlacklistedFundsSeized(address indexed user, address indexed recipient, uint256 amount, uint256 shares);
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ERRORS  ---------------------------------------
@@ -78,6 +79,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
     error ExpiredDeadline();
     error InvalidSignature();
     error TransferAmountExceedsBalance();
+    error UserNotBlacklisted(address user);
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  CONSTRUCTOR  ----------------------------------
@@ -324,6 +326,28 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, DeprecatedOZOwnable, Pausab
      */
     function recoverERC721(address token, address to, uint256 tokenId) external onlyOperatingTimelock {
         _recoverERC721(token, to, tokenId);
+    }
+
+    /**
+     * @notice Seizes the entire eETH balance of a blacklisted address
+     * @param user The blacklisted address to seize from
+     * @param recipient The address that receives the seized eETH
+     * @return seizedShares The eETH shares moved to the recipient
+     * @dev Only callable by the upgrade timelock, and only while `user` is blacklisted.
+     *      Moves shares directly, so the pause and the sender blacklist check that guard
+     *      normal transfers do not apply. The recipient must not be blacklisted.
+     */
+    function seizeBlacklistedFunds(address user, address recipient) external onlyUpgradeTimelock returns (uint256 seizedShares) {
+        if (recipient == address(0)) revert AddressZero();
+        if (!blacklister.isBlacklisted(user)) revert UserNotBlacklisted(user);
+        blacklister.nonBlacklisted(recipient);
+
+        seizedShares = shares[user];
+        uint256 amount = liquidityPool.amountForShare(seizedShares);
+        _transferShares(user, recipient, seizedShares);
+
+        emit Transfer(user, recipient, amount);
+        emit BlacklistedFundsSeized(user, recipient, amount, seizedShares);
     }
 
     //--------------------------------------------------------------------------------------

@@ -123,8 +123,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
                 roleRegistry: address(roleRegistryInstance),
                 priorityWithdrawalQueue: address(pQueue),
                 blacklister: address(blacklisterInstance),
-                etherFiAdminContract: address(etherFiAdminInstance),
-                membershipManager: address(membershipManagerInstance)
+                etherFiAdminContract: address(etherFiAdminInstance)
             })
         )));
         vm.stopPrank();

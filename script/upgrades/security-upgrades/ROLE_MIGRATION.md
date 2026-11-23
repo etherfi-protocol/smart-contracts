@@ -337,8 +337,8 @@ Sizing guidance:
 
 Each constant sets the duration that a single `pauseContractUntil()` call locks
 the contract for. From `PausableUntil.sol`: `MIN_PAUSE_DURATION = 8 hours`,
-`MAX_PAUSE_DURATION = 30 days`, `PAUSER_UNTIL_COOLDOWN = 7 days` — a pauser can
-re-arm only after `duration + 7 day cooldown`.
+`MAX_PAUSE_DURATION = 30 days`. A pauser can re-arm as soon as the current
+timed pause ends or is lifted.
 
 `executeOperatingConfig` sets these on exactly the **11** contracts that mix in
 `PausableUntil` and expose `setPauseUntilDuration` (all `onlyAdmin`). Contracts

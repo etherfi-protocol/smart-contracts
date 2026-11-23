@@ -199,54 +199,6 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     error InsufficientLiquidity();
     error RequireTokenUnlocked();
 
-    /// @notice Requests exchange of membership points tokens for ETH.
-    /// @dev This function allows users to request exchange of membership tokens to ETH.
-    /// @param _tokenId The ID of the membership NFT.
-    /// @param _amount The amount of membership tokens to exchange.
-    function requestWithdraw(uint256 _tokenId, uint256 _amount) external whenNotPaused returns (uint256) {
-        _requireTokenOwner(_tokenId);
-        if (liquidityPool.totalValueInLp() < _amount) revert InsufficientLiquidity();
-
-        // prevent transfers for several blocks after a withdrawal to prevent frontrunning
-        membershipNFT.incrementLock(_tokenId, withdrawalLockBlocks);
-
-        _claimPoints(_tokenId);
-        _claimStakingRewards(_tokenId);
-
-        if (!membershipNFT.isWithdrawable(_tokenId, _amount)) revert ExceededMaxWithdrawal();
-
-        uint256 prevAmount = tokenDeposits[_tokenId].amounts;
-        _updateAllTimeHighDepositOf(_tokenId);
-        _withdraw(_tokenId, _amount);
-        _applyUnwrapPenalty(_tokenId, prevAmount, _amount);
-
-        // send EETH to recipient before requesting withdraw?
-        eETH.approve(address(liquidityPool), _amount);
-        uint256 withdrawTokenId = liquidityPool.requestMembershipNFTWithdraw(address(msg.sender), _amount, uint64(0));
-
-        _emitNftUpdateEvent(_tokenId);
-        return withdrawTokenId;
-    }
-
-    /// @notice request to withdraw the entire balance of this NFT and burn it
-    /// @param _tokenId The ID of the membership NFT to liquidate
-    function requestWithdrawAndBurn(uint256 _tokenId) external whenNotPaused returns (uint256) {
-        _requireTokenOwner(_tokenId);
-
-        // Claim all staking rewards before burn
-        _claimStakingRewards(_tokenId);
-
-        uint256 feeAmount = burnFee * 0.001 ether;
-        uint256 totalBalance = _withdrawAndBurn(_tokenId);
-        if (totalBalance < feeAmount) revert InsufficientBalance();
-
-        eETH.approve(address(liquidityPool), totalBalance);
-        if (feeAmount > 0) liquidityPool.withdraw(address(this), feeAmount);
-        uint256 withdrawTokenId = liquidityPool.requestMembershipNFTWithdraw(msg.sender, totalBalance, uint64(feeAmount));
-        _emitNftUpdateEvent(_tokenId);
-        return withdrawTokenId;
-    }
-
     /// @notice Claims {points, staking rewards} and update the tier, if needed.
     /// @param _tokenId The ID of the membership NFT.
     /// @dev This function allows users to claim the rewards + a new tier, if eligible.

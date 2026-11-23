@@ -60,18 +60,20 @@ contract BlacklistTest is TestSetup {
 
     function test_blacklist_user_is_blacklisted() public {
         assertTrue(blacklisterInstance.blacklistedUntil(blacklisted) > block.timestamp);
+        assertTrue(blacklisterInstance.isBlacklisted(blacklisted));
     }
 
     function test_blacklist_unblacklist_clears_flag() public {
         vm.prank(owner);
         blacklisterInstance.unblacklistUser(blacklisted);
         assertFalse(blacklisterInstance.blacklistedUntil(blacklisted) > block.timestamp);
+        assertFalse(blacklisterInstance.isBlacklisted(blacklisted));
     }
 
     function test_blacklist_requires_role() public {
         address rando = vm.addr(0xBEEF);
         vm.prank(rando);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         blacklisterInstance.blacklistUser(rando);
     }
 
@@ -233,34 +235,6 @@ contract BlacklistTest is TestSetup {
     }
 
     // -------------------------------------------------------------------------
-    // MembershipManager (V1)
-    // -------------------------------------------------------------------------
-
-    function test_blacklist_MembershipManager_unwrapForEEthAndBurn_reverts() public {
-        vm.prank(blacklisted);
-        _expectBlacklistedRevert(blacklisted);
-        membershipManagerV1Instance.unwrapForEEthAndBurn(1);
-    }
-
-    function test_blacklist_MembershipManager_requestWithdraw_reverts() public {
-        vm.prank(blacklisted);
-        _expectBlacklistedRevert(blacklisted);
-        membershipManagerV1Instance.requestWithdraw(1, 1 ether);
-    }
-
-    function test_blacklist_MembershipManager_requestWithdrawAndBurn_reverts() public {
-        vm.prank(blacklisted);
-        _expectBlacklistedRevert(blacklisted);
-        membershipManagerV1Instance.requestWithdrawAndBurn(1);
-    }
-
-    function test_blacklist_MembershipManager_claim_reverts() public {
-        vm.prank(blacklisted);
-        _expectBlacklistedRevert(blacklisted);
-        membershipManagerV1Instance.claim(1);
-    }
-
-    // -------------------------------------------------------------------------
     // WithdrawRequestNFT
     // -------------------------------------------------------------------------
 
@@ -311,6 +285,23 @@ contract BlacklistTest is TestSetup {
         bytes32 role = roleRegistryInstance.GUARDIAN_ROLE();
         vm.prank(owner);
         roleRegistryInstance.grantRole(role, who);
+    }
+
+    function test_isBlacklisted_followsTheWindow() public {
+        _grantBlacklistUntilRoleTo(owner);
+
+        uint256 t0 = block.timestamp;
+        assertFalse(blacklisterInstance.isBlacklisted(tempBlacklisted));
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUserUntil(tempBlacklisted);
+        assertTrue(blacklisterInstance.isBlacklisted(tempBlacklisted));
+
+        // Same strict `>` as nonBlacklisted: one second before the end it still holds, at the end it lifts.
+        vm.warp(t0 + 3 days - 1);
+        assertTrue(blacklisterInstance.isBlacklisted(tempBlacklisted));
+        vm.warp(t0 + 3 days);
+        assertFalse(blacklisterInstance.isBlacklisted(tempBlacklisted));
     }
 
     function test_blacklistUserUntil_default_sets_three_days_window() public {
@@ -379,7 +370,7 @@ contract BlacklistTest is TestSetup {
     function test_blacklistUserUntil_custom_requires_BLACKLISTER_ROLE() public {
         address rando = vm.addr(0xB16B00B5);
         vm.prank(rando);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         blacklisterInstance.setBlacklistUntil(tempBlacklisted, 1 days);
     }
 

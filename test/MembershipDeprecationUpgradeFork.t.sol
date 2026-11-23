@@ -7,21 +7,19 @@ import "@etherfi/archive/membership/MembershipNFT.sol";
 import "@etherfi/governance/Blacklister.sol";
 import "@etherfi/utils/UUPSProxy.sol";
 
-/// @notice Fork test for the membership-deprecation trim.
+/// @notice Fork rehearsal of the membership wind-down.
 ///
 /// Forks mainnet, upgrades the MembershipManager + MembershipNFT proxies in
-/// place to the trimmed implementations, and then verifies that ether.fan
-/// holders can still:
-///   (a) unwrap a V1 NFT for eETH (`unwrapForEEthAndBurn`)
-///   (b) request a queued withdrawal of a V1 NFT (`requestWithdrawAndBurn`)
-///   (c) request a partial withdrawal that keeps the NFT alive (`requestWithdraw`)
+/// place to the wind-down implementations, and then verifies that the
+/// operating multisig can `forceExit` real holders: each NFT is burned and its
+/// eETH (minus the burn fee) lands with the owner, with no LiquidityPool call.
 ///
 /// Rebase routing is no longer a MembershipManager concern (EARN-1440 routes
 /// rebase EtherFiAdmin → LiquidityPool directly); it is covered separately by
 /// the EtherFiOracle `executeTasks` and LiquidityPool rebase tests.
 ///
 /// Real on-chain owners are used for each test NFT (queried via the Alchemy
-/// NFT API at the time this test was authored). Three NFTs are exercised:
+/// NFT API at the time this test was authored). Four NFTs are exercised:
 ///   - 6251: previously V0, migrated to V1 in the one-shot mainnet migration.
 ///   - 7500: born V1 (above the highest V0 id, 6251).
 ///   - 8500: born V1.
@@ -104,84 +102,62 @@ contract MembershipDeprecationUpgradeForkTest is Test {
         assertEq(mnft.getImplementation(), address(newMnftImpl), "MNFT impl not upgraded");
     }
 
-    // ---- (a) unwrap for eETH on a migrated-V0 NFT ----
-    function test_unwrapForEEthAndBurn_migratedV0() public {
-        _runUnwrap(ID_MIGRATED_V0, OWNER_MIGRATED_V0);
-    }
+    function test_forceExit_realHolders() public {
+        uint256[] memory ids = new uint256[](4);
+        address[] memory owners = new address[](4);
+        (ids[0], owners[0]) = (ID_MIGRATED_V0, OWNER_MIGRATED_V0);
+        (ids[1], owners[1]) = (ID_BORN_V1_A, OWNER_BORN_V1_A);
+        (ids[2], owners[2]) = (ID_BORN_V1_B, OWNER_BORN_V1_B);
+        (ids[3], owners[3]) = (ID_BORN_V1_C, OWNER_BORN_V1_C);
 
-    // ---- (a) unwrap for eETH on a born-V1 NFT ----
-    function test_unwrapForEEthAndBurn_bornV1() public {
-        _runUnwrap(ID_BORN_V1_A, OWNER_BORN_V1_A);
-    }
-
-    // ---- (b) request withdraw + burn ----
-    function test_requestWithdrawAndBurn_bornV1() public {
         IERC1155Like nft = IERC1155Like(MNFT_PROXY);
-        assertEq(nft.balanceOf(OWNER_BORN_V1_B, ID_BORN_V1_B), 1, "owner no longer holds NFT");
+        IERC20Like eeth = IERC20Like(EETH);
+        (, uint256 burnFeeAmount,) = mm.getFees();
 
-        vm.prank(OWNER_BORN_V1_B);
-        uint256 withdrawRequestId = mm.requestWithdrawAndBurn(ID_BORN_V1_B);
+        uint256[] memory expected = new uint256[](4);
+        uint256[] memory before = new uint256[](4);
+        for (uint256 i = 0; i < 4; i++) {
+            assertEq(nft.balanceOf(owners[i], ids[i]), 1, "owner no longer holds NFT");
+            uint256 value = mnft.valueOf(ids[i]);
+            uint256 fee = mm.hasMetBurnFeeWaiverPeriod(ids[i]) ? 0 : (burnFeeAmount < value ? burnFeeAmount : value);
+            expected[i] = value - fee;
+            before[i] = eeth.balanceOf(owners[i]);
+        }
 
-        assertEq(nft.balanceOf(OWNER_BORN_V1_B, ID_BORN_V1_B), 0, "NFT not burned");
-        (, , , , , , uint8 version) = mm.tokenData(ID_BORN_V1_B);
-        assertEq(version, 0, "tokenData not cleared post burn");
-        assertGt(withdrawRequestId, 0, "withdraw-request id zero");
+        vm.prank(_operatingMultisigHolder());
+        mm.forceExit(ids, owners);
 
-        emit log_named_uint("requestWithdrawAndBurn -> request id", withdrawRequestId);
+        for (uint256 i = 0; i < 4; i++) {
+            assertEq(nft.balanceOf(owners[i], ids[i]), 0, "NFT not burned");
+            (, , , , , , uint8 version) = mm.tokenData(ids[i]);
+            assertEq(version, 0, "tokenData not cleared");
+            assertApproxEqAbs(eeth.balanceOf(owners[i]) - before[i], expected[i], 2, "owner payout mismatch");
+            emit log_named_uint("forceExit tokenId", ids[i]);
+            emit log_named_uint("forceExit eETH paid (wei)", expected[i]);
+        }
     }
 
-    // ---- (c) partial requestWithdraw that keeps the NFT alive ----
-    function test_requestWithdraw_partial_bornV1() public {
-        IERC1155Like nft = IERC1155Like(MNFT_PROXY);
-        assertEq(nft.balanceOf(OWNER_BORN_V1_C, ID_BORN_V1_C), 1, "owner no longer holds NFT");
-
-        uint256 valueBefore = mnft.valueOf(ID_BORN_V1_C);
-        assertGt(valueBefore, 0, "NFT has zero value");
-
-        // Withdraw 25% — that's well under the 50%-of-ATH cap in isWithdrawable.
-        uint256 withdrawAmount = valueBefore / 4;
-
-        vm.prank(OWNER_BORN_V1_C);
-        uint256 withdrawRequestId = mm.requestWithdraw(ID_BORN_V1_C, withdrawAmount);
-
-        // NFT should still exist (it's a partial withdraw, not a burn).
-        assertEq(nft.balanceOf(OWNER_BORN_V1_C, ID_BORN_V1_C), 1, "NFT burned on partial");
-        (, , , , , , uint8 version) = mm.tokenData(ID_BORN_V1_C);
-        assertEq(version, 1, "NFT version flipped on partial");
-        assertGt(withdrawRequestId, 0, "withdraw-request id zero");
-
-        uint256 valueAfter = mnft.valueOf(ID_BORN_V1_C);
-        // Value should have dropped by roughly the withdraw amount (rate may
-        // shift by a few wei between reads; allow tiny tolerance).
-        assertLt(valueAfter, valueBefore, "valueOf did not decrease on partial withdraw");
-        emit log_named_uint("partial withdraw: valueBefore", valueBefore);
-        emit log_named_uint("partial withdraw: withdraw amount", withdrawAmount);
-        emit log_named_uint("partial withdraw: valueAfter", valueAfter);
-        emit log_named_uint("partial withdraw: WithdrawRequestNFT id", withdrawRequestId);
+    function test_sweepRemainingFunds_revertsWhileHoldersRemain() public {
+        vm.prank(_operatingMultisigHolder());
+        vm.expectRevert(MembershipManager.TierVaultsNotEmpty.selector);
+        mm.sweepRemainingFunds(address(0xdead));
     }
 
     // ----- helpers -----
 
-    function _runUnwrap(uint256 tokenId, address owner) internal {
-        IERC1155Like nft  = IERC1155Like(MNFT_PROXY);
-        IERC20Like   eeth = IERC20Like(EETH);
-
-        assertEq(nft.balanceOf(owner, tokenId), 1, "owner no longer holds NFT");
-        uint256 eethBefore = eeth.balanceOf(owner);
-
-        vm.prank(owner);
-        mm.unwrapForEEthAndBurn(tokenId);
-
-        assertEq(nft.balanceOf(owner, tokenId), 0, "NFT not burned after unwrap");
-        uint256 received = eeth.balanceOf(owner) - eethBefore;
-        assertGt(received, 0, "owner received no eETH on unwrap");
-
-        (, , , , , , uint8 version) = mm.tokenData(tokenId);
-        assertEq(version, 0, "tokenData not cleared post-burn");
-
-        emit log_named_uint("unwrap tokenId", tokenId);
-        emit log_named_uint("unwrap eETH received (wei)", received);
+    function _operatingMultisigHolder() internal returns (address holder) {
+        holder = makeAddr("operatingMultisig");
+        IRoleRegistryLike registry = IRoleRegistryLike(ROLE_REGISTRY);
+        bytes32 role = registry.OPERATION_MULTISIG_ROLE();
+        vm.prank(registry.owner());
+        registry.grantRole(role, holder);
     }
+}
+
+interface IRoleRegistryLike {
+    function owner() external view returns (address);
+    function OPERATION_MULTISIG_ROLE() external view returns (bytes32);
+    function grantRole(bytes32 role, address account) external;
 }
 
 interface IUUPS {

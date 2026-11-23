@@ -12,12 +12,12 @@ abstract contract PausableUntil is Pausable {
      * @dev Storage for the PausableUntil contract
      * @param pausedUntil The timestamp when the contract is paused until
      * @param pauseUntilDuration The duration for which the contract is paused until
-     * @param lastPauseTimestamp The timestamp when the last pause occurred
+     * @param __gap_0 Deprecated: per-pauser last pause timestamp, used by the removed pauser cooldown; kept to preserve storage layout
      */
     struct PausableUntilStorage {
         uint256 pausedUntil;
         uint256 pauseUntilDuration;
-        mapping(address => uint256) lastPauseTimestamp;
+        mapping(address => uint256) __gap_0;
     }
 
     //--------------------------------------------------------------------------------------
@@ -27,7 +27,6 @@ abstract contract PausableUntil is Pausable {
 
     uint256 public constant MIN_PAUSE_DURATION = 8 hours;
     uint256 public constant MAX_PAUSE_DURATION = 30 days;
-    uint256 public constant PAUSER_UNTIL_COOLDOWN = 7 days;
 
     //--------------------------------------------------------------------------------------
     //-----------------------------------  EVENTS  -----------------------------------------
@@ -41,7 +40,6 @@ abstract contract PausableUntil is Pausable {
     //--------------------------------------------------------------------------------------
     error ContractPausedUntil(uint256 pausedUntil);
     error ContractNotPausedUntil();
-    error PauserCooldownStillActive();
     error InvalidPauseUntilDuration();
 
     //--------------------------------------------------------------------------------------
@@ -58,9 +56,9 @@ abstract contract PausableUntil is Pausable {
 
     /**
      * @notice Lift a timed pause early
-     * @dev gated to the operating multisig
+     * @dev gated to the super guardian
      */
-    function unpauseUntil() external onlyOperatingMultisig {
+    function unpauseUntil() external onlySuperGuardian {
         _requirePausedUntil();
         PausableUntilStorage storage $ = _getPausableUntilStorage();
         $.pausedUntil = 0;
@@ -108,7 +106,7 @@ abstract contract PausableUntil is Pausable {
 
     /**
      * @notice Pause the contract until
-     * @dev only callable when contract is not paused until and pauser is not in cooldown
+     * @dev only callable when contract is not paused until
      */
     function _pauseUntil() internal {
         _requireNotPausedUntil();
@@ -117,12 +115,9 @@ abstract contract PausableUntil is Pausable {
         // If the duration was never configured (0 — e.g. a fresh proxy or a just-upgraded
         // contract before setPauseUntilDuration is called), fall back to MIN_PAUSE_DURATION
         // so the emergency pause is always effective. Without this, `pausedUntil` would be
-        // `block.timestamp + 0` (expires the same block) — a silent no-op that still burns
-        // the pauser's cooldown.
+        // `block.timestamp + 0` (expires the same block) — a silent no-op.
         if (_pauseUntilDuration == 0) _pauseUntilDuration = MIN_PAUSE_DURATION;
-        if ($.lastPauseTimestamp[msg.sender] + _pauseUntilDuration + PAUSER_UNTIL_COOLDOWN > block.timestamp) revert PauserCooldownStillActive();
         $.pausedUntil = block.timestamp + _pauseUntilDuration;
-        $.lastPauseTimestamp[msg.sender] = block.timestamp;
         emit PausedUntil($.pausedUntil);
     }
 
@@ -143,15 +138,6 @@ abstract contract PausableUntil is Pausable {
      */
     function pauseUntilDuration() external view returns (uint256) {
         return _getPausableUntilStorage().pauseUntilDuration;
-    }
-
-    /**
-     * @notice Get the last pause timestamp for a given pauser
-     * @param pauser The address of the pauser
-     * @return The last pause timestamp for the pauser
-     */
-    function lastPauseTimestamp(address pauser) external view returns (uint256) {
-        return _getPausableUntilStorage().lastPauseTimestamp[pauser];
     }
 
     //--------------------------------------------------------------------------------------

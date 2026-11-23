@@ -195,8 +195,7 @@ contract DeploySecurityUpgrades is Script, SecurityUpgradesConstants, Utils {
                 roleRegistry: ROLE_REGISTRY,
                 priorityWithdrawalQueue: PRIORITY_WITHDRAWAL_QUEUE,
                 blacklister: blacklisterProxy,
-                etherFiAdminContract: ETHERFI_ADMIN,
-                membershipManager: MEMBERSHIP_MANAGER
+                etherFiAdminContract: ETHERFI_ADMIN
             });
             bytes memory args = abi.encode(lpAddrs);
             bytes memory bc = abi.encodePacked(type(LiquidityPool).creationCode, args);

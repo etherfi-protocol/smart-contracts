@@ -116,8 +116,7 @@ contract PreludeTest is Test, ArrayTestHelper {
                 roleRegistry: address(roleRegistry),
                 priorityWithdrawalQueue: 0x35e7D6feF6f72aDd3c3e39dEc6d9CCc29e3345FA,
                 blacklister: address(blacklisterInstance),
-                etherFiAdminContract: 0x0EF8fa4760Db8f5Cd4d993f3e3416f30f942D705,
-                membershipManager: 0x3d320286E014C3e1ce99Af6d6B00f0C1D63E3000
+                etherFiAdminContract: 0x0EF8fa4760Db8f5Cd4d993f3e3416f30f942D705
             })
         );
         vm.prank(roleRegistry.owner());

@@ -73,10 +73,10 @@ contract Blacklister is Initializable, UUPSUpgradeable, RolesLibrary {
      * @notice Set a user's blacklist duration
      * @param user The address of the user to set the blacklist duration for
      * @param until The duration until the user is blacklisted
-     * @dev Only callable by the operating multisig
+     * @dev Only callable by the super guardian
      * reverts with UserAlreadyBlacklisted if the user is already blacklisted
      */
-    function setBlacklistUntil(address user, uint256 until) external onlyOperatingMultisig {
+    function setBlacklistUntil(address user, uint256 until) external onlySuperGuardian {
         if (user == address(0)) revert InvalidUser();
         blacklistedUntil[user] = block.timestamp + until;
         emit UserBlacklistedUntil(user, block.timestamp + until);
@@ -85,10 +85,10 @@ contract Blacklister is Initializable, UUPSUpgradeable, RolesLibrary {
     /**
      * @notice Blacklist a user indefinitely
      * @param user The address of the user to blacklist
-     * @dev Only callable by the operating multisig
+     * @dev Only callable by the super guardian
      * reverts with UserAlreadyBlacklisted if the user is already blacklisted
      */
-    function blacklistUser(address user) external onlyOperatingMultisig {
+    function blacklistUser(address user) external onlySuperGuardian {
         if (user == address(0)) revert InvalidUser();
         blacklistedUntil[user] = type(uint256).max;
         emit UserBlacklisted(user);
@@ -97,10 +97,10 @@ contract Blacklister is Initializable, UUPSUpgradeable, RolesLibrary {
     /**
      * @notice Unblacklist a user
      * @param user The address of the user to unblacklist
-     * @dev Only callable by the operating multisig
+     * @dev Only callable by the super guardian
      * reverts with UserNotBlacklisted if the user is not blacklisted
      */
-    function unblacklistUser(address user) external onlyOperatingMultisig {
+    function unblacklistUser(address user) external onlySuperGuardian {
         blacklistedUntil[user] = 0;
         emit UserUnblacklisted(user);
     }
@@ -118,12 +118,21 @@ contract Blacklister is Initializable, UUPSUpgradeable, RolesLibrary {
     //-----------------------------------  GETTERS  ----------------------------------------
     //--------------------------------------------------------------------------------------
     /**
+     * @notice Check if a user is blacklisted
+     * @param user The address of the user to check
+     * @return True while the user's blacklist has not expired
+     */
+    function isBlacklisted(address user) public view returns (bool) {
+        return blacklistedUntil[user] > block.timestamp;
+    }
+
+    /**
      * @notice Check if a user is not blacklisted
      * @param user The address of the user to check
      * @dev reverts with BlacklistedUser if the user is blacklisted
      */
     function nonBlacklisted(address user) external view {
-        if (blacklistedUntil[user] > block.timestamp) revert BlacklistedUser(user);
+        if (isBlacklisted(user)) revert BlacklistedUser(user);
     }
 
     /**
