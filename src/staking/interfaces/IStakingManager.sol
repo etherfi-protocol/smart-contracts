@@ -12,6 +12,11 @@ interface IStakingManager {
         string ipfsHashForEncryptedValidatorKey;
     }
 
+    struct ValidatorFunding {
+        bytes publicKey;
+        uint256 amount;
+    }
+
     // Possible values for validator creation status
     enum ValidatorCreationStatus {
         NOT_REGISTERED,
@@ -21,14 +26,13 @@ interface IStakingManager {
     }
 
     function INITIAL_DEPOSIT_AMOUNT() external view returns (uint256);
-    function MIN_VALIDATOR_SIZE_WEI() external view returns (uint256);
     function MAX_VALIDATOR_SIZE_WEI() external view returns (uint256);
 
     // deposit flow
     function registerBeaconValidators(DepositData[] calldata depositData, uint256[] calldata bidIds, address etherFiNode) external;
     function createBeaconValidators(DepositData[] calldata depositData, uint256[] calldata bidIds, address etherFiNode) external payable;
     function invalidateRegisteredBeaconValidator(DepositData calldata depositData, uint256 bidId, address etherFiNode) external;
-    function confirmAndFundBeaconValidators(DepositData[] calldata depositData, uint256 validatorSizeWei) external payable;
+    function fundValidators(ValidatorFunding[] calldata fundings) external payable;
     function calculateValidatorPubkeyHash(bytes memory pubkey) external pure returns (bytes32);
     function generateDepositDataRoot(bytes memory pubkey, bytes memory signature, bytes memory withdrawalCredentials, uint256 amount) external pure returns (bytes32);
 
@@ -100,8 +104,9 @@ interface IStakingManager {
     error InvalidDepositData();
     error InactiveBid();
     error InvalidEtherFiNode();
-    error InvalidValidatorSize();
     error InvalidUpgrade();
     error InvalidValidatorCreationStatus();
+    error InvalidFundingAmount();
+    error IncorrectFundingValue();
 
 }

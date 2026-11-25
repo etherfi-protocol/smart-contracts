@@ -47,7 +47,6 @@ contract StakingManager is
     //-----------------------------  CONSTANTS  ---------------------------------
     //---------------------------------------------------------------------------
     uint256 public constant INITIAL_DEPOSIT_AMOUNT = 1 ether;
-    uint256 public constant MIN_VALIDATOR_SIZE_WEI = 32 ether;
     uint256 public constant MAX_VALIDATOR_SIZE_WEI = 2048 ether;
     uint256 public constant VALIDATOR_PUBKEY_LENGTH = 48;
 
@@ -183,49 +182,36 @@ contract StakingManager is
     }
 
     /**
-     * @notice Sends remaining eth to activate validators created by "createBeaconValidators"
-     * @param depositData The deposit data of the validator to confirm and fund
-     * @param validatorSizeWei The size of the validator to confirm and fund
-     * @dev The oracle is expected to have confirmed the withdrawal credentials
-     *      note that since this is considered a "validator top up" by the beacon chain,
-     *      the signatures are not actually verified by the beacon chain, as key ownership was
-     *      already proved during the previous deposit. The "deposit data root" i.e. (checksum) however must be valid.
-     *      The caller can use generateDepositDataRoot() to generate a valid root.
+     * @notice Deposits ETH to linked validators: the leg after the 1 ETH deposit, and any top-up after that
+     * @param fundings The pubkey and amount for each deposit
+     * @dev The oracle decides which validators to fund and how much; it is expected to have checked
+     *      the validator's withdrawal credentials on the beacon chain and not to fund a key that a
+     *      malicious operator front-ran. This function guarantees the ETH goes to our own
+     *      credentials: the pubkey must be linked to an EtherFiNode, and the credentials are derived
+     *      here from that node.
+     *      The beacon chain checks a deposit signature only when the deposit creates a validator.
+     *      Every pubkey here already has a processed or queued 1 ETH deposit ahead of it, so each
+     *      deposit adds to an existing validator; a zeroed signature is used and the root is computed here.
      */
-    function confirmAndFundBeaconValidators(DepositData[] calldata depositData, uint256 validatorSizeWei) external payable {
+    function fundValidators(ValidatorFunding[] calldata fundings) external payable {
         if (msg.sender != liquidityPool) revert InvalidCaller();
-        if (validatorSizeWei < MIN_VALIDATOR_SIZE_WEI || validatorSizeWei > MAX_VALIDATOR_SIZE_WEI) revert InvalidValidatorSize();
 
-        // we already deposited the initial amount to create the validators in createBeaconValidators()
-        uint256 remainingDeposit = validatorSizeWei - INITIAL_DEPOSIT_AMOUNT;
+        bytes memory signature = new bytes(96);
+        uint256 total = 0;
+        for (uint256 i = 0; i < fundings.length; i++) {
+            uint256 amount = fundings[i].amount;
+            if (amount < 1 ether || amount > MAX_VALIDATOR_SIZE_WEI || amount % 1 gwei != 0) revert InvalidFundingAmount();
+            total += amount;
 
-        for (uint256 i = 0; i < depositData.length; i++) {
+            bytes32 pubkeyHash = calculateValidatorPubkeyHash(fundings[i].publicKey);
+            bytes memory withdrawalCredentials = _withdrawalCredentials(pubkeyHash);
+            bytes32 depositDataRoot = generateDepositDataRoot(fundings[i].publicKey, signature, withdrawalCredentials, amount);
+            depositContractEth2.deposit{value: amount}(fundings[i].publicKey, withdrawalCredentials, signature, depositDataRoot);
 
-            // check that withdrawal credentials for pubkey match what we originally intended
-            // It is expected that the oracle will not call the function for any key that was front-run by a malicious operator
-            bytes32 pubkeyHash = calculateValidatorPubkeyHash(depositData[i].publicKey);
-            IEtherFiNode etherFiNode = etherFiNodesManager.etherFiNodeFromPubkeyHash(pubkeyHash);
-            if (address(etherFiNode) == address(0x0)) revert UnlinkedPubkey();
-
-            // verify deposit root. Resolve the target directly rather than through
-            // withdrawalCredentialTarget so a top-up is never blocked if the pod was retired between
-            // creation and this confirmation: the credentials must match those baked at creation,
-            // which is the same pod/node address regardless of retirement (disablePod changes the
-            // pod's restaking status, not its address). The PodRetired guard belongs on initial
-            // creation only, which still goes through the checked resolver.
-            // Not manager.getEigenPod: its _validateNode rejects a legacy node missing from
-            // deployedEtherFiNodes, stranding the 1 ETH leg.
-            address credentialTarget = address(IEtherFiNode(etherFiNode).getEigenPod());
-            if (credentialTarget == address(0)) credentialTarget = address(etherFiNode);
-            bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(credentialTarget);
-            bytes32 computedDataRoot = generateDepositDataRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, remainingDeposit);
-            if (computedDataRoot != depositData[i].depositDataRoot) revert IncorrectBeaconRoot();
-
-            // Deposit the remaining eth to the validator
-            depositContractEth2.deposit{value: remainingDeposit}(depositData[i].publicKey, withdrawalCredentials, depositData[i].signature, computedDataRoot);
-
-            emit validatorConfirmed(pubkeyHash, liquidityPool, liquidityPool, depositData[i].publicKey);
+            emit validatorConfirmed(pubkeyHash, liquidityPool, liquidityPool, fundings[i].publicKey);
         }
+
+        if (total != msg.value) revert IncorrectFundingValue();
     }
 
     //---------------------------------------------------------------------------
@@ -272,6 +258,24 @@ contract StakingManager is
      * @param newImplementation the address of the new implementation contract
      */
     function _authorizeUpgrade(address newImplementation) internal override onlyUpgradeTimelock {}
+
+    /**
+     * @notice Returns the withdrawal credentials baked into a linked validator at creation
+     * @param pubkeyHash The validator's pubkey hash
+     * @dev Resolves the target directly rather than through withdrawalCredentialTarget so a
+     *      deposit is never blocked if the pod was retired after creation: the credentials are the
+     *      same pod/node address regardless of retirement (disablePod changes the pod's restaking
+     *      status, not its address). The PodRetired guard belongs on initial creation only.
+     *      Not manager.getEigenPod: its _validateNode rejects a legacy node missing from
+     *      deployedEtherFiNodes, stranding the 1 ETH leg.
+     */
+    function _withdrawalCredentials(bytes32 pubkeyHash) internal view returns (bytes memory) {
+        IEtherFiNode etherFiNode = etherFiNodesManager.etherFiNodeFromPubkeyHash(pubkeyHash);
+        if (address(etherFiNode) == address(0x0)) revert UnlinkedPubkey();
+        address credentialTarget = address(etherFiNode.getEigenPod());
+        if (credentialTarget == address(0)) credentialTarget = address(etherFiNode);
+        return etherFiNodesManager.addressToCompoundingWithdrawalCredentials(credentialTarget);
+    }
 
     //---------------------------------------------------------------------------
     //-----------------------------  GETTERS  ------------------------------------

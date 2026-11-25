@@ -65,7 +65,7 @@ methods {
 //   withdraw(address,uint256)                                        -> 274
 //   addEthAmountLockedForWithdrawal / transferLockedEthForPriority
 //                                          -> _lockEth               -> 651
-//   batchCreateBeaconValidators / confirmAndFundBeaconValidators
+//   batchCreateBeaconValidators / fundValidators
 //                                          -> _accountForEthSentOut  -> 662
 //   initializeOnUpgradeV2()                                          -> 175
 //   receive()                                                        -> 189
@@ -89,7 +89,7 @@ rule I8_lp_buffer_solvency_guarded(method f, env e, calldataarg args)
           || f.selector == sig:addEthAmountLockedForWithdrawal(uint128).selector
           || f.selector == sig:transferLockedEthForPriority(uint128).selector
           || f.selector == sig:batchCreateBeaconValidators(IStakingManager.DepositData[],uint256[],address).selector
-          || f.selector == sig:confirmAndFundBeaconValidators(IStakingManager.DepositData[],uint256).selector
+          || f.selector == sig:fundValidators(IStakingManager.ValidatorFunding[]).selector
           || f.selector == sig:initializeOnUpgradeV2().selector
     }
 {

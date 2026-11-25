@@ -73,7 +73,6 @@ contract UpgradeStorageIntegrityTest is Test, SecurityUpgradesConstants {
         uint128 totalIn;
         uint128 totalOut;
         uint128 locked;
-        uint256 valSize;
         bool paused;
         bool restake;
     }
@@ -101,7 +100,6 @@ contract UpgradeStorageIntegrityTest is Test, SecurityUpgradesConstants {
         // DEPRECATED_ethAmountLockedForWithdrawal()). Slot 220, upper 16 bytes.
         bytes32 raw = vm.load(address(lp), bytes32(uint256(220)));
         s.locked = uint128(uint256(raw) >> 8);
-        s.valSize = lp.validatorSizeWei();
         s.paused = lp.paused();
     }
 
@@ -123,7 +121,6 @@ contract UpgradeStorageIntegrityTest is Test, SecurityUpgradesConstants {
         assertEq(a.totalIn,        b.totalIn,        "totalValueInLp");
         assertEq(a.totalOut,       b.totalOut,       "totalValueOutOfLp");
         assertEq(a.locked,         b.locked,         "DEPRECATED_ethAmountLockedForWithdrawal");
-        assertEq(a.valSize,        b.valSize,        "validatorSizeWei");
         assertEq(a.paused,         b.paused,         "paused");
         assertEq(a.restake,        b.restake,        "restakeBnftDeposits");
     }

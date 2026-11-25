@@ -273,23 +273,10 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.prank(admin);
         liquidityPool.batchCreateBeaconValidators(toArray(initialDepositData), toArray_u256(params.bidId), params.etherFiNode);
 
-        uint256 confirmAmount = params.validatorSize - 1 ether;
-
-        // remaining deposit
-        bytes32 confirmDepositRoot = depositDataRootGenerator.generateDepositDataRoot(
-            pubkey,
-            signature,
-            etherFiNodesManager.addressToCompoundingWithdrawalCredentials(credTarget),
-            confirmAmount
-        );
-        IStakingManager.DepositData memory confirmDepositData = IStakingManager.DepositData({
-            publicKey: pubkey,
-            signature: signature,
-            depositDataRoot: confirmDepositRoot,
-            ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
-        });
+        // remaining deposit up to the requested size
+        IStakingManager.ValidatorFunding[] memory fundings = toFundings(pubkey, params.validatorSize - 1 ether);
         vm.prank(admin);
-        liquidityPool.confirmAndFundBeaconValidators(toArray(confirmDepositData), params.validatorSize);
+        liquidityPool.fundValidators(fundings);
 
         if (params.withdrawable) {
             // Poke some withdrawable funds into the restakedExecutionLayerGwei storage slot of the eigenpod.
@@ -315,6 +302,11 @@ contract PreludeTest is Test, ArrayTestHelper {
             pubkey: pubkey
         });
         return out;
+    }
+
+    function toFundings(bytes memory pubkey, uint256 amount) internal pure returns (IStakingManager.ValidatorFunding[] memory f) {
+        f = new IStakingManager.ValidatorFunding[](1);
+        f[0] = IStakingManager.ValidatorFunding({publicKey: pubkey, amount: amount});
     }
 
     function test_validatorHelper() public {
@@ -377,29 +369,11 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.prank(admin); // OPERATION_MULTISIG_ROLE for linkLegacyValidatorIds
         etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(bidId), toArray_bytes(pubkey));
 
-        vm.prank(admin);
-        liquidityPool.setValidatorSizeWei(33 ether);
-
-        // The old batchApproveRegistration entry on LP is gone; the equivalent path is now
-        // EtherFiAdmin.executeValidatorApprovalTask -> LP.confirmAndFundBeaconValidators.
-        // Build DepositData here and call confirmAndFundBeaconValidators directly,
-        // pranking the etherFiAdminContract (which carries the oracle-operations role).
-        uint256 validatorSizeWei = liquidityPool.validatorSizeWei();
-        uint256 remainingEthPerValidator = validatorSizeWei - stakingManager.INITIAL_DEPOSIT_AMOUNT();
-        address eigenPod = address(IEtherFiNode(etherFiNodesManager.etherfiNodeAddress(bidId)).getEigenPod());
-        bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod);
-        bytes32 depositDataRoot = stakingManager.generateDepositDataRoot(pubkey, signature, withdrawalCredentials, remainingEthPerValidator);
-
-        IStakingManager.DepositData[] memory depositData = new IStakingManager.DepositData[](1);
-        depositData[0] = IStakingManager.DepositData({
-            publicKey: pubkey,
-            signature: signature,
-            depositDataRoot: depositDataRoot,
-            ipfsHashForEncryptedValidatorKey: ""
-        });
-
+        // The equivalent of the old batchApproveRegistration is now
+        // EtherFiAdmin.executeValidatorApprovalTask -> LP.fundValidators; call it as the admin contract.
+        IStakingManager.ValidatorFunding[] memory fundings = toFundings(pubkey, 31 ether);
         vm.prank(LiquidityPool(payable(address(liquidityPool))).etherFiAdminContract());
-        liquidityPool.confirmAndFundBeaconValidators(depositData, validatorSizeWei);
+        liquidityPool.fundValidators(fundings);
     }
 
     function test_forwardingWhitelist() public {
@@ -658,25 +632,9 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.prank(admin);
         liquidityPool.batchCreateBeaconValidators(toArray(initialDepositData), bidIds, etherFiNode);
 
-        uint256 validatorSize = 32 ether;
-        uint256 confirmAmount = validatorSize - 1 ether;
-
-        bytes32 confirmDepositRoot = depositDataRootGenerator.generateDepositDataRoot(
-            pubkey,
-            signature,
-            etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod),
-            confirmAmount
-        );
-
-        IStakingManager.DepositData memory confirmDepositData = IStakingManager.DepositData({
-            publicKey: pubkey,
-            signature: signature,
-            depositDataRoot: confirmDepositRoot,
-            ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
-        });
-
+        IStakingManager.ValidatorFunding[] memory fundings = toFundings(pubkey, 31 ether);
         vm.prank(admin);
-        liquidityPool.confirmAndFundBeaconValidators(toArray(confirmDepositData), validatorSize);
+        liquidityPool.fundValidators(fundings);
     }
 
     function test_withdrawRestakedValidatorETH() public {
@@ -967,17 +925,11 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.expectRevert(IStakingManager.InvalidCaller.selector);
         stakingManager.createBeaconValidators(toArray(initialDepositData), bidIds, address(0));
 
-        // only liquidityPool can call confirmAndFundBeaconValidators
-        bytes32 confirmDepositDataRoot = depositDataRootGenerator.generateDepositDataRoot(pubkey, signature, "", 31 ether);
-        IStakingManager.DepositData memory confirmDepositData = IStakingManager.DepositData({
-            publicKey: pubkey,
-            signature: signature,
-            depositDataRoot: 0,
-            ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
-        });
+        // only liquidityPool can call fundValidators
+        IStakingManager.ValidatorFunding[] memory fundings = toFundings(pubkey, 31 ether);
         vm.prank(address(admin));
         vm.expectRevert(IStakingManager.InvalidCaller.selector);
-        stakingManager.confirmAndFundBeaconValidators(toArray(confirmDepositData), 32 ether);
+        stakingManager.fundValidators(fundings);
 
 
         // only protocolUpgrader can upgrade etherFiNode

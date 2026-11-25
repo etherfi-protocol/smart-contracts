@@ -75,7 +75,7 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         // ORACLE_OPERATIONS_ROLE (formerly ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE) is required by
         // EtherFiAdmin.executeValidatorApprovalTask.
         roleRegistryInstance.grantRole(roleRegistryInstance.ORACLE_OPERATIONS_ROLE(), ADMIN_EOA);
-        etherFiAdminInstance.updateMaxNumValidatorsToApprovePerDay(etherFiAdminInstance.maxAcceptableNumValidatorsToApprovePerDay());
+        etherFiAdminInstance.updateMaxValidatorFundingAmountPerDay(etherFiAdminInstance.maxAcceptableValidatorFundingAmountPerDay());
         vm.stopPrank();
 
         // Handle any pending oracle report that hasn't been processed yet
@@ -209,11 +209,11 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         });
     }
 
-    function _executeValidatorApprovalTask(IEtherFiOracle.OracleReport memory report, bytes[] memory pubkeys, bytes[] memory signatures) internal returns (bool completed, bool exists) {
+    function _executeValidatorApprovalTask(IEtherFiOracle.OracleReport memory report, bytes[] memory pubkeys) internal returns (bool completed, bool exists) {
         bytes32 reportHash = etherFiOracleInstance.generateReportHash(report);
-        bytes32 taskHash = keccak256(abi.encode(reportHash, report.validatorsToApprove));
+        bytes32 taskHash = keccak256(abi.encode(reportHash, report.validatorsToApprove, report.validatorFundingAmounts));
         vm.prank(ADMIN_EOA);
-        etherFiAdminInstance.executeValidatorApprovalTask(reportHash, report.validatorsToApprove, pubkeys, signatures);
+        etherFiAdminInstance.executeValidatorApprovalTask(reportHash, report.validatorsToApprove, report.validatorFundingAmounts, pubkeys);
         (completed, exists) = etherFiAdminInstance.validatorApprovalTaskStatus(taskHash);
         return (completed, exists);
     }
@@ -275,17 +275,17 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         uint256[] memory emptyVals = new uint256[](0);
         report = IEtherFiOracle.OracleReport(
             etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0, 0
-        );
+        , new uint256[](0));
 
         (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();
 
         bytes[] memory pubkeys = new bytes[](1);
         uint256[] memory ids = new uint256[](1);
-        bytes[] memory signatures = new bytes[](1);
         pubkeys[0] = depositData.publicKey;
         ids[0] = bidId;
-        signatures[0] = depositData.signature;
         report.validatorsToApprove = ids;
+        report.validatorFundingAmounts = new uint256[](1);
+        report.validatorFundingAmounts[0] = 31 ether;
         report.lastFinalizedWithdrawalRequestId = withdrawRequestNFTInstance.lastFinalizedRequestId();
         
         // Set refBlockTo to a block number that is < block.number and > lastAdminExecutionBlock
@@ -309,8 +309,8 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         uint256 LiquidityPoolBalanceBefore = address(liquidityPoolInstance).balance;
         vm.prank(ADMIN_EOA);
         etherFiAdminInstance.executeTasks(report);
-        (bool completed, bool exists) = _executeValidatorApprovalTask(report, pubkeys, signatures);
+        (bool completed, bool exists) = _executeValidatorApprovalTask(report, pubkeys);
         uint256 LiquidityPoolBalanceAfter = address(liquidityPoolInstance).balance;
-        assertApproxEqAbs(LiquidityPoolBalanceAfter, LiquidityPoolBalanceBefore - liquidityPoolInstance.validatorSizeWei() + stakingManagerInstance.INITIAL_DEPOSIT_AMOUNT(), 1e3);
+        assertApproxEqAbs(LiquidityPoolBalanceAfter, LiquidityPoolBalanceBefore - 31 ether, 1e3);
     }
 }

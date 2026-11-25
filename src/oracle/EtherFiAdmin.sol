@@ -48,11 +48,13 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
 
     uint256 public lastStaleReportFinalizationBlock;
     uint256 public maxFinalizedWithdrawalAmountPerDay;
-    uint256 public maxNumValidatorsToApprovePerDay;
+    uint256 private __deprecated_maxNumValidatorsToApprovePerDay;
 
     // Override for the per-report negative (slashing) rebase cap, in bps of TVL.
     // 0 = use DEFAULT_MAX_NEGATIVE_REBASE_BPS. Settable behind the operating timelock.
     uint256 public maxNegativeRebaseBps;
+
+    uint256 public maxValidatorFundingAmountPerDay;
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  IMMUTABLES  --------------------------------------
@@ -69,7 +71,7 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
     uint256 public immutable maxValidatorTaskBatchSize;
     uint256 public immutable maxNumberOfRequestsToFinalizePerReport;
     uint256 public immutable maxAcceptableFinalizedWithdrawalAmountPerDay;
-    uint256 public immutable maxAcceptableNumValidatorsToApprovePerDay;
+    uint256 public immutable maxAcceptableValidatorFundingAmountPerDay;
     uint256 public immutable staleOracleReportBlockWindow;
 
     //--------------------------------------------------------------------------------------
@@ -96,7 +98,7 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
     //--------------------------------------------------------------------------------------
     event MaxNegativeRebaseBpsUpdated(uint256 bps);
     event AdminOperationsExecuted(address indexed _address, bytes32 indexed _reportHash);
-    event ValidatorApprovalTaskCreated(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators);
+    event ValidatorApprovalTaskCreated(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators, uint256[] _amounts);
     event ValidatorApprovalTaskCompleted(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators);
     event ValidatorApprovalTaskInvalidated(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators);
 
@@ -106,7 +108,8 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
     error InvalidMaxAcceptableFinalizedWithdrawalAmount();
     error InvalidMaxNumberOfRequestsToFinalizePerReport();
     error InvalidMaxFinalizedWithdrawalAmountPerDay();
-    error InvalidMaxNumValidatorsToApprovePerDay();
+    error InvalidMaxValidatorFundingAmountPerDay();
+    error PubkeyNotLinkedToValidatorNode();
     error InvalidAcceptableRebaseApr();
     error InvalidMaxNegativeRebaseBps();
     error InvalidValidatorTaskBatchSize();
@@ -120,7 +123,6 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
     error TaskDoesNotExist();
     error TaskAlreadyCompleted();
     error TaskAlreadyExists();
-    error InvalidValidatorSize();
     error InvalidArrayLengths();
 
     //--------------------------------------------------------------------------------------
@@ -133,7 +135,7 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
      * @param _maxValidatorTaskBatchSize The maximum validator task batch size
      * @param _staleOracleReportBlockWindow The stale oracle report block window
      * @param _maxAcceptableFinalizedWithdrawalAmountPerDay The maximum acceptable finalized withdrawal amount per day
-     * @param _maxAcceptableNumValidatorsToApprovePerDay The maximum acceptable number of validators to approve per day
+     * @param _maxAcceptableValidatorFundingAmountPerDay The highest value maxValidatorFundingAmountPerDay can be set to, in wei
      * @param _maxNumberOfRequestsToFinalizePerReport The maximum number of requests to finalize per report
      * @custom:oz-upgrades-unsafe-allow constructor
      */
@@ -143,7 +145,7 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
         uint256 _maxValidatorTaskBatchSize,
         uint256 _staleOracleReportBlockWindow,
         uint256 _maxAcceptableFinalizedWithdrawalAmountPerDay,
-        uint256 _maxAcceptableNumValidatorsToApprovePerDay,
+        uint256 _maxAcceptableValidatorFundingAmountPerDay,
         uint256 _maxNumberOfRequestsToFinalizePerReport
     ) RolesLibrary(_constructorAddresses.roleRegistry) {
         if (_maxAcceptableRebaseAprInBps <= 0 || _maxAcceptableRebaseAprInBps > int256(BASIS_POINTS_DENOMINATOR)) revert InvalidMaxAcceptableRebaseApr();
@@ -164,7 +166,7 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
         maxValidatorTaskBatchSize = _maxValidatorTaskBatchSize;
         staleOracleReportBlockWindow = _staleOracleReportBlockWindow;
         maxAcceptableFinalizedWithdrawalAmountPerDay = _maxAcceptableFinalizedWithdrawalAmountPerDay;
-        maxAcceptableNumValidatorsToApprovePerDay = _maxAcceptableNumValidatorsToApprovePerDay;
+        maxAcceptableValidatorFundingAmountPerDay = _maxAcceptableValidatorFundingAmountPerDay;
         maxNumberOfRequestsToFinalizePerReport = _maxNumberOfRequestsToFinalizePerReport;
 
         _disableInitializers();
@@ -210,12 +212,12 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
     }
 
     /**
-     * @notice Update the maximum number of validators to approve per day
-     * @param _maxNumValidatorsToApprovePerDay The maximum number of validators to approve per day
+     * @notice Update the most ETH a report may send to validators, scaled to one day
+     * @param _maxValidatorFundingAmountPerDay The cap in wei
      */
-    function updateMaxNumValidatorsToApprovePerDay(uint256 _maxNumValidatorsToApprovePerDay) external onlyOperatingTimelock {
-        if (_maxNumValidatorsToApprovePerDay > maxAcceptableNumValidatorsToApprovePerDay) revert InvalidMaxNumValidatorsToApprovePerDay();
-        maxNumValidatorsToApprovePerDay = _maxNumValidatorsToApprovePerDay;
+    function updateMaxValidatorFundingAmountPerDay(uint256 _maxValidatorFundingAmountPerDay) external onlyOperatingTimelock {
+        if (_maxValidatorFundingAmountPerDay > maxAcceptableValidatorFundingAmountPerDay) revert InvalidMaxValidatorFundingAmountPerDay();
+        maxValidatorFundingAmountPerDay = _maxValidatorFundingAmountPerDay;
     }
 
     /**
@@ -252,9 +254,10 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
      * @notice Invalidate a validator approval task
      * @param _reportHash The hash of the report
      * @param _validators The validators to invalidate
+     * @param _amounts The funding amounts the task carries, in wei
      */
-    function invalidateValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators) external onlyOperatingMultisig {
-        bytes32 taskHash = keccak256(abi.encode(_reportHash, _validators));
+    function invalidateValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators, uint256[] calldata _amounts) external onlyOperatingMultisig {
+        bytes32 taskHash = keccak256(abi.encode(_reportHash, _validators, _amounts));
         if (!validatorApprovalTaskStatus[taskHash].exists) revert TaskDoesNotExist();
         if (validatorApprovalTaskStatus[taskHash].completed) revert TaskAlreadyCompleted();
         validatorApprovalTaskStatus[taskHash].exists = false;
@@ -287,18 +290,18 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
     /**
      * @notice Execute a validator approval task
      * @param _reportHash The hash of the report
-     * @param _validators The validators to approve
+     * @param _validators The validators to fund
+     * @param _amounts The wei to deposit to each validator, as agreed in the report
      * @param _pubKeys The public keys of the validators
-     * @param _signatures The signatures of the validators
      */
-    function executeValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators, bytes[] calldata _pubKeys, bytes[] calldata _signatures) external onlyOracleOperations {
+    function executeValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators, uint256[] calldata _amounts, bytes[] calldata _pubKeys) external onlyOracleOperations {
         if (!etherFiOracle.isConsensusReached(_reportHash)) revert ConsensusNotReached();
-        bytes32 taskHash = keccak256(abi.encode(_reportHash, _validators));
+        bytes32 taskHash = keccak256(abi.encode(_reportHash, _validators, _amounts));
         if (!validatorApprovalTaskStatus[taskHash].exists) revert TaskDoesNotExist();
         if (validatorApprovalTaskStatus[taskHash].completed) revert TaskAlreadyCompleted();
 
         validatorApprovalTaskStatus[taskHash].completed = true;
-        _approveValidators(_validators, _pubKeys, _signatures);
+        _fundValidators(_validators, _amounts, _pubKeys);
         emit ValidatorApprovalTaskCompleted(taskHash, _reportHash, _validators);
     }
 
@@ -349,42 +352,26 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
     //----------------------------  INTERNAL FUNCTIONS  ------------------------------------
     //--------------------------------------------------------------------------------------
     /**
-     * @notice Approves the validators
-     * @param _validatorIds The validator ids
+     * @notice Funds the validators of a completed approval task
+     * @param _validatorIds The validator ids from the report
+     * @param _amounts The wei to deposit to each validator
      * @param _pubKeys The public keys of the validators
-     * @param _signatures The signatures of the validators
-     * @dev Builds DepositData[] from (validatorIds, pubKeys, signatures) and forwards to
-     *      LiquidityPool.confirmAndFundBeaconValidators. Previously this construction lived
-     *      in LiquidityPool.batchApproveRegistration; moved here so LP stays under the
-     *      EIP-170 24,576-byte cap.
+     * @dev The report commits to ids and amounts; the executor supplies the pubkeys. Each pubkey
+     *      must be linked to the same node as its id, so the executor cannot redirect a task's ETH
+     *      to a validator on another node.
      */
-    function _approveValidators(uint256[] calldata _validatorIds, bytes[] calldata _pubKeys, bytes[] calldata _signatures) internal {
-        uint256 validatorSizeWei = liquidityPool.validatorSizeWei();
-        if (validatorSizeWei < stakingManager.MIN_VALIDATOR_SIZE_WEI() || validatorSizeWei > stakingManager.MAX_VALIDATOR_SIZE_WEI()) revert InvalidValidatorSize();
-        if (_validatorIds.length == 0 || _validatorIds.length != _pubKeys.length || _validatorIds.length != _signatures.length) revert InvalidArrayLengths();
+    function _fundValidators(uint256[] calldata _validatorIds, uint256[] calldata _amounts, bytes[] calldata _pubKeys) internal {
+        if (_validatorIds.length == 0 || _validatorIds.length != _amounts.length || _validatorIds.length != _pubKeys.length) revert InvalidArrayLengths();
 
-        uint256 remainingEthPerValidator = validatorSizeWei - stakingManager.INITIAL_DEPOSIT_AMOUNT();
-        IStakingManager.DepositData[] memory depositData = new IStakingManager.DepositData[](_validatorIds.length);
-
+        IStakingManager.ValidatorFunding[] memory fundings = new IStakingManager.ValidatorFunding[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
-            // Must resolve pod-or-node exactly as StakingManager.confirmAndFundBeaconValidators
-            // does, or the deposit roots disagree. Raw, not withdrawalCredentialTarget, which
-            // would reject a legacy node missing from deployedEtherFiNodes.
-            address node = etherFiNodesManager.etherfiNodeAddress(_validatorIds[i]);
-            address credentialTarget = address(IEtherFiNode(node).getEigenPod());
-            if (credentialTarget == address(0)) credentialTarget = node;
-            bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(credentialTarget);
-            bytes32 depositDataRoot = stakingManager.generateDepositDataRoot(_pubKeys[i], _signatures[i], withdrawalCredentials, remainingEthPerValidator);
-
-            depositData[i] = IStakingManager.DepositData({
-                publicKey: _pubKeys[i],
-                signature: _signatures[i],
-                depositDataRoot: depositDataRoot,
-                ipfsHashForEncryptedValidatorKey: ""
-            });
+            bytes32 pubkeyHash = etherFiNodesManager.calculateValidatorPubkeyHash(_pubKeys[i]);
+            address node = address(etherFiNodesManager.etherFiNodeFromPubkeyHash(pubkeyHash));
+            if (node == address(0) || node != etherFiNodesManager.etherfiNodeAddress(_validatorIds[i])) revert PubkeyNotLinkedToValidatorNode();
+            fundings[i] = IStakingManager.ValidatorFunding({publicKey: _pubKeys[i], amount: _amounts[i]});
         }
 
-        liquidityPool.confirmAndFundBeaconValidators(depositData, validatorSizeWei);
+        liquidityPool.fundValidators(fundings);
     }
 
     /**
@@ -417,14 +404,16 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
             uint256 start = i * validatorTaskBatchSize;
             uint256 end = (i + 1) * validatorTaskBatchSize > _report.validatorsToApprove.length ? _report.validatorsToApprove.length : (i + 1) * validatorTaskBatchSize;
             uint256[] memory batchValidators = new uint256[](end - start);
+            uint256[] memory batchAmounts = new uint256[](end - start);
 
             for (uint256 j = start; j < end; j++) {
                 batchValidators[j - start] = _report.validatorsToApprove[j];
+                batchAmounts[j - start] = _report.validatorFundingAmounts[j];
             }
-            bytes32 taskHash = keccak256(abi.encode(_reportHash, batchValidators));
+            bytes32 taskHash = keccak256(abi.encode(_reportHash, batchValidators, batchAmounts));
             if (validatorApprovalTaskStatus[taskHash].exists) revert TaskAlreadyExists();
             validatorApprovalTaskStatus[taskHash] = TaskStatus({completed: false, exists: true});
-            emit ValidatorApprovalTaskCreated(taskHash, _reportHash, batchValidators);
+            emit ValidatorApprovalTaskCreated(taskHash, _reportHash, batchValidators, batchAmounts);
         }
     }
     
@@ -555,8 +544,12 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
      * @return _error The error message
      */
     function _validateValidatorApprovals(IEtherFiOracle.OracleReport calldata _report, uint256 elapsedTime) internal view returns (bool, string memory) {
-        uint256 numValidatorsToApprovePerDay = _report.validatorsToApprove.length.mulDiv(1 days, elapsedTime);
-        if (numValidatorsToApprovePerDay > maxNumValidatorsToApprovePerDay) return (false, "EtherFiAdmin: number of validators to approve exceeds max");
+        if (_report.validatorFundingAmounts.length != _report.validatorsToApprove.length) return (false, "EtherFiAdmin: validator funding amounts length mismatch");
+        uint256 totalFunding = 0;
+        for (uint256 i = 0; i < _report.validatorFundingAmounts.length; i++) {
+            totalFunding += _report.validatorFundingAmounts[i];
+        }
+        if (totalFunding.mulDiv(1 days, elapsedTime) > maxValidatorFundingAmountPerDay) return (false, "EtherFiAdmin: validator funding exceeds max per day");
         return (true, "");
     }
 

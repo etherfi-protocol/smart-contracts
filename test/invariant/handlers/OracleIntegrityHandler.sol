@@ -178,7 +178,7 @@ contract OracleIntegrityHandler is Test {
     function _baseReport() internal view returns (IEtherFiOracle.OracleReport memory r) {
         uint256[] memory emptyVals = new uint256[](0);
         uint32 cv = oracle.consensusVersion();
-        r = IEtherFiOracle.OracleReport(cv, 0, 0, 0, 0, 0, 0, emptyVals, 0, 0);
+        r = IEtherFiOracle.OracleReport(cv, 0, 0, 0, 0, 0, 0, emptyVals, 0, 0, new uint256[](0));
         (uint32 slotFrom, uint32 slotTo, uint32 blockFrom) = oracle.blockStampForNextReport();
         r.refSlotFrom = slotFrom;
         r.refSlotTo = slotTo;

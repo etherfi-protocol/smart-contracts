@@ -96,9 +96,9 @@ contract NonEigenPodValidatorLifecycleTest is PreludeTest {
         assertFalse(auctionManager.isBidActive(s.bidId));
 
         // Step 7: 31 ETH top-up
-        IStakingManager.DepositData memory fundData = _depositData(s, 31 ether);
+        IStakingManager.ValidatorFunding[] memory fundings = toFundings(s.pubkey, 31 ether);
         vm.prank(admin);
-        liquidityPool.confirmAndFundBeaconValidators(toArray(fundData), 32 ether);
+        liquidityPool.fundValidators(fundings);
 
         assertEq(liquidityPool.totalValueOutOfLp(), outBefore + 32 ether);
         assertEq(liquidityPool.totalValueInLp(), inBefore - 32 ether);
@@ -208,12 +208,11 @@ contract NonEigenPodValidatorLifecycleTest is PreludeTest {
 
     function test_lifecycle_cannotFundUnlinkedPubkey() public {
         Spun memory s = _prepare();
-        // built before expectRevert: generateDepositDataRoot is itself a call and would consume it
-        IStakingManager.DepositData[] memory d = toArray(_depositData(s, 31 ether));
+        IStakingManager.ValidatorFunding[] memory fundings = toFundings(s.pubkey, 31 ether);
 
         vm.expectRevert(IStakingManager.UnlinkedPubkey.selector);
         vm.prank(admin);
-        liquidityPool.confirmAndFundBeaconValidators(d, 32 ether);
+        liquidityPool.fundValidators(fundings);
     }
 
     function test_lifecycle_credentialsForAnotherTargetAreRejected() public {
@@ -230,23 +229,6 @@ contract NonEigenPodValidatorLifecycleTest is PreludeTest {
         vm.expectRevert(IStakingManager.IncorrectBeaconRoot.selector);
         vm.prank(spawner);
         liquidityPool.batchRegister(toArray(bad), toArray_u256(s.bidId), s.node);
-    }
-
-    function test_lifecycle_topUpRootMustMatchTheRemainingAmount() public {
-        Spun memory s = _prepare();
-        IStakingManager.DepositData memory d = _depositData(s, 1 ether);
-
-        vm.prank(spawner);
-        liquidityPool.batchRegister(toArray(d), toArray_u256(s.bidId), s.node);
-        vm.prank(admin);
-        liquidityPool.batchCreateBeaconValidators(toArray(d), toArray_u256(s.bidId), s.node);
-
-        // root built for 32 ETH rather than the 31 ETH actually deposited
-        IStakingManager.DepositData[] memory bad = toArray(_depositData(s, 32 ether));
-
-        vm.expectRevert(IStakingManager.IncorrectBeaconRoot.selector);
-        vm.prank(admin);
-        liquidityPool.confirmAndFundBeaconValidators(bad, 32 ether);
     }
 
     function test_lifecycle_onlyLiquidityPoolCanReachStakingManager() public {

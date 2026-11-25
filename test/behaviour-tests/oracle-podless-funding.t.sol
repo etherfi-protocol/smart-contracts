@@ -6,14 +6,9 @@ import "@etherfi/oracle/EtherFiAdmin.sol";
 import {IEtherFiAdmin} from "@etherfi/oracle/interfaces/IEtherFiAdmin.sol";
 import {IEtherFiOracle} from "@etherfi/oracle/interfaces/IEtherFiOracle.sol";
 
-/// @notice Funds a pod-less validator through the REAL production top-up path:
-///         EtherFiAdmin.executeValidatorApprovalTask -> _approveValidators ->
-///         LiquidityPool.confirmAndFundBeaconValidators.
-/// @dev The existing pod-less tests hand-build the top-up DepositData and prank the admin, which
-///      skips EtherFiAdmin._approveValidators -- the only component that builds this data in
-///      production. This test lets _approveValidators build it. Pre-fix, _approveValidators
-///      hardcoded getEigenPod() (== address(0) for a pod-less node) and the top-up reverted
-///      IncorrectBeaconRoot; post-fix it resolves pod-or-node and the validator funds to full size.
+/// @notice Funds a pod-less validator through the production oracle path:
+///         EtherFiAdmin.executeValidatorApprovalTask -> _fundValidators -> LiquidityPool.fundValidators,
+///         with the amount per validator taken from the approval task the report created.
 contract OraclePodlessFundingTest is PreludeTest {
     // EIP-1967 implementation slot.
     bytes32 constant IMPL_SLOT = 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
@@ -30,7 +25,7 @@ contract OraclePodlessFundingTest is PreludeTest {
     }
 
     /// @dev Redeploy EtherFiAdmin with the proxy's own immutables and point the proxy at it, so the
-    ///      fork runs the fixed _approveValidators (PreludeTest does not upgrade EtherFiAdmin).
+    ///      fork runs this branch's _fundValidators (PreludeTest does not upgrade EtherFiAdmin).
     function _upgradeEtherFiAdminInPlace(address proxy) internal {
         EtherFiAdmin cur = EtherFiAdmin(proxy);
         IEtherFiAdmin.ConstructorAddresses memory addrs = IEtherFiAdmin.ConstructorAddresses({
@@ -49,7 +44,7 @@ contract OraclePodlessFundingTest is PreludeTest {
             cur.maxValidatorTaskBatchSize(),
             cur.staleOracleReportBlockWindow(),
             cur.maxAcceptableFinalizedWithdrawalAmountPerDay(),
-            cur.maxAcceptableNumValidatorsToApprovePerDay(),
+            1_000_000 ether, // maxAcceptableValidatorFundingAmountPerDay: the live impl predates this getter
             cur.maxNumberOfRequestsToFinalizePerReport()
         );
         vm.store(proxy, IMPL_SLOT, bytes32(uint256(uint160(address(newImpl)))));
@@ -90,13 +85,13 @@ contract OraclePodlessFundingTest is PreludeTest {
     }
 
     /// @dev Seed the two executeValidatorApprovalTask gates (orthogonal to the builder under test).
-    function _seedApprovalTask(address proxy, bytes32 reportHash, uint256[] memory validatorIds) internal {
+    function _seedApprovalTask(address proxy, bytes32 reportHash, uint256[] memory validatorIds, uint256[] memory amounts) internal {
         vm.mockCall(
             address(EtherFiAdmin(proxy).etherFiOracle()),
             abi.encodeWithSelector(IEtherFiOracle.isConsensusReached.selector, reportHash),
             abi.encode(true)
         );
-        bytes32 taskHash = keccak256(abi.encode(reportHash, validatorIds));
+        bytes32 taskHash = keccak256(abi.encode(reportHash, validatorIds, amounts));
         // TaskStatus { bool completed; bool exists; } packed in one slot: exists at byte offset 1.
         bytes32 taskSlot = keccak256(abi.encode(taskHash, TASK_STATUS_SLOT));
         vm.store(proxy, taskSlot, bytes32(uint256(1) << 8));
@@ -104,35 +99,64 @@ contract OraclePodlessFundingTest is PreludeTest {
         assertTrue(exists && !completed, "seeded approval task exists, not completed");
     }
 
-    function test_oracleApprovalPath_fundsPodLessValidator() public {
-        address proxy = LiquidityPool(payable(address(liquidityPool))).etherFiAdminContract();
+    function _singleTask(uint256 amount) internal returns (address proxy, uint256 outStart, uint256[] memory ids, uint256[] memory amounts, bytes32 reportHash) {
+        proxy = LiquidityPool(payable(address(liquidityPool))).etherFiAdminContract();
         _upgradeEtherFiAdminInPlace(proxy);
+        outStart = _createPodLessValidatorPhase1();
 
-        uint256 outStart = _createPodLessValidatorPhase1();
+        ids = new uint256[](1);
+        ids[0] = uint256(etherFiNodesManager.calculateValidatorPubkeyHash(valPubkey));
+        amounts = new uint256[](1);
+        amounts[0] = amount;
+        reportHash = keccak256("podless-funding-report");
+        _seedApprovalTask(proxy, reportHash, ids, amounts);
+    }
 
-        bytes32 pubkeyHash = etherFiNodesManager.calculateValidatorPubkeyHash(valPubkey);
-        assertEq(etherFiNodesManager.etherfiNodeAddress(uint256(pubkeyHash)), podLessNode, "oracle resolves node by pubkeyHash id");
+    function test_oracleApprovalPath_fundsPodLessValidator() public {
+        (address proxy, uint256 outStart, uint256[] memory ids, uint256[] memory amounts, bytes32 reportHash) = _singleTask(31 ether);
+        bytes32 pubkeyHash = bytes32(ids[0]);
+        assertEq(etherFiNodesManager.etherfiNodeAddress(ids[0]), podLessNode, "oracle resolves node by pubkeyHash id");
 
-        uint256[] memory validatorIds = new uint256[](1);
-        validatorIds[0] = uint256(pubkeyHash);
-        bytes[] memory pubKeys = new bytes[](1);
-        pubKeys[0] = valPubkey;
-        bytes[] memory signatures = new bytes[](1);
-        signatures[0] = valSignature;
-
-        bytes32 reportHash = keccak256("podless-funding-report");
-        _seedApprovalTask(proxy, reportHash, validatorIds);
-
-        uint256 validatorSizeWei = liquidityPool.validatorSizeWei();
-
-        // The whole point: let EtherFiAdmin._approveValidators BUILD the top-up deposit data.
         vm.prank(admin); // ORACLE_OPERATIONS_ROLE
-        EtherFiAdmin(proxy).executeValidatorApprovalTask(reportHash, validatorIds, pubKeys, signatures);
+        EtherFiAdmin(proxy).executeValidatorApprovalTask(reportHash, ids, amounts, toArray_bytes(valPubkey));
 
-        assertEq(liquidityPool.totalValueOutOfLp(), outStart + validatorSizeWei, "funded to full validator size via oracle path");
+        assertEq(liquidityPool.totalValueOutOfLp(), outStart + 32 ether, "funded to 32 ETH via oracle path");
         assertEq(address(etherFiNodesManager.etherFiNodeFromPubkeyHash(pubkeyHash)), podLessNode, "still linked to the pod-less node");
         assertEq(address(IEtherFiNode(podLessNode).getEigenPod()), address(0), "node remained pod-less");
 
+        vm.clearMockedCalls();
+    }
+
+    function test_oracleApprovalPath_depositsTheReportedAmount() public {
+        (address proxy, uint256 outStart, uint256[] memory ids, uint256[] memory amounts, bytes32 reportHash) = _singleTask(1999 ether);
+
+        vm.prank(admin);
+        EtherFiAdmin(proxy).executeValidatorApprovalTask(reportHash, ids, amounts, toArray_bytes(valPubkey));
+
+        assertEq(liquidityPool.totalValueOutOfLp(), outStart + 2000 ether, "1 ETH leg plus the reported 1999 ETH");
+        vm.clearMockedCalls();
+    }
+
+    function test_oracleApprovalPath_rejectsAmountsTheReportDidNotCommitTo() public {
+        (address proxy,, uint256[] memory ids, uint256[] memory amounts, bytes32 reportHash) = _singleTask(31 ether);
+        amounts[0] = 2000 ether;
+        bytes[] memory pubkeys = toArray_bytes(valPubkey);
+
+        vm.expectRevert(EtherFiAdmin.TaskDoesNotExist.selector);
+        vm.prank(admin);
+        EtherFiAdmin(proxy).executeValidatorApprovalTask(reportHash, ids, amounts, pubkeys);
+        vm.clearMockedCalls();
+    }
+
+    function test_oracleApprovalPath_rejectsAPubkeyFromAnotherNode() public {
+        (address proxy,, uint256[] memory ids, uint256[] memory amounts, bytes32 reportHash) = _singleTask(31 ether);
+        // a second ether.fi validator on its own node: linked, but not the one the report approved
+        _createPodLessValidatorPhase1();
+        bytes[] memory otherNodesPubkey = toArray_bytes(valPubkey);
+
+        vm.expectRevert(EtherFiAdmin.PubkeyNotLinkedToValidatorNode.selector);
+        vm.prank(admin);
+        EtherFiAdmin(proxy).executeValidatorApprovalTask(reportHash, ids, amounts, otherNodesPubkey);
         vm.clearMockedCalls();
     }
 }

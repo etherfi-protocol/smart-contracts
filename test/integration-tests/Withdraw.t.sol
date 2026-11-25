@@ -331,7 +331,7 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         uint256[] memory emptyVals = new uint256[](0);
         report = IEtherFiOracle.OracleReport(
             etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0, 0
-        );
+        , new uint256[](0));
         report.lastFinalizedWithdrawalRequestId = uint32(requestId);
         report.finalizedWithdrawalAmount = _sumValidRequestAmounts(report.lastFinalizedWithdrawalRequestId);
 
@@ -396,7 +396,7 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         uint256[] memory emptyVals = new uint256[](0);
         report = IEtherFiOracle.OracleReport(
             etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0, 0
-        );
+        , new uint256[](0));
         report.lastFinalizedWithdrawalRequestId = uint32(requestId);
         report.finalizedWithdrawalAmount = _sumValidRequestAmounts(report.lastFinalizedWithdrawalRequestId);
 
@@ -469,7 +469,7 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         uint256[] memory emptyVals = new uint256[](0);
         report = IEtherFiOracle.OracleReport(
             etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0, 0
-        );
+        , new uint256[](0));
         report.lastFinalizedWithdrawalRequestId = uint32(requestId);
         report.finalizedWithdrawalAmount = _sumValidRequestAmounts(report.lastFinalizedWithdrawalRequestId);
 
@@ -575,7 +575,7 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         uint256[] memory emptyVals = new uint256[](0);
         report = IEtherFiOracle.OracleReport(
             etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0, 0
-        );
+        , new uint256[](0));
         report.lastFinalizedWithdrawalRequestId = uint32(requestId);
         report.finalizedWithdrawalAmount = _sumValidRequestAmounts(report.lastFinalizedWithdrawalRequestId);
 
@@ -661,7 +661,7 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         uint256[] memory emptyVals = new uint256[](0);
         report = IEtherFiOracle.OracleReport(
             etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0, 0
-        );
+        , new uint256[](0));
         report.lastFinalizedWithdrawalRequestId = uint32(requestId);
         report.finalizedWithdrawalAmount = _sumValidRequestAmounts(report.lastFinalizedWithdrawalRequestId);
 

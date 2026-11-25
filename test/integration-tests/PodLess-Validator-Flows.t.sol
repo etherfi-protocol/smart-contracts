@@ -13,13 +13,9 @@ import "@etherfi/staking/libraries/DepositDataRootGenerator.sol";
 ///         production components at every step: node-operator whitelisting, bid submission,
 ///         validator creation against 0x02 credentials that point at the EtherFiNode, oracle
 ///         report submission to consensus, EtherFiAdmin.executeTasks, and finally
-///         EtherFiAdmin.executeValidatorApprovalTask funding the validator to full size.
-/// @dev Nothing here hand-builds the top-up DepositData. EtherFiAdmin._approveValidators is the
-///      only component that does so in production, and it derives the credential target
-///      independently of StakingManager.confirmAndFundBeaconValidators. If the two derivations
-///      ever disagree the top-up reverts IncorrectBeaconRoot, which is exactly what a pod-less
-///      node used to trigger: _approveValidators hardcoded getEigenPod() (address(0) with no
-///      pod) while StakingManager resolved the node. These tests pin the two together.
+///         EtherFiAdmin.executeValidatorApprovalTask funding the validator with the amount the
+///         report carries. StakingManager.fundValidators derives the credentials from the node,
+///         so a pod-less node funds the same way a pod-backed one does.
 contract PodLessValidatorFlowsIntegrationTest is TestSetup, Deployed {
     /// @dev EtherFiAdmin slot 209 packs lastHandledReportRefSlot (4B @ offset 0) and
     ///      lastHandledReportRefBlock (4B @ offset 4).
@@ -92,9 +88,7 @@ contract PodLessValidatorFlowsIntegrationTest is TestSetup, Deployed {
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), rrOwner);
         roleRegistryInstance.grantRole(roleRegistryInstance.ORACLE_OPERATIONS_ROLE(), ADMIN_EOA);
         // Otherwise executeTasks rejects the approval against the per-day cap.
-        etherFiAdminInstance.updateMaxNumValidatorsToApprovePerDay(
-            etherFiAdminInstance.maxAcceptableNumValidatorsToApprovePerDay()
-        );
+        etherFiAdminInstance.updateMaxValidatorFundingAmountPerDay(etherFiAdminInstance.maxAcceptableValidatorFundingAmountPerDay());
         vm.stopPrank();
 
         _syncAdminToOracle();
@@ -164,9 +158,13 @@ contract PodLessValidatorFlowsIntegrationTest is TestSetup, Deployed {
     {
         report = IEtherFiOracle.OracleReport(
             etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, new uint256[](0), 0, 0
-        );
+        , new uint256[](0));
         (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();
         report.validatorsToApprove = validatorsToApprove;
+        report.validatorFundingAmounts = new uint256[](validatorsToApprove.length);
+        for (uint256 i = 0; i < validatorsToApprove.length; i++) {
+            report.validatorFundingAmounts[i] = 31 ether;
+        }
         report.lastFinalizedWithdrawalRequestId = withdrawRequestNFTInstance.lastFinalizedRequestId();
 
         // refBlockTo must be below the current block and above the last admin execution.
@@ -353,7 +351,7 @@ contract PodLessValidatorFlowsIntegrationTest is TestSetup, Deployed {
         vm.prank(ADMIN_EOA);
         etherFiAdminInstance.executeTasks(report);
 
-        bytes32 taskHash = keccak256(abi.encode(reportHash, report.validatorsToApprove));
+        bytes32 taskHash = keccak256(abi.encode(reportHash, report.validatorsToApprove, report.validatorFundingAmounts));
         (bool completedBefore, bool exists) = etherFiAdminInstance.validatorApprovalTaskStatus(taskHash);
         assertTrue(exists, "executeTasks created the approval task");
         assertFalse(completedBefore, "approval task not yet executed");
@@ -362,8 +360,8 @@ contract PodLessValidatorFlowsIntegrationTest is TestSetup, Deployed {
         etherFiAdminInstance.executeValidatorApprovalTask(
             reportHash,
             report.validatorsToApprove,
-            _toArrayBytes(depositData.publicKey),
-            _toArrayBytes(depositData.signature)
+            report.validatorFundingAmounts,
+            _toArrayBytes(depositData.publicKey)
         );
 
         (bool completedAfter,) = etherFiAdminInstance.validatorApprovalTaskStatus(taskHash);
@@ -387,7 +385,7 @@ contract PodLessValidatorFlowsIntegrationTest is TestSetup, Deployed {
 
         assertEq(address(IEtherFiNode(etherFiNode).getEigenPod()), address(0), "node never got a pod");
         assertEq(managerInstance.withdrawalCredentialTarget(etherFiNode), etherFiNode, "node is its own target");
-        assertEq(outDelta, liquidityPoolInstance.validatorSizeWei(), "funded to full validator size");
+        assertEq(outDelta, 32 ether, "funded to activation size");
     }
 
     /// @notice The pod-backed flow through the identical path, so the pod-less result is read as
@@ -400,7 +398,7 @@ contract PodLessValidatorFlowsIntegrationTest is TestSetup, Deployed {
         address pod = address(IEtherFiNode(etherFiNode).getEigenPod());
         assertTrue(pod != address(0), "node has a pod");
         assertEq(managerInstance.withdrawalCredentialTarget(etherFiNode), pod, "pod is the target");
-        assertEq(outDelta, liquidityPoolInstance.validatorSizeWei(), "funded to full validator size");
+        assertEq(outDelta, 32 ether, "funded to activation size");
     }
 
     /// @notice Pins EtherFiAdmin's credential derivation to StakingManager's. These are separate

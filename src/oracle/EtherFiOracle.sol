@@ -465,7 +465,8 @@ contract EtherFiOracle is Initializable, DeprecatedOZOwnable, DeprecatedOZPausab
 
         bytes32 chunk2 = keccak256(
             abi.encode(
-                _report.validatorsToApprove
+                _report.validatorsToApprove,
+                _report.validatorFundingAmounts
             )
         );
 

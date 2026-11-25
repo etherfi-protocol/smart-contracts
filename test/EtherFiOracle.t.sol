@@ -14,7 +14,7 @@ contract EtherFiOracleTest is TestSetup {
         vm.prank(alice);
         etherFiAdminInstance.updateMaxFinalizedWithdrawalAmountPerDay(10_000 ether);
         vm.prank(alice);
-        etherFiAdminInstance.updateMaxNumValidatorsToApprovePerDay(200);
+        etherFiAdminInstance.updateMaxValidatorFundingAmountPerDay(200 * 32 ether);
     }
 
     /// setReportStartSlot was removed from EtherFiOracle in the role-consolidation
@@ -1063,42 +1063,42 @@ contract EtherFiOracleTest is TestSetup {
     }
 
     function test_constructor_maxValidatorTaskBatchSize_guardrail() public {
-        EtherFiAdmin nonZeroValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 500, 1000);
+        EtherFiAdmin nonZeroValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 1_000_000 ether, 1000);
         assertEq(nonZeroValue.maxValidatorTaskBatchSize(), 1_000);
 
         // value 0 reverts
         vm.expectRevert(EtherFiAdmin.InvalidValidatorTaskBatchSize.selector);
-        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 0, 7200, 100_000 ether, 500, 1000);
+        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 0, 7200, 100_000 ether, 1_000_000 ether, 1000);
     }
 
     function test_constructor_maxAcceptableRebaseAprInBps_guardrail() public {
-        EtherFiAdmin validValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 500, 1000);
+        EtherFiAdmin validValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 1_000_000 ether, 1000);
         assertEq(validValue.maxAcceptableRebaseAprInBps(), 500);
 
         // value 0 reverts
         vm.expectRevert(EtherFiAdmin.InvalidMaxAcceptableRebaseApr.selector);
-        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 0, 1_000, 7200, 100_000 ether, 500, 1000);
+        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 0, 1_000, 7200, 100_000 ether, 1_000_000 ether, 1000);
 
         // negative values revert
         vm.expectRevert(EtherFiAdmin.InvalidMaxAcceptableRebaseApr.selector);
-        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), -1, 1_000, 7200, 100_000 ether, 500, 1000);
+        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), -1, 1_000, 7200, 100_000 ether, 1_000_000 ether, 1000);
 
         // values above 10_000 revert
         vm.expectRevert(EtherFiAdmin.InvalidMaxAcceptableRebaseApr.selector);
-        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 10_001, 1_000, 7200, 100_000 ether, 500, 1000);
+        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 10_001, 1_000, 7200, 100_000 ether, 1_000_000 ether, 1000);
     }
 
     function test_constructor_staleOracleReportBlockWindow_guardrail() public {
-        EtherFiAdmin validValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 500, 1000);
+        EtherFiAdmin validValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 1_000_000 ether, 1000);
         assertEq(validValue.staleOracleReportBlockWindow(), 7200);
 
         // value 0 reverts
         vm.expectRevert(EtherFiAdmin.InvalidStaleOracleReportBlockWindow.selector);
-        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 0, 100_000 ether, 500, 1000);
+        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 0, 100_000 ether, 1_000_000 ether, 1000);
     }
 
     function test_constructor_maxAcceptableFinalizedWithdrawalAmountPerDay_guardrail() public {
-        EtherFiAdmin validValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 500, 1000);
+        EtherFiAdmin validValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 1_000_000 ether, 1000);
         assertEq(validValue.maxAcceptableFinalizedWithdrawalAmountPerDay(), 100_000 ether);
 
         // value 0 reverts
@@ -1106,10 +1106,10 @@ contract EtherFiOracleTest is TestSetup {
         new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 0, 500, 1000);
     }
 
-    function test_constructor_maxAcceptableNumValidatorsToApprovePerDay_zero_is_allowed() public {
-        // _maxAcceptableNumValidatorsToApprovePerDay = 0 signals "pause new validators"
+    function test_constructor_maxAcceptableValidatorFundingAmountPerDay_zero_is_allowed() public {
+        // _maxAcceptableValidatorFundingAmountPerDay = 0 signals "pause validator funding"
         EtherFiAdmin zeroAllowed = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 0, 1000);
-        assertEq(zeroAllowed.maxAcceptableNumValidatorsToApprovePerDay(), 0);
+        assertEq(zeroAllowed.maxAcceptableValidatorFundingAmountPerDay(), 0);
     }
 
     function test_executeValidatorApprovalTask() public {
@@ -1124,6 +1124,8 @@ contract EtherFiOracleTest is TestSetup {
         _initReportBlockStamp(report);
         report.validatorsToApprove = new uint256[](1);
         report.validatorsToApprove[0] = 1;
+        report.validatorFundingAmounts = new uint256[](1);
+        report.validatorFundingAmounts[0] = 31 ether;
 
         vm.prank(alice);
         etherFiOracleInstance.submitReport(report);
@@ -1134,26 +1136,23 @@ contract EtherFiOracleTest is TestSetup {
         etherFiAdminInstance.executeTasks(report);
 
         bytes32 reportHash = etherFiOracleInstance.generateReportHash(report);
-        bytes32 taskHash = keccak256(abi.encode(reportHash, report.validatorsToApprove));
+        bytes32 taskHash = keccak256(abi.encode(reportHash, report.validatorsToApprove, report.validatorFundingAmounts));
 
         (bool completed, bool exists) = etherFiAdminInstance.validatorApprovalTaskStatus(taskHash);
         assertEq(exists, true);
         assertEq(completed, false);
 
         // Execute the validator approval task
-        // Note: We need valid pubKeys and signatures, but for testing we can use empty ones
-        // The actual deposit-data construction now lives in EtherFiAdmin._approveValidators
-        // which forwards to liquidityPool.confirmAndFundBeaconValidators.
+        // A zeroed pubkey is not linked to validator 1's node, so execution may revert in
+        // EtherFiAdmin._fundValidators; the task bookkeeping is what this test covers.
         bytes[] memory pubKeys = new bytes[](1);
-        bytes[] memory signatures = new bytes[](1);
         pubKeys[0] = new bytes(48);
-        signatures[0] = new bytes(96);
 
         // This might revert if the liquidity pool doesn't accept empty pubKeys/signatures
         // Let's test that the task exists and can be executed
         vm.prank(alice);
         // If this reverts, it's likely due to invalid pubKeys/signatures, not the task logic
-        try etherFiAdminInstance.executeValidatorApprovalTask(reportHash, report.validatorsToApprove, pubKeys, signatures) {
+        try etherFiAdminInstance.executeValidatorApprovalTask(reportHash, report.validatorsToApprove, report.validatorFundingAmounts, pubKeys) {
             (completed, exists) = etherFiAdminInstance.validatorApprovalTaskStatus(taskHash);
             assertEq(completed, true);
             assertEq(exists, true);
@@ -1170,12 +1169,12 @@ contract EtherFiOracleTest is TestSetup {
 
         bytes32 fakeHash = keccak256("fake");
         uint256[] memory validators = new uint256[](0);
+        uint256[] memory amounts = new uint256[](0);
         bytes[] memory pubKeys = new bytes[](0);
-        bytes[] memory signatures = new bytes[](0);
 
         vm.prank(alice);
         vm.expectRevert(EtherFiAdmin.ConsensusNotReached.selector);
-        etherFiAdminInstance.executeValidatorApprovalTask(fakeHash, validators, pubKeys, signatures);
+        etherFiAdminInstance.executeValidatorApprovalTask(fakeHash, validators, amounts, pubKeys);
     }
 
     function test_executeValidatorApprovalTask_taskNotExists() public {
@@ -1195,12 +1194,13 @@ contract EtherFiOracleTest is TestSetup {
         bytes32 reportHash = etherFiOracleInstance.generateReportHash(report);
         uint256[] memory validators = new uint256[](1);
         validators[0] = 999; // Different validator
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = 31 ether;
         bytes[] memory pubKeys = new bytes[](1);
-        bytes[] memory signatures = new bytes[](1);
 
         vm.prank(alice);
         vm.expectRevert(EtherFiAdmin.TaskDoesNotExist.selector);
-        etherFiAdminInstance.executeValidatorApprovalTask(reportHash, validators, pubKeys, signatures);
+        etherFiAdminInstance.executeValidatorApprovalTask(reportHash, validators, amounts, pubKeys);
     }
 
     function test_invalidateValidatorApprovalTask() public {
@@ -1217,6 +1217,8 @@ contract EtherFiOracleTest is TestSetup {
         _initReportBlockStamp(report);
         report.validatorsToApprove = new uint256[](1);
         report.validatorsToApprove[0] = 1;
+        report.validatorFundingAmounts = new uint256[](1);
+        report.validatorFundingAmounts[0] = 31 ether;
 
         vm.prank(alice);
         etherFiOracleInstance.submitReport(report);
@@ -1227,7 +1229,7 @@ contract EtherFiOracleTest is TestSetup {
         etherFiAdminInstance.executeTasks(report);
 
         bytes32 reportHash = etherFiOracleInstance.generateReportHash(report);
-        bytes32 taskHash = keccak256(abi.encode(reportHash, report.validatorsToApprove));
+        bytes32 taskHash = keccak256(abi.encode(reportHash, report.validatorsToApprove, report.validatorFundingAmounts));
 
         (bool completed, bool exists) = etherFiAdminInstance.validatorApprovalTaskStatus(taskHash);
         assertEq(exists, true);
@@ -1235,7 +1237,7 @@ contract EtherFiOracleTest is TestSetup {
 
         // Invalidate the task
         vm.prank(alice);
-        etherFiAdminInstance.invalidateValidatorApprovalTask(reportHash, report.validatorsToApprove);
+        etherFiAdminInstance.invalidateValidatorApprovalTask(reportHash, report.validatorsToApprove, report.validatorFundingAmounts);
 
         (completed, exists) = etherFiAdminInstance.validatorApprovalTaskStatus(taskHash);
         assertEq(exists, false);
@@ -1244,7 +1246,7 @@ contract EtherFiOracleTest is TestSetup {
         // Test: cannot invalidate non-existent task
         vm.prank(alice);
         vm.expectRevert(EtherFiAdmin.TaskDoesNotExist.selector);
-        etherFiAdminInstance.invalidateValidatorApprovalTask(reportHash, report.validatorsToApprove);
+        etherFiAdminInstance.invalidateValidatorApprovalTask(reportHash, report.validatorsToApprove, report.validatorFundingAmounts);
     }
 
     function test_invalidateValidatorApprovalTask_alreadyCompleted() public {
@@ -1259,6 +1261,8 @@ contract EtherFiOracleTest is TestSetup {
         _initReportBlockStamp(report);
         report.validatorsToApprove = new uint256[](1);
         report.validatorsToApprove[0] = 1;
+        report.validatorFundingAmounts = new uint256[](1);
+        report.validatorFundingAmounts[0] = 31 ether;
 
         vm.prank(alice);
         etherFiOracleInstance.submitReport(report);
@@ -1269,15 +1273,10 @@ contract EtherFiOracleTest is TestSetup {
         etherFiAdminInstance.executeTasks(report);
 
         bytes32 reportHash = etherFiOracleInstance.generateReportHash(report);
-        bytes[] memory pubKeys = new bytes[](1);
-        bytes[] memory signatures = new bytes[](1);
-        pubKeys[0] = new bytes(48);
-        signatures[0] = new bytes(96);
-
-        // Try to execute the task - it might revert due to invalid pubKeys/signatures
-        // Since we can't easily test this without valid pubKeys/signatures, we'll just verify
+        // Executing the task needs a pubkey linked to validator 1's node; this test only
+        // verifies
         // that the task exists and the logic for invalidating completed tasks is in the contract
-        bytes32 taskHash = keccak256(abi.encode(reportHash, report.validatorsToApprove));
+        bytes32 taskHash = keccak256(abi.encode(reportHash, report.validatorsToApprove, report.validatorFundingAmounts));
         (bool completed, bool exists) = etherFiAdminInstance.validatorApprovalTaskStatus(taskHash);
         assertEq(exists, true);
         assertEq(completed, false);
@@ -1523,15 +1522,17 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), 1000);
     }
 
-    function test_executeTasks_revertsWhenValidatorApprovalsExceedCap() public {
+    function test_executeTasks_revertsWhenValidatorFundingExceedsCap() public {
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
-        report.validatorsToApprove = new uint256[](400); // > 200/day cap
+        report.validatorsToApprove = new uint256[](400);
+        report.validatorFundingAmounts = new uint256[](400); // 400 * 32 ETH > 200 * 32 ETH/day cap
         for (uint256 i = 0; i < 400; i++) {
             report.validatorsToApprove[i] = i + 1;
+            report.validatorFundingAmounts[i] = 32 ether;
         }
 
         _moveClock(1 days / 12);
-        _executeAdminTasks(report, "EtherFiAdmin: number of validators to approve exceeds max");
+        _executeAdminTasks(report, "EtherFiAdmin: validator funding exceeds max per day");
     }
 
     // Happy path: a report with a non-zero finalized-withdrawal amount that stays
@@ -1787,18 +1788,33 @@ contract EtherFiOracleTest is TestSetup {
         etherFiAdminInstance.executeTasks(report);
     }
 
-    function test_canExecuteTasks_falseWhenValidatorRateAboveCap() public {
+    function test_canExecuteTasks_falseWhenValidatorFundingAboveCap() public {
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
-        report.validatorsToApprove = new uint256[](400); // > 200/day cap
+        report.validatorsToApprove = new uint256[](400);
+        report.validatorFundingAmounts = new uint256[](400); // 400 * 32 ETH > 200 * 32 ETH/day cap
         for (uint256 i = 0; i < 400; i++) {
             report.validatorsToApprove[i] = i + 1;
+            report.validatorFundingAmounts[i] = 32 ether;
         }
         _moveClock(1 days / 12);
         _submitForConsensus(report);
 
         assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
 
-        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: number of validators to approve exceeds max"));
+        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: validator funding exceeds max per day"));
+        etherFiAdminInstance.executeTasks(report);
+    }
+
+    function test_canExecuteTasks_falseWhenFundingAmountsDoNotMatchValidators() public {
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.validatorsToApprove = new uint256[](2);
+        report.validatorFundingAmounts = new uint256[](1);
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, "EtherFiAdmin: validator funding amounts length mismatch"));
         etherFiAdminInstance.executeTasks(report);
     }
 

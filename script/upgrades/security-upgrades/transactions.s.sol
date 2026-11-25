@@ -1564,7 +1564,6 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
         require(a.maxValidatorTaskBatchSize()         == ADMIN_MAX_VALIDATOR_TASK_BATCH_SIZE, "EFAdmin.maxValidatorTaskBatchSize");
         require(a.staleOracleReportBlockWindow()      == ADMIN_STALE_ORACLE_REPORT_BLOCK_WINDOW, "EFAdmin.staleOracleReportBlockWindow");
         require(a.maxAcceptableFinalizedWithdrawalAmountPerDay() == ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY, "EFAdmin.maxAcceptableFinalizedWithdrawalAmountPerDay");
-        require(a.maxAcceptableNumValidatorsToApprovePerDay()    == ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY,       "EFAdmin.maxAcceptableNumValidatorsToApprovePerDay");
         require(a.maxNumberOfRequestsToFinalizePerReport()       == ADMIN_MAX_REQUESTS_TO_FINALIZE_PER_REPORT,    "EFAdmin.maxNumberOfRequestsToFinalizePerReport");
 
         EtherFiOracle o = EtherFiOracle(ETHERFI_ORACLE);
@@ -2650,7 +2649,7 @@ contract SecurityUpgradesScript is Script, SecurityUpgradesConstants, Utils {
     function _emptyReport() private view returns (IEtherFiOracle.OracleReport memory report) {
         uint256[] memory emptyVals = new uint256[](0);
         uint32 cv = EtherFiOracle(ETHERFI_ORACLE).consensusVersion();
-        report = IEtherFiOracle.OracleReport(cv, 0, 0, 0, 0, 0, 0, emptyVals, 0, 0);
+        report = IEtherFiOracle.OracleReport(cv, 0, 0, 0, 0, 0, 0, emptyVals, 0, 0, new uint256[](0));
     }
 
     function _makeRedemptionPermissive() private {

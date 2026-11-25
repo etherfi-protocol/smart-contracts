@@ -13,6 +13,7 @@ interface IEtherFiOracle {
         uint256[] validatorsToApprove;
         uint32 lastFinalizedWithdrawalRequestId;
         uint128 finalizedWithdrawalAmount;
+        uint256[] validatorFundingAmounts; // wei to deposit to each of validatorsToApprove, same order
     }
 
     struct CommitteeMemberState {
