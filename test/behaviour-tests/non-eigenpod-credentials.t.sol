@@ -144,15 +144,9 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         liquidityPool.batchCreateBeaconValidators(toArray(createData), toArray_u256(bidId), node);
         assertEq(liquidityPool.totalValueOutOfLp(), outBefore + 1 ether);
 
-        IStakingManager.DepositData memory confirmData = IStakingManager.DepositData({
-            publicKey: pubkey,
-            signature: signature,
-            depositDataRoot: depositDataRootGenerator.generateDepositDataRoot(pubkey, signature, creds, confirmAmount),
-            ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
-        });
-
+        IStakingManager.ValidatorFunding[] memory fundings = toFundings(pubkey, confirmAmount);
         vm.prank(admin);
-        liquidityPool.confirmAndFundBeaconValidators(toArray(confirmData));
+        liquidityPool.fundValidators(fundings);
 
         assertEq(liquidityPool.totalValueOutOfLp(), outBefore + validatorSize);
         bytes32 pubkeyHash = etherFiNodesManager.calculateValidatorPubkeyHash(pubkey);

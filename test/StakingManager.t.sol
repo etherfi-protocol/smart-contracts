@@ -1454,11 +1454,11 @@ contract StakingManagerTest is TestSetup {
         stakingManagerInstance.createBeaconValidators{value: 1 ether}(depositDataArray, bidIds, address(0x1234));
     }
 
-    function test_confirmAndFundBeaconValidatorsFailsIfInvalidCaller() public {
-        IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](1);
-        
+    function test_fundValidatorsFailsIfInvalidCaller() public {
+        IStakingManager.ValidatorFunding[] memory fundings = new IStakingManager.ValidatorFunding[](1);
+
         vm.expectRevert(IStakingManager.InvalidCaller.selector);
-        stakingManagerInstance.confirmAndFundBeaconValidators{value: 31 ether}(depositDataArray);
+        stakingManagerInstance.fundValidators{value: 31 ether}(fundings);
     }
 }
 

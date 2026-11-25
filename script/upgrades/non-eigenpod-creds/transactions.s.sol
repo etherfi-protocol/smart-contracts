@@ -339,12 +339,10 @@ contract NonEigenPodCredsTransactions is DeployNonEigenPodCreds {
         vm.prank(ADMIN_EOA);
         liquidityPool.batchCreateBeaconValidators(dd, bidIds, node);
 
-        // top-up root is built over 31 ETH, not 32
-        IStakingManager.DepositData[] memory dd31 = new IStakingManager.DepositData[](1);
-        dd31[0] = dd[0];
-        dd31[0].depositDataRoot = depositDataRootGenerator.generateDepositDataRoot(pubkey, sig, creds, 31 ether);
+        IStakingManager.ValidatorFunding[] memory fundings = new IStakingManager.ValidatorFunding[](1);
+        fundings[0] = IStakingManager.ValidatorFunding({publicKey: pubkey, amount: 31 ether});
         vm.prank(ADMIN_EOA);
-        liquidityPool.confirmAndFundBeaconValidators(dd31);
+        liquidityPool.fundValidators(fundings);
 
         console2.log("[OK] pod-less validator spun up on node", node);
         return (node, pubkey);

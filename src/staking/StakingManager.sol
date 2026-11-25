@@ -5,9 +5,7 @@ import "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 import "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/beacon/IBeaconUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
-import "@etherfi/governance/rate-limiting/libraries/BucketLimiter.sol";
 import "@etherfi/staking/interfaces/IAuctionManager.sol";
 import "@etherfi/staking/interfaces/IStakingManager.sol";
 import "@etherfi/interfaces/IDepositContract.sol";
@@ -36,14 +34,6 @@ contract StakingManager is
     mapping(address => bool) public deployedEtherFiNodes;
     mapping(bytes32 => ValidatorCreationStatus) public validatorCreationStatus;
 
-    // ETH this contract has deposited to each validator, keyed by pubkey hash. Non-zero only
-    // after confirmAndFundBeaconValidators, which runs once the oracle has checked the
-    // validator's withdrawal credentials on the beacon chain. Top-ups require it.
-    mapping(bytes32 => uint256) public validatorPrincipalWei;
-    BucketLimiter.Limit public topUpLimit; // gwei
-    uint256 public maxValidatorPrincipalWei;
-    uint256 public minLiquidityPoolBalanceWei;
-
     //---------------------------------------------------------------------------
     //-----------------------------  IMMUTABLES  ---------------------------------
     //---------------------------------------------------------------------------
@@ -57,7 +47,6 @@ contract StakingManager is
     //-----------------------------  CONSTANTS  ---------------------------------
     //---------------------------------------------------------------------------
     uint256 public constant INITIAL_DEPOSIT_AMOUNT = 1 ether;
-    uint256 public constant MIN_VALIDATOR_SIZE_WEI = 32 ether;
     uint256 public constant MAX_VALIDATOR_SIZE_WEI = 2048 ether;
     uint256 public constant VALIDATOR_PUBKEY_LENGTH = 48;
 
@@ -193,79 +182,36 @@ contract StakingManager is
     }
 
     /**
-     * @notice Sends the remaining eth to bring validators created by "createBeaconValidators"
-     *         to MIN_VALIDATOR_SIZE_WEI, and marks them eligible for topUpValidators
-     * @param depositData The deposit data of the validator to confirm and fund
-     * @dev The oracle is expected to have confirmed the withdrawal credentials
-     *      note that since this is considered a "validator top up" by the beacon chain,
-     *      the signatures are not actually verified by the beacon chain, as key ownership was
-     *      already proved during the previous deposit. The "deposit data root" i.e. (checksum) however must be valid.
-     *      The caller can use generateDepositDataRoot() to generate a valid root.
-     *      Each pubkey can be confirmed once. Capital above MIN_VALIDATOR_SIZE_WEI goes through topUpValidators.
+     * @notice Deposits ETH to linked validators: the leg after the 1 ETH deposit, and any top-up after that
+     * @param fundings The pubkey and amount for each deposit
+     * @dev The oracle decides which validators to fund and how much; it is expected to have checked
+     *      the validator's withdrawal credentials on the beacon chain and not to fund a key that a
+     *      malicious operator front-ran. This function guarantees the ETH goes to our own
+     *      credentials: the pubkey must be linked to an EtherFiNode, and the credentials are derived
+     *      here from that node.
+     *      The beacon chain checks a deposit signature only when the deposit creates a validator.
+     *      Every pubkey here already has a processed or queued 1 ETH deposit ahead of it, so each
+     *      deposit adds to an existing validator; a zeroed signature is used and the root is computed here.
      */
-    function confirmAndFundBeaconValidators(DepositData[] calldata depositData) external payable {
+    function fundValidators(ValidatorFunding[] calldata fundings) external payable {
         if (msg.sender != liquidityPool) revert InvalidCaller();
-
-        // we already deposited the initial amount to create the validators in createBeaconValidators()
-        uint256 remainingDeposit = MIN_VALIDATOR_SIZE_WEI - INITIAL_DEPOSIT_AMOUNT;
-
-        for (uint256 i = 0; i < depositData.length; i++) {
-
-            // It is expected that the oracle will not call the function for any key that was front-run by a malicious operator
-            bytes32 pubkeyHash = calculateValidatorPubkeyHash(depositData[i].publicKey);
-            if (validatorPrincipalWei[pubkeyHash] != 0) revert ValidatorAlreadyFunded();
-            validatorPrincipalWei[pubkeyHash] = MIN_VALIDATOR_SIZE_WEI;
-
-            bytes memory withdrawalCredentials = _withdrawalCredentials(pubkeyHash);
-            bytes32 computedDataRoot = generateDepositDataRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, remainingDeposit);
-            if (computedDataRoot != depositData[i].depositDataRoot) revert IncorrectBeaconRoot();
-
-            // Deposit the remaining eth to the validator
-            depositContractEth2.deposit{value: remainingDeposit}(depositData[i].publicKey, withdrawalCredentials, depositData[i].signature, computedDataRoot);
-
-            emit validatorConfirmed(pubkeyHash, liquidityPool, liquidityPool, depositData[i].publicKey);
-        }
-    }
-
-    /**
-     * @notice Adds ETH to validators already funded by confirmAndFundBeaconValidators
-     * @param topUps The pubkey and amount for each deposit
-     * @dev confirmAndFundBeaconValidators only runs after the oracle has checked the validator's
-     *      withdrawal credentials on the beacon chain, and the beacon chain never changes them
-     *      afterwards, so every top-up lands with our EtherFiNode or EigenPod.
-     *      The beacon chain skips signature checks for deposits to an existing validator, so
-     *      top-ups use a zeroed signature and the root is computed here.
-     *      Bounded by maxValidatorPrincipalWei per validator, topUpLimit per time window and
-     *      minLiquidityPoolBalanceWei left in the pool. The liquidity pool books the ETH out
-     *      after this call returns, so totalValueInLp still includes msg.value here.
-     */
-    function topUpValidators(TopUp[] calldata topUps) external payable {
-        if (msg.sender != liquidityPool) revert InvalidCaller();
-        if (ILiquidityPool(liquidityPool).totalValueInLp() < minLiquidityPoolBalanceWei + msg.value) revert InsufficientLiquidityPoolBalance();
 
         bytes memory signature = new bytes(96);
-        uint256 total;
-        for (uint256 i = 0; i < topUps.length; i++) {
-            uint256 amount = topUps[i].amount;
-            if (amount < 1 ether || amount % 1 gwei != 0) revert InvalidTopUpAmount();
-
-            bytes32 pubkeyHash = calculateValidatorPubkeyHash(topUps[i].publicKey);
-            uint256 principal = validatorPrincipalWei[pubkeyHash];
-            if (principal == 0) revert ValidatorNotFunded();
-            principal += amount;
-            if (principal > maxValidatorPrincipalWei) revert ExceedsMaxValidatorPrincipal();
-            validatorPrincipalWei[pubkeyHash] = principal;
+        uint256 total = 0;
+        for (uint256 i = 0; i < fundings.length; i++) {
+            uint256 amount = fundings[i].amount;
+            if (amount < 1 ether || amount > MAX_VALIDATOR_SIZE_WEI || amount % 1 gwei != 0) revert InvalidFundingAmount();
             total += amount;
 
+            bytes32 pubkeyHash = calculateValidatorPubkeyHash(fundings[i].publicKey);
             bytes memory withdrawalCredentials = _withdrawalCredentials(pubkeyHash);
-            bytes32 depositDataRoot = generateDepositDataRoot(topUps[i].publicKey, signature, withdrawalCredentials, amount);
-            depositContractEth2.deposit{value: amount}(topUps[i].publicKey, withdrawalCredentials, signature, depositDataRoot);
+            bytes32 depositDataRoot = generateDepositDataRoot(fundings[i].publicKey, signature, withdrawalCredentials, amount);
+            depositContractEth2.deposit{value: amount}(fundings[i].publicKey, withdrawalCredentials, signature, depositDataRoot);
 
-            emit ValidatorToppedUp(pubkeyHash, amount, principal);
+            emit validatorConfirmed(pubkeyHash, liquidityPool, liquidityPool, fundings[i].publicKey);
         }
 
-        if (total != msg.value) revert IncorrectTopUpValue();
-        if (!BucketLimiter.consume(topUpLimit, SafeCast.toUint64(total / 1 gwei))) revert TopUpRateLimitExceeded();
+        if (total != msg.value) revert IncorrectFundingValue();
     }
 
     //---------------------------------------------------------------------------
@@ -302,38 +248,6 @@ contract StakingManager is
             deployedEtherFiNodes[node] = true;
             emit EtherFiNodeDeployed(node);
         }
-    }
-
-    /**
-     * @notice Sets the most ETH this contract may deposit to one validator across confirmation and top-ups
-     * @param _maxValidatorPrincipalWei The cap, between MIN_VALIDATOR_SIZE_WEI and MAX_VALIDATOR_SIZE_WEI
-     */
-    function setMaxValidatorPrincipalWei(uint256 _maxValidatorPrincipalWei) external onlyOperatingTimelock {
-        if (_maxValidatorPrincipalWei < MIN_VALIDATOR_SIZE_WEI || _maxValidatorPrincipalWei > MAX_VALIDATOR_SIZE_WEI) revert InvalidValidatorSize();
-        maxValidatorPrincipalWei = _maxValidatorPrincipalWei;
-        emit MaxValidatorPrincipalSet(_maxValidatorPrincipalWei);
-    }
-
-    /**
-     * @notice Sets the ETH that must stay in the liquidity pool after a top-up
-     * @param _minLiquidityPoolBalanceWei The floor on LiquidityPool.totalValueInLp
-     */
-    function setMinLiquidityPoolBalanceWei(uint256 _minLiquidityPoolBalanceWei) external onlyOperatingTimelock {
-        minLiquidityPoolBalanceWei = _minLiquidityPoolBalanceWei;
-        emit MinLiquidityPoolBalanceSet(_minLiquidityPoolBalanceWei);
-    }
-
-    /**
-     * @notice Sets the top-up rate limit
-     * @param capacityGwei The most gwei that can be topped up in one burst
-     * @param refillRateGwei The gwei of capacity restored per second
-     * @dev Raising the capacity does not raise what is left in the bucket. A bucket
-     *      configured for the first time starts empty and fills at refillRateGwei.
-     */
-    function setTopUpLimit(uint64 capacityGwei, uint64 refillRateGwei) external onlyOperatingTimelock {
-        BucketLimiter.setCapacity(topUpLimit, capacityGwei);
-        BucketLimiter.setRefillRate(topUpLimit, refillRateGwei);
-        emit TopUpLimitSet(capacityGwei, refillRateGwei);
     }
 
     //---------------------------------------------------------------------------

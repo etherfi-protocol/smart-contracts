@@ -40,9 +40,7 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
     mapping(address => ValidatorSpawner) public validatorSpawner;
     
     //deprecated storage slots
-    uint256[5] private __gap_3;
-
-    uint256 private __deprecated_validatorSizeWei;
+    uint256[6] private __gap_3;
     uint256 public maxWithdrawAmount;
     uint256 public minWithdrawAmount;
     bool public escrowMigrationCompleted;
@@ -395,39 +393,21 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
     }
 
     /**
-     * @notice send remaining eth to deposit contract to bring the provided validators to 32 ETH
-     * @param _depositData The deposit data for the validators
-     * @dev step 4 of staking flow. Callable directly by oracle ops, or by EtherFiAdmin
-     *      when forwarding from `executeValidatorApprovalTask` (which gates oracle ops at
-     *      its own entry point and tracks task completion on-chain). Both upstream paths
-     *      enforce oracle-ops authorization, so accepting EtherFiAdmin here doesn't widen
-     *      the auth surface.
-    */
-    function confirmAndFundBeaconValidators(
-        IStakingManager.DepositData[] calldata _depositData
-    ) external nonReentrant whenNotPaused {
+     * @notice send eth to linked validators, either the leg after the 1 ETH deposit or a later top-up
+     * @param _fundings The pubkey and amount for each deposit
+     * @dev step 4 of staking flow. Callable by EtherFiAdmin when executing an oracle validator
+     *      approval task (which gates oracle ops at its own entry point), or directly by oracle ops.
+     *      StakingManager derives the withdrawal credentials from the node each pubkey is linked to.
+     */
+    function fundValidators(IStakingManager.ValidatorFunding[] calldata _fundings) external nonReentrant whenNotPaused {
         if (msg.sender != address(etherFiAdminContract)) roleRegistry.onlyOracleOperations(msg.sender);
 
-        // we have already deposited the initial amount to create the validator on the beacon chain
-        uint256 remainingEthPerValidator = stakingManager.MIN_VALIDATOR_SIZE_WEI() - stakingManager.INITIAL_DEPOSIT_AMOUNT();
-
-        uint256 outboundEthAmountFromLp = remainingEthPerValidator * _depositData.length;
-        stakingManager.confirmAndFundBeaconValidators{value: outboundEthAmountFromLp}(_depositData);
-
-        _accountForEthSentOut(outboundEthAmountFromLp);
-    }
-
-    /**
-     * @notice send eth to validators already funded by confirmAndFundBeaconValidators
-     * @param _topUps The pubkey and amount for each deposit
-     * @dev Per-validator, rate and liquidity-floor limits live in StakingManager.topUpValidators.
-     */
-    function topUpValidators(IStakingManager.TopUp[] calldata _topUps) external nonReentrant whenNotPaused onlyOracleOperations {
-        uint256 total;
-        for (uint256 i = 0; i < _topUps.length; i++) {
-            total += _topUps[i].amount;
+        uint256 total = 0;
+        for (uint256 i = 0; i < _fundings.length; i++) {
+            total += _fundings[i].amount;
         }
-        stakingManager.topUpValidators{value: total}(_topUps);
+        stakingManager.fundValidators{value: total}(_fundings);
+
         _accountForEthSentOut(total);
     }
 

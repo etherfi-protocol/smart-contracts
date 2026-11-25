@@ -65,8 +65,8 @@ methods {
 //   withdraw(address,uint256)                                        -> 274
 //   addEthAmountLockedForWithdrawal / transferLockedEthForPriority
 //                                          -> _lockEth               -> 651
-//   batchCreateBeaconValidators / confirmAndFundBeaconValidators /
-//   topUpValidators                        -> _accountForEthSentOut  -> 662
+//   batchCreateBeaconValidators / fundValidators
+//                                          -> _accountForEthSentOut  -> 662
 //   initializeOnUpgradeV2()                                          -> 175
 //   receive()                                                        -> 189
 // `receive()` IS covered: CVL exposes the receive/fallback dispatch as the
@@ -89,8 +89,7 @@ rule I8_lp_buffer_solvency_guarded(method f, env e, calldataarg args)
           || f.selector == sig:addEthAmountLockedForWithdrawal(uint128).selector
           || f.selector == sig:transferLockedEthForPriority(uint128).selector
           || f.selector == sig:batchCreateBeaconValidators(IStakingManager.DepositData[],uint256[],address).selector
-          || f.selector == sig:confirmAndFundBeaconValidators(IStakingManager.DepositData[]).selector
-          || f.selector == sig:topUpValidators(IStakingManager.TopUp[]).selector
+          || f.selector == sig:fundValidators(IStakingManager.ValidatorFunding[]).selector
           || f.selector == sig:initializeOnUpgradeV2().selector
     }
 {

@@ -1834,34 +1834,34 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.batchCreateBeaconValidators(emptyDd, empty, address(0));
     }
 
-    function test_confirmAndFundBeaconValidators_blockedByPauseContractUntil() public {
+    function test_fundValidators_blockedByPauseContractUntil() public {
         _grantLpPauseUntilRoles();
         vm.prank(lpPauseUntilPauser);
         liquidityPoolInstance.pauseUntil();
 
-        IStakingManager.DepositData[] memory emptyDd;
+        IStakingManager.ValidatorFunding[] memory emptyFundings;
         vm.expectRevert(
             abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
         );
-        liquidityPoolInstance.confirmAndFundBeaconValidators(emptyDd);
+        liquidityPoolInstance.fundValidators(emptyFundings);
     }
 
     /// @dev Auth gate must accept the EtherFiAdmin proxy as a caller without requiring
     ///      ORACLE_OPERATIONS_ROLE. EtherFiAdmin.executeValidatorApprovalTask itself gates
     ///      the oracle EOA caller; the LP gate here exists to admit the admin's forwarded
     ///      call. An empty payload succeeds, which proves the gate accepted.
-    function test_confirmAndFundBeaconValidators_acceptsEtherFiAdmin() public {
-        IStakingManager.DepositData[] memory emptyDd;
+    function test_fundValidators_acceptsEtherFiAdmin() public {
+        IStakingManager.ValidatorFunding[] memory emptyFundings;
         vm.prank(address(etherFiAdminInstance));
-        liquidityPoolInstance.confirmAndFundBeaconValidators(emptyDd);
+        liquidityPoolInstance.fundValidators(emptyFundings);
     }
 
     /// @dev A random EOA without ORACLE_OPERATIONS_ROLE must still be rejected by the gate.
-    function test_confirmAndFundBeaconValidators_rejectsUnauthorized() public {
-        IStakingManager.DepositData[] memory emptyDd;
+    function test_fundValidators_rejectsUnauthorized() public {
+        IStakingManager.ValidatorFunding[] memory emptyFundings;
         vm.prank(bob); // not an oracle ops role holder
         vm.expectRevert(RoleRegistry.OnlyOracleOperations.selector);
-        liquidityPoolInstance.confirmAndFundBeaconValidators(emptyDd);
+        liquidityPoolInstance.fundValidators(emptyFundings);
     }
 
     function test_deposit_unblockedAfterPauseExpires() public {
