@@ -1411,7 +1411,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.stopPrank();
         vm.startPrank(alice);
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
-        liquidityPoolInstance.setValidatorSizeWei(32 ether);
         liquidityPoolInstance.setMaxWithdrawAmount(1000 ether);
         liquidityPoolInstance.setMinWithdrawAmount(0.001 ether);
         // PR #385: the new per-rebase caps (positive in LP, negative in EtherFiAdmin)
@@ -2153,7 +2152,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         vm.startPrank(admin);
         // TODO(Dave): fix for new deposit flow
-        liquidityPoolInstance.confirmAndFundBeaconValidators(depositDataArray, 32 ether);
+        liquidityPoolInstance.confirmAndFundBeaconValidators(depositDataArray);
         vm.stopPrank();
 
         return newValidators;

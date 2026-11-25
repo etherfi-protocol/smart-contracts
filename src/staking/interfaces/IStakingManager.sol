@@ -12,6 +12,11 @@ interface IStakingManager {
         string ipfsHashForEncryptedValidatorKey;
     }
 
+    struct TopUp {
+        bytes publicKey;
+        uint256 amount;
+    }
+
     // Possible values for validator creation status
     enum ValidatorCreationStatus {
         NOT_REGISTERED,
@@ -28,7 +33,14 @@ interface IStakingManager {
     function registerBeaconValidators(DepositData[] calldata depositData, uint256[] calldata bidIds, address etherFiNode) external;
     function createBeaconValidators(DepositData[] calldata depositData, uint256[] calldata bidIds, address etherFiNode) external payable;
     function invalidateRegisteredBeaconValidator(DepositData calldata depositData, uint256 bidId, address etherFiNode) external;
-    function confirmAndFundBeaconValidators(DepositData[] calldata depositData, uint256 validatorSizeWei) external payable;
+    function confirmAndFundBeaconValidators(DepositData[] calldata depositData) external payable;
+    function topUpValidators(TopUp[] calldata topUps) external payable;
+    function validatorPrincipalWei(bytes32 pubkeyHash) external view returns (uint256);
+    function maxValidatorPrincipalWei() external view returns (uint256);
+    function minLiquidityPoolBalanceWei() external view returns (uint256);
+    function setMaxValidatorPrincipalWei(uint256 _maxValidatorPrincipalWei) external;
+    function setMinLiquidityPoolBalanceWei(uint256 _minLiquidityPoolBalanceWei) external;
+    function setTopUpLimit(uint64 capacityGwei, uint64 refillRateGwei) external;
     function calculateValidatorPubkeyHash(bytes memory pubkey) external pure returns (bytes32);
     function generateDepositDataRoot(bytes memory pubkey, bytes memory signature, bytes memory withdrawalCredentials, uint256 amount) external pure returns (bytes32);
 
@@ -88,6 +100,10 @@ interface IStakingManager {
     event ValidatorRegistered(address indexed operator, address indexed bNftOwner, address indexed tNftOwner, uint256 validatorId, bytes validatorPubKey, string ipfsHashForEncryptedValidatorKey);
 
     event ValidatorCreationStatusUpdated(DepositData depositData, uint256 bidId, address etherFiNode, bytes32 hashedAllData, ValidatorCreationStatus indexed status);
+    event ValidatorToppedUp(bytes32 indexed pubkeyHash, uint256 amount, uint256 principal);
+    event MaxValidatorPrincipalSet(uint256 maxValidatorPrincipalWei);
+    event MinLiquidityPoolBalanceSet(uint256 minLiquidityPoolBalanceWei);
+    event TopUpLimitSet(uint64 capacityGwei, uint64 refillRateGwei);
 
     //--------------------------------------------------------------------------
     //-----------------------------  Errors  -----------------------------------
@@ -103,5 +119,12 @@ interface IStakingManager {
     error InvalidValidatorSize();
     error InvalidUpgrade();
     error InvalidValidatorCreationStatus();
+    error ValidatorAlreadyFunded();
+    error ValidatorNotFunded();
+    error InvalidTopUpAmount();
+    error ExceedsMaxValidatorPrincipal();
+    error IncorrectTopUpValue();
+    error TopUpRateLimitExceeded();
+    error InsufficientLiquidityPoolBalance();
 
 }

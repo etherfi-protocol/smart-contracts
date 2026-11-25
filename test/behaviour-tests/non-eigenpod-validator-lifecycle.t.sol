@@ -98,7 +98,7 @@ contract NonEigenPodValidatorLifecycleTest is PreludeTest {
         // Step 7: 31 ETH top-up
         IStakingManager.DepositData memory fundData = _depositData(s, 31 ether);
         vm.prank(admin);
-        liquidityPool.confirmAndFundBeaconValidators(toArray(fundData), 32 ether);
+        liquidityPool.confirmAndFundBeaconValidators(toArray(fundData));
 
         assertEq(liquidityPool.totalValueOutOfLp(), outBefore + 32 ether);
         assertEq(liquidityPool.totalValueInLp(), inBefore - 32 ether);
@@ -213,7 +213,7 @@ contract NonEigenPodValidatorLifecycleTest is PreludeTest {
 
         vm.expectRevert(IStakingManager.UnlinkedPubkey.selector);
         vm.prank(admin);
-        liquidityPool.confirmAndFundBeaconValidators(d, 32 ether);
+        liquidityPool.confirmAndFundBeaconValidators(d);
     }
 
     function test_lifecycle_credentialsForAnotherTargetAreRejected() public {
@@ -246,7 +246,7 @@ contract NonEigenPodValidatorLifecycleTest is PreludeTest {
 
         vm.expectRevert(IStakingManager.IncorrectBeaconRoot.selector);
         vm.prank(admin);
-        liquidityPool.confirmAndFundBeaconValidators(bad, 32 ether);
+        liquidityPool.confirmAndFundBeaconValidators(bad);
     }
 
     function test_lifecycle_onlyLiquidityPoolCanReachStakingManager() public {

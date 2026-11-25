@@ -311,6 +311,6 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         etherFiAdminInstance.executeTasks(report);
         (bool completed, bool exists) = _executeValidatorApprovalTask(report, pubkeys, signatures);
         uint256 LiquidityPoolBalanceAfter = address(liquidityPoolInstance).balance;
-        assertApproxEqAbs(LiquidityPoolBalanceAfter, LiquidityPoolBalanceBefore - liquidityPoolInstance.validatorSizeWei() + stakingManagerInstance.INITIAL_DEPOSIT_AMOUNT(), 1e3);
+        assertApproxEqAbs(LiquidityPoolBalanceAfter, LiquidityPoolBalanceBefore - stakingManagerInstance.MIN_VALIDATOR_SIZE_WEI() + stakingManagerInstance.INITIAL_DEPOSIT_AMOUNT(), 1e3);
     }
 }

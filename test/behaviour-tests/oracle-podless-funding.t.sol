@@ -123,13 +123,11 @@ contract OraclePodlessFundingTest is PreludeTest {
         bytes32 reportHash = keccak256("podless-funding-report");
         _seedApprovalTask(proxy, reportHash, validatorIds);
 
-        uint256 validatorSizeWei = liquidityPool.validatorSizeWei();
-
         // The whole point: let EtherFiAdmin._approveValidators BUILD the top-up deposit data.
         vm.prank(admin); // ORACLE_OPERATIONS_ROLE
         EtherFiAdmin(proxy).executeValidatorApprovalTask(reportHash, validatorIds, pubKeys, signatures);
 
-        assertEq(liquidityPool.totalValueOutOfLp(), outStart + validatorSizeWei, "funded to full validator size via oracle path");
+        assertEq(liquidityPool.totalValueOutOfLp(), outStart + stakingManager.MIN_VALIDATOR_SIZE_WEI(), "funded to full validator size via oracle path");
         assertEq(address(etherFiNodesManager.etherFiNodeFromPubkeyHash(pubkeyHash)), podLessNode, "still linked to the pod-less node");
         assertEq(address(IEtherFiNode(podLessNode).getEigenPod()), address(0), "node remained pod-less");
 

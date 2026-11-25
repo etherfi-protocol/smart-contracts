@@ -152,7 +152,7 @@ contract NonEigenPodCredentialsTest is PreludeTest {
         });
 
         vm.prank(admin);
-        liquidityPool.confirmAndFundBeaconValidators(toArray(confirmData), validatorSize);
+        liquidityPool.confirmAndFundBeaconValidators(toArray(confirmData));
 
         assertEq(liquidityPool.totalValueOutOfLp(), outBefore + validatorSize);
         bytes32 pubkeyHash = etherFiNodesManager.calculateValidatorPubkeyHash(pubkey);

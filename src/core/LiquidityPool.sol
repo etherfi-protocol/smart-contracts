@@ -42,7 +42,7 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
     //deprecated storage slots
     uint256[5] private __gap_3;
 
-    uint256 public validatorSizeWei;
+    uint256 private __deprecated_validatorSizeWei;
     uint256 public maxWithdrawAmount;
     uint256 public minWithdrawAmount;
     bool public escrowMigrationCompleted;
@@ -98,7 +98,6 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
     error InvalidShareAmount();
     error InsufficientLiquidity();
     error SendFail();
-    error InvalidValidatorSize();
     error RebaseExceedsPositiveCap();
     error AlreadyMigrated();
     error MigrationNotComplete();
@@ -396,29 +395,40 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
     }
 
     /**
-     * @notice send remaining eth to deposit contract to activate the provided validators
+     * @notice send remaining eth to deposit contract to bring the provided validators to 32 ETH
      * @param _depositData The deposit data for the validators
-     * @param _validatorSizeWei The size of the validators
-     * @dev step 3 of staking flow. Callable directly by oracle ops, or by EtherFiAdmin
+     * @dev step 4 of staking flow. Callable directly by oracle ops, or by EtherFiAdmin
      *      when forwarding from `executeValidatorApprovalTask` (which gates oracle ops at
      *      its own entry point and tracks task completion on-chain). Both upstream paths
      *      enforce oracle-ops authorization, so accepting EtherFiAdmin here doesn't widen
      *      the auth surface.
     */
     function confirmAndFundBeaconValidators(
-        IStakingManager.DepositData[] calldata _depositData,
-        uint256 _validatorSizeWei
+        IStakingManager.DepositData[] calldata _depositData
     ) external nonReentrant whenNotPaused {
         if (msg.sender != address(etherFiAdminContract)) roleRegistry.onlyOracleOperations(msg.sender);
-        _requireValidValidatorSize(_validatorSizeWei);
 
         // we have already deposited the initial amount to create the validator on the beacon chain
-        uint256 remainingEthPerValidator = _validatorSizeWei - stakingManager.INITIAL_DEPOSIT_AMOUNT();
+        uint256 remainingEthPerValidator = stakingManager.MIN_VALIDATOR_SIZE_WEI() - stakingManager.INITIAL_DEPOSIT_AMOUNT();
 
         uint256 outboundEthAmountFromLp = remainingEthPerValidator * _depositData.length;
-        stakingManager.confirmAndFundBeaconValidators{value: outboundEthAmountFromLp}(_depositData, _validatorSizeWei);
+        stakingManager.confirmAndFundBeaconValidators{value: outboundEthAmountFromLp}(_depositData);
 
         _accountForEthSentOut(outboundEthAmountFromLp);
+    }
+
+    /**
+     * @notice send eth to validators already funded by confirmAndFundBeaconValidators
+     * @param _topUps The pubkey and amount for each deposit
+     * @dev Per-validator, rate and liquidity-floor limits live in StakingManager.topUpValidators.
+     */
+    function topUpValidators(IStakingManager.TopUp[] calldata _topUps) external nonReentrant whenNotPaused onlyOracleOperations {
+        uint256 total;
+        for (uint256 i = 0; i < _topUps.length; i++) {
+            total += _topUps[i].amount;
+        }
+        stakingManager.topUpValidators{value: total}(_topUps);
+        _accountForEthSentOut(total);
     }
 
     /**
@@ -529,18 +539,6 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
     //--------------------------------------------------------------------------------------
     //------------------------------  SETTER FUNCTIONS  ------------------------------------
     //--------------------------------------------------------------------------------------
-    /**
-     * @notice set the size of validators created when EtherFiAdmin.executeValidatorApprovalTask
-     * @param _validatorSizeWei The size of the validators
-     * @dev set the size of validators created when EtherFiAdmin.executeValidatorApprovalTask
-     *      forwards into confirmAndFundBeaconValidators(). In a future upgrade this will be a
-     *      parameter to that call but was done like this to limit changes to other dependent contracts.
-     */
-    function setValidatorSizeWei(uint256 _validatorSizeWei) external onlyOperatingTimelock {
-        _requireValidValidatorSize(_validatorSizeWei);
-        validatorSizeWei = _validatorSizeWei;
-    }
-
     /**
      * @notice Set the fee recipient address
      * @param _feeRecipient The address to set as the fee recipient
@@ -688,14 +686,6 @@ contract LiquidityPool is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, R
         (uint256 P1, uint256 S1) = _snapRate();
         // Bootstrap exempt (no rate before/after to compare).
         if (S0 != 0 && S1 != 0 && P1 * S0 < P0 * S1) revert EETHRateDeflation();
-    }
-
-    /**
-     * @notice Checks if the validator size is valid
-     * @param _validatorSizeWei The validator size
-     */
-    function _requireValidValidatorSize(uint256 _validatorSizeWei) internal view {
-        if (_validatorSizeWei < stakingManager.MIN_VALIDATOR_SIZE_WEI() || _validatorSizeWei > stakingManager.MAX_VALIDATOR_SIZE_WEI()) revert InvalidValidatorSize();
     }
 
     /**

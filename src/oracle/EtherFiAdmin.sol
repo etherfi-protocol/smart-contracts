@@ -120,7 +120,6 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
     error TaskDoesNotExist();
     error TaskAlreadyCompleted();
     error TaskAlreadyExists();
-    error InvalidValidatorSize();
     error InvalidArrayLengths();
 
     //--------------------------------------------------------------------------------------
@@ -359,11 +358,9 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
      *      EIP-170 24,576-byte cap.
      */
     function _approveValidators(uint256[] calldata _validatorIds, bytes[] calldata _pubKeys, bytes[] calldata _signatures) internal {
-        uint256 validatorSizeWei = liquidityPool.validatorSizeWei();
-        if (validatorSizeWei < stakingManager.MIN_VALIDATOR_SIZE_WEI() || validatorSizeWei > stakingManager.MAX_VALIDATOR_SIZE_WEI()) revert InvalidValidatorSize();
         if (_validatorIds.length == 0 || _validatorIds.length != _pubKeys.length || _validatorIds.length != _signatures.length) revert InvalidArrayLengths();
 
-        uint256 remainingEthPerValidator = validatorSizeWei - stakingManager.INITIAL_DEPOSIT_AMOUNT();
+        uint256 remainingEthPerValidator = stakingManager.MIN_VALIDATOR_SIZE_WEI() - stakingManager.INITIAL_DEPOSIT_AMOUNT();
         IStakingManager.DepositData[] memory depositData = new IStakingManager.DepositData[](_validatorIds.length);
 
         for (uint256 i = 0; i < _validatorIds.length; i++) {
@@ -384,7 +381,7 @@ contract EtherFiAdmin is Initializable, DeprecatedOZOwnable, UUPSUpgradeable, Ro
             });
         }
 
-        liquidityPool.confirmAndFundBeaconValidators(depositData, validatorSizeWei);
+        liquidityPool.confirmAndFundBeaconValidators(depositData);
     }
 
     /**

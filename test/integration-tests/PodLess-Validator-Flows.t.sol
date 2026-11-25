@@ -387,7 +387,7 @@ contract PodLessValidatorFlowsIntegrationTest is TestSetup, Deployed {
 
         assertEq(address(IEtherFiNode(etherFiNode).getEigenPod()), address(0), "node never got a pod");
         assertEq(managerInstance.withdrawalCredentialTarget(etherFiNode), etherFiNode, "node is its own target");
-        assertEq(outDelta, liquidityPoolInstance.validatorSizeWei(), "funded to full validator size");
+        assertEq(outDelta, 32 ether, "funded to activation size");
     }
 
     /// @notice The pod-backed flow through the identical path, so the pod-less result is read as
@@ -400,7 +400,7 @@ contract PodLessValidatorFlowsIntegrationTest is TestSetup, Deployed {
         address pod = address(IEtherFiNode(etherFiNode).getEigenPod());
         assertTrue(pod != address(0), "node has a pod");
         assertEq(managerInstance.withdrawalCredentialTarget(etherFiNode), pod, "pod is the target");
-        assertEq(outDelta, liquidityPoolInstance.validatorSizeWei(), "funded to full validator size");
+        assertEq(outDelta, 32 ether, "funded to activation size");
     }
 
     /// @notice Pins EtherFiAdmin's credential derivation to StakingManager's. These are separate

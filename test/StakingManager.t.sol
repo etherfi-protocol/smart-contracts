@@ -1458,19 +1458,7 @@ contract StakingManagerTest is TestSetup {
         IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](1);
         
         vm.expectRevert(IStakingManager.InvalidCaller.selector);
-        stakingManagerInstance.confirmAndFundBeaconValidators{value: 31 ether}(depositDataArray, 32 ether);
-    }
-
-    function test_confirmAndFundBeaconValidatorsFailsIfInvalidValidatorSize() public {
-        IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](1);
-        // Use the implementation's stored liquidityPool address (set in constructor)
-        address liquidityPoolAddr = address(liquidityPoolInstance);
-        vm.deal(liquidityPoolAddr, 100 ether);
-        
-        // First check passes (caller is liquidityPool), then validator size check fails
-        vm.prank(liquidityPoolAddr);
-        vm.expectRevert(IStakingManager.InvalidValidatorSize.selector);
-        stakingManagerInstance.confirmAndFundBeaconValidators{value: 30 ether}(depositDataArray, 31 ether); // too small
+        stakingManagerInstance.confirmAndFundBeaconValidators{value: 31 ether}(depositDataArray);
     }
 }
 

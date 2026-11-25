@@ -344,7 +344,7 @@ contract NonEigenPodCredsTransactions is DeployNonEigenPodCreds {
         dd31[0] = dd[0];
         dd31[0].depositDataRoot = depositDataRootGenerator.generateDepositDataRoot(pubkey, sig, creds, 31 ether);
         vm.prank(ADMIN_EOA);
-        liquidityPool.confirmAndFundBeaconValidators(dd31, 32 ether);
+        liquidityPool.confirmAndFundBeaconValidators(dd31);
 
         console2.log("[OK] pod-less validator spun up on node", node);
         return (node, pubkey);

@@ -1088,34 +1088,6 @@ contract LiquidityPoolTest is TestSetup {
         vm.stopPrank();
     }
 
-    function test_SetValidatorSizeWei() public {
-        vm.startPrank(alice);
-        liquidityPoolInstance.setValidatorSizeWei(64 ether);
-        assertEq(liquidityPoolInstance.validatorSizeWei(), 64 ether);
-        vm.stopPrank();
-    }
-
-    function test_SetValidatorSizeWeiFailsIfTooSmall() public {
-        vm.startPrank(alice);
-        vm.expectRevert(LiquidityPool.InvalidValidatorSize.selector);
-        liquidityPoolInstance.setValidatorSizeWei(31 ether);
-        vm.stopPrank();
-    }
-
-    function test_SetValidatorSizeWeiFailsIfTooLarge() public {
-        vm.startPrank(alice);
-        vm.expectRevert(LiquidityPool.InvalidValidatorSize.selector);
-        liquidityPoolInstance.setValidatorSizeWei(2049 ether);
-        vm.stopPrank();
-    }
-
-    function test_SetValidatorSizeWeiFailsIfNotAdmin() public {
-        vm.startPrank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
-        liquidityPoolInstance.setValidatorSizeWei(64 ether);
-        vm.stopPrank();
-    }
-
     function test_UnregisterValidatorSpawner() public {
         vm.startPrank(alice);
         registerAsBnftHolder(bob);
@@ -1871,20 +1843,17 @@ contract LiquidityPoolTest is TestSetup {
         vm.expectRevert(
             abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
         );
-        liquidityPoolInstance.confirmAndFundBeaconValidators(emptyDd, 32 ether);
+        liquidityPoolInstance.confirmAndFundBeaconValidators(emptyDd);
     }
 
     /// @dev Auth gate must accept the EtherFiAdmin proxy as a caller without requiring
     ///      ORACLE_OPERATIONS_ROLE. EtherFiAdmin.executeValidatorApprovalTask itself gates
     ///      the oracle EOA caller; the LP gate here exists to admit the admin's forwarded
-    ///      call. Past the gate, the call still reverts on InvalidValidatorSize for an
-    ///      empty payload — that's how we prove the gate accepted, then control fell to
-    ///      the next check.
+    ///      call. An empty payload succeeds, which proves the gate accepted.
     function test_confirmAndFundBeaconValidators_acceptsEtherFiAdmin() public {
         IStakingManager.DepositData[] memory emptyDd;
         vm.prank(address(etherFiAdminInstance));
-        vm.expectRevert(LiquidityPool.InvalidValidatorSize.selector);
-        liquidityPoolInstance.confirmAndFundBeaconValidators(emptyDd, 0); // size 0 trips InvalidValidatorSize past the auth gate
+        liquidityPoolInstance.confirmAndFundBeaconValidators(emptyDd);
     }
 
     /// @dev A random EOA without ORACLE_OPERATIONS_ROLE must still be rejected by the gate.
@@ -1892,7 +1861,7 @@ contract LiquidityPoolTest is TestSetup {
         IStakingManager.DepositData[] memory emptyDd;
         vm.prank(bob); // not an oracle ops role holder
         vm.expectRevert(RoleRegistry.OnlyOracleOperations.selector);
-        liquidityPoolInstance.confirmAndFundBeaconValidators(emptyDd, 32 ether);
+        liquidityPoolInstance.confirmAndFundBeaconValidators(emptyDd);
     }
 
     function test_deposit_unblockedAfterPauseExpires() public {
